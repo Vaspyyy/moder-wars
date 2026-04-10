@@ -1,0 +1,1623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Satellite War: Organic Frontlines</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
+    <script type="importmap">
+      {
+        "imports": {
+          "leaflet": "https://esm.sh/leaflet@1.9.4",
+          "jszip": "https://esm.sh/jszip@3.10.1"
+        }
+      }
+    </script>
+</head>
+<body>
+    <div id="map"></div>
+    
+
+
+    <div id="settings-overlay" class="settings-overlay thematic-overlay" style="display:none">
+        <div class="menu-v2-overlay"></div>
+        <div class="menu-v2-container">
+            <div class="menu-v2-header">
+                <h1 class="menu-v2-title">SETTINGS</h1>
+                <div class="menu-v2-author">System Configuration</div>
+            </div>
+            <div class="menu-v2-nav">
+                <div class="scenario-selection-container">
+                    <div class="selection-header">
+                        <button id="close-settings-btn" class="selection-back-btn">
+                            <svg viewBox="0 0 24 24" fill="currentColor" style="width:20px;height:20px;"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+                            <span>BACK</span>
+                        </button>
+                        <div class="settings-tab-container" style="margin-bottom:0;">
+                            <button class="settings-tab-btn active" data-tab="sys">SYSTEM</button>
+                            <button class="settings-tab-btn" data-tab="pre">PRESETS</button>
+                            <button class="settings-tab-btn" data-tab="eng">ENGINE</button>
+                            <button class="settings-tab-btn" data-tab="vis">VISUALS</button>
+                        </div>
+                    </div>
+
+                    <div class="scenario-scroller-v2" style="padding-top: 10px;">
+                        <!-- System Tab -->
+                        <div id="settings-tab-sys" class="settings-tab-pane">
+                <div class="setting-group">
+                    <label data-i18n="LANGUAGE">Language</label>
+                    <select id="language-select">
+                        <option value="en">English</option>
+                        <option value="es">Español</option>
+                        <option value="fr">Français</option>
+                        <option value="de">Deutsch</option>
+                        <option value="pt">Português</option>
+                        <option value="ru">Русский</option>
+                        <option value="zh">中文</option>
+                        <option value="ja">日本語</option>
+                        <option value="it">Italiano</option>
+                        <option value="pl">Polski</option>
+                        <option value="uk">Українська</option>
+                        <option value="hi">हिन्दी</option>
+                        <option value="ar">العربية</option>
+                    </select>
+                </div>
+                <div class="setting-group">
+                    <label data-i18n="MAX_UNITS">Max Units (Global)</label>
+                    <select id="unit-limit-select">
+                        <option value="100" data-i18n="UNIT_MIN">100 (Minimalist)</option>
+                        <option value="250" selected data-i18n="UNIT_STD">250 (Standard)</option>
+                        <option value="500" data-i18n="UNIT_WAR">500 (Grand War)</option>
+                        <option value="1000" data-i18n="UNIT_STRESS">1000 (Maximum Stress)</option>
+                    </select>
+                </div>
+                <div class="setting-group">
+                    <label data-i18n="BG_VOLUME">Background Music Volume</label>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <input type="range" id="music-volume-slider" min="0" max="1" step="0.01" value="0.15" style="flex: 1; cursor: pointer; accent-color: #ff4757;">
+                        <span id="music-vol-val" style="font-size: 11px; color: #888; min-width: 35px; font-family: monospace;">15%</span>
+                    </div>
+                </div>
+                <div class="setting-group">
+                    <label>Custom Soundtrack</label>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <input type="file" id="custom-track-input" accept="audio/*" style="font-size: 11px; color: #888;">
+                        <div style="display: flex; gap: 6px;">
+                            <button id="clear-custom-track-btn" class="mini-btn" style="flex: 1; background: #c0392b; font-size: 9px; padding: 4px;">Reset to Original</button>
+                        </div>
+                        <small style="font-size: 9px; color: #555;">Uploaded MP3s will replace the standard background loop.</small>
+                    </div>
+                </div>
+                <div class="setting-group">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                        <input type="checkbox" id="save-skip-checkbox" style="width: 18px; height: 18px; accent-color: #27ae60;">
+                        <span data-i18n="SAVE_SKIP">Remember & Skip on Startup</span>
+                    </label>
+                </div>
+                <div class="setting-group">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                        <input type="checkbox" id="disable-invisible-buffs-checkbox" style="width: 18px; height: 18px; accent-color: #9b59b6;">
+                        <span>Disable Invisible Buffs Globally</span>
+                    </label>
+                    <small>When enabled, hidden buffs are ignored and only visible buffs affect combat.</small>
+                </div>
+                <div class="setting-group">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                        <input type="checkbox" id="disable-auto-fullscreen-checkbox" style="width: 18px; height: 18px; accent-color: #e67e22;">
+                        <span>Disable Auto-Fullscreen</span>
+                    </label>
+                    <small>Prevents the game from automatically requesting fullscreen on your first click.</small>
+                </div>
+            </div>
+
+            <!-- Engine Tab -->
+            <div id="settings-tab-eng" class="settings-tab-pane" style="display:none">
+                <div class="setting-group">
+                    <label data-i18n="MAP_RES">Map Resolution</label>
+                    <select id="map-res-select">
+                        <option value="110m" selected data-i18n="RES_LOW">Low (Performance)</option>
+                        <option value="50m" data-i18n="RES_STD">Standard (Medium)</option>
+                        <option value="10m" data-i18n="RES_HIGH">High (Very Heavy)</option>
+                    </select>
+                    <small data-i18n="RES_SUB">Higher resolution improves borders but slows loading.</small>
+                </div>
+                <div class="setting-group">
+                    <label data-i18n="GRID_DENSITY">Grid Density</label>
+                    <select id="grid-res-select">
+                        <option value="0.25" data-i18n="GRID_FAST">Low (Fast)</option>
+                        <option value="0.15" selected data-i18n="GRID_STD">Standard</option>
+                        <option value="0.1" data-i18n="GRID_SMOOTH">High (Smooth)</option>
+                        <option value="0.05" data-i18n="GRID_INSANE">Insane (Ultra)</option>
+                    </select>
+                    <small data-i18n="GRID_SUB">Density affects the smoothness of frontlines.</small>
+                </div>
+            </div>
+
+            <!-- Presets Tab -->
+            <div id="settings-tab-pre" class="settings-tab-pane" style="display:none">
+                <div class="setting-group">
+                    <label>Performance Presets</label>
+                    <div style="display: flex; gap: 10px;">
+                        <button id="preset-low-btn" class="mini-btn" style="flex: 1; padding: 10px; background: #c0392b;">LOW PERFORMANCE</button>
+                        <button id="preset-default-btn" class="mini-btn" style="flex: 1; padding: 10px; background: #2e86de;">DEFAULT</button>
+                    </div>
+                    <small style="margin-top: 8px;">Instantly adjust all resolution, visual, and unit settings.</small>
+                </div>
+            </div>
+
+            <!-- Visuals Tab -->
+            <div id="settings-tab-vis" class="settings-tab-pane" style="display:none">
+                <div class="setting-group">
+                    <label>Style</label>
+                    <select id="imagery-select">
+                        <option value="arcgis" selected>ArcGIS World Imagery</option>
+                        <option value="google">Google Earth (No Video Recording)</option>
+                        <option value="google_cartoon">Google Maps (Standard View)</option>
+                        <option value="wargames">Simplified Mode</option>
+                    </select>
+                </div>
+                <div class="setting-group" style="display: flex; flex-direction: column; gap: 10px;">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                        <input type="checkbox" id="disable-mountains-checkbox" style="width: 18px; height: 18px; accent-color: #f1c40f;">
+                        <span data-i18n="DISABLE_MT">Disable Mountains</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                        <input type="checkbox" id="disable-provinces-checkbox" style="width: 18px; height: 18px; accent-color: #95a5a6;" checked>
+                        <span data-i18n="DISABLE_PROV">Disable Provinces</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                        <input type="checkbox" id="disable-units-visually-checkbox" style="width: 18px; height: 18px; accent-color: #e74c3c;">
+                        <span data-i18n="HIDE_UNITS">Hide Units Visually</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                        <input type="checkbox" id="disable-country-gradient-checkbox" style="width: 18px; height: 18px; accent-color: #3498db;">
+                        <span>Disable Country Gradient</span>
+                    </label>
+                </div>
+            </div>
+
+                        <button id="launch-btn" class="start-btn" style="margin-top: 20px; width: 100%;" data-i18n="APPLY_INIT">Apply & Initialize</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="main-menu" class="main-menu-v2" style="display:none">
+        <div class="menu-v2-overlay"></div>
+        <div class="menu-v2-container">
+            <div class="menu-v2-header">
+                <h1 class="menu-v2-title">MODERN WARS</h1>
+                <div class="menu-v2-author">Created by man_82</div>
+            </div>
+
+            <div class="menu-v2-nav" id="menu-nav-main">
+                <div id="nav-links-container" class="nav-links-fade">
+                    <button id="play-mode-btn" class="menu-v2-link primary">
+                        <span>PLAY</span>
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                    </button>
+                    <div class="nav-separator"></div>
+                    <button id="editor-mode-btn" class="menu-v2-link">EDITOR</button>
+                    <button id="menu-hub-btn" class="menu-v2-link">EDITOR HUB</button>
+                    <button id="menu-load-play-btn" class="menu-v2-link">LOAD FILE</button>
+                    <button id="main-settings-btn" class="menu-v2-link">ENGINE SETTINGS</button>
+                    <button id="global-chat-btn" class="menu-v2-link">GLOBAL CHAT</button>
+                    <button id="tutorial-btn" class="menu-v2-link">TUTORIAL</button>
+                    <button id="discord-server-btn" class="menu-v2-link">DISCORD SERVER</button>
+                    <button id="donate-btn" class="menu-v2-link">SUPPORT DEV</button>
+                    <button id="download-btn" class="menu-v2-link">DOWNLOAD BUILD</button>
+                    <button id="credits-btn" class="menu-v2-link">CREDITS</button>
+                </div>
+
+                <!-- New Integrated Scenario Scroller -->
+                <div id="menu-scenario-selector" class="scenario-selection-container" style="display: none;">
+                    <div class="selection-header">
+                        <button id="back-to-nav-btn" class="selection-back-btn">
+                            <svg viewBox="0 0 24 24" fill="currentColor" style="width:20px;height:20px;"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+                            <span>BACK</span>
+                        </button>
+                        <h2 class="selection-title">CHOOSE ERA</h2>
+                    </div>
+                    <div class="scenario-scroller-v2">
+                        <!-- Eras categorized for smooth scrolling -->
+                        <div class="scroller-section">
+                            <div class="scroller-label">PRESENT & COLD WAR</div>
+                            <div class="scroller-grid">
+                                <div class="scroller-card primary" id="scroller-choice-modern">
+                                    <div class="scroller-card-name">2022 MODERN DAY</div>
+                                    <div class="scroller-card-desc">Current global geopolitics and real-world alliances.</div>
+                                    <div class="scroller-card-credits">Map: UnionOfBritain</div>
+                                </div>
+                                <div class="scroller-card" id="scroller-choice-1974">
+                                    <div class="scroller-card-name">1974 COLD WAR</div>
+                                    <div class="scroller-card-desc">Bipolar world, proxy fronts, and superpower blocs.</div>
+                                    <div class="scroller-card-credits">Map: orange</div>
+                                </div>
+
+                            </div>
+                        </div>
+                        <div class="scroller-section">
+                            <div class="scroller-label">WORLD WARS</div>
+                            <div class="scroller-grid">
+                                <div class="scroller-card" id="scroller-choice-1942">
+                                    <div class="scroller-card-name">1942 TOTAL WAR</div>
+                                    <div class="scroller-card-desc">The high tide of the Axis powers' global advance.</div>
+                                    <div class="scroller-card-credits">Map: orange</div>
+                                </div>
+                                <div class="scroller-card" id="scroller-choice-1936">
+                                    <div class="scroller-card-name">1936 INTERWAR</div>
+                                    <div class="scroller-card-desc">The buildup to the most destructive war in history.</div>
+                                    <div class="scroller-card-credits">Map: filip</div>
+                                </div>
+                                <div class="scroller-card" id="scroller-choice-1914">
+                                    <div class="scroller-card-name">1914 GREAT WAR</div>
+                                    <div class="scroller-card-desc">Empires collide on the trenches of Europe.</div>
+                                    <div class="scroller-card-credits">Map: orange</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="scroller-section">
+                            <div class="scroller-label">HISTORICAL & REGIONAL</div>
+                            <div class="scroller-grid">
+                                <div class="scroller-card" id="scroller-choice-1804">
+                                    <div class="scroller-card-name">1804 NAPOLEONIC</div>
+                                    <div class="scroller-card-desc">Revolutionary France clashing with global coalitions.</div>
+                                    <div class="scroller-card-credits">Map: orange</div>
+                                </div>
+                                <div class="scroller-card" id="scroller-choice-1492">
+                                    <div class="scroller-card-name">1492 EXPLORATION</div>
+                                    <div class="scroller-card-desc">The discovery of the New World and Old World rivalries.</div>
+                                    <div class="scroller-card-credits">Map: orange</div>
+                                </div>
+                                <div class="scroller-card" id="scroller-choice-1ad">
+                                    <div class="scroller-card-name">1 AD ANTIQUITY</div>
+                                    <div class="scroller-card-desc">Classic empires and frontier legions of Rome and beyond.</div>
+                                    <div class="scroller-card-credits">Map: System</div>
+                                </div>
+
+                                <div class="scroller-card" id="scroller-choice-canada">
+                                    <div class="scroller-card-name">CANADA PROVINCES</div>
+                                    <div class="scroller-card-desc">Provincial conflicts across Canada.</div>
+                                    <div class="scroller-card-credits">Map: Gurt / man_82</div>
+                                </div>
+
+                                <div class="scroller-card" id="scroller-choice-france">
+                                    <div class="scroller-card-name">FRANCE DEPARTMENTS</div>
+                                    <div class="scroller-card-desc">Departments & regional scenarios for France.</div>
+                                    <div class="scroller-card-credits">Map: man_82</div>
+                                </div>
+
+                                <div class="scroller-card" id="scroller-choice-germany">
+                                    <div class="scroller-card-name">GERMANY STATES</div>
+                                    <div class="scroller-card-desc">Federal state level conflict in Germany.</div>
+                                    <div class="scroller-card-credits">Map: orange</div>
+                                </div>
+
+                                <div class="scroller-card" id="scroller-choice-england">
+                                    <div class="scroller-card-name">ENGLAND STATES</div>
+                                    <div class="scroller-card-desc">Counties and regional conflict in England.</div>
+                                    <div class="scroller-card-credits">Map: System</div>
+                                </div>
+
+                                <div class="scroller-card" id="scroller-choice-us">
+                                    <div class="scroller-card-name">US STATES</div>
+                                    <div class="scroller-card-desc">Internal subdivision conflict across North America.</div>
+                                    <div class="scroller-card-credits">Map: angel</div>
+                                </div>
+
+                                <div class="scroller-card" id="scroller-choice-poland">
+                                    <div class="scroller-card-name">POLAND STATES</div>
+                                    <div class="scroller-card-desc">Detailed voivodeship and internal regional conflict in Poland.</div>
+                                    <div class="scroller-card-credits">Map: man_82</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="scroller-section">
+                            <div class="scroller-label">ALTERNATE HISTORIES</div>
+                            <div class="scroller-grid">
+                                <div class="scroller-card" id="scroller-choice-kaiserreich">
+                                    <div class="scroller-card-name">KAISERREICH</div>
+                                    <div class="scroller-card-desc">Germany triumphant in the Great War; a fractured Entente world.</div>
+                                    <div class="scroller-card-credits">Map: angel</div>
+                                </div>
+                                <div class="scroller-card" id="scroller-choice-fire">
+                                    <div class="scroller-card-name">THE FIRE RISES</div>
+                                    <div class="scroller-card-desc">A Second American Civil War erupts across a divided United States.</div>
+                                    <div class="scroller-card-credits">Map: angel</div>
+                                </div>
+                                <div class="scroller-card" id="scroller-choice-1984-alt">
+                                    <div class="scroller-card-name">1984</div>
+                                    <div class="scroller-card-desc">Oceania, Eurasia, and Eastasia locked in perpetual global war.</div>
+                                    <div class="scroller-card-credits">Map: Randombanana</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="position:absolute; bottom:15px; right:30px; font-size:9px; color:rgba(255,255,255,0.3); text-transform:uppercase; letter-spacing:1px; pointer-events:none;">Double click to open</div>
+                    <button id="enter-scenario-btn" class="start-btn" style="display:none; margin-top: 20px; animation: fadeIn 0.3s ease-out;">ENTER THEATER</button>
+                </div>
+            </div>
+
+            <div class="menu-v2-footer">
+                v1.4.0-BETA // <span data-i18n="STABLE">CONNECTION STABLE</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="fade-transition-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:black; z-index:9999; opacity:0; transition:opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1); pointer-events:none;"></div>
+
+    <div id="loading-overlay" class="settings-overlay" style="display:none">
+        <!-- Standard Generic Loading (Old Look) -->
+        <div id="loading-standard-content" class="settings-content" style="display: flex; flex-direction: column; align-items: center; text-align: center; gap: 15px;">
+            <div class="loader-spinner"></div>
+            <h2 class="loading-status-text settings-title" style="margin:0;">Loading...</h2>
+            <div class="loading-bar-container" style="width: 100%;">
+                <div class="loading-bar-fill-el loading-bar-fill"></div>
+            </div>
+            <div class="loading-tip-text loading-tip">Initializing satellite systems...</div>
+        </div>
+
+        <!-- Thematic Scenario Loading (New Look) -->
+        <div id="loading-thematic-content" class="menu-v2-container" style="display:none; pointer-events: none;">
+            <div class="menu-v2-overlay"></div>
+            <div class="menu-v2-header" style="pointer-events: none;">
+                <h1 class="menu-v2-title">MODERN WARS</h1>
+                <div class="menu-v2-author">System Loading...</div>
+            </div>
+            <div class="menu-v2-nav" style="pointer-events: auto;">
+                <div class="scenario-selection-container">
+                    <div class="selection-header">
+                        <h2 class="selection-title">INITIALIZING</h2>
+                    </div>
+                    <div class="thematic-loading-body">
+                        <div class="loader-spinner"></div>
+                        <h2 class="loading-status-text" style="font-family: 'Playfair Display', serif; font-size: 32px; margin: 0; color: #fff; text-transform: uppercase; letter-spacing: 1px;">Acquiring Assets...</h2>
+                        <div class="loading-bar-container" style="height: 2px; width: 300px;">
+                            <div class="loading-bar-fill-el loading-bar-fill"></div>
+                        </div>
+                        <div class="loading-tip-text loading-tip">Syncing satellite telemetry for global operations...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="flag-rendering-loader" class="settings-overlay" style="display:none; background: rgba(0,0,0,0.6); z-index: 5000; pointer-events: none; backdrop-filter: blur(4px);">
+        <div class="settings-content" style="background: rgba(26, 26, 31, 0.9); width: auto; padding: 25px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.15);">
+            <div class="loader-spinner" style="margin: 0 auto 15px; width: 30px; height: 30px;"></div>
+            <div style="color: #fff; font-size: 11px; letter-spacing: 2px; font-weight: 900; text-transform: uppercase; text-align: center;">Rendering Flags...</div>
+        </div>
+    </div>
+
+    <div class="ui-overlay" style="display:none" id="main-ui">
+        <!-- Editor Toolbox -->
+        <div id="editor-toolbox" class="status-panel" style="display:none; margin-bottom: 10px;">
+            <div class="status-left">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-size: 10px; color: #888; letter-spacing: 1px;" data-i18n="EDITOR_TOOLS">EDITOR TOOLS</span>
+                    <div style="display:flex; gap:4px;">
+                        <button id="editor-tools-page-1-btn" class="mini-btn" style="padding:2px 6px; font-size:9px; background:#2e86de;">P1</button>
+                        <button id="editor-tools-page-2-btn" class="mini-btn" style="padding:2px 6px; font-size:9px; background:#444;">P2</button>
+                        <button id="editor-tools-page-3-btn" class="mini-btn" style="padding:2px 6px; font-size:9px; background:#444;">P3</button>
+                        <button id="editor-tools-page-4-btn" class="mini-btn" style="padding:2px 6px; font-size:9px; background:#444;">City</button>
+                        <button id="editor-tools-page-5-btn" class="mini-btn" style="padding:2px 6px; font-size:9px; background:#444;">Images</button>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 5px; flex-wrap: wrap;">
+                    <button id="editor-create-btn" class="mini-btn" data-i18n="NEW_NATION">New Nation</button>
+                    <button id="editor-test-btn" class="mini-btn" style="background: #27ae60;" data-i18n="TEST_SCENARIO">Test Scenario</button>
+                    <button id="editor-update-btn" class="mini-btn" style="display:none; background: #27ae60; font-weight: bold; border: 1px solid #fff;" data-i18n="UPDATE_SCENARIO">Update Scenario</button>
+                    <button id="editor-save-btn" class="mini-btn" style="background: #8e44ad;" data-i18n="SAVE_PRESET">Save Preset</button>
+                    <button id="editor-load-btn" class="mini-btn" style="background: #2c3e50;" data-i18n="LOAD_PRESET">Load Preset</button>
+                    <button id="editor-share-btn" class="mini-btn" style="background: #e67e22;" data-i18n="SHARE_HUB">Share to Hub</button>
+                    <button id="editor-hub-btn" class="mini-btn" style="background: #f39c12;" data-i18n="HUB_TAB">Editor Hub</button>
+                    <button id="editor-library-btn" class="mini-btn" style="background: #27ae60;" data-i18n="COUNTRY_LIB">Country Library</button>
+                    <button id="editor-flag-library-btn" class="mini-btn" style="background: #2e86de;" data-i18n="FLAG_LIB">Flag Library</button>
+                    <button id="editor-save-country-btn" class="mini-btn" style="background: #27ae60;" data-i18n="SAVE_COUNTRY">Save Country</button>
+                    <button id="editor-load-country-btn" class="mini-btn" style="background: #8e44ad;" data-i18n="LOAD_COUNTRY">Load Country</button>
+                    <button id="editor-save-multi-btn" class="mini-btn" style="background: #e67e22;" title="Save all Ctrl-selected countries into one ZIP file.">Save Selected (ZIP)</button>
+                    <button id="editor-save-all-zip-btn" class="mini-btn" style="background: #d35400;" title="Save every country with territory in this scenario into a ZIP file.">Save All (ZIP)</button>
+                    <button id="editor-load-zip-btn" class="mini-btn" style="background: #16a085;" title="Load a ZIP of country files into this scenario.">Load ZIP</button>
+                    <button id="editor-import-country-from-scenario-btn" class="mini-btn" style="background: #2980b9;" title="Import a single country from a built-in era or a saved scenario into this map.">Import from Scenario</button>
+                    <button id="editor-paint-btn" class="mini-btn" style="display:none" data-i18n="PAINT">Paint Borders</button>
+                    <button id="editor-fill-btn" class="mini-btn" style="display:none; background: #d35400;" data-i18n="FILL">Fill</button>
+                    <button id="editor-unclaim-btn" class="mini-btn" style="display:none; background: #34495e;" data-i18n="UNCLAIM">Unclaim Tool</button>
+                    <button id="editor-terrain-btn" class="mini-btn" style="display:none; background: #e67e22;" title="Paint new land or carve oceans.">Terrain Brush</button>
+                    <button id="editor-place-division-btn" class="mini-btn" style="display:none; background:#27ae60;" title="Place a division for the selected nation by clicking on the map.">Place Division</button>
+                    <button id="editor-city-new-btn" class="mini-btn" style="display:none; background:#27ae60;" title="Create a new city by clicking on the map.">New City</button>
+                    <button id="editor-city-clear-btn" class="mini-btn" style="display:none; background:#c0392b;" title="Remove all cities from this scenario.">Clear Cities</button>
+                    <div id="brush-controls" style="display:none; align-items: center; gap: 8px; margin-left: 5px; border-left: 1px solid #444; padding-left: 10px;">
+                        <label style="font-size: 9px; color: #888; text-transform: uppercase;">Brush</label>
+                        <input type="range" id="brush-size-slider" min="0.1" max="3.0" step="0.1" value="0.5" style="width: 60px; height: 4px; cursor: pointer;">
+                        <span id="brush-size-val" style="font-size: 10px; color: #aaa; min-width: 20px;">0.5</span>
+                    </div>
+                    <div id="terrain-controls" style="display:none; align-items: center; gap: 8px; margin-left: 5px; border-left: 1px solid #444; padding-left: 10px;">
+                        <select id="terrain-type-select" class="mini-select" style="width: 70px;">
+                            <option value="LAND">LAND</option>
+                            <option value="DESERT">DESERT</option>
+                            <option value="MOUNTAIN">MTN</option>
+                            <option value="OCEAN">OCEAN</option>
+                        </select>
+                    </div>
+
+                    <!-- Page 5: Overlay Tools -->
+                    <div id="overlay-tools" style="display:none; align-items: center; gap: 10px; flex-wrap: wrap;">
+                        <div style="display: flex; flex-direction: column; gap: 4px; border-right: 1px solid #444; padding-right: 10px;">
+                            <label style="font-size: 8px; color: #888;">CUSTOM SATELLITE (BG)</label>
+                            <div style="display: flex; gap: 4px;">
+                                <input type="file" id="custom-sat-input" accept="image/*" style="display:none;">
+                                <button onclick="document.getElementById('custom-sat-input').click()" class="mini-btn" style="background:#2e86de; padding:4px 8px;">Upload BG</button>
+                                <button id="clear-sat-btn" class="mini-btn" style="background:#c0392b; padding:4px 8px;">Clear</button>
+                            </div>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <label style="font-size: 8px; color: #888;">REFERENCE IMAGE (GUIDE)</label>
+                            <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                                <input type="file" id="ref-image-input" accept="image/*" style="display:none;">
+                                <button onclick="document.getElementById('ref-image-input').click()" class="mini-btn" style="background:#27ae60; padding:4px 8px;">Upload Ref</button>
+                                <div style="display:flex; align-items:center; gap:4px;">
+                                    <span style="font-size:8px; color:#555;">Opacity</span>
+                                    <input type="range" id="ref-opacity-slider" min="0" max="1" step="0.05" value="0.5" style="width:50px; height:4px;">
+                                </div>
+                                <div style="display:flex; align-items:center; gap:4px;">
+                                    <span style="font-size:8px; color:#555;">Scale</span>
+                                    <input type="range" id="ref-scale-slider" min="0.1" max="5" step="0.05" value="1" style="width:50px; height:4px;">
+                                </div>
+                                <label style="display:flex; align-items:center; gap:4px; font-size:8px; color:#777; cursor:pointer;">
+                                    <input type="checkbox" id="ref-above-checkbox" style="width:12px; height:12px;">
+                                    <span>Draw Above Terrain</span>
+                                </label>
+                                <button id="clear-ref-btn" class="mini-btn" style="background:#c0392b; padding:4px 8px;">Clear</button>
+                            </div>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 4px; border-left: 1px solid #444; padding-left: 10px;">
+                            <label style="font-size: 8px; color: #888;">EXPORT TOOLS</label>
+                            <button id="editor-download-map-btn" class="mini-btn" style="background:#8e44ad; padding:4px 8px;" title="Download a high-res PNG of your map's layout and terrain.">Download PNG</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="status-right">
+                <button id="editor-map-settings-btn" class="mini-btn">Map Settings</button>
+                <button id="editor-exit-btn" class="mini-btn">Exit Editor</button>
+            </div>
+        </div>
+
+        <div id="game-status" class="status-panel">
+            <div class="status-left">
+                <span id="status-text" data-i18n="SELECT_P1">Select First Country</span>
+                <div id="unit-counts" style="display:none; font-size: 10px; color: #888; margin-top: 4px;">
+                    <span id="p1-units" class="team-a">0</span> <span data-i18n="VS_MINI">vs</span> <span id="p2-units" class="team-b">0</span> <span data-i18n="UNITS">UNITS</span>
+                </div>
+            </div>
+            <div class="status-right">
+                <button id="minimize-status-btn" class="mini-btn" style="background:#555;font-size:14px;padding:2px 8px;margin-right:4px;">−</button>
+                <div class="control-group">
+                    <button id="view-mode-btn" class="mini-btn" title="Toggle View Mode" style="background: #3498db;" data-i18n="POLITICAL">POLITICAL</button>
+                    <label style="display:inline-flex; align-items:center; gap:4px; font-size:9px; color:#ccc; cursor:pointer;">
+                        <input type="checkbox" id="alliance-view-checkbox" style="width:14px;height:14px; accent-color:#16a085;">
+                        <span>ALLIANCE</span>
+                    </label>
+                    <button id="arrows-toggle-btn" class="mini-btn" title="Toggle Alliance View (legacy toggle)" data-i18n="ARROWS">ARROWS (BUGGY)</button>
+                    <button id="battles-toggle-btn" class="mini-btn" title="Toggle Battle Visuals" data-i18n="BATTLE_VIS">BATTLE VISUALS</button>
+                    <button id="labels-toggle-btn" class="mini-btn" title="Toggle Country Labels">LABELS</button>
+                    <button id="cities-toggle-btn" class="mini-btn" title="Toggle Cities">CITIES</button>
+                </div>
+
+                <div class="control-group simulation-controls">
+                    <button id="god-mode-btn" class="mini-btn" style="display:none; background: #d35400; font-weight: 900;" data-i18n="GOD">GOD</button>
+                    <button id="god-bomb-btn" class="mini-btn" style="display:none; background: #c0392b; font-weight: 900;">GOD BOMB: OFF</button>
+                    <div id="speed-controls" style="display:none; align-items: center; gap: 4px;">
+                        <button id="pause-btn" class="mini-btn" style="background: #f39c12; min-width: 30px; padding: 5px;">⏸</button>
+                        <button id="speed-down-btn" class="mini-btn" style="padding: 5px 8px;">&lsaquo;</button>
+                        <button id="ff-btn" class="mini-btn" style="min-width: 35px;">1x</button>
+                        <button id="speed-up-btn" class="mini-btn" style="padding: 5px 8px;">&rsaquo;</button>
+                    </div>
+                    <button id="force-peace-btn" class="mini-btn" style="display:none; background: #27ae60;" data-i18n="DIPLOMACY">DIPLOMACY</button>
+                </div>
+
+                <div class="control-group utility-controls" style="gap: 8px;">
+                    <button id="quick-restart-btn" class="start-btn" style="display:none; background: #e67e22; font-size: 10px; padding: 8px 15px; width: auto; border: 2px solid #fff;" title="QUICK RESTART: Instantly reset borders and war state to scenario start (no loading screen)">QUICK RESTART</button>
+                    <button id="restart-scenario-btn" class="mini-btn" style="display:none; background: #c0392b; padding: 8px 10px;" title="FULL RELOAD: Reload the entire scenario from disk (shows loading screen)">FULL RELOAD</button>
+                    <button id="reset-btn" class="mini-btn" style="display:none" title="Reset Simulation">RESET</button>
+                    <button id="main-menu-btn" class="mini-btn" style="background:#444;" title="Return to Main Menu">MENU</button>
+                    <button id="leaderboard-btn" class="mini-btn" style="background:#555;" title="Open Global Leaderboard">RANK</button>
+                    <button id="mute-btn" class="mini-btn" style="min-width: 32px;" title="Toggle Mute">🔊</button>
+                    <button id="ingame-settings-btn" class="mini-btn" title="Open Settings">⚙️</button>
+                </div>
+            </div>
+        </div>
+        
+        <div id="setup-panel" class="setup-panel" style="max-width: 320px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h3 class="setup-title" style="margin: 0;" data-i18n="CONFLICT_SETUP">Conflict Setup</h3>
+                <div style="display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end;">
+                    <button id="random-war-btn" class="mini-btn" style="background: #9b59b6;" data-i18n="RANDOM_WAR_OFF" title="Periodically spawns extra AI wars between random neighboring countries during the simulation.">Random War: OFF</button>
+                    <button id="add-side-btn" class="mini-btn" style="background: #8e44ad;" data-i18n="ADD_SIDE" title="Add another faction column so more teams can join this conflict.">+ Side</button>
+                    <button id="ffa-toggle-btn" class="mini-btn" style="background: #e67e22;" data-i18n="FFA" title="Free‑for‑all: each side fights everyone else instead of two big alliances.">FFA</button>
+                    <button id="minimize-setup-btn" class="mini-btn" style="background: #555; font-size: 14px; padding: 2px 8px;">−</button>
+                </div>
+            </div>
+            
+            <div id="sides-container" class="setup-sides" style="overflow-x: auto; padding-bottom: 10px; align-items: flex-start;">
+                <!-- Sides will be injected here -->
+            </div>
+
+            <div id="setup-prompt" style="text-align: center; font-size: 11px; color: #666; margin: 10px 0;" data-i18n="SETUP_PROMPT">
+                Select a side, then click countries on the map to recruit them.
+            </div>
+            
+            <div id="setup-options" class="setup-options" style="display:none; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
+                <div class="option-row">
+                    <label data-i18n="DENSITY" title="Controls how many units are spawned per country. Higher density = thicker frontlines but lower performance.">Force Density</label>
+                    <input type="range" id="density-slider" min="0.5" max="2" step="0.1" value="1" title="Slide right for more units and thicker fronts, left for fewer units and higher FPS.">
+                </div>
+
+                <div class="option-row" style="margin-top: 8px;">
+                    <label style="font-size: 11px; color: #ccc;" title="Optional: set total manpower (soldiers) each alliance starts with. Leave empty for automatic scaling based on territory.">
+                        Alliance Manpower (Optional)
+                    </label>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; align-items:center;">
+                        <div style="display:flex; flex-direction:column; gap:2px;">
+                            <span style="font-size:9px; color:#ff4757; text-transform:uppercase; letter-spacing:0.5px;">Side A</span>
+                            <input id="manpower-side-a" type="number" min="0" placeholder="auto" style="width:110px; padding:4px 6px; background:#2a2a30; border:1px solid #444; border-radius:4px; color:#fff; font-size:11px;" title="Total soldiers for Side A (e.g. 2000000).">
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:2px;">
+                            <span style="font-size:9px; color:#2e86de; text-transform:uppercase; letter-spacing:0.5px;">Side B</span>
+                            <input id="manpower-side-b" type="number" min="0" placeholder="auto" style="width:110px; padding:4px 6px; background:#2a2a30; border:1px solid #444; border-radius:4px; color:#fff; font-size:11px;" title="Total soldiers for Side B (e.g. 1500000).">
+                        </div>
+                    </div>
+                </div>
+                <div class="option-row" style="margin-top: 10px;">
+                    <label style="font-size: 12px; color: #ccc;" title="Optional in‑game calendar that advances as the war runs (purely cosmetic).">Time System</label>
+                    <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: flex-end;">
+                        <label style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #ccc; cursor: pointer;" title="Toggle the calendar on/off for this conflict.">
+                            <input type="checkbox" id="enable-time-checkbox" style="width: 16px; height: 16px; accent-color: #f1c40f; cursor: pointer;">
+                            <span>Enable</span>
+                        </label>
+                        <input id="time-year-input" type="number" placeholder="1936" style="width: 70px; padding: 4px 6px; background:#2a2a30;border:1px solid #444;border-radius:4px;color:#fff;font-size:11px;" title="Starting year for the war (for flavor only, not mechanics)." />
+                        <span style="color:#777;font-size:11px;">/</span>
+                        <input id="time-month-input" type="number" min="1" max="12" placeholder="1" style="width: 40px; padding: 4px 6px; background:#2a2a30;border:1px solid #444;border-radius:4px;color:#fff;font-size:11px;" title="Starting month of the conflict." />
+                        <span style="color:#777;font-size:11px;">/</span>
+                        <input id="time-day-input" type="number" min="1" max="31" placeholder="1" style="width: 40px; padding: 4px 6px; background:#2a2a30;border:1px solid #444;border-radius:4px;color:#fff;font-size:11px;" title="Starting day of the conflict." />
+                    </div>
+                </div>
+
+                <div class="option-row" style="margin-top: 10px;">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%;" title="When enabled, the AI will never offer peace; the war only ends when one side is fully defeated.">
+                        <input type="checkbox" id="no-peace-checkbox" style="width: 18px; height: 18px; accent-color: #ff4757; cursor: pointer;">
+                        <span style="font-size: 12px; color: #ccc;" data-i18n="FIGHT_TO_DEATH">FIGHT TO THE DEATH (NO PEACE)</span>
+                    </label>
+                </div>
+                <div class="option-row" style="margin-top: 5px;">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%;" title="When enabled, AI offensives will prioritize capturing cities before other territory.">
+                        <input type="checkbox" id="city-focus-checkbox" style="width: 18px; height: 18px; accent-color: #e67e22; cursor: pointer;">
+                        <span style="font-size: 12px; color: #ccc;">CITY FOCUS MODE (TARGET CITIES)</span>
+                    </label>
+                </div>
+                <div class="option-row" style="margin-top: 5px;">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%;" title="Turns off long‑range missile/bomb animations and their extra casualties.">
+                        <input type="checkbox" id="disable-bombs-checkbox" style="width: 18px; height: 18px; accent-color: #f39c12; cursor: pointer;">
+                        <span style="font-size: 12px; color: #ccc;" data-i18n="DISABLE_MISSILES">DISABLE LONG-RANGE MISSILES</span>
+                    </label>
+                </div>
+                <div class="option-row" style="margin-top: 5px;">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%;" title="If checked, units ignore mountain movement penalties and mountain darkening.">
+                        <input type="checkbox" id="setup-disable-mountains-checkbox" style="width: 18px; height: 18px; accent-color: #f1c40f; cursor: pointer;">
+                        <span style="font-size: 12px; color: #ccc;" data-i18n="DISABLE_MT">DISABLE MOUNTAINS</span>
+                    </label>
+                </div>
+
+                <div class="option-row" style="margin-top: 5px;">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%;" title="Hide or show detailed internal province borders inside each country.">
+                        <input type="checkbox" id="setup-disable-provinces-checkbox" style="width: 18px; height: 18px; accent-color: #95a5a6; cursor: pointer;" checked>
+                        <span style="font-size: 12px; color: #ccc;" data-i18n="DISABLE_PROV">DISABLE PROVINCES</span>
+                    </label>
+                </div>
+
+                <div class="option-row" style="margin-top: 5px;">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%;" title="Prevents overlord nations from automatically calling their vassals into the war.">
+                        <input type="checkbox" id="disable-puppets-checkbox" style="width: 18px; height: 18px; accent-color: #9b59b6; cursor: pointer;" checked>
+                        <span style="font-size: 12px; color: #ccc;" data-i18n="DISABLE_PUPPETS">DISABLE PUPPETS (NO VASSAL CALL)</span>
+                    </label>
+                </div>
+                <div class="option-row" style="margin-top: 5px; background: rgba(255,255,255,0.03); padding: 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%;" title="Cinematic mode hides most UI during war and records a video of the conflict to save locally when it ends.">
+                        <input type="checkbox" id="cinematic-mode-checkbox" style="width: 18px; height: 18px; accent-color: #f1c40f; cursor: pointer;">
+                        <span style="font-size: 12px; color: #f1c40f; font-weight: 900; letter-spacing: 1px;">CINEMATIC MODE (RECORD WAR)</span>
+                    </label>
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 15px;">
+                    <button id="start-btn" class="start-btn" style="flex: 2;" data-i18n="INAUGURATE" title="Lock in the setup and start the war simulation with the chosen sides and options.">Inaugurate Conflict</button>
+                    <button id="rebellion-btn" class="start-btn" style="flex: 1; background: #95a5a6; font-size: 11px;" disabled data-i18n="REBELLION" title="If enabled, launches an internal independence war against an empire that has annexed other nations.">Start Rebellion</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="game-date-display" class="game-date-display" style="display:none;">0000/00/00</div>
+
+        <div id="casualty-panel" class="casualty-panel" style="display:none">
+            <div class="casualty-title">CASUALTIES</div>
+            <div id="casualty-list-a" class="casualty-side-list"></div>
+            <div id="casualty-list-b" class="casualty-side-list"></div>
+        </div>
+
+        <div id="stats-panel" class="stats-panel" style="display:none">
+            <div id="treaty-alert" class="treaty-alert" style="display:none; margin-bottom: 15px;">
+                <div class="treaty-content">
+                    <div id="treaty-msg">Peace Proposal Offered</div>
+                    <div id="treaty-status" style="font-size: 10px; color: #888; margin-top: 5px;">Negotiating...</div>
+                </div>
+            </div>
+
+            <div class="stats-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <span>COMBAT OPERATIONS REPORT</span>
+                <button id="minimize-stats-btn" class="mini-btn" style="background: #444; font-size: 14px; padding: 2px 8px;">−</button>
+            </div>
+            
+            <div class="stats-grid">
+                <div class="side-stats team-a-block">
+                    <div id="p1-name" class="stat-name team-a">Side A</div>
+                    <div class="stat-metrics">
+                        <div class="metric">
+                            <span class="metric-label">PERSONNEL</span>
+                            <span id="p1-soldiers-ui" class="metric-value team-a">0</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">CITIES</span>
+                            <span id="p1-cities" class="metric-value">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stats-vs">VS</div>
+
+                <div class="side-stats team-b-block">
+                    <div id="p2-name" class="stat-name team-b">Side B</div>
+                    <div class="stat-metrics">
+                        <div class="metric">
+                            <span class="metric-label">PERSONNEL</span>
+                            <span id="p2-soldiers-ui" class="metric-value team-b">0</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">CITIES</span>
+                            <span id="p2-cities" class="metric-value">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tug-of-war">
+                <div id="p1-control" class="control-pct">50%</div>
+                <div class="stat-progress">
+                    <div id="progress-bar" class="progress-inner"></div>
+                </div>
+                <div id="p2-control" class="control-pct">50%</div>
+            </div>
+        </div>
+
+        <div class="bottom-controls">
+            <div class="coordinates-display" id="coords">0.0000, 0.0000</div>
+        </div>
+    </div>
+
+    <!-- Editor Choice Modal -->
+    <div id="editor-choice-modal" class="settings-overlay" style="display:none">
+        <div class="settings-content" style="max-width: 500px;">
+            <h2 class="settings-title">CHOOSE EDITOR MODULE</h2>
+            <div class="editor-choice-grid">
+                <button id="choice-ingame-editor" class="menu-card primary">
+                    <div class="card-icon">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M4 20V9l8-5 8 5v11h-3v-7H7v7H4z" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <div class="card-body">
+                        <span class="btn-text">IN-GAME ENGINE</span>
+                        <span class="btn-sub">Integrated Map Builder</span>
+                    </div>
+                </button>
+                <button id="choice-external-editor" class="menu-card">
+                    <div class="card-icon">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M4 20l4-1 9-9-3-3-9 9-1 4zM15 4l3 3 2-4-1-1-4 2z" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <div class="card-body">
+                        <span class="btn-text">EXTERNAL EDITOR</span>
+                        <span class="btn-sub">Advanced Standalone Module</span>
+                    </div>
+                </button>
+            </div>
+            <button id="cancel-editor-choice" class="start-btn" style="background: #444;">BACK TO MENU</button>
+        </div>
+    </div>
+
+    <!-- Editor Source Modal -->
+    <div id="editor-source-modal" class="settings-overlay" style="display:none">
+        <div class="settings-content" style="max-width: 500px;">
+            <h2 class="settings-title">CHOOSE TERRAIN SOURCE</h2>
+            <div style="display: grid; grid-template-columns: 1fr; gap: 15px; margin-bottom: 20px;">
+                <button id="choice-source-earth" class="menu-card primary" style="width: 100%; border: 1px solid rgba(255, 71, 87, 0.3);">
+                    <div class="card-icon">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                            <path d="M9 6h2l1 2-2 2 1 2-1 2H7l-1-2 1-2-1-2 3-2zM14 7l3 1v2l-1 2 1 2-1 2h-3l1-3-1-2 1-4z" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <div class="card-body" style="text-align: left;">
+                        <span class="btn-text">REAL EARTH</span>
+                        <span class="btn-sub">Standard Map & Topography</span>
+                    </div>
+                </button>
+                <button id="choice-source-blank" class="menu-card" style="width: 100%; border: 1px solid rgba(255,255,255,0.1);">
+                    <div class="card-icon">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <rect x="5" y="5" width="14" height="14" fill="currentColor"/>
+                        </svg>
+                    </div>
+                    <div class="card-body" style="text-align: left;">
+                        <span class="btn-text">BLANK CANVAS</span>
+                        <span class="btn-sub">Draw your own world from scratch</span>
+                    </div>
+                </button>
+            </div>
+            <button id="cancel-source-choice" class="start-btn" style="background: #444;">BACK</button>
+        </div>
+    </div>
+
+    <!-- Blank Canvas Size Modal -->
+    <div id="blank-size-modal" class="settings-overlay" style="display:none">
+        <div class="settings-content" style="max-width: 400px;">
+            <h2 class="settings-title">CANVAS DIMENSIONS</h2>
+            <div class="setting-group">
+                <label>Width (Degrees)</label>
+                <input type="number" id="blank-width-input" value="360" min="10" max="360" style="width: 100%; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px;">
+                <small>360 = Full World. Smaller values limit the map.</small>
+            </div>
+            <div class="setting-group">
+                <label>Height (Degrees)</label>
+                <input type="number" id="blank-height-input" value="180" min="10" max="180" style="width: 100%; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px;">
+                <small>180 = Full World.</small>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button id="confirm-blank-size-btn" class="start-btn">Initialize Canvas</button>
+                <button id="cancel-blank-size-btn" class="start-btn" style="background: #444;">Back</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Map Settings Modal -->
+    <div id="map-settings-modal" class="settings-overlay thematic-overlay" style="display:none">
+        <div class="menu-v2-overlay"></div>
+        <div class="menu-v2-container">
+            <div class="menu-v2-header">
+                <h1 class="menu-v2-title">MAP CONFIG</h1>
+                <div class="menu-v2-author">Theater Parameters</div>
+            </div>
+            <div class="menu-v2-nav">
+                <div class="scenario-selection-container">
+                    <div class="selection-header">
+                        <button id="map-settings-cancel-btn" class="selection-back-btn">
+                            <svg viewBox="0 0 24 24" fill="currentColor" style="width:20px;height:20px;"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+                            <span>BACK</span>
+                        </button>
+                        <h2 class="selection-title">DIMENSIONS</h2>
+                    </div>
+                    <div class="scenario-scroller-v2">
+                <label>Map Name</label>
+                <input type="text" id="map-settings-name-input" placeholder="e.g. Cold War Europe" style="width: 100%; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px;">
+            </div>
+            <div class="setting-group">
+                <label>World Width (Degrees)</label>
+                <input type="number" id="map-settings-width-input" min="10" max="360" step="1" style="width: 100%; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px;">
+                <small>360 = full longitude wrap. Smaller values confine the playable world.</small>
+            </div>
+            <div class="setting-group">
+                <label>World Height (Degrees)</label>
+                <input type="number" id="map-settings-height-input" min="10" max="180" step="1" style="width: 100%; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px;">
+                <small>180 = full pole‑to‑pole. Smaller values confine latitude.</small>
+            </div>
+            <div class="setting-group">
+                <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                    <input type="checkbox" id="map-settings-missiles-checkbox" style="width: 18px; height: 18px; accent-color: #f39c12;">
+                    <span>Enable Long‑Range Missiles in This Map</span>
+                </label>
+                <small>When disabled, missile/bomb launches are fully disabled in this scenario.</small>
+            </div>
+                        <button id="map-settings-apply-btn" class="start-btn" style="margin-top: 20px;">Apply Strategic Changes</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Conquest Choice Modal -->
+    <div id="conquest-choice-modal" class="settings-overlay thematic-overlay" style="display:none">
+        <div class="menu-v2-overlay"></div>
+        <div class="menu-v2-container">
+            <div class="menu-v2-header">
+                <h1 class="menu-v2-title">CONQUEST</h1>
+                <div class="menu-v2-author">Global Combat Operations</div>
+            </div>
+            <div class="menu-v2-nav">
+                <div class="scenario-selection-container">
+                    <div class="selection-header">
+                        <button id="cancel-conquest-choice" class="selection-back-btn">
+                            <svg viewBox="0 0 24 24" fill="currentColor" style="width:20px;height:20px;"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+                            <span>BACK</span>
+                        </button>
+                        <div class="era-tabs">
+                            <button id="era-tab-modern" class="mini-btn active">MODERN</button>
+                            <button id="era-tab-wars" class="mini-btn">WARS</button>
+                            <button id="era-tab-history" class="mini-btn">HISTORIC</button>
+                            <button id="era-tab-states" class="mini-btn">REGIONAL</button>
+                            <button id="era-tab-alt" class="mini-btn">ALT</button>
+                        </div>
+                    </div>
+                    <div class="scenario-scroller-v2">
+                        <!-- Modern scenarios page -->
+                        <div id="era-page-modern" class="era-page era-page-active">
+                <div class="era-timeline-label">PRESENT & COLD WAR</div>
+                <div class="era-grid">
+                    <button id="choice-modern-day" class="era-card era-card-primary">
+                        <div class="era-card-header">
+                            <span class="era-chip era-chip-hot">LIVE WORLD</span>
+                            <span class="era-icon">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M4 9h16v9H4V9zm2-4h4v3H6V5zm6 0h4v3h-4V5z" fill="currentColor"/>
+                                </svg>
+                            </span>
+                        </div>
+                        <div class="era-card-body">
+                            <div class="era-name" data-i18n="MODERN_DAY">2022</div>
+                            <div class="era-desc" data-i18n="MODERN_DAY_SUB">Present geopolitics and alliances</div>
+                            <div class="era-meta">Real borders • 21st century</div>
+                            <div class="era-meta">Map: UnionOfBritain</div>
+                        </div>
+                    </button>
+
+
+                    <button id="choice-1974-scenario" class="era-card">
+                        <div class="era-card-header">
+                            <span class="era-chip">COLD WAR</span>
+                            <span class="era-icon">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <circle cx="12" cy="12" r="3" fill="currentColor"/>
+                                    <path d="M3 5l5 2-2 2-3-4zm16 0l-5 2 2 2 3-4zm-5 12l2 2-4 2 2-4zm-6 0l-2 2 4 2-2-4z" fill="currentColor"/>
+                                </svg>
+                            </span>
+                        </div>
+                        <div class="era-card-body">
+                            <div class="era-name">1974 SCENARIO</div>
+                            <div class="era-desc">Bipolar world, proxy fronts & blocs</div>
+                            <div class="era-meta">NATO vs Warsaw Pact • Map: orange</div>
+                        </div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- World Wars page -->
+            <div id="era-page-wars" class="era-page">
+                <div class="era-timeline-label">THE WORLD WARS (1914 - 1945)</div>
+                <div class="era-grid">
+                    <button id="choice-1942-scenario" class="era-card">
+                        <div class="era-card-header">
+                            <span class="era-chip">TOTAL WAR</span>
+                            <span class="era-icon">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M12 3c2 2 3 3.8 3 6a4 4 0 11-8 0c0-.7.1-1.3.3-1.9C7 8.5 6 9.8 6 12a6 6 0 0012 0c0-3.2-2-5.4-6-9z" fill="currentColor"/>
+                                </svg>
+                            </span>
+                        </div>
+                        <div class="era-card-body">
+                            <div class="era-name">1942 SCENARIO</div>
+                            <div class="era-desc">High tide of the Axis advance</div>
+                            <div class="era-meta">Eastern Front • Pacific • Desert War</div>
+                            <div class="era-meta">Map: orange</div>
+                        </div>
+                    </button>
+                    
+                    <button id="choice-1936-scenario" class="era-card">
+                        <div class="era-card-header">
+                            <span class="era-chip">INTERWAR</span>
+                            <span class="era-icon">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5L12 15.8 7.1 18.2l.9-5.5-4-3.9 5.5-.8L12 3z" fill="currentColor"/>
+                                </svg>
+                            </span>
+                        </div>
+                        <div class="era-card-body">
+                            <div class="era-name" data-i18n="WW2_SCENARIO">1936 SCENARIO</div>
+                            <div class="era-desc" data-i18n="WW2_SCENARIO_SUB">Build‑up to global conflict</div>
+                            <div class="era-meta">Revanchism • Rearmament</div>
+                            <div class="era-meta">Map: filip</div>
+                        </div>
+                    </button>
+
+                    <button id="choice-ww1-1914" class="era-card">
+                        <div class="era-card-header">
+                            <span class="era-chip">GREAT WAR</span>
+                            <span class="era-icon">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M4 13a8 8 0 0116 0v3H4v-3zm2 4h12v2H6z" fill="currentColor"/>
+                                </svg>
+                            </span>
+                        </div>
+                        <div class="era-card-body">
+                            <div class="era-name">1914 SCENARIO</div>
+                            <div class="era-desc">Empires collide on trench frontiers</div>
+                            <div class="era-meta">Alliances • Mobilisation • Map: orange</div>
+                        </div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Historical page -->
+            <div id="era-page-history" class="era-page">
+                <div class="era-timeline-label">CLASSICAL & HISTORICAL</div>
+                <div class="era-grid">
+                    <button id="choice-1804-scenario" class="era-card">
+                        <div class="era-card-header">
+                            <span class="era-chip">NAPOLEONIC</span>
+                            <span class="era-icon">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M12 3l1.5 3 3.5.5-2.5 2.4.6 3.6L12 11.5 8.9 12.5l.6-3.6L7 6.5l3.5-.5L12 3z" fill="currentColor"/>
+                                </svg>
+                            </span>
+                        </div>
+                        <div class="era-card-body">
+                            <div class="era-name">1804 NAPOLEONIC WARS</div>
+                            <div class="era-desc">Coalitions clash across revolutionary Europe</div>
+                            <div class="era-meta">Empires • Coalitions</div>
+                            <div class="era-meta">Map: orange</div>
+                        </div>
+                    </button>
+
+                    <button id="choice-1492-scenario" class="era-card">
+                        <div class="era-card-header">
+                            <span class="era-chip">DISCOVERY</span>
+                            <span class="era-icon">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M4 18h16l-3-6-4 2-2-8-4 5v7zM3 20h18v1H3z" fill="currentColor"/>
+                                </svg>
+                            </span>
+                        </div>
+                        <div class="era-card-body">
+                            <div class="era-name">1492 SCENARIO</div>
+                            <div class="era-desc">The dawn of global exploration and old world empires</div>
+                            <div class="era-meta">Exploration • Colonialism</div>
+                            <div class="era-meta">Map: orange</div>
+                        </div>
+                    </button>
+
+                    <button id="choice-1ad-scenario" class="era-card">
+                        <div class="era-card-header">
+                            <span class="era-chip">ANTIQUE</span>
+                            <span class="era-icon">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M9 3h6v2h2v2.5a6 6 0 01-2 4.5V18a2 2 0 01-2 2h-2a2 2 0 01-2-2v-6a6 6 0 01-2-4.5V5h2V3z" fill="currentColor"/>
+                                </svg>
+                            </span>
+                        </div>
+                        <div class="era-card-body">
+                            <div class="era-name">1 AD SCENARIO</div>
+                            <div class="era-desc">Classical empires and frontier legions</div>
+                            <div class="era-meta">Rome • Parthia • Tribal belts</div>
+                            <div class="era-meta">Map: System</div>
+                        </div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- States scenarios page -->
+            <div id="era-page-states" class="era-page">
+                <div class="era-timeline-label">NATIONAL SUBDIVISIONS</div>
+                <div class="era-grid">
+                    <button id="choice-us-states" class="era-card">
+                        <div class="era-card-header">
+                            <span class="era-chip">INTERNAL</span>
+                            <span class="era-icon">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M4 5l5-2 6 2 5-2v14l-5 2-6-2-5 2V5z" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                                    <path d="M9 3v14M15 5v14" stroke="currentColor" stroke-width="1.2"/>
+                                </svg>
+                            </span>
+                        </div>
+                        <div class="era-card-body">
+                            <div class="era-name">US STATES</div>
+                            <div class="era-desc">State‑vs‑state campaigns on the US map</div>
+                            <div class="era-meta">50 states • State flags</div>
+                            <div class="era-meta">Basemap: orange • Cities: angel</div>
+                        </div>
+                    </button>
+
+                    <button id="choice-canada-states" class="era-card">
+                        <div class="era-card-header">
+                            <span class="era-chip">INTERNAL</span>
+                            <span class="era-icon">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M12 3l2 3 3-1-1 3 3 1-3 2 1 3-3-1-1 4-1-4-3 1 1-3-3-2 3-1-1-3 3 1z" fill="currentColor"/>
+                                </svg>
+                            </span>
+                        </div>
+                        <div class="era-card-body">
+                            <div class="era-name">CANADA PROVINCES</div>
+                            <div class="era-desc">Provincial conflicts across Canada</div>
+                            <div class="era-meta">10 provinces • 3 territories</div>
+                            <div class="era-meta">Base map: orange • Provinces layout: gurt • Quebec &amp; New Brunswick: man_82</div>
+                        </div>
+                    </button>
+
+                    <button id="choice-germany-states" class="era-card">
+                        <div class="era-card-header">
+                            <span class="era-chip">INTERNAL</span>
+                            <span class="era-icon">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M5 4h14v3H5zm0 5h14v3H5zm0 5h14v3H5z" fill="currentColor"/>
+                                </svg>
+                            </span>
+                        </div>
+                        <div class="era-card-body">
+                            <div class="era-name">GERMANY STATES</div>
+                            <div class="era-desc">16 Federal States of Germany</div>
+                            <div class="era-meta">Regional Conflict • Map: orange</div>
+                        </div>
+                    </button>
+
+                    <button id="choice-england-states" class="era-card">
+                        <div class="era-card-header">
+                            <span class="era-chip">INTERNAL</span>
+                            <span class="era-icon">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z" fill="currentColor"/>
+                                </svg>
+                            </span>
+                        </div>
+                        <div class="era-card-body">
+                            <div class="era-name">ENGLAND STATES</div>
+                            <div class="era-desc">English Counties and regional centers</div>
+                            <div class="era-meta">Counties Layout • Map: orange</div>
+                        </div>
+                    </button>
+                </div>
+
+                <div class="era-hint">
+                    More state‑level maps will appear here as you or the community publish them to the hub.
+                </div>
+            </div>
+
+            <!-- Alt History page -->
+            <div id="era-page-alt" class="era-page">
+                <div class="era-timeline-label">ALTERNATE HISTORIES</div>
+                <div class="era-grid">
+                    <button id="choice-kaiserreich-scenario" class="era-card">
+                        <div class="era-card-header">
+                            <span class="era-chip">WHAT IF</span>
+                            <span class="era-icon">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M4 12l4-7h8l4 7-4 7H8l-4-7z" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                                    <path d="M10 10h4v4h-4z" fill="currentColor"/>
+                                </svg>
+                            </span>
+                        </div>
+                        <div class="era-card-body">
+                            <div class="era-name">KAISERREICH</div>
+                            <div class="era-desc">Germany triumphant in the Great War</div>
+                            <div class="era-meta">Alt-history • Map: angel</div>
+                        </div>
+                    </button>
+
+                    <button id="choice-fire-rises-scenario" class="era-card">
+                        <div class="era-card-header">
+                            <span class="era-chip">WHAT IF</span>
+                            <span class="era-icon">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M12 3c1.8 1.7 3 3.8 3 6a4 4 0 11-8 0c0-.7.1-1.4.3-2C6 9 5 10.4 5 12.5A6.5 6.5 0 0018 14c0-3.3-1.8-6.2-6-11z" fill="currentColor"/>
+                                </svg>
+                            </span>
+                        </div>
+                        <div class="era-card-body">
+                            <div class="era-name">THE FIRE RISES</div>
+                            <div class="era-desc">American Civil War rekindled</div>
+                            <div class="era-meta">US civil war alt-history • Map: angel</div>
+                        </div>
+                    </button>
+
+                    <button id="choice-1984-scenario" class="era-card">
+                        <div class="era-card-header">
+                            <span class="era-chip">DYSTOPIA</span>
+                            <span class="era-icon">
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M3 12s3.5-5 9-5 9 5 9 5-3.5 5-9 5-9-5-9-5z" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                                    <circle cx="12" cy="12" r="2.5" fill="currentColor"/>
+                                </svg>
+                            </span>
+                        </div>
+                        <div class="era-card-body">
+                            <div class="era-name">1984</div>
+                            <div class="era-desc">Oceania, Eurasia and Eastasia in perpetual war</div>
+                            <div class="era-meta">Alt-history (Orwell) • Map: Randombanana</div>
+                        </div>
+                    </button>
+                </div>
+            </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Country Modal -->
+    <div id="create-country-modal" class="settings-overlay" style="display:none">
+        <div class="settings-content">
+            <h3 class="settings-title">Establish New Nation</h3>
+            <div class="setting-group">
+                <label>Nation Name</label>
+                <input type="text" id="new-country-name" placeholder="e.g. New Atlantica" style="width: 100%; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px;">
+            </div>
+            <div class="setting-group">
+                <label>Nation Color</label>
+                <input type="color" id="new-country-color" value="#ff4757" style="width: 100%; height: 40px; border: none; background: none; cursor: pointer;">
+            </div>
+            <div class="setting-group">
+                <label>National Flag</label>
+                <input type="file" id="new-country-flag" accept="image/*" style="font-size: 12px; color: #888;">
+                <small>Upload a square or rectangular PNG/JPG</small>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button id="confirm-create-btn" class="start-btn">Confirm</button>
+                <button id="cancel-create-btn" class="start-btn" style="background: #444;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Unified Editor Hub Modal -->
+    <div id="scenario-hub-modal" class="settings-overlay thematic-overlay" style="display:none">
+        <div class="menu-v2-overlay"></div>
+        <div class="menu-v2-container">
+            <div class="menu-v2-header">
+                <h1 class="menu-v2-title">EDITOR HUB</h1>
+                <div class="menu-v2-author">Community Content Network</div>
+            </div>
+            <div class="menu-v2-nav">
+                <div class="scenario-selection-container">
+                    <div class="selection-header">
+                        <button id="close-hub-btn" class="selection-back-btn">
+                            <svg viewBox="0 0 24 24" fill="currentColor" style="width:20px;height:20px;"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+                            <span>EXIT</span>
+                        </button>
+                        <div class="hub-tabs">
+                            <button id="tab-scenarios-btn" class="mini-btn active">SCENARIOS</button>
+                            <button id="tab-countries-btn" class="mini-btn">NATIONS</button>
+                            <button id="tab-flags-btn" class="mini-btn">FLAGS</button>
+                        </div>
+                    </div>
+
+                    <div id="hub-list-container" class="scenario-scroller-v2" style="padding-right: 10px;">
+                        <div id="hub-list" style="display: flex; flex-direction: column; gap: 15px;">
+                            <div style="text-align: center; color: #666; padding: 40px;">Connecting to satellite network...</div>
+                        </div>
+                        <div id="library-list" style="display: none; flex-direction: column; gap: 15px;">
+                            <div style="text-align: center; color: #666; padding: 40px;">Searching archives...</div>
+                        </div>
+                        <div id="flag-library-list" style="display: none; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px;">
+                            <div style="grid-column: 1/-1; text-align: center; color: #666; padding: 40px;">Loading vexillology archives...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload Details Modal -->
+    <div id="upload-details-modal" class="settings-overlay" style="display:none">
+        <div class="settings-content">
+            <h3 class="settings-title">Share Scenario</h3>
+            <div class="setting-group">
+                <label>Scenario Name</label>
+                <input type="text" id="upload-scenario-name" placeholder="e.g. World War III" style="width: 100%; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px;">
+            </div>
+            <div class="setting-group">
+                <label>Description</label>
+                <textarea id="upload-scenario-desc" placeholder="Briefly describe your scenario..." style="width: 100%; height: 80px; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px; font-family: inherit; resize: none;"></textarea>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button id="confirm-upload-btn" class="start-btn" style="background: #27ae60;">Upload Now</button>
+                <button id="cancel-upload-btn" class="start-btn" style="background: #444;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Share Flag Modal -->
+    <div id="share-flag-modal" class="settings-overlay" style="display:none">
+        <div class="settings-content">
+            <h3 class="settings-title">Contribute to Flag Library</h3>
+            <div class="setting-group">
+                <label>Flag Name</label>
+                <input type="text" id="share-flag-name" placeholder="e.g. Imperial Banner" style="width: 100%; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px;">
+            </div>
+            <div class="setting-group">
+                <label>Description</label>
+                <textarea id="share-flag-desc" placeholder="History or details about this flag..." style="width: 100%; height: 80px; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px; font-family: inherit; resize: none;"></textarea>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button id="confirm-share-flag-btn" class="start-btn" style="background: #2e86de;">Upload Flag</button>
+                <button id="cancel-share-flag-btn" class="start-btn" style="background: #444;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Share Country Modal -->
+    <div id="share-country-modal" class="settings-overlay" style="display:none">
+        <div class="settings-content">
+            <h3 class="settings-title">Contribute to Library</h3>
+            <div class="setting-group">
+                <label>Public Name</label>
+                <input type="text" id="share-country-name" placeholder="e.g. Neo Tokyo" style="width: 100%; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px;">
+            </div>
+            <div class="setting-group">
+                <label>Description</label>
+                <textarea id="share-country-desc" placeholder="Tell the world about this nation..." style="width: 100%; height: 80px; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px; font-family: inherit; resize: none;"></textarea>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button id="confirm-share-country-btn" class="start-btn" style="background: #8e44ad;">Upload to Library</button>
+                <button id="cancel-share-country-btn" class="start-btn" style="background: #444;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Release Selection Modal -->
+    <div id="release-modal" class="settings-overlay" style="display:none">
+        <div class="settings-content" style="max-width: 400px;">
+            <h3 class="settings-title">Release Nation</h3>
+            <div id="releasable-list" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; max-height: 300px; overflow-y: auto; padding-right: 5px;">
+                <!-- Releasables injected here -->
+            </div>
+            <button id="close-release-modal" class="start-btn" style="background: #444;">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Credits Modal -->
+    <div id="credits-modal" class="settings-overlay" style="display:none">
+        <div class="settings-content" style="text-align: center;">
+            <h3 class="settings-title">Intel Assets & Credits</h3>
+            <div class="setting-group" style="margin-top: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 20px;">
+                <label>Logo & Thumbnail Design</label>
+                <div style="font-size: 14px; color: #fff; font-weight: bold;">Merry raisan bran cereal box</div>
+            </div>
+            <div class="setting-group" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 20px;">
+                <label>Map Design (1936)</label>
+                <div style="font-size: 14px; color: #fff; font-weight: bold;">filip</div>
+            </div>
+            <div class="setting-group" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 20px;">
+                <label>Map Design (1914 &amp; 1974) &amp; Second Thumbnail Editing</label>
+                <div style="font-size: 14px; color: #fff; font-weight: bold;">orange</div>
+            </div>
+            <div class="setting-group" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 20px;">
+                <label>Soundtrack</label>
+                <div style="font-size: 14px; color: #fff; font-weight: bold;">OST - Tyler Cunningham Music</div>
+            </div>
+            <div class="setting-group" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 20px;">
+                <label>Label Engine</label>
+                <div style="font-size: 14px; color: #fff; font-weight: bold;">certaincoin (HOI4 Style Curved Labels)</div>
+            </div>
+            <div class="setting-group">
+                <label>Development</label>
+                <div style="font-size: 14px; color: #fff; font-weight: bold;">man_82</div>
+            </div>
+            <button id="close-credits-btn" class="start-btn" style="background: #444;">Dismiss</button>
+        </div>
+    </div>
+
+    <!-- Leaderboard Modal -->
+    <div id="leaderboard-overlay" class="settings-overlay thematic-overlay" style="display:none">
+        <div class="menu-v2-overlay"></div>
+        <div class="menu-v2-container">
+            <div class="menu-v2-header">
+                <h1 class="menu-v2-title">RANKINGS</h1>
+                <div class="menu-v2-author">Global Power Projection</div>
+            </div>
+            <div class="menu-v2-nav">
+                <div class="scenario-selection-container">
+                    <div class="selection-header">
+                        <button id="close-leaderboard-btn" class="selection-back-btn">
+                            <svg viewBox="0 0 24 24" fill="currentColor" style="width:20px;height:20px;"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+                            <span>BACK</span>
+                        </button>
+                        <h2 class="selection-title">LEADERBOARD</h2>
+                    </div>
+                    <div class="leaderboard-header" style="margin-top: 10px;">
+                        <span style="flex: 2;">Country</span>
+                        <span style="flex: 1; text-align:right;">Tiles</span>
+                        <span style="flex: 1; text-align:right;">Units</span>
+                        <span style="width: 40px; text-align:right;">#</span>
+                    </div>
+                    <div id="leaderboard-list" class="scenario-scroller-v2 leaderboard-list" style="gap: 6px; padding-right: 5px;">
+                        <!-- rows injected by JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Item Details + Comments Modal -->
+    <div id="item-comment-modal" class="settings-overlay thematic-overlay" style="display:none">
+        <div class="menu-v2-overlay"></div>
+        <div class="menu-v2-container">
+            <div class="menu-v2-header">
+                <h1 id="item-modal-title" class="menu-v2-title" style="font-size: 48px;">ITEM DETAILS</h1>
+                <div id="item-modal-author-name" class="menu-v2-author" style="font-size: 18px;">Intel Report</div>
+            </div>
+            <div class="menu-v2-nav item-details-nav">
+                <div class="scenario-selection-container">
+                    <div class="selection-header">
+                        <button id="close-item-modal-btn" class="selection-back-btn">
+                            <svg viewBox="0 0 24 24" fill="currentColor" style="width:20px;height:20px;"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+                            <span>BACK</span>
+                        </button>
+                        <div id="item-modal-actions" style="display:none; gap:8px; margin-left: auto;">
+                            <button id="item-modal-play" class="mini-btn active" style="background:#27ae60;">PLAY</button>
+                            <button id="item-modal-remix" class="mini-btn active" style="background:#8e44ad;">REMIX</button>
+                            <button id="item-modal-delete" class="mini-btn" style="background:#c0392b; display:none;">DEL</button>
+                        </div>
+                    </div>
+
+                    <div class="scenario-scroller-v2" style="gap: 20px;">
+                        <div class="item-detail-hero">
+                            <img id="item-modal-preview" src="" alt="" style="width:100%; height:180px; object-fit:cover; border-radius:4px; border:1px solid rgba(255,255,255,0.1); display:none;">
+                            <div id="item-modal-desc" style="font-size:14px; color:#ccc; line-height:1.6; margin-top:10px;"></div>
+                        </div>
+
+                        <div class="scroller-section">
+                            <div class="scroller-label">COMMUNICATIONS LOG</div>
+                            <div id="item-comments-list" class="item-comments-v2"></div>
+                            
+                            <div class="comment-composer-v2">
+                                <textarea id="item-comment-input" placeholder="Transmit a message..." style="width:100%; min-height:80px; padding:12px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); color:#fff; border-radius:4px; font-family: inherit; font-size:13px; resize:none;"></textarea>
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+                                    <span id="item-reply-indicator" style="font-size:10px; color:#f1c40f; text-transform:uppercase; letter-spacing:1px; display:none;">REPLYING...</span>
+                                    <div style="display:flex; gap:6px; margin-left:auto;">
+                                        <button id="item-comment-cancel-reply" class="mini-btn" style="background:#444; display:none;">CANCEL</button>
+                                        <button id="item-comment-submit" class="start-btn" style="padding:10px 20px; width:auto; font-size:12px;">SEND TRANSMISSION</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Chat Modal -->
+    <div id="global-chat-modal" class="settings-overlay" style="display:none">
+        <div class="settings-content" style="max-width: 520px; width: 95%; max-height: 90vh;">
+            <h3 class="settings-title" style="margin-bottom: 10px;">GLOBAL CHAT</h3>
+            <div style="font-size:10px; color:#777; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">
+                Shared war-room across everyone in this project.
+            </div>
+            <div id="global-chat-list" style="flex:1; min-height:120px; max-height:320px; overflow-y:auto; padding:8px; border-radius:8px; background:rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.08); margin-bottom:10px;">
+                <div style="text-align:center; font-size:11px; color:#666; padding:20px;">Connecting to command net...</div>
+            </div>
+            <div>
+                <textarea id="global-chat-input" placeholder="Type a message..." style="width:100%; min-height:50px; max-height:120px; padding:8px; background:#2a2a30; border:1px solid #444; color:#fff; border-radius:6px; font-size:12px; resize:vertical;"></textarea>
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:6px;">
+                    <button id="global-chat-send" class="start-btn" style="width:auto; padding:8px 16px;">Send</button>
+                    <button id="global-chat-close" class="start-btn" style="background:#444; width:auto; padding:8px 16px;">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tutorial Overlay -->
+    <div id="tutorial-overlay" class="tutorial-popup-container" style="display:none">
+        <div class="settings-content tutorial-content">
+            <div id="tutorial-step-container">
+                <!-- Content injected by JS -->
+            </div>
+            <div class="tutorial-navigation">
+                <button id="tutorial-skip-btn" class="mini-btn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1);">Skip Tutorial</button>
+                <button id="tutorial-prev-btn" class="mini-btn">Back</button>
+                <div id="tutorial-dots"></div>
+                <button id="tutorial-next-btn" class="start-btn" style="width: auto; padding: 10px 30px;">Next</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Country Inspector -->
+    <div id="country-inspector" class="setup-panel" style="display:none; position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); z-index: 1010; max-width: 300px; padding: 15px;">
+        <div style="margin-bottom: 15px;">
+            <label style="font-size: 9px; color: #888; text-transform: uppercase; letter-spacing: 1px;">Nation Name</label>
+            <input type="text" id="inspect-name-input" placeholder="Nation Name" style="width: 100%; background: transparent; border: none; border-bottom: 1px solid #444; color: white; font-size: 18px; font-weight: bold; outline: none; padding: 5px 0;">
+        </div>
+
+        
+
+        <div id="mid-war-recruitment" style="display:none; margin-bottom: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
+            <label style="font-size: 9px; color: #888; text-transform: uppercase; display: block; margin-bottom: 8px; text-align: center; letter-spacing: 1px;">Mobilize Into Conflict</label>
+            <div id="recruit-sides-btns" style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 10px;">
+                <!-- Join Side buttons injected here -->
+            </div>
+            <button id="vassalize-btn" class="start-btn" style="display:none; background: #9b59b6; font-size: 11px; padding: 10px;">FORCE VASSALIZATION</button>
+            <button id="exit-conflict-btn" class="start-btn" style="display:none; background: #27ae60; font-size: 11px; padding: 10px; margin-top: 8px;">EXIT CONFLICT (ANNEX OCCUPIED)</button>
+        </div>
+
+        <div style="text-align: center; margin-bottom: 15px;">
+            <div id="inspect-color-swatch" style="width: 100%; height: 6px; border-radius: 3px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.2);"></div>
+            
+            <div class="editor-only" style="margin-bottom: 12px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 8px; text-align: left;">
+                <label style="font-size: 9px; color: #888; display: block; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px;">National Identity</label>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input type="color" id="inspect-color-picker" style="width: 40px; height: 30px; border: none; background: none; cursor: pointer; padding: 0;">
+                    <div style="flex: 1; display: flex; align-items: center; gap: 10px;">
+                        <img id="inspect-flag-preview" style="width: 40px; height: 25px; object-fit: cover; background: #000; border: 1px solid #444; border-radius: 2px; display: none;">
+                        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                            <label style="font-size: 8px; color: #555; text-transform: uppercase; display: block;">Update Flag</label>
+                            <input type="file" id="inspect-flag-input" accept="image/*" style="font-size: 9px; color: #777; width: 100%;">
+                            <div style="display: flex; gap: 4px;">
+                                <button id="inspect-fetch-flag-btn" class="mini-btn" style="background: #34495e; font-size: 8px; padding: 2px 4px; flex: 1;">Fetch Modern</button>
+                                <button id="inspect-hub-flag-btn" class="mini-btn" style="background: #2e86de; font-size: 8px; padding: 2px 4px; flex: 1;">Hub Library</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="editor-only" style="display: flex; gap: 5px; margin-bottom: 10px;">
+                <button id="inspect-paint-btn" class="start-btn" style="flex: 1; background: #2e86de; font-size: 11px; padding: 10px;">PAINT</button>
+                <button id="inspect-annex-click-btn" class="start-btn" style="flex: 1; background: #d35400; font-size: 11px; padding: 10px;">ANNEX CLICK</button>
+            </div>
+            <div class="editor-only" style="display: flex; gap: 5px; margin-bottom: 10px;">
+                <button id="share-country-btn" class="start-btn" style="flex: 1; background: #8e44ad; font-size: 10px; padding: 8px;">Share Country</button>
+                <button id="share-flag-btn" class="start-btn" style="flex: 1; background: #34495e; font-size: 10px; padding: 8px;">Share Flag</button>
+            </div>
+            
+            <div id="buff-editor-section" class="editor-only" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; margin-top: 5px;">
+                <label style="font-size: 9px; color: #888; display: block; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px;">Combat Buff</label>
+                <button id="inspect-buff-btn" class="mini-btn" style="width: 100%; margin-bottom: 10px; background:#444; font-size:10px; padding:6px 8px;">
+                    BUFF: NONE
+                </button>
+                <div id="vassal-status-display" style="font-size: 10px; color: #f1c40f; margin-bottom: 8px; text-transform: uppercase; display: none;">
+                    Vassal of: <span id="overlord-name-disp">None</span>
+                </div>
+                <div id="inspector-release-container" style="display: none; margin-bottom: 10px;">
+                    <button id="inspect-release-btn" class="start-btn" style="background: #27ae60; font-size: 11px; padding: 10px; width: 100%;">RELEASE NATION...</button>
+                </div>
+                <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+                    <button id="set-overlord-btn" class="mini-btn" style="flex: 1; background: #8e44ad;" title="Set as puppet vassal">Vassalize</button>
+                    <button id="set-releasable-btn" class="mini-btn" style="flex: 1; background: #27ae60;" title="Absorb into another nation as a releasable core">Set Releasable</button>
+                    <button id="clear-overlord-btn" class="mini-btn" style="flex: 0.5; background: #444;">Clear</button>
+                </div>
+
+                <div id="ally-controls" style="margin-bottom: 10px; padding: 8px; border-radius: 6px; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06);">
+                    <label style="font-size: 9px; color: #888; display: block; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px;">Alliances</label>
+                    <div id="ally-list" style="font-size: 11px; color: #ccc; margin-bottom: 6px; max-height: 80px; overflow-y: auto;">
+                        <span style="font-size: 10px; color: #666;">No allies set.</span>
+                    </div>
+                    <div style="display: flex; gap: 5px;">
+                        <button id="add-ally-btn" class="mini-btn" style="flex: 1; background: #16a085;" title="Click to enter ally-select mode, then click another country on the map to form a mutual alliance.">Add Ally (Click Map)</button>
+                        <button id="clear-allies-btn" class="mini-btn" style="flex: 1; background: #444;" title="Remove all alliances for this country.">Clear Allies</button>
+                    </div>
+                    <div style="margin-top:6px; display:flex; flex-direction:column; gap:4px;">
+                        <label style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:1px;">Alliance Flag</label>
+                        <input type="file" id="alliance-flag-input" accept="image/*" style="font-size:9px; color:#777;">
+                    </div>
+                </div>
+                <label style="font-size: 10px; color: #888; display: block; margin-bottom: 5px; text-transform: uppercase;">Annex Modern Territory</label>
+                <div style="display: flex; gap: 5px;">
+                    <input type="text" id="annex-country-input" placeholder="e.g. Poland, France..." style="flex: 1; padding: 6px; font-size: 12px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 4px;">
+                    <button id="annex-country-btn" class="mini-btn" style="background: #e67e22;">Annex</button>
+                </div>
+                <small style="font-size: 9px; color: #666; display: block; margin-top: 4px;">This adds the territory of a real country to your selection.</small>
+            </div>
+        </div>
+        <button id="close-inspector-btn" class="mini-btn" style="width: 100%;">Close</button>
+    </div>
+
+    <!-- City Inspector -->
+    <div id="city-inspector" class="setup-panel" style="display:none; position: absolute; bottom: 80px; left: 10px; z-index: 1001; width: 220px; padding: 15px;">
+        <div style="margin-bottom: 10px;">
+            <label style="font-size: 9px; color: #888; text-transform: uppercase; letter-spacing: 1px;">City Name</label>
+            <input type="text" id="city-name-input" placeholder="City Name" style="width: 100%; background: transparent; border: none; border-bottom: 1px solid #444; color: white; font-size: 16px; font-weight: bold; outline: none; padding: 5px 0;">
+        </div>
+        <div style="margin-bottom: 10px;">
+            <label style="font-size: 9px; color: #888; text-transform: uppercase; letter-spacing: 1px;">Owner Nation</label>
+            <select id="city-owner-select" style="width: 100%; padding: 6px; background:#2a2a30; border:1px solid #444; border-radius:4px; color:#fff; font-size:11px;">
+            </select>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+            <label style="display:flex; align-items:center; gap:6px; font-size:11px; color:#ccc; cursor:pointer;">
+                <input type="checkbox" id="city-capital-checkbox" style="width:16px; height:16px; accent-color:#f1c40f;">
+                <span>Set as Capital</span>
+            </label>
+        </div>
+        <div style="display:flex; gap:6px; margin-bottom:10px;">
+            <button id="city-move-btn" class="start-btn" style="flex:1; background:#2e86de; font-size:11px; padding:10px;">Move City</button>
+            <button id="city-delete-btn" class="start-btn" style="flex:1; background:#c0392b; font-size:11px; padding:10px;">Delete</button>
+        </div>
+        <button id="city-close-btn" class="mini-btn" style="width: 100%;">Close</button>
+    </div>
+
+    <!-- Import Country From Scenario Modal -->
+    <div id="import-country-modal" class="settings-overlay" style="display:none">
+        <div class="settings-content" style="max-width: 520px;">
+            <h3 class="settings-title">Import Country From Scenario</h3>
+            <div class="setting-group">
+                <label>Source Scenario</label>
+                <select id="import-scenario-select" style="width:100%; padding:8px; background:#2a2a30; border:1px solid #444; border-radius:6px; color:#fff; font-size:12px;">
+                    <option value="" selected disabled>-- choose source --</option>
+                    <option value="builtin:modern_2022">2022 (world invis)</option>
+                    <option value="builtin:ww2_1936">1936 Scenario (WW2)</option>
+                    <option value="builtin:ww2_1942">1942 Scenario (WW2)</option>
+                    <option value="builtin:ww1_1914">1914 Scenario (WW1)</option>
+                    <option value="builtin:coldwar_1974">1974 Cold War</option>
+                    <option value="builtin:coldwar_1948">1948 Scenario</option>
+                    <option value="builtin:france_states">France States Preset</option>
+                    <option value="builtin:england_states">England States Preset</option>
+                    <option value="file">Load from .json file…</option>
+                </select>
+                <small>Pick a built‑in era preset or load any saved scenario preset file.</small>
+                <input type="file" id="import-scenario-file" accept=".json" style="margin-top:8px; display:none; font-size:11px; color:#aaa;">
+            </div>
+            <div class="setting-group">
+                <label>Country To Import</label>
+                <input
+                    type="text"
+                    id="import-country-search"
+                    placeholder="Search country by name..."
+                    style="width:100%; padding:8px; background:#2a2a30; border:1px solid #444; border-radius:6px; color:#fff; font-size:12px; margin-bottom:8px;"
+                    disabled
+                >
+                <div id="import-country-card-list" class="import-country-card-list">
+                    <div style="font-size:11px; color:#777; text-align:center; padding:10px;">
+                        Choose a source scenario first
+                    </div>
+                </div>
+                <small>The selected country’s territory will be merged into this map as a new nation.</small>
+            </div>
+            <div style="font-size:10px; color:#777; margin-bottom:10px;">
+                Grid differences are handled automatically; imported borders are approximated to your current engine resolution.
+            </div>
+            <div style="display:flex; gap:10px; margin-top:5px;">
+                <button id="import-country-confirm-btn" class="start-btn" style="flex:1;">Import</button>
+                <button id="import-country-cancel-btn" class="start-btn" style="flex:1; background:#444;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- No Nations Detection Modal -->
+    <div id="no-nations-modal" class="settings-overlay" style="display:none">
+        <div class="settings-content" style="max-width: 420px;">
+            <h2 class="settings-title">UNINHABITED WORLD</h2>
+            <p style="color: #ccc; font-size: 13px; line-height: 1.6; text-align: center; margin-bottom: 20px;">
+                Satellite analysis indicates this scenario contains no established nations. Would you like to procedurally generate a new geopolitical landscape?
+            </p>
+            <div class="setting-group">
+                <label>Number of Nations to Spawn</label>
+                <input type="number" id="random-nations-count" value="15" min="2" max="100" style="width: 100%; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px;">
+                <small>Nations will expand until they cover all available land.</small>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                <button id="confirm-random-gen-btn" class="start-btn" style="background: #27ae60;">Generate Civilization</button>
+                <button id="skip-random-gen-btn" class="start-btn" style="background: #444;">Continue Nationless</button>
+            </div>
+        </div>
+    </div>
+
+
+
+    <script>
+        window.onerror = function(msg, url, line, col, err) {
+            document.body.innerHTML = '<div style="background:#111;color:#f44;padding:20px;font-family:monospace;white-space:pre-wrap;font-size:14px;">JS Error at line ' + line + ':\n' + msg + '\n\n' + (err && err.stack || '') + '</div>';
+            return true;
+        };
+    </script>
+    <script type="module" src="main.js"></script>
+</body>
+</html>
