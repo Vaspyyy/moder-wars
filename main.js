@@ -1013,6 +1013,25 @@ const UNIT_HASH_CELL_SIZE = 2.5; // Degrees per spatial bucket
 const DEBUG_WAR_STATE = true;
 let warDebugOverlayEl = null;
 let _debugWarSummary = null;
+const aiCountryState = new Map();
+const AI_DESPERATION = {
+    OFFENSE_MIN_WAR_TICKS: 1200,          // ~20s at 60fps
+    OFFENSE_STALL_TICKS: 900,             // sustained stall before "push harder"
+    OFFENSE_STALL_DELTA_FRAC: 0.002,      // <=0.2% map gain counts as stalled
+    DEFENSE_TRIGGER_RATIO: 0.40,          // under 40% land -> defensive desperation
+    LAST_STAND_TRIGGER_RATIO: 0.22,       // under 22% land -> last stand
+    CITY_RATIO_DEFENSE_TRIGGER: 0.35,     // under 35% of starting cities -> defensive desperation
+    CITY_RATIO_LAST_STAND_TRIGGER: 0.20,  // under 20% of starting cities -> last stand
+    PEACE_PRESSURE_PROPOSAL_BASE: 0.001,  // base treaty proposal chance
+    PEACE_PRESSURE_PROPOSAL_MULT_MAX: 5.0 // cap additional desperation pressure
+};
+const AI_MOBILIZATION = {
+    INITIAL_SPAWN_FRAC: 0.18,      // spawn ~18% of theoretical force at war start
+    INITIAL_SPAWN_MIN: 2,          // each nation starts with a tiny standing force
+    START_FROM_FRONT_CHANCE: 0.25, // mostly start behind lines, not fully on border
+    EARLY_TICKS: 1800,             // first ~30s at 60fps = mobilization phase
+    EARLY_RECRUIT_MULT: 2.3        // recruit faster early to fill armies over time
+};
 
 // Frontline Distance Field: pre-computed per-cell direction toward nearest frontline cell.
 // Updated once every FRONTLINE_FIELD_UPDATE_INTERVAL ticks instead of scanning per-unit.
@@ -1063,14 +1082,15 @@ function updateWarDebugOverlay(countryStats, shouldCountLand, combatantIds) {
         lines.push('warCells=(waiting for count frame)');
     }
     lines.push(`countFrame=${shouldCountLand ? 'yes' : 'no'} combatants=${combatantIds.size}`);
-    lines.push('countries: id | name | units | owned | controlled | initial | grace');
+    lines.push('countries: id | name | units | owned | controlled | initial | grace | ai');
 
     sides.forEach((side, sIdx) => {
         if (!side || side.length === 0) return;
         lines.push(` side[${sIdx}] pole=${sIdx % 2 === 0 ? 'A' : 'B'}`);
         side.forEach(c => {
             const st = countryStats.get(c.id) || { units: 0, owned: 0, controlled: 0 };
-            lines.push(`  ${c.id} | ${c.name} | ${st.units || 0} | ${st.owned || 0} | ${st.controlled || 0} | ${c.initialCells || 0} | ${c.graceTicks || 0}`);
+            const aiMode = aiCountryState.get(c.id)?.mode || 'NORMAL';
+            lines.push(`  ${c.id} | ${c.name} | ${st.units || 0} | ${st.owned || 0} | ${st.controlled || 0} | ${c.initialCells || 0} | ${c.graceTicks || 0} | ${aiMode}`);
         });
     });
 
@@ -6522,10 +6542,14 @@ async function startWar() {
     _cachedP1T = 0;
     _cachedP2T = 0;
     latestCountryStats.clear();
+    aiCountryState.clear();
     sides.flat().forEach(c => {
         if (!c) return;
         c.lastControlledCount = undefined;
         c.lastOwnedCount = undefined;
+        c._aiPrevControlled = undefined;
+        c._aiStallTicks = 0;
+        c._aiInitialCities = undefined;
     });
     
     // Cinematic Mode logic
@@ -6864,19 +6888,22 @@ async function startWar() {
             const sizeFactor = Math.max(1, theaterIndices.length / 1500);
             const densityScale = 1.0 / Math.pow(sizeFactor, 0.45);
 
-            let desiredCount = Math.floor(theaterIndices.length * CONFIG.UNIT_DENSITY_FACTOR * multiplier * densityScale);
-            const floor = c.startingUnitsFloor || 3;
-            desiredCount = Math.max(floor, desiredCount);
+            const fullDesiredCount = Math.floor(theaterIndices.length * CONFIG.UNIT_DENSITY_FACTOR * multiplier * densityScale);
+            const standingFloor = Math.max(AI_MOBILIZATION.INITIAL_SPAWN_MIN, Math.floor((c.startingUnitsFloor || 3) * 0.67));
+            let desiredCount = Math.floor(fullDesiredCount * AI_MOBILIZATION.INITIAL_SPAWN_FRAC);
+            desiredCount = Math.max(standingFloor, desiredCount);
+            desiredCount = Math.min(desiredCount, Math.max(standingFloor, fullDesiredCount));
 
             const remainingCap = Math.max(0, CONFIG.MAX_UNITS_PER_SIDE - sideCurrentUnits);
             const count = Math.min(desiredCount, remainingCap);
             if (count <= 0) return;
 
             for (let j = 0; j < count; j++) {
-                // High probability (95%) to spawn at identified frontline cells
+                // At war start, only a minority deploy directly on the frontline;
+                // most formations begin deeper and mobilize forward over time.
                 let fData;
                 let fromFront = false;
-                if (fronts && fronts.length > 0 && Math.random() < 0.95) {
+                if (fronts && fronts.length > 0 && Math.random() < AI_MOBILIZATION.START_FROM_FRONT_CHANCE) {
                     fData = fronts[Math.floor(Math.random() * fronts.length)];
                     fromFront = true;
                 } else {
@@ -7919,11 +7946,117 @@ function performSimulationTick() {
     // Expose capital-loss state globally so recruitment/spawn logic can react to supply failure
     capitalLostCountries = new Set(countryCapitalLost.keys());
 
+    // --- COUNTRY AI POSTURE (Desperation + realism tuning) ---
+    // Recomputed on counting frames and reused between them.
+    if (shouldCountLand) {
+        sides.flat().forEach(country => {
+            if (!country) return;
+            const stats = countryStats.get(country.id);
+            if (!stats) return;
+
+            const initialLand = Math.max(1, country.initialCells || 1);
+            const controlRatio = stats.controlled / initialLand;
+            const cityCount = countryToCityCount.get(country.id) || 0;
+            if (country._aiInitialCities === undefined) country._aiInitialCities = cityCount;
+            const initCities = Math.max(1, country._aiInitialCities || 1);
+            const cityRatio = cityCount / initCities;
+
+            const prevControlled = (country._aiPrevControlled !== undefined) ? country._aiPrevControlled : stats.controlled;
+            const deltaControlled = stats.controlled - prevControlled;
+            country._aiPrevControlled = stats.controlled;
+
+            const stallDeltaThreshold = Math.max(1, Math.floor(initialLand * AI_DESPERATION.OFFENSE_STALL_DELTA_FRAC));
+            const isStalled = Math.abs(deltaControlled) <= stallDeltaThreshold;
+            if (isStalled) {
+                country._aiStallTicks = (country._aiStallTicks || 0) + countInterval;
+            } else {
+                country._aiStallTicks = Math.max(0, (country._aiStallTicks || 0) - (countInterval * 2));
+            }
+
+            const role = country.role || 'OFFENSE';
+            const canUseOffensiveDesperation =
+                role === 'OFFENSE' &&
+                simFrameCount >= AI_DESPERATION.OFFENSE_MIN_WAR_TICKS &&
+                (country._aiStallTicks || 0) >= AI_DESPERATION.OFFENSE_STALL_TICKS &&
+                controlRatio > 0.45;
+
+            const lastStand =
+                controlRatio <= AI_DESPERATION.LAST_STAND_TRIGGER_RATIO ||
+                cityRatio <= AI_DESPERATION.CITY_RATIO_LAST_STAND_TRIGGER;
+            const defensiveDesperation =
+                !lastStand && (
+                    controlRatio <= AI_DESPERATION.DEFENSE_TRIGGER_RATIO ||
+                    cityRatio <= AI_DESPERATION.CITY_RATIO_DEFENSE_TRIGGER
+                );
+
+            let mode = 'NORMAL';
+            if (lastStand) mode = 'LAST_STAND';
+            else if (defensiveDesperation) mode = 'DEFENSIVE_DESPERATION';
+            else if (canUseOffensiveDesperation) mode = 'OFFENSIVE_DESPERATION';
+
+            let profile = {
+                mode,
+                recruitCapMult: 1.0,
+                recruitChanceMult: 1.0,
+                retreatTriggerMultiple: 8.0,
+                frontlineBlend: 0.9,
+                speedMult: 1.0,
+                targetCityWeight: 0.0,
+                forceDefensive: false,
+                reserveShare: 0.08,
+                peacePressure: 0.0
+            };
+            if (mode === 'OFFENSIVE_DESPERATION') {
+                profile = {
+                    mode,
+                    recruitCapMult: 1.2,
+                    recruitChanceMult: 1.45,
+                    retreatTriggerMultiple: 10.0,
+                    frontlineBlend: 0.96,
+                    speedMult: 1.08,
+                    targetCityWeight: 0.45,
+                    forceDefensive: false,
+                    reserveShare: 0.05,
+                    peacePressure: 0.02
+                };
+            } else if (mode === 'DEFENSIVE_DESPERATION') {
+                profile = {
+                    mode,
+                    recruitCapMult: 1.45,
+                    recruitChanceMult: 1.8,
+                    retreatTriggerMultiple: 5.8,
+                    frontlineBlend: 0.76,
+                    speedMult: 0.96,
+                    targetCityWeight: 0.18,
+                    forceDefensive: true,
+                    reserveShare: 0.22,
+                    peacePressure: 0.36
+                };
+            } else if (mode === 'LAST_STAND') {
+                profile = {
+                    mode,
+                    recruitCapMult: 1.85,
+                    recruitChanceMult: 2.5,
+                    retreatTriggerMultiple: 4.8,
+                    frontlineBlend: 0.68,
+                    speedMult: 0.92,
+                    targetCityWeight: 0.05,
+                    forceDefensive: true,
+                    reserveShare: 0.34,
+                    peacePressure: 0.7
+                };
+            }
+
+            aiCountryState.set(country.id, profile);
+        });
+    }
+
     // Mid-War Recruitment (Steady, Land-Capped, and Underdog-Aware)
     sides.forEach((side, sIdx) => {
         side.forEach(country => {
             const stats = countryStats.get(country.id);
             if (!stats) return;
+            const aiProfile = aiCountryState.get(country.id) || null;
 
             const currentUnits = stats.units;
             const initialLand = country.initialCells || 1;
@@ -7947,6 +8080,9 @@ function performSimulationTick() {
             // Flexible Limit: allow bigger armies but still clamp for performance
             const flexibleLimit = sideLimit * (1 + Math.min(3.0, (currentLand / 4000) + (cityCount * 0.15)));
             let absoluteCap = Math.min(landBasedCap, flexibleLimit);
+            if (aiProfile) {
+                absoluteCap = Math.floor(absoluteCap * aiProfile.recruitCapMult);
+            }
             
             // GODLY Buff: Higher cap and ignores flexible limits
             if (country.buffState === 'godly') {
@@ -7984,6 +8120,11 @@ function performSimulationTick() {
                     * (controlRatio + cityBonus + underdogFactor)
                     * annexationMultiplier
                     * multiplier;
+                const mobilizationMult = simFrameCount < AI_MOBILIZATION.EARLY_TICKS
+                    ? (1 + ((AI_MOBILIZATION.EARLY_RECRUIT_MULT - 1) * (1 - (simFrameCount / AI_MOBILIZATION.EARLY_TICKS))))
+                    : 1;
+                recruitmentChance *= mobilizationMult;
+                if (aiProfile) recruitmentChance *= aiProfile.recruitChanceMult;
                 
                 if (country.buffState === 'godly') {
                     recruitmentChance *= 12.0; // 12x recruitment speed
@@ -8059,7 +8200,18 @@ function performSimulationTick() {
         if (!sideList) continue;
 
         const countryObj = sideList.find(c => c.id === u.sovereignId);
+        const aiProfile = aiCountryState.get(u.sovereignId) || {
+            mode: 'NORMAL',
+            retreatTriggerMultiple: 8.0,
+            frontlineBlend: 0.9,
+            speedMult: 1.0,
+            targetCityWeight: 0.0,
+            forceDefensive: false,
+            reserveShare: 0.08,
+            peacePressure: 0.0
+        };
         const isDefensive = countryObj?.strategy === 'DEFENSIVE';
+        const effectiveDefensive = isDefensive || aiProfile.forceDefensive;
         const isUrban = countryObj?.strategy === 'URBAN';
         const metaForBuff = _metadataById.get(u.sovereignId) || null;
         const effectiveBuff = getEffectiveBuffState(countryObj, metaForBuff);
@@ -8403,7 +8555,7 @@ function performSimulationTick() {
                         const eIdx = getGridIndex(e.lat, e.lng);
                         const eAtSea = eIdx === -1 || landMask[eIdx] === 0;
 
-                        if ((isDefensive || isRebelUnit) && !isAtSea) {
+                        if ((effectiveDefensive || isRebelUnit) && !isAtSea) {
                             const isEnemyInMyMandatedLand = eIdx !== -1 && (isRebelUnit ? deJureMap[eIdx] === u.sovereignId : worldControlMap[eIdx] === u.sovereignId);
                             if (!isEnemyInMyMandatedLand && dSq > 0.09) continue; 
                         }
@@ -8478,7 +8630,7 @@ function performSimulationTick() {
         u.lastAllyCount = localAllyCount;
 
         // Retreat logic: If enemy force is > 5x ally force (increased threshold to prevent premature dodging)
-        if (localEnemyCount > localAllyCount * 8 && localEnemyCount >= 5) {
+        if (localEnemyCount > localAllyCount * aiProfile.retreatTriggerMultiple && localEnemyCount >= 5) {
             const avgLat = enemyCentroidLat / localEnemyCount;
             const avgLng = enemyCentroidLng / localEnemyCount;
             const dirLat = u.lat - avgLat;
@@ -8621,7 +8773,7 @@ function performSimulationTick() {
             if (isRebel) {
                 // REBELS: Target their own de jure land exclusively
                 enemyId = u.sovereignId;
-            } else if (isDefensive) {
+            } else if (effectiveDefensive) {
                 // DEFENSIVE: Target own nation to find occupied cells to reclaim
                 enemyId = u.sovereignId;
             } else if (collapsedEnemyNations.length > 0) {
@@ -8687,7 +8839,7 @@ function performSimulationTick() {
                         }
                     } else if (ownerAtIdx === targetId) {
                         const occ = occupationMap[randIdx];
-                        if (isDefensive) {
+                        if (effectiveDefensive) {
                             if ((isTeamA && occ < 0.98) || (!isTeamA && occ > -0.98)) isCandidate = true;
                         } else {
                             if ((isTeamA && occ < 0.85) || (!isTeamA && occ > -0.85)) isCandidate = true;
@@ -8773,6 +8925,48 @@ function performSimulationTick() {
             target = u.mopUpTarget;
         }
 
+        // Objective hierarchy: in desperation modes, bias toward meaningful enemy cities
+        // (especially capitals) instead of purely nearest-unit chasing.
+        if (!shouldMopUp && aiProfile.targetCityWeight > 0 && globalCityTargets && globalCityTargets.length) {
+            let bestCity = null;
+            let bestScore = -Infinity;
+            for (let ci = 0; ci < globalCityTargets.length; ci++) {
+                const c = globalCityTargets[ci];
+                const cOwner = c.sovereignId || c.ownerId || 0;
+                const cSide = countryToSideMap.get(cOwner);
+                if (cSide === undefined) continue;
+                const isEnemyCity = ffaMode ? (cSide !== sideIndex) : (cSide % 2 !== sideIndex % 2);
+                if (!isEnemyCity) continue;
+
+                let dlng = c.lng - u.lng;
+                if (dlng > 180) dlng -= 360;
+                else if (dlng < -180) dlng += 360;
+                const dSq = (u.lat - c.lat) ** 2 + dlng ** 2;
+                const occ = getControlValue(c.lat, c.lng);
+                const contested = (u.team === 'A') ? (occ < 0.35) : (occ > -0.35);
+
+                let score = -(dSq * 0.6);
+                if (contested) score += 120;
+                if (c.isCapital) score += 260;
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestCity = c;
+                }
+            }
+
+            if (bestCity) {
+                if (target && target.lat !== undefined && target.lng !== undefined) {
+                    const w = aiProfile.targetCityWeight;
+                    target = {
+                        lat: target.lat * (1 - w) + bestCity.lat * w,
+                        lng: target.lng * (1 - w) + bestCity.lng * w
+                    };
+                } else {
+                    target = { lat: bestCity.lat, lng: bestCity.lng };
+                }
+            }
+        }
+
         // CITY-FOCUS COMBAT MODE:
         // When enabled, AI movement targeting prioritizes cities as primary objectives,
         // using unit positions only for local combat/retreat decisions.
@@ -8793,6 +8987,25 @@ function performSimulationTick() {
             } else {
                 // No nearby enemies: hold position around the city
                 target = { lat: garrisonCity.lat, lng: garrisonCity.lng };
+            }
+        }
+
+        // Reserve doctrine: a slice of units stay one layer behind and guard cities/cores
+        // unless local contact is high. This makes fronts feel less all-in and more human.
+        const reserveRoll = (Math.floor(u.id * 1000000) % 1000) / 1000;
+        const isReserveUnit = reserveRoll < aiProfile.reserveShare;
+        if (
+            isReserveUnit &&
+            !shouldMopUp &&
+            localEnemyCount < 2 &&
+            !retreatVector &&
+            !cityFocusMode &&
+            aiProfile.mode !== 'OFFENSIVE_DESPERATION'
+        ) {
+            if (garrisonCity) {
+                target = { lat: garrisonCity.lat, lng: garrisonCity.lng };
+            } else if (groupCentroid) {
+                target = { lat: groupCentroid.lat, lng: groupCentroid.lng };
             }
         }
 
@@ -8822,7 +9035,7 @@ function performSimulationTick() {
                 
                 // Roaming Prevention: Removed exploratory wiggle to force a focused linear push
                 const landSpeedBuff = (!isAtSea && ((u.team === 'A' && currentControl > 0.5) || (u.team === 'B' && currentControl < -0.5))) ? 1.8 : 1.2;
-                const speedMult = landSpeedBuff * speedBuffMult;
+                const speedMult = landSpeedBuff * speedBuffMult * aiProfile.speedMult;
 
                 let moveDirLat = dLat / dist;
                 let moveDirLng = dLng / dist;
@@ -8830,7 +9043,7 @@ function performSimulationTick() {
                 // Pull towards nearby frontline so units hug the border instead of roaming deep interiors
                 if (borderDir && !isAtSea) {
                     // Force units to prioritize the frontline even more heavily to prevent the "interior roaming" seen in clusters.
-                    const blendStrength = 0.9;
+                    const blendStrength = aiProfile.frontlineBlend;
                     moveDirLat = moveDirLat * (1 - blendStrength) + borderDir.lat * blendStrength;
                     moveDirLng = moveDirLng * (1 - blendStrength) + borderDir.lng * blendStrength;
                     const magBorder = Math.sqrt(moveDirLat * moveDirLat + moveDirLng * moveDirLng);
@@ -9356,15 +9569,44 @@ function performSimulationTick() {
     } else if (p1LandScore <= 0.1) {
         applyTreaty('FULL_CAPITULATION_B'); return true;
     } else if (timeSinceTreaty > 6000 && treatyAlert.style.display === 'none') {
-        if (!peaceTreatiesDisabled && Math.random() < 0.001) {
+        if (!peaceTreatiesDisabled) {
+            // Peace pressure: desperate / last-stand countries become more willing
+            // to open negotiations to avoid total collapse.
+            const getPolePressure = (pole) => {
+                let total = 0;
+                let count = 0;
+                sides.forEach((side, idx) => {
+                    if ((idx % 2 === 0 ? 'A' : 'B') !== pole) return;
+                    side.forEach(c => {
+                        total += aiCountryState.get(c.id)?.peacePressure || 0;
+                        count++;
+                    });
+                });
+                return count > 0 ? (total / count) : 0;
+            };
+            const pressureA = getPolePressure('A');
+            const pressureB = getPolePressure('B');
+            const maxPressure = Math.max(pressureA, pressureB);
+            const proposalChance = AI_DESPERATION.PEACE_PRESSURE_PROPOSAL_BASE * (1 + Math.min(AI_DESPERATION.PEACE_PRESSURE_PROPOSAL_MULT_MAX, maxPressure * 5));
+
+            if (Math.random() < proposalChance) {
             // Select actual side indices for a more specific treaty proposal
             const proposerSideIdx = Math.floor(Math.random() * sides.length);
             if (sides[proposerSideIdx] && sides[proposerSideIdx].length > 0) {
                 const proposerPole = proposerSideIdx % 2 === 0 ? 'A' : 'B';
                 const receiverPole = proposerPole === 'A' ? 'B' : 'A';
                 const receiverLand = receiverPole === 'A' ? p1LandScore : (100 - p1LandScore);
-                const acceptChance = Math.max(0.1, (100 - receiverLand) / 100);
+                const proposerPressure = proposerPole === 'A' ? pressureA : pressureB;
+                const receiverPressure = receiverPole === 'A' ? pressureA : pressureB;
+                let acceptChance = Math.max(0.1, (100 - receiverLand) / 100);
+                // A desperate receiver is more likely to accept.
+                acceptChance += receiverPressure * 0.25;
+                // A highly desperate proposer is often offering from weakness;
+                // unless the receiver is also strained, this reduces acceptance.
+                acceptChance -= Math.max(0, proposerPressure - receiverPressure) * 0.12;
+                acceptChance = Math.max(0.05, Math.min(0.95, acceptChance));
                 showTreatyOffer(proposerPole, Math.random() < acceptChance, proposerSideIdx);
+            }
             }
         }
     }
@@ -10163,6 +10405,7 @@ function applyTreaty(type, winnerPoleOverride = null) {
 
     units = [];
     unitSpatialHash.clear();
+    aiCountryState.clear();
     activeBattles = [];
     bombs = [];
     explosions = [];
