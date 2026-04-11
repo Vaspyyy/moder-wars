@@ -982,7 +982,7 @@ let cityEditMode = null; // 'CREATE' | 'MOVE' | null
 let animationFrameId = null;
 let backgroundTickId = null;
 let simFrameCount = 0;
-let simSpeed = 0.5;
+let simSpeed = 3.0;
 let _cachedP1T = 0, _cachedP2T = 0; // Cached territory counts — only recomputed on shouldCountLand frames
 let isPaused = false;
 let frameAccumulator = 0;
@@ -8003,7 +8003,7 @@ function performSimulationTick() {
                 speedMult: 1.0,
                 targetCityWeight: 0.0,
                 forceDefensive: false,
-                reserveShare: 0.08,
+                reserveShare: 0.02,
                 peacePressure: 0.0
             };
             if (mode === 'OFFENSIVE_DESPERATION') {
@@ -8016,7 +8016,7 @@ function performSimulationTick() {
                     speedMult: 1.08,
                     targetCityWeight: 0.45,
                     forceDefensive: false,
-                    reserveShare: 0.05,
+                    reserveShare: 0.01,
                     peacePressure: 0.02
                 };
             } else if (mode === 'DEFENSIVE_DESPERATION') {
@@ -8029,7 +8029,7 @@ function performSimulationTick() {
                     speedMult: 0.96,
                     targetCityWeight: 0.18,
                     forceDefensive: true,
-                    reserveShare: 0.22,
+                    reserveShare: 0.06,
                     peacePressure: 0.36
                 };
             } else if (mode === 'LAST_STAND') {
@@ -8042,7 +8042,7 @@ function performSimulationTick() {
                     speedMult: 0.92,
                     targetCityWeight: 0.05,
                     forceDefensive: true,
-                    reserveShare: 0.34,
+                    reserveShare: 0.10,
                     peacePressure: 0.7
                 };
             }
@@ -8207,7 +8207,7 @@ function performSimulationTick() {
             speedMult: 1.0,
             targetCityWeight: 0.0,
             forceDefensive: false,
-            reserveShare: 0.08,
+            reserveShare: 0.02,
             peacePressure: 0.0
         };
         const isDefensive = countryObj?.strategy === 'DEFENSIVE';
@@ -8678,7 +8678,7 @@ function performSimulationTick() {
         }
 
         // Frontline Pressure: If unit is too close to a moving/losing border, push it back
-        const borderBuffer = 0.06; // Narrower buffer so units sit "right on" the frontline
+        const borderBuffer = -0.05; // Tightened buffer to prevent endless retreating / stuttering
         const currentIdx = getGridIndex(u.lat, u.lng);
         const currentOwnerId = currentIdx !== -1 ? worldControlMap[currentIdx] : 0;
         const currentOwnerSideIdx = countryToSideMap.get(currentOwnerId);
@@ -10065,7 +10065,7 @@ function capitulateCountry(country, sideIndex) {
     const affectedIndices = [];
 
     for (let i = 0; i < worldControlMap.length; i++) {
-        if (worldControlMap[i] === country.id && landMask[i] === 2) {
+        if (worldControlMap[i] === country.id && landMask[i] > 0) {
             const occupierId = primaryOccupierMap[i];
             
             // Verify if the occupier belongs to the winning side of this specific engagement
