@@ -491,7 +491,7 @@
             <div class="status-left">
                 <span id="status-text" data-i18n="SELECT_P1">Select First Country</span>
                 <div id="unit-counts" style="display:none; font-size: 10px; color: #888; margin-top: 4px;">
-                    <span id="p1-units" class="team-a">0</span> <span data-i18n="VS_MINI">vs</span> <span id="p2-units" class="team-b">0</span> <span data-i18n="UNITS">UNITS</span>
+                    <span id="unit-counts-display"></span> <span data-i18n="UNITS">UNITS</span>
                 </div>
             </div>
             <div class="status-right">
@@ -561,7 +561,7 @@
                     <label style="font-size: 11px; color: #ccc;" title="Optional: set total manpower (soldiers) each alliance starts with. Leave empty for automatic scaling based on territory.">
                         Alliance Manpower (Optional)
                     </label>
-                    <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; align-items:center;">
+                    <div id="manpower-inputs-container" style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; align-items:center;">
                         <div style="display:flex; flex-direction:column; gap:2px;">
                             <span style="font-size:9px; color:#ff4757; text-transform:uppercase; letter-spacing:0.5px;">Side A</span>
                             <input id="manpower-side-a" type="number" min="0" placeholder="auto" style="width:110px; padding:4px 6px; background:#2a2a30; border:1px solid #444; border-radius:4px; color:#fff; font-size:11px;" title="Total soldiers for Side A (e.g. 2000000).">
@@ -642,8 +642,7 @@
 
         <div id="casualty-panel" class="casualty-panel" style="display:none">
             <div class="casualty-title">CASUALTIES</div>
-            <div id="casualty-list-a" class="casualty-side-list"></div>
-            <div id="casualty-list-b" class="casualty-side-list"></div>
+            <div id="casualty-lists-container"></div>
         </div>
 
         <div id="stats-panel" class="stats-panel" style="display:none">
@@ -659,44 +658,10 @@
                 <button id="minimize-stats-btn" class="mini-btn" style="background: #444; font-size: 14px; padding: 2px 8px;">−</button>
             </div>
             
-            <div class="stats-grid">
-                <div class="side-stats team-a-block">
-                    <div id="p1-name" class="stat-name team-a">Side A</div>
-                    <div class="stat-metrics">
-                        <div class="metric">
-                            <span class="metric-label">PERSONNEL</span>
-                            <span id="p1-soldiers-ui" class="metric-value team-a">0</span>
-                        </div>
-                        <div class="metric">
-                            <span class="metric-label">CITIES</span>
-                            <span id="p1-cities" class="metric-value">0</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="stats-vs">VS</div>
-
-                <div class="side-stats team-b-block">
-                    <div id="p2-name" class="stat-name team-b">Side B</div>
-                    <div class="stat-metrics">
-                        <div class="metric">
-                            <span class="metric-label">PERSONNEL</span>
-                            <span id="p2-soldiers-ui" class="metric-value team-b">0</span>
-                        </div>
-                        <div class="metric">
-                            <span class="metric-label">CITIES</span>
-                            <span id="p2-cities" class="metric-value">0</span>
-                        </div>
-                    </div>
-                </div>
+            <div id="stats-grid" class="stats-grid">
             </div>
 
-            <div class="tug-of-war">
-                <div id="p1-control" class="control-pct">50%</div>
-                <div class="stat-progress">
-                    <div id="progress-bar" class="progress-inner"></div>
-                </div>
-                <div id="p2-control" class="control-pct">50%</div>
+            <div id="tug-of-war-container" class="tug-of-war">
             </div>
         </div>
 
@@ -809,26 +774,27 @@
                         <h2 class="selection-title">DIMENSIONS</h2>
                     </div>
                     <div class="scenario-scroller-v2">
-                <label>Map Name</label>
-                <input type="text" id="map-settings-name-input" placeholder="e.g. Cold War Europe" style="width: 100%; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px;">
-            </div>
-            <div class="setting-group">
-                <label>World Width (Degrees)</label>
-                <input type="number" id="map-settings-width-input" min="10" max="360" step="1" style="width: 100%; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px;">
-                <small>360 = full longitude wrap. Smaller values confine the playable world.</small>
-            </div>
-            <div class="setting-group">
-                <label>World Height (Degrees)</label>
-                <input type="number" id="map-settings-height-input" min="10" max="180" step="1" style="width: 100%; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px;">
-                <small>180 = full pole‑to‑pole. Smaller values confine latitude.</small>
-            </div>
-            <div class="setting-group">
-                <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
-                    <input type="checkbox" id="map-settings-missiles-checkbox" style="width: 18px; height: 18px; accent-color: #f39c12;">
-                    <span>Enable Long‑Range Missiles in This Map</span>
-                </label>
-                <small>When disabled, missile/bomb launches are fully disabled in this scenario.</small>
-            </div>
+                        <div class="setting-group">
+                            <label>Map Name</label>
+                            <input type="text" id="map-settings-name-input" placeholder="e.g. Cold War Europe" style="width: 100%; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px;">
+                        </div>
+                        <div class="setting-group">
+                            <label>World Width (Degrees)</label>
+                            <input type="number" id="map-settings-width-input" min="10" max="360" step="1" style="width: 100%; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px;">
+                            <small>360 = full longitude wrap. Smaller values confine the playable world.</small>
+                        </div>
+                        <div class="setting-group">
+                            <label>World Height (Degrees)</label>
+                            <input type="number" id="map-settings-height-input" min="10" max="180" step="1" style="width: 100%; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px;">
+                            <small>180 = full pole‑to‑pole. Smaller values confine latitude.</small>
+                        </div>
+                        <div class="setting-group">
+                            <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                                <input type="checkbox" id="map-settings-missiles-checkbox" style="width: 18px; height: 18px; accent-color: #f39c12;">
+                                <span>Enable Long‑Range Missiles in This Map</span>
+                            </label>
+                            <small>When disabled, missile/bomb launches are fully disabled in this scenario.</small>
+                        </div>
                         <button id="map-settings-apply-btn" class="start-btn" style="margin-top: 20px;">Apply Strategic Changes</button>
                     </div>
                 </div>
