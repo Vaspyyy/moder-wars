@@ -1921,6 +1921,8 @@ let simSpeed = 3.0;
 let _cachedP1T = 0,
 	_cachedP2T = 0;
 let _cachedSoldierEls = [];
+let _cachedSideUnitCounts = [];
+let _cachedSideSoldierEsts = [];
 let _cachedCityEls = [];
 let _cachedUnitCountSpans = [];
 let _cachedTerritoryCtrlEls = [];
@@ -11664,6 +11666,23 @@ function performSimulationTick() {
 		if (explosions[i].life <= 0) explosions.splice(i, 1);
 	}
 
+	// Cache unit counts / soldier estimates once per tick instead of re-scanning
+	// the full units[] array every visual frame in updateLoop().
+	const numSides = sides.length;
+	const unitCounts = new Array(numSides).fill(0);
+	const soldierEsts = new Array(numSides).fill(0);
+	for (let i = 0; i < units.length; i++) {
+		const u = units[i];
+		const si = u.sideIndex;
+		if (si >= 0 && si < numSides) {
+			unitCounts[si]++;
+			const sp = soldiersPerUnit[si] || CONFIG.UNIT_TO_SOLDIER_RATIO;
+			soldierEsts[si] += (u.health / CONFIG.UNIT_HEALTH) * sp;
+		}
+	}
+	_cachedSideUnitCounts = unitCounts;
+	_cachedSideSoldierEsts = soldierEsts;
+
 	return false;
 }
 
@@ -11715,18 +11734,8 @@ function updateLoop(now) {
 		return;
 	}
 
-	const sideUnitCounts = new Array(sides.length).fill(0);
-	const sideSoldierEsts = new Array(sides.length).fill(0);
-
-	for (let i = 0; i < units.length; i++) {
-		const u = units[i];
-		const si = u.sideIndex;
-		if (si >= 0 && si < sides.length) {
-			sideUnitCounts[si]++;
-			const sp = soldiersPerUnit[si] || CONFIG.UNIT_TO_SOLDIER_RATIO;
-			sideSoldierEsts[si] += (u.health / CONFIG.UNIT_HEALTH) * sp;
-		}
-	}
+	const sideUnitCounts = _cachedSideUnitCounts;
+	const sideSoldierEsts = _cachedSideSoldierEsts;
 
 	for (let si = 0; si < sides.length; si++) {
 		const el = _cachedSoldierEls[si];
