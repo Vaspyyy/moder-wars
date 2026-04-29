@@ -1,0 +1,6 @@
+# Firefox browser profile dumps
+Firefox*.json
+
+# OS files
+.DS_Store
+Thumbs.db

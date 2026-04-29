@@ -386,13 +386,6 @@
         </div>
     </div>
 
-    <div id="flag-rendering-loader" class="settings-overlay" style="display:none; background: rgba(0,0,0,0.6); z-index: 5000; pointer-events: none; backdrop-filter: blur(4px);">
-        <div class="settings-content" style="background: rgba(26, 26, 31, 0.9); width: auto; padding: 25px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.15);">
-            <div class="loader-spinner" style="margin: 0 auto 15px; width: 30px; height: 30px;"></div>
-            <div style="color: #fff; font-size: 11px; letter-spacing: 2px; font-weight: 900; text-transform: uppercase; text-align: center;">Rendering Flags...</div>
-        </div>
-    </div>
-
     <div class="ui-overlay" style="display:none" id="main-ui">
         <!-- Editor Toolbox -->
         <div id="editor-toolbox" class="status-panel" style="display:none; margin-bottom: 10px;">
@@ -1422,7 +1415,7 @@
                 <div style="display: flex; gap: 10px; align-items: center;">
                     <input type="color" id="inspect-color-picker" style="width: 40px; height: 30px; border: none; background: none; cursor: pointer; padding: 0;">
                     <div style="flex: 1; display: flex; align-items: center; gap: 10px;">
-                        <img id="inspect-flag-preview" style="width: 40px; height: 25px; object-fit: cover; background: #000; border: 1px solid #444; border-radius: 2px; display: none;">
+                        <img id="inspect-flag-preview" alt="" style="width: 40px; height: 25px; object-fit: cover; background: #000; border: 1px solid #444; border-radius: 2px; display: none;">
                         <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
                             <label style="font-size: 8px; color: #555; text-transform: uppercase; display: block;">Update Flag</label>
                             <input type="file" id="inspect-flag-input" accept="image/*" style="font-size: 9px; color: #777; width: 100%;">
@@ -1579,8 +1572,8 @@
 
 
     <script>
-        window.onerror = function(msg, url, line, col, err) {
-            document.body.innerHTML = '<div style="background:#111;color:#f44;padding:20px;font-family:monospace;white-space:pre-wrap;font-size:14px;">JS Error at line ' + line + ':\n' + msg + '\n\n' + (err && err.stack || '') + '</div>';
+        window.onerror = (msg, _url, line, _col, err) => {
+            document.body.innerHTML = `<div style="background:#111;color:#f44;padding:20px;font-family:monospace;white-space:pre-wrap;font-size:14px;">JS Error at line ${line}:\n${msg}\n\n${err?.stack || ''}</div>`;
             return true;
         };
     </script>

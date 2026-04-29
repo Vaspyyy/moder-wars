@@ -1,0 +1,15 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.4.13/schema.json",
+	"files": {
+		"includes": ["*.js", "*.html", "*.css"]
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"a11y": {
+				"useButtonType": "off",
+				"noSvgWithoutTitle": "off"
+			}
+		}
+	}
+}
