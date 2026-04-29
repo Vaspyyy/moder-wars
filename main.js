@@ -7903,7 +7903,7 @@ function tickGameTime(elapsedMs) {
 }
 
 function deepClone(obj) {
-	return obj ? JSON.parse(JSON.stringify(obj)) : obj;
+	return obj ? structuredClone(obj) : obj;
 }
 
 async function startWar() {
@@ -12913,7 +12913,7 @@ if (quickRestartBtn) {
 		if (initialBiomeMaskSnapshot) biomeMask.set(initialBiomeMaskSnapshot);
 
 		// Restore metadata and cities from snapshots
-		// Note: we avoid deepClone (JSON) here because it breaks Infinity values in bounds and loses Image references
+		// structuredClone preserves Infinity, NaN, and typed arrays correctly.
 		if (initialCountryMetadataSnapshot) {
 			countryMetadata = initialCountryMetadataSnapshot.map((m) => {
 				if (!m) return null;
