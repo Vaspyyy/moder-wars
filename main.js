@@ -7915,7 +7915,12 @@ function tickGameTime(elapsedMs) {
 }
 
 function deepClone(obj) {
-	return obj ? structuredClone(obj) : obj;
+	if (!obj) return obj;
+	try {
+		return structuredClone(obj);
+	} catch (_e) {
+		return JSON.parse(JSON.stringify(obj));
+	}
 }
 
 async function startWar() {
