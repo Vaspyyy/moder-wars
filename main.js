@@ -1750,6 +1750,67 @@ const CONFIG = {
 	FRONTLINE_COLOR: "rgba(0, 0, 0, 1.0)",
 };
 
+// ─── IndexedDB GeoJSON Cache ───────────────────────────────────────────────
+// On first load, parsed GeoJSON is stored in IndexedDB (keyed by URL).
+// Subsequent loads skip the network + JSON.parse entirely — removes the
+// 20-31MB main-thread stall on revisits.
+
+async function _geoCacheOpen() {
+	return new Promise((resolve, reject) => {
+		const req = indexedDB.open("mw-geocache", 1);
+		req.onupgradeneeded = () => {
+			if (!req.result.objectStoreNames.contains("geojson")) {
+				req.result.createObjectStore("geojson", { keyPath: "url" });
+			}
+		};
+		req.onsuccess = () => resolve(req.result);
+		req.onerror = () => reject(req.error);
+	});
+}
+
+async function _geoCacheGet(url) {
+	const db = await _geoCacheOpen();
+	return new Promise((resolve, _reject) => {
+		const tx = db.transaction("geojson", "readonly");
+		const req = tx.objectStore("geojson").get(url);
+		req.onsuccess = () => {
+			const entry = req.result;
+			if (entry?.data) {
+				const age = Date.now() - (entry.timestamp || 0);
+				if (age < 7 * 24 * 60 * 60 * 1000) {
+					resolve(entry.data);
+					return;
+				}
+			}
+			resolve(null);
+		};
+		req.onerror = () => resolve(null);
+	});
+}
+
+async function _geoCachePut(url, data) {
+	const db = await _geoCacheOpen();
+	return new Promise((resolve) => {
+		const tx = db.transaction("geojson", "readwrite");
+		tx.objectStore("geojson").put({ url, data, timestamp: Date.now() });
+		tx.oncomplete = () => resolve();
+		tx.onerror = () => resolve();
+	});
+}
+
+async function fetchJSONWithCache(url) {
+	// Normalize relative URLs to absolute so cache keys are stable across redirects / origins
+	const key = new URL(url, window.location.href).href;
+	const cached = await _geoCacheGet(key);
+	if (cached) return cached;
+	const response = await fetch(url);
+	const data = await response.json();
+	_geoCachePut(key, data);
+	return data;
+}
+
+// ─── End Cache ─────────────────────────────────────────────────────────────
+
 function getOptimizationFactor() {
 	// More active sides => higher factor => more aggressive optimization
 	const activeSides = sides.filter((s) => s && s.length > 0).length || 1;
@@ -6566,18 +6627,22 @@ async function loadTerrain(res) {
 		// Fallback to 50m if 10m is selected for physical features, as 10m physical data is often missing/split differently
 		const terrainRes = res === "110m" ? "110m" : "50m";
 		const terrainUrl = `${CONFIG.GEOJSON_BASE}${terrainRes}/physical/ne_${terrainRes}_geography_regions_polys.json`;
-		const response = await fetch(terrainUrl);
 
-		// If the request fails or is blocked, fall back immediately to flat terrain
-		if (!response.ok) {
-			console.warn("Terrain fetch failed with status", response.status);
-			terrainMask.fill(0);
-			loadingBar.style.width = "100%";
-			loadingStatus.innerText = "Terrain data unavailable, continuing...";
-			return;
+		let data = await _geoCacheGet(terrainUrl);
+		if (!data) {
+			const response = await fetch(terrainUrl);
+
+			if (!response.ok) {
+				console.warn("Terrain fetch failed with status", response.status);
+				terrainMask.fill(0);
+				loadingBar.style.width = "100%";
+				loadingStatus.innerText = "Terrain data unavailable, continuing...";
+				return;
+			}
+
+			data = await response.json();
+			_geoCachePut(terrainUrl, data);
 		}
-
-		const data = await response.json();
 
 		const features = data.features || [];
 
@@ -6750,8 +6815,8 @@ async function loadTerrain(res) {
 async function loadFlagCodes() {
 	if (flagCodes) return;
 	try {
-		const resp = await fetch("https://flagcdn.com/en/codes.json");
-		flagCodes = await resp.json();
+		const url = "https://flagcdn.com/en/codes.json";
+		flagCodes = await fetchJSONWithCache(url);
 	} catch (e) {
 		console.error("Failed to load flag codes", e);
 	}
@@ -7113,10 +7178,8 @@ function findCodeByName(name) {
 async function loadCities() {
 	try {
 		// Upgrade to 50m resolution for a significantly higher city count (thousands vs hundreds)
-		const response = await fetch(
-			"https://raw.githubusercontent.com/martynafford/natural-earth-geojson/master/50m/cultural/ne_50m_populated_places_simple.json",
-		);
-		const data = await response.json();
+		const url = "https://raw.githubusercontent.com/martynafford/natural-earth-geojson/master/50m/cultural/ne_50m_populated_places_simple.json";
+		const data = await fetchJSONWithCache(url);
 		cities = data.features.map((f, idx) => ({
 			id: idx + 1,
 			name: f.properties.name || f.properties.NAME || "City",
@@ -7160,8 +7223,7 @@ async function loadCountries(url, isBlank = false, suppressUi = false) {
 		loadingTip.innerText =
 			"Refining city coordinates for strategic deployment...";
 
-		const response = await fetch(url);
-		const data = await response.json();
+		const data = await fetchJSONWithCache(url);
 		rawGeoJsonData = data;
 		loadingBar.style.width = "30%";
 		loadingStatus.innerText = isBlank
