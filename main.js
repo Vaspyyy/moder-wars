@@ -7919,7 +7919,12 @@ function deepClone(obj) {
 	try {
 		return structuredClone(obj);
 	} catch (_e) {
-		return JSON.parse(JSON.stringify(obj));
+		return JSON.parse(JSON.stringify(obj, (_k, v) => {
+			if (v && typeof v === "object" && (v instanceof HTMLImageElement || v instanceof HTMLCanvasElement || v instanceof Node)) {
+				return undefined;
+			}
+			return v;
+		}));
 	}
 }
 
@@ -14464,16 +14469,13 @@ window.remixFromHub = async (url, sourceId, sourceName, ownerUsername) => {
  */
 function preloadAssets() {
 	const assets = [
-		"/all menu/2022.png",
-		"/all menu/1974.png",
-		"/all menu/1942.png",
-		"/all menu/1936.png",
-		"/all menu/1914.png",
-		"/all menu/1804.png",
-		"/all menu/1492.png",
-		"/all menu/1.png",
-		"Screenshot 2026-03-02 212802.png",
-		"/other thing (1).png",
+		"/2022.png",
+		"/1974.png",
+		"/1942.png",
+		"/1936.png",
+		"/1914.png",
+		"/1804.png",
+		"/1492.png",
 	];
 	assets.forEach((src) => {
 		const img = new Image();
@@ -14864,24 +14866,24 @@ document.getElementById("back-to-nav-btn").addEventListener("click", () => {
  * DYNAMIC MENU BACKGROUND SYSTEM
  */
 const SCENARIO_MENU_BGS = {
-	"scroller-choice-modern": "/all menu/2022.png",
-	"scroller-choice-1974": "/all menu/1974.png",
+	"scroller-choice-modern": "/2022.png",
+	"scroller-choice-1974": "/1974.png",
 
-	"scroller-choice-1942": "/all menu/1942.png",
-	"scroller-choice-1936": "/all menu/1936.png",
-	"scroller-choice-1914": "/all menu/1914.png",
-	"scroller-choice-1804": "/all menu/1804.png",
-	"scroller-choice-1492": "/all menu/1492.png",
-	"scroller-choice-1ad": "/all menu/1.png",
-	"scroller-choice-canada": "/all menu/2022.png",
-	"scroller-choice-france": "/all menu/2022.png",
-	"scroller-choice-germany": "/all menu/2022.png",
-	"scroller-choice-england": "/all menu/2022.png",
-	"scroller-choice-us": "/all menu/2022.png",
-	"scroller-choice-poland": "/all menu/2022.png",
-	"scroller-choice-kaiserreich": "/all menu/1936.png",
-	"scroller-choice-fire": "/all menu/2022.png",
-	"scroller-choice-1984-alt": "/all menu/1974.png",
+	"scroller-choice-1942": "/1942.png",
+	"scroller-choice-1936": "/1936.png",
+	"scroller-choice-1914": "/1914.png",
+	"scroller-choice-1804": "/1804.png",
+	"scroller-choice-1492": "/1492.png",
+	"scroller-choice-1ad": "/1492.png",
+	"scroller-choice-canada": "/2022.png",
+	"scroller-choice-france": "/2022.png",
+	"scroller-choice-germany": "/2022.png",
+	"scroller-choice-england": "/2022.png",
+	"scroller-choice-us": "/2022.png",
+	"scroller-choice-poland": "/2022.png",
+	"scroller-choice-kaiserreich": "/1936.png",
+	"scroller-choice-fire": "/2022.png",
+	"scroller-choice-1984-alt": "/1974.png",
 };
 
 let queuedScenarioAction = null;
@@ -14896,7 +14898,7 @@ function selectScenario(cardId, action) {
 	if (selectedCard) selectedCard.classList.add("selected");
 
 	// 2. Change Menu Background
-	const bgUrl = SCENARIO_MENU_BGS[cardId] || "/all menu/2022.png";
+	const bgUrl = SCENARIO_MENU_BGS[cardId] || "/2022.png";
 	if (mainMenu) {
 		mainMenu.style.backgroundImage = `url('${bgUrl}')`;
 	}
