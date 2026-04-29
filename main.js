@@ -3045,7 +3045,7 @@ const ControlMapLayer = L.Layer.extend({
 		);
 
 		const terrain = terrainMask;
-		const ctx = this._container.getContext("2d");
+		const ctx = this._container.getContext("2d", { willReadFrequently: false });
 		const dpr = window.devicePixelRatio || 1;
 		const isWar =
 			gameState === "SIMULATING" ||
@@ -3628,7 +3628,7 @@ const ControlMapLayer = L.Layer.extend({
 				}
 			}
 
-			// 2. Pass: Greedy Mesh Rendering
+			// 2. Pass: Greedy Mesh Rendering (Batched)
 			this._gradientCache = null; // Clear per-frame gradient cache (camera may have moved)
 			const processed = this._processedCells;
 			const gridXPositions = new Float32Array(vWidth + 1);
@@ -3637,6 +3637,9 @@ const ControlMapLayer = L.Layer.extend({
 				gridXPositions[x] = getGridPoint(xMin + x, yMin).x;
 			for (let y = 0; y <= vHeight; y++)
 				gridYPositions[y] = getGridPoint(xMin, yMin + y).y;
+
+			// Batch mesh rectangles by resolved fillStyle to minimize ctx.fillStyle + ctx.fill() calls
+			const meshBatch = new Map();
 
 			for (let vy = 0; vy < vHeight; vy += step) {
 				const rowOffset = vy * vWidth;
@@ -3675,7 +3678,7 @@ const ControlMapLayer = L.Layer.extend({
 					}
 					if (vy + mh > vHeight) mh = vHeight - vy;
 
-					// Draw Mesh
+					// Compute mesh rectangle bounds
 					const pX1 = gridXPositions[vx];
 					const pX2 = gridXPositions[vx + mw];
 					const pY1 = gridYPositions[vy];
@@ -3687,6 +3690,7 @@ const ControlMapLayer = L.Layer.extend({
 					const drawH = Math.abs(pY2 - pY1);
 
 					if (drawW > 0 && drawH > 0) {
+						let resolvedFill = fill;
 						if (typeof fill === "string" && fill.startsWith("WG_")) {
 							const parts = fill.split("_");
 							const sid = parseInt(parts[1], 10);
@@ -3695,7 +3699,6 @@ const ControlMapLayer = L.Layer.extend({
 							const biome = parseInt(parts[4], 10) || 0;
 
 							if (biome === 1) {
-								// Apply desert tint to country color: lighter, yellower, and desaturated
 								colorParts[0] = Math.min(255, colorParts[0] * 1.1 + 30);
 								colorParts[1] = Math.min(255, colorParts[1] * 1.1 + 10);
 								colorParts[2] = Math.max(0, colorParts[2] * 0.85);
@@ -3703,7 +3706,6 @@ const ControlMapLayer = L.Layer.extend({
 
 							const meta = countryMetadata[sid - 1];
 							if (!disableCountryGradient && meta && meta.bounds) {
-								// PERF: Cache gradient per fill string to avoid repeated getGridPoint calls (was 7.8% total time).
 								if (!this._gradientCache) this._gradientCache = new Map();
 								let cached = this._gradientCache.get(fill);
 								if (!cached) {
@@ -3725,16 +3727,13 @@ const ControlMapLayer = L.Layer.extend({
 									cached = g;
 									this._gradientCache.set(fill, cached);
 								}
-								ctx.fillStyle = cached;
+								resolvedFill = cached;
 							} else {
-								ctx.fillStyle = `rgba(${colorParts[0]},${colorParts[1]},${colorParts[2]},${a})`;
+								resolvedFill = `rgba(${colorParts[0]},${colorParts[1]},${colorParts[2]},${a})`;
 							}
-						} else {
-							ctx.fillStyle = fill;
 						}
-						// Removed Math.floor to allow smooth subpixel rendering, relying on larger
-						// overlap (+0.5px) to ensure no gaps appear during camera transitions.
-						ctx.fillRect(drawX - 0.25, drawY - 0.25, drawW + 0.5, drawH + 0.5);
+						if (!meshBatch.has(resolvedFill)) meshBatch.set(resolvedFill, []);
+						meshBatch.get(resolvedFill).push([drawX - 0.25, drawY - 0.25, drawW + 0.5, drawH + 0.5]);
 					}
 
 					// Mark as processed
@@ -3745,6 +3744,17 @@ const ControlMapLayer = L.Layer.extend({
 						}
 					}
 				}
+			}
+
+			// Render all batched rectangles: one ctx.fill() per unique fillStyle
+			for (const [fillStyle, rects] of meshBatch) {
+				ctx.fillStyle = fillStyle;
+				ctx.beginPath();
+				for (let r = 0; r < rects.length; r++) {
+					const rc = rects[r];
+					ctx.rect(rc[0], rc[1], rc[2], rc[3]);
+				}
+				ctx.fill();
 			}
 		}
 
