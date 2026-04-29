@@ -1983,6 +1983,8 @@ let frontlineDirLng = null; // Float32Array, length = gridWidth * gridHeight
 let frontlineFieldTick = -999; // last simFrameCount when field was rebuilt
 let _frontlineSourceCell = null; // reusable Int32Array for BFS — allocated once
 const FRONTLINE_FIELD_UPDATE_INTERVAL = 15; // rebuild every N ticks (not every 4 — grid is 2.88M cells)
+let _simWorker = null; // Web Worker for async frontline BFS
+let _workerBusy = false; // prevent overlapping rebuild requests
 
 
 
@@ -2918,6 +2920,16 @@ const map = L.map("map", {
 	zoomSnap: 0.25,
 	wheelPxPerZoomLevel: 120,
 });
+
+// Create Web Worker for async frontline BFS rebuilds
+_simWorker = new Worker("simulation-worker.js");
+_simWorker.onmessage = function (evt) {
+	_workerBusy = false;
+	const { frontlineDirLat: latBuf, frontlineDirLng: lngBuf, sourceCell: srcBuf } = evt.data;
+	frontlineDirLat = new Float32Array(latBuf);
+	frontlineDirLng = new Float32Array(lngBuf);
+	_frontlineSourceCell = new Int32Array(srcBuf);
+};
 
 let baseImageryLayer = null;
 const imagerySelect = document.getElementById("imagery-select");
@@ -8034,8 +8046,9 @@ async function _startWarInner() {
 	// Without this, a new war may reuse old direction vectors and pull both
 	// teams toward the same stale hotspot from the previous conflict.
 	frontlineFieldTick = -999;
-	frontlineDirLat = null;
-	frontlineDirLng = null;
+	_workerBusy = false;
+
+	// Reset cached frontline field state between wars.
 	_frontlineSourceCell = null;
 	setSpeed(0); // Conflicts start at 0.5 speed (Index 0 in SPEED_STEPS)
 
@@ -9269,11 +9282,27 @@ function performSimulationTick() {
 		arr.push(u);
 	}
 
-	// OPT-1: Rebuild frontline direction field every N ticks (not per-unit).
+	// OPT-1: Rebuild frontline direction field every N ticks via Web Worker.
 	// getBorderDirection() now does an O(1) array lookup instead of a 12-radius grid scan.
 	if (simFrameCount - frontlineFieldTick >= FRONTLINE_FIELD_UPDATE_INTERVAL) {
-		rebuildFrontlineField();
 		frontlineFieldTick = simFrameCount;
+		if (_simWorker && !_workerBusy) {
+			_workerBusy = true;
+			const lmCopy = new Uint8Array(landMask);
+			const dsCopy = new Int8Array(dominantSideMap);
+			_simWorker.postMessage(
+				{
+					landMask: lmCopy.buffer,
+					dominantSideMap: dsCopy.buffer,
+					gridWidth,
+					gridHeight,
+					gridRes: CONFIG.GRID_RES,
+				},
+				[lmCopy.buffer, dsCopy.buffer],
+			);
+		} else {
+			rebuildFrontlineField();
+		}
 	}
 
 	// --- UNIT CONSOLIDATION (Merge Stacks) ---
@@ -12232,6 +12261,7 @@ function capitulateCountry(country, sideIndex) {
 	// Invalidate caches so the frontline field and adjacency reflect new borders
 	adjacencyCache = null;
 	frontlineFieldTick = -999;
+	_workerBusy = false;
 
 	// Refresh UI
 	recalculateAllBounds();
