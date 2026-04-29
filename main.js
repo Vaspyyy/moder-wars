@@ -1859,6 +1859,13 @@ let simFrameCount = 0;
 let simSpeed = 3.0;
 let _cachedP1T = 0,
 	_cachedP2T = 0;
+let _cachedSoldierEls = [];
+let _cachedCityEls = [];
+let _cachedUnitCountSpans = [];
+let _cachedTerritoryCtrlEls = [];
+let _cachedTerritorySegEls = [];
+let _casualtyStructureKey = "";
+let _casualtyValueEls = {};
 let isPaused = false;
 let frameAccumulator = 0;
 let lastTreatyTime = 0;
@@ -2764,6 +2771,36 @@ function rebuildStatsPanel() {
         </div>`;
 	});
 	statsGrid.innerHTML = gridHtml;
+
+	_cachedSoldierEls = [];
+	_cachedCityEls = [];
+	_cachedTerritoryCtrlEls = [];
+	_cachedTerritorySegEls = [];
+	for (const s of activeSides) {
+		_cachedSoldierEls[s.idx] = document.querySelector(`[data-sidesoldiers="${s.idx}"]`);
+		_cachedCityEls[s.idx] = document.querySelector(`[data-sidecities="${s.idx}"]`);
+		_cachedTerritoryCtrlEls[s.idx] = document.querySelector(`[data-sidecontrol="${s.idx}"]`);
+		_cachedTerritorySegEls[s.idx] = document.querySelector(`[data-tugsegment="${s.idx}"]`);
+	}
+
+	if (unitCountsDisplay) {
+		unitCountsDisplay.innerHTML = "";
+		const spans = [];
+		for (let i = 0; i < sides.length; i++) {
+			if (i > 0) {
+				const vs = document.createElement("span");
+				vs.style.color = "#888";
+				vs.textContent = " vs ";
+				unitCountsDisplay.appendChild(vs);
+			}
+			const span = document.createElement("span");
+			span.style.color = sideColors[i].replace(rgbaRe, "1)");
+			span.textContent = "0";
+			unitCountsDisplay.appendChild(span);
+			spans[i] = span;
+		}
+		_cachedUnitCountSpans = spans;
+	}
 
 	let tugHtml = '<div class="tug-bar">';
 	activeSides.forEach((s) => {
@@ -4440,9 +4477,9 @@ const ControlMapLayer = L.Layer.extend({
 			if (total > 0) {
 				for (let si = 0; si < sides.length; si++) {
 					const pct = Math.round((sideTerritory[si] / total) * 100);
-					const ctrlEl = document.querySelector(`[data-sidecontrol="${si}"]`);
-					if (ctrlEl) ctrlEl.innerText = `${pct}%`;
-					const segEl = document.querySelector(`[data-tugsegment="${si}"]`);
+					const ctrlEl = _cachedTerritoryCtrlEls[si];
+					if (ctrlEl) ctrlEl.textContent = `${pct}%`;
+					const segEl = _cachedTerritorySegEls[si];
 					if (segEl) segEl.style.width = `${pct}%`;
 				}
 			}
@@ -11620,22 +11657,19 @@ function updateLoop(now) {
 	}
 
 	for (let si = 0; si < sides.length; si++) {
-		const el = document.querySelector(`[data-sidesoldiers="${si}"]`);
+		const el = _cachedSoldierEls[si];
 		if (el)
-			el.innerText = influenceLayer.formatSoldiers(
+			el.textContent = influenceLayer.formatSoldiers(
 				sideSoldierEsts[si] > 0 && sideSoldierEsts[si] < 1
 					? 1
 					: sideSoldierEsts[si],
 			);
 	}
 
-	if (unitCountsDisplay) {
-		unitCountsDisplay.innerHTML = sideUnitCounts
-			.map((count, si) => {
-				const color = sideColors[si].replace(rgbaRe, "1)");
-				return `<span style="color:${color};">${count}</span>`;
-			})
-			.join(' <span style="color:#888;">vs</span> ');
+	if (_cachedUnitCountSpans.length) {
+		for (let si = 0; si < _cachedUnitCountSpans.length; si++) {
+			_cachedUnitCountSpans[si].textContent = sideUnitCounts[si];
+		}
 	}
 
 	const sideCityCounts = new Array(sides.length).fill(0);
@@ -11644,8 +11678,8 @@ function updateLoop(now) {
 		if (dm >= 0 && dm < sides.length) sideCityCounts[dm]++;
 	});
 	for (let si = 0; si < sides.length; si++) {
-		const el = document.querySelector(`[data-sidecities="${si}"]`);
-		if (el) el.innerText = sideCityCounts[si];
+		const el = _cachedCityEls[si];
+		if (el) el.textContent = sideCityCounts[si];
 	}
 
 	// Throttled UI rendering in Flag mode to maintain responsive interaction and framerate
@@ -11656,10 +11690,11 @@ function updateLoop(now) {
 		updateCombatantsUI();
 	}
 
-	// Update Casualty UI (Every frame for "live" counting effect)
+	// Update Casualty UI (Every 5 frames for "live" counting effect)
 	const casualtyContainer = document.getElementById("casualty-lists-container");
 	if (casualtyContainer && simFrameCount % 5 === 0) {
-		let html = "";
+		let entriesKey = "";
+		const entriesFlat = [];
 		for (let sIdx = 0; sIdx < sides.length; sIdx++) {
 			if (!sides[sIdx] || sides[sIdx].length === 0) continue;
 			const entries = initialCombatants.filter((c) => c.sideIndex === sIdx);
@@ -11669,28 +11704,57 @@ function updateLoop(now) {
 				}
 			});
 			if (entries.length === 0) continue;
-			const sideColor = sideColors[sIdx].replace(rgbaRe, "1)");
-			html += `<div class="casualty-side-list">`;
-			entries.forEach((c, i) => {
-				const casualties = countryCasualties.get(c.id) || 0;
+			for (const e of entries) {
+				entriesFlat.push({ ...e, side: sIdx });
+				entriesKey += `${e.id},`;
+			}
+		}
+		const structureChanged = entriesKey !== _casualtyStructureKey;
+		if (structureChanged) {
+			_casualtyStructureKey = entriesKey;
+			let html = "";
+			let currentSide = -1;
+			let sidePos = 0;
+			for (const e of entriesFlat) {
+				const casualties = countryCasualties.get(e.id) || 0;
 				const formatted = influenceLayer.formatSoldiers(casualties);
-				const isDefeated = !sides.flat().some((active) => active.id === c.id);
-				const isPrimary = i === 0 && !isDefeated;
-				const meta = countryMetadata[c.id - 1];
+				const isDefeated = !sides.flat().some((active) => active.id === e.id);
+				if (e.side !== currentSide) {
+					if (currentSide !== -1) html += `</div>`;
+					currentSide = e.side;
+					sidePos = 0;
+					html += `<div class="casualty-side-list">`;
+				}
+				const isPrimary = sidePos === 0 && !isDefeated;
+				const sideColor = sideColors[currentSide].replace(rgbaRe, "1)");
+				const meta = countryMetadata[e.id - 1];
 				let flagSrc = meta?.flagUrl || "";
 				if (meta?.tempFlag instanceof HTMLCanvasElement) {
 					try {
 						flagSrc = meta.tempFlag.toDataURL();
 					} catch (_e) {}
 				}
-				html += `<div class="casualty-item ${isPrimary ? "primary" : "secondary"}" style="opacity: ${isDefeated ? 0.45 : 1};">
+				html += `<div class="casualty-item ${isPrimary ? "primary" : "secondary"}" style="opacity: ${isDefeated ? 0.45 : 1};" data-ctype="cas-item" data-cid="${e.id}">
                     <img src="${flagSrc}" class="cas-flag ${isPrimary ? "" : "small"}" alt="" style="${isDefeated ? "filter: grayscale(1);" : ""}">
-                    <div class="cas-value" style="font-size: ${isPrimary ? "18px" : "12px"}; color: ${sideColor};">${formatted}</div>
+                    <div class="cas-value" data-cval="${e.id}" style="font-size: ${isPrimary ? "18px" : "12px"}; color: ${sideColor};">${formatted}</div>
                 </div>`;
+				sidePos++;
+			}
+			if (currentSide !== -1) html += `</div>`;
+			casualtyContainer.innerHTML = html;
+			_casualtyValueEls = {};
+			casualtyContainer.querySelectorAll("[data-cval]").forEach((el) => {
+				_casualtyValueEls[el.getAttribute("data-cval")] = el;
 			});
-			html += `</div>`;
+		} else {
+			for (const e of entriesFlat) {
+				const el = _casualtyValueEls[e.id];
+				if (el) {
+					const casualties = countryCasualties.get(e.id) || 0;
+					el.textContent = influenceLayer.formatSoldiers(casualties);
+				}
+			}
 		}
-		casualtyContainer.innerHTML = html;
 	}
 
 	if (viewMode === "FLAG") {
