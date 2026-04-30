@@ -8094,6 +8094,8 @@ async function _startWarInner() {
 	// teams toward the same stale hotspot from the previous conflict.
 	frontlineFieldTick = -999;
 	_workerBusy = false;
+	_cachedFrontierCells = null;
+	_frontierScanCounter = 0;
 
 	// Reset cached frontline field state between wars.
 	_frontlineSourceCell = null;
@@ -9017,29 +9019,47 @@ function rebuildFrontlineField() {
 	let qHead = 0,
 		qTail = 0;
 
-	// Seed: cells where two different sides are adjacent (frontline cells)
-	for (let i = 0; i < total; i++) {
-		if (landMask[i] !== 2) continue;
-		const mySide = dominantSideMap[i];
-		if (mySide < 0) continue;
-		let isFront = false;
-		if (i % gridWidth < gridWidth - 1) {
-			const ns = dominantSideMap[i + 1];
-			if (ns >= 0 && ns !== mySide) isFront = true;
+	// Incremental seed: full frontier scan only every 3rd rebuild (every ~45 ticks).
+	// Between full scans, reuse previous frontier cells as seeds — frontiers move
+	// slowly and this avoids the 2.88M-cell scan 67% of the time.
+	if (!_cachedFrontierCells) _cachedFrontierCells = [];
+	if (!_frontierScanCounter) _frontierScanCounter = 0;
+	_frontierScanCounter = (_frontierScanCounter + 1) % 3;
+
+	if (_frontierScanCounter === 0 || _cachedFrontierCells.length === 0) {
+		// Full scan: find all frontier cells
+		_cachedFrontierCells.length = 0;
+		for (let i = 0; i < total; i++) {
+			if (landMask[i] !== 2) continue;
+			const mySide = dominantSideMap[i];
+			if (mySide < 0) continue;
+			let isFront = false;
+			if (i % gridWidth < gridWidth - 1) {
+				const ns = dominantSideMap[i + 1];
+				if (ns >= 0 && ns !== mySide) isFront = true;
+			}
+			if (!isFront && i % gridWidth > 0) {
+				const ns = dominantSideMap[i - 1];
+				if (ns >= 0 && ns !== mySide) isFront = true;
+			}
+			if (!isFront && i + gridWidth < total) {
+				const ns = dominantSideMap[i + gridWidth];
+				if (ns >= 0 && ns !== mySide) isFront = true;
+			}
+			if (!isFront && i - gridWidth >= 0) {
+				const ns = dominantSideMap[i - gridWidth];
+				if (ns >= 0 && ns !== mySide) isFront = true;
+			}
+			if (isFront) {
+				_cachedFrontierCells.push(i);
+			}
 		}
-		if (!isFront && i % gridWidth > 0) {
-			const ns = dominantSideMap[i - 1];
-			if (ns >= 0 && ns !== mySide) isFront = true;
-		}
-		if (!isFront && i + gridWidth < total) {
-			const ns = dominantSideMap[i + gridWidth];
-			if (ns >= 0 && ns !== mySide) isFront = true;
-		}
-		if (!isFront && i - gridWidth >= 0) {
-			const ns = dominantSideMap[i - gridWidth];
-			if (ns >= 0 && ns !== mySide) isFront = true;
-		}
-		if (isFront) {
+	}
+
+	// Seed queue from cached frontier cells
+	for (let f = 0; f < _cachedFrontierCells.length; f++) {
+		const i = _cachedFrontierCells[f];
+		if (landMask[i] === 2 && dominantSideMap[i] >= 0) {
 			queue[qTail++] = i;
 			_frontlineSourceCell[i] = i;
 		}
@@ -12326,6 +12346,8 @@ function capitulateCountry(country, sideIndex) {
 	adjacencyCache = null;
 	frontlineFieldTick = -999;
 	_workerBusy = false;
+	_cachedFrontierCells = null;
+	_frontierScanCounter = 0;
 
 	// Refresh UI
 	recalculateAllBounds();
