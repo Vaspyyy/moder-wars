@@ -1144,7 +1144,7 @@ function getFlagUrl(code, name) {
 		code = findCodeByName(name);
 	}
 	if (!code || code === "-99") return null;
-	return `https://flagcdn.com/w320/${code.toLowerCase()}.png`;
+	return `https://flagcdn.com/w320/${code.toLowerCase()}.webp`;
 }
 
 // biome-ignore lint/complexity/useRegexLiterals: regex literal contains )$ which confuses some parsers
@@ -8153,9 +8153,9 @@ async function _startWarInner() {
 				} else {
 					const nameCode = findCodeByName(c.name);
 					const src = nameCode
-						? `https://flagcdn.com/w80/${nameCode}.png`
+						? `https://flagcdn.com/w80/${nameCode}.webp`
 						: c.feature
-							? `https://flagcdn.com/w80/${getCode(c.feature)}.png`
+							? `https://flagcdn.com/w80/${getCode(c.feature)}.webp`
 							: null;
 					if (src) c.flag.src = src;
 				}
@@ -14469,13 +14469,13 @@ window.remixFromHub = async (url, sourceId, sourceName, ownerUsername) => {
  */
 function preloadAssets() {
 	const assets = [
-		"/2022.png",
-		"/1974.png",
-		"/1942.png",
-		"/1936.png",
-		"/1914.png",
-		"/1804.png",
-		"/1492.png",
+		"/2022.webp",
+		"/1974.webp",
+		"/1942.webp",
+		"/1936.webp",
+		"/1914.webp",
+		"/1804.webp",
+		"/1492.webp",
 	];
 	assets.forEach((src) => {
 		const img = new Image();
@@ -14866,24 +14866,24 @@ document.getElementById("back-to-nav-btn").addEventListener("click", () => {
  * DYNAMIC MENU BACKGROUND SYSTEM
  */
 const SCENARIO_MENU_BGS = {
-	"scroller-choice-modern": "/2022.png",
-	"scroller-choice-1974": "/1974.png",
+	"scroller-choice-modern": "/2022.webp",
+	"scroller-choice-1974": "/1974.webp",
 
-	"scroller-choice-1942": "/1942.png",
-	"scroller-choice-1936": "/1936.png",
-	"scroller-choice-1914": "/1914.png",
-	"scroller-choice-1804": "/1804.png",
-	"scroller-choice-1492": "/1492.png",
-	"scroller-choice-1ad": "/1492.png",
-	"scroller-choice-canada": "/2022.png",
-	"scroller-choice-france": "/2022.png",
-	"scroller-choice-germany": "/2022.png",
-	"scroller-choice-england": "/2022.png",
-	"scroller-choice-us": "/2022.png",
-	"scroller-choice-poland": "/2022.png",
-	"scroller-choice-kaiserreich": "/1936.png",
-	"scroller-choice-fire": "/2022.png",
-	"scroller-choice-1984-alt": "/1974.png",
+	"scroller-choice-1942": "/1942.webp",
+	"scroller-choice-1936": "/1936.webp",
+	"scroller-choice-1914": "/1914.webp",
+	"scroller-choice-1804": "/1804.webp",
+	"scroller-choice-1492": "/1492.webp",
+	"scroller-choice-1ad": "/1492.webp",
+	"scroller-choice-canada": "/2022.webp",
+	"scroller-choice-france": "/2022.webp",
+	"scroller-choice-germany": "/2022.webp",
+	"scroller-choice-england": "/2022.webp",
+	"scroller-choice-us": "/2022.webp",
+	"scroller-choice-poland": "/2022.webp",
+	"scroller-choice-kaiserreich": "/1936.webp",
+	"scroller-choice-fire": "/2022.webp",
+	"scroller-choice-1984-alt": "/1974.webp",
 };
 
 let queuedScenarioAction = null;
@@ -14898,7 +14898,7 @@ function selectScenario(cardId, action) {
 	if (selectedCard) selectedCard.classList.add("selected");
 
 	// 2. Change Menu Background
-	const bgUrl = SCENARIO_MENU_BGS[cardId] || "/2022.png";
+	const bgUrl = SCENARIO_MENU_BGS[cardId] || "/2022.webp";
 	if (mainMenu) {
 		mainMenu.style.backgroundImage = `url('${bgUrl}')`;
 	}
@@ -16784,7 +16784,7 @@ inspectFetchFlagBtn.addEventListener("click", async () => {
 		return;
 	}
 
-	const flagUrl = `https://flagcdn.com/w160/${code}.png`;
+	const flagUrl = `https://flagcdn.com/w160/${code}.webp`;
 	updateCountryFlag(editingCountryId, flagUrl);
 });
 
