@@ -1923,6 +1923,7 @@ let _cachedP1T = 0,
 let _cachedSoldierEls = [];
 let _cachedSideUnitCounts = [];
 let _cachedSideSoldierEsts = [];
+let _cachedSideTerritoryCounts = [];
 let _cachedCityEls = [];
 let _cachedUnitCountSpans = [];
 let _cachedTerritoryCtrlEls = [];
@@ -8003,6 +8004,7 @@ async function _startWarInner() {
 	}
 	_cachedP1T = 0;
 	_cachedP2T = 0;
+	_cachedSideTerritoryCounts = [];
 	latestCountryStats.clear();
 	aiCountryState.clear();
 	sides.flat().forEach((c) => {
@@ -11467,12 +11469,17 @@ function performSimulationTick() {
 		}
 	}
 
-	const sideTerritoryCounts = new Array(sides.length).fill(0);
-	for (let i = 0; i < dominantSideMap.length; i++) {
-		if (landMask[i] === 2) {
-			const ds = dominantSideMap[i];
-			if (ds >= 0 && ds < sides.length) sideTerritoryCounts[ds]++;
+	let sideTerritoryCounts = _cachedSideTerritoryCounts;
+	if (shouldCountLand) {
+		const counts = new Array(sides.length).fill(0);
+		for (let i = 0; i < dominantSideMap.length; i++) {
+			if (landMask[i] === 2) {
+				const ds = dominantSideMap[i];
+				if (ds >= 0 && ds < sides.length) counts[ds]++;
+			}
 		}
+		_cachedSideTerritoryCounts = counts;
+		sideTerritoryCounts = counts;
 	}
 	const totalTerritory = sideTerritoryCounts.reduce((a, b) => a + b, 0);
 	const side0Pct =
