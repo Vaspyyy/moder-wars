@@ -6103,38 +6103,40 @@ function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
 	const frameStride = 3;
 	const _currentTickOffset = simFrameCount % frameStride;
 
-	// Territory Diffusion Pass: Spread occupation laterally to prevent thin "fingers" and jagged borders
-	// Increased samples and blur strength to ensure smoother, more solid frontline shapes.
-	const smoothingBase = 35000;
-	const smoothingSamples = Math.max(
-		5000,
-		Math.floor(smoothingBase / optimizationFactor),
-	);
-	for (let s = 0; s < smoothingSamples; s++) {
-		const idx = Math.floor(Math.random() * landMask.length);
-		if (landMask[idx] !== 2) continue;
+	// Territory Diffusion Pass: Spread occupation laterally to prevent thin "fingers" and jagged borders.
+	// Throttled: only runs every 3 ticks (was every tick at 35K samples — ~15-20% CPU at 5x).
+	if (simFrameCount % 3 === 0) {
+		const smoothingBase = 8000;
+		const smoothingSamples = Math.max(
+			2000,
+			Math.floor(smoothingBase / optimizationFactor),
+		);
+		for (let s = 0; s < smoothingSamples; s++) {
+			const idx = Math.floor(Math.random() * landMask.length);
+			if (landMask[idx] !== 2) continue;
 
-		const y = Math.floor(idx / gridWidth);
-		const x = idx % gridWidth;
-		if (x <= 0 || x >= gridWidth - 1 || y <= 0 || y >= gridHeight - 1) continue;
+			const y = Math.floor(idx / gridWidth);
+			const x = idx % gridWidth;
+			if (x <= 0 || x >= gridWidth - 1 || y <= 0 || y >= gridHeight - 1) continue;
 
-		const blur = 0.25;
-		for (let si = 0; si < sideInfluenceMaps.length; si++) {
-			let sum = 0;
-			let count = 0;
-			for (let dy = -1; dy <= 1; dy++) {
-				for (let dx = -1; dx <= 1; dx++) {
-					const nIdx = idx + dy * gridWidth + dx;
-					if (nIdx >= 0 && nIdx < sideInfluenceMaps[si].length) {
-						sum += sideInfluenceMaps[si][nIdx];
-						count++;
+			const blur = 0.25;
+			for (let si = 0; si < sideInfluenceMaps.length; si++) {
+				let sum = 0;
+				let count = 0;
+				for (let dy = -1; dy <= 1; dy++) {
+					for (let dx = -1; dx <= 1; dx++) {
+						const nIdx = idx + dy * gridWidth + dx;
+						if (nIdx >= 0 && nIdx < sideInfluenceMaps[si].length) {
+							sum += sideInfluenceMaps[si][nIdx];
+							count++;
+						}
 					}
 				}
+				sideInfluenceMaps[si][idx] =
+					sideInfluenceMaps[si][idx] * (1 - blur) + (sum / count) * blur;
 			}
-			sideInfluenceMaps[si][idx] =
-				sideInfluenceMaps[si][idx] * (1 - blur) + (sum / count) * blur;
+			syncOccupationFromSideInfluence(idx);
 		}
-		syncOccupationFromSideInfluence(idx);
 	}
 
 	// Strategic Batching: Process a fixed max number of units per frame for influence
