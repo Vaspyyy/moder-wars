@@ -11855,7 +11855,7 @@ function updateLoop(now) {
 					} catch (_e) {}
 				}
 				html += `<div class="casualty-item ${isPrimary ? "primary" : "secondary"}" style="opacity: ${isDefeated ? 0.45 : 1};" data-ctype="cas-item" data-cid="${e.id}">
-                    <img src="${flagSrc}" class="cas-flag ${isPrimary ? "" : "small"}" alt="" style="${isDefeated ? "filter: grayscale(1);" : ""}">
+                    <img src="${flagSrc}" class="cas-flag ${isPrimary ? "" : "small"}" alt="" loading="lazy" decoding="async" style="${isDefeated ? "filter: grayscale(1);" : ""}">
                     <div class="cas-value" data-cval="${e.id}" style="font-size: ${isPrimary ? "18px" : "12px"}; color: ${sideColor};">${formatted}</div>
                 </div>`;
 				sidePos++;
