@@ -3703,9 +3703,11 @@ const ControlMapLayer = L.Layer.extend({
 											alpha = 0.85;
 										} else {
 											alpha = 0.7;
-		}
-	}
-}
+										}
+									}
+								}
+							}
+						}
 
 						// Apply mountain visuals across all states (War or Peace), including neutral land
 						if (mountainsEnabled && terrain && terrain[idx] > 0) {
