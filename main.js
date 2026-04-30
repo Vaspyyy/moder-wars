@@ -10263,6 +10263,15 @@ function performSimulationTick() {
 		let enemyCentroidLat = 0;
 		let enemyCentroidLng = 0;
 
+		// At high sim speeds, skip tactical awareness for units far from combat
+		// to reduce the 3×3 spatial-hash neighbor iteration cost (~5-10% CPU at 5×).
+		const idleTicks = simFrameCount - (u.lastCombatTick || 0);
+		const isTacticallyIdle =
+			simSpeed >= 3 &&
+			idleTicks > 60 &&
+			u.mopUpTargetId === 0 &&
+			!u.cityFocusTarget;
+
 		const isRebelUnit =
 			activeRebellion && u.sovereignId === activeRebellion.rebelId;
 		const _isAlpen = !!u.isAlpenjager;
@@ -10277,7 +10286,9 @@ function performSimulationTick() {
 		const ky = Math.floor((u.lat + 90) / HASH_SIZE);
 		const maxKx = Math.ceil(360 / HASH_SIZE);
 
-		// Only search adjacent 3x3 hash cells (approx 6x6 degrees footprint)
+		// Only search adjacent 3x3 hash cells (approx 6x6 degrees footprint).
+		// Skip for tactically idle units at high sim speeds to reduce CPU load.
+		if (!isTacticallyIdle) {
 		for (let dy = -1; dy <= 1; dy++) {
 			for (let dx = -1; dx <= 1; dx++) {
 				let cx = kx + dx;
@@ -10403,6 +10414,7 @@ function performSimulationTick() {
 				}
 			}
 		}
+		} // !isTacticallyIdle
 
 		u.lastAllyCount = localAllyCount;
 
