@@ -2955,8 +2955,8 @@ const _geoParsePending = new Map();
 function _getGeoParseWorker() {
 	if (!_geoParseWorker) {
 		_geoParseWorker = new Worker("geo-parse-worker.js");
-		_geoParseWorker.onmessage = function (evt) {
-			const { id, ok, data, error } = evt.data;
+		_geoParseWorker.onmessage = (evt) => {
+			const { id, ok, data } = evt.data;
 			const resolve = _geoParsePending.get(id);
 			_geoParsePending.delete(id);
 			if (resolve) resolve(ok ? data : null);

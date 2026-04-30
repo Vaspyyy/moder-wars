@@ -2,8 +2,9 @@
 // Receives grid snapshots, runs BFS, posts back direction arrays.
 // Runs off main thread to avoid jank during the 15-tick rebuild cycle.
 
-self.onmessage = function (evt) {
-	const { landMask, dominantSideMap, gridWidth, gridHeight, gridRes } = evt.data;
+self.onmessage = (evt) => {
+	const { landMask, dominantSideMap, gridWidth, gridHeight, gridRes } =
+		evt.data;
 	const total = gridWidth * gridHeight;
 
 	const frontlineDirLat = new Float32Array(total);
