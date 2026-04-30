@@ -7267,8 +7267,8 @@ async function loadCountries(url, isBlank = false, suppressUi = false) {
 
 		// Capture Instant Quick Restart Snapshots for the base map load
 		if (worldControlMap) {
-			initialWorldControlMapSnapshot = new Int32Array(worldControlMap);
-			initialDeJureMapSnapshot = new Int32Array(deJureMap);
+			initialWorldControlMapSnapshot = new Uint16Array(worldControlMap);
+			initialDeJureMapSnapshot = new Uint16Array(deJureMap);
 			initialProvinceMapSnapshot = new Int32Array(provinceMap);
 			initialLandMaskSnapshot = new Uint8Array(landMask);
 			initialCountryMetadataSnapshot = deepClone(countryMetadata);
@@ -7966,9 +7966,9 @@ async function _startWarInner() {
 	// Capture a clean snapshot of the scenario just before the war starts
 	// so QUICK RESTART can restore it instantly with no loading screen.
 	initialWorldControlMapSnapshot = worldControlMap
-		? new Int32Array(worldControlMap)
+		? new Uint16Array(worldControlMap)
 		: null;
-	initialDeJureMapSnapshot = deJureMap ? new Int32Array(deJureMap) : null;
+	initialDeJureMapSnapshot = deJureMap ? new Uint16Array(deJureMap) : null;
 	initialProvinceMapSnapshot = provinceMap ? new Int32Array(provinceMap) : null;
 	initialLandMaskSnapshot = landMask ? new Uint8Array(landMask) : null;
 	initialBiomeMaskSnapshot = biomeMask ? new Uint8Array(biomeMask) : null;
@@ -12482,7 +12482,7 @@ function applyTreaty(type, winnerPoleOverride = null) {
 	});
 
 	for (let p = 0; p < smoothingPasses; p++) {
-		const tempMap = new Int32Array(worldControlMap);
+		const tempMap = new Uint16Array(worldControlMap);
 		for (let y = 1; y < gridHeight - 1; y++) {
 			const rowIdx = y * gridWidth;
 			for (let x = 1; x < gridWidth - 1; x++) {
@@ -13493,7 +13493,7 @@ function signSelectivePeace(exiter, target) {
 	// 5. Separate Peace Smoothing Pass - Optimized to avoid GC thrashing
 	const smoothingPasses = 2;
 	for (let p = 0; p < smoothingPasses; p++) {
-		const tempMap = new Int32Array(worldControlMap);
+		const tempMap = new Uint16Array(worldControlMap);
 		const uniqueIds = new Int32Array(9);
 		const idCounts = new Int32Array(9);
 
@@ -14541,12 +14541,12 @@ function initializeEngine() {
 		// Allocate Grid
 		gridWidth = Math.ceil(360 / CONFIG.GRID_RES);
 		gridHeight = Math.ceil(180 / CONFIG.GRID_RES);
-		worldControlMap = new Int32Array(gridWidth * gridHeight);
-		deJureMap = new Int32Array(gridWidth * gridHeight);
+		worldControlMap = new Uint16Array(gridWidth * gridHeight);
+		deJureMap = new Uint16Array(gridWidth * gridHeight);
 		provinceMap = new Int32Array(gridWidth * gridHeight);
 		occupationMap = new Float32Array(gridWidth * gridHeight);
 		initSideInfluenceMaps();
-		primaryOccupierMap = new Int32Array(gridWidth * gridHeight);
+		primaryOccupierMap = new Uint16Array(gridWidth * gridHeight);
 		landMask = new Uint8Array(gridWidth * gridHeight);
 		biomeMask = new Uint8Array(gridWidth * gridHeight);
 		terrainMask = new Float32Array(gridWidth * gridHeight);
@@ -18309,8 +18309,8 @@ async function performPresetLoad(fileOrBlob, targetMode = "EDITOR") {
 		}
 
 		// Capture Instant Quick Restart Snapshots immediately upon scenario load
-		initialWorldControlMapSnapshot = new Int32Array(worldControlMap);
-		initialDeJureMapSnapshot = new Int32Array(deJureMap);
+		initialWorldControlMapSnapshot = new Uint16Array(worldControlMap);
+		initialDeJureMapSnapshot = new Uint16Array(deJureMap);
 		initialProvinceMapSnapshot = new Int32Array(provinceMap);
 		initialLandMaskSnapshot = new Uint8Array(landMask);
 		initialCountryMetadataSnapshot = deepClone(countryMetadata);
@@ -20016,12 +20016,12 @@ choiceSourceEarth.onclick = () => {
 	if (!worldControlMap) {
 		gridWidth = Math.ceil(360 / CONFIG.GRID_RES);
 		gridHeight = Math.ceil(180 / CONFIG.GRID_RES);
-		worldControlMap = new Int32Array(gridWidth * gridHeight);
-		deJureMap = new Int32Array(gridWidth * gridHeight);
+		worldControlMap = new Uint16Array(gridWidth * gridHeight);
+		deJureMap = new Uint16Array(gridWidth * gridHeight);
 		provinceMap = new Int32Array(gridWidth * gridHeight);
 		occupationMap = new Float32Array(gridWidth * gridHeight);
 		initSideInfluenceMaps();
-		primaryOccupierMap = new Int32Array(gridWidth * gridHeight);
+		primaryOccupierMap = new Uint16Array(gridWidth * gridHeight);
 		landMask = new Uint8Array(gridWidth * gridHeight);
 		terrainMask = new Float32Array(gridWidth * gridHeight);
 		flagProcessedBuffer = new Int32Array(gridWidth * gridHeight);
