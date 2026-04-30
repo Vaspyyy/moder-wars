@@ -1993,6 +1993,8 @@ let _frontlineSourceCell = null; // reusable Int32Array for BFS — allocated on
 const FRONTLINE_FIELD_UPDATE_INTERVAL = 15; // rebuild every N ticks (not every 4 — grid is 2.88M cells)
 let _simWorker = null; // Web Worker for async frontline BFS
 let _workerBusy = false; // prevent overlapping rebuild requests
+let _cachedFrontierCells = null; // cached BFS frontier seed cells (incremental rebuild)
+let _frontierScanCounter = 0; // counter for full-scan cadence
 
 // Frontline polyline system: distributed unit stationing along war fronts
 // _frontlinePolys["A_B"] = [{lat, lng}, ...]  — ordered polyline of frontier cells
@@ -9246,7 +9248,6 @@ function rebuildFrontlineField() {
 	// Between full scans, reuse previous frontier cells as seeds — frontiers move
 	// slowly and this avoids the 2.88M-cell scan 67% of the time.
 	if (!_cachedFrontierCells) _cachedFrontierCells = [];
-	if (!_frontierScanCounter) _frontierScanCounter = 0;
 	_frontierScanCounter = (_frontierScanCounter + 1) % 3;
 
 	if (_frontierScanCounter === 0 || _cachedFrontierCells.length === 0) {
