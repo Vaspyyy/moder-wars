@@ -1803,8 +1803,15 @@ async function fetchJSONWithCache(url) {
 	const key = new URL(url, window.location.href).href;
 	const cached = await _geoCacheGet(key);
 	if (cached) return cached;
-	const response = await fetch(url);
-	const data = await response.json();
+	// Offload fetch + JSON.parse to Web Worker (keeps main thread responsive during 2-5s parse)
+	let data;
+	if (_geoParseWorker || typeof Worker !== "undefined") {
+		data = await _fetchViaWorker(url);
+		if (!data) throw new Error("Worker parse failed");
+	} else {
+		const response = await fetch(url);
+		data = await response.json();
+	}
 	_geoCachePut(key, data);
 	return data;
 }
@@ -2931,6 +2938,32 @@ _simWorker.onmessage = function (evt) {
 	frontlineDirLng = new Float32Array(lngBuf);
 	_frontlineSourceCell = new Int32Array(srcBuf);
 };
+
+// GeoJSON parse worker — offloads 20-31MB JSON.parse from main thread
+let _geoParseWorker = null;
+let _geoParseReqId = 0;
+const _geoParsePending = new Map();
+
+function _getGeoParseWorker() {
+	if (!_geoParseWorker) {
+		_geoParseWorker = new Worker("geo-parse-worker.js");
+		_geoParseWorker.onmessage = function (evt) {
+			const { id, ok, data, error } = evt.data;
+			const resolve = _geoParsePending.get(id);
+			_geoParsePending.delete(id);
+			if (resolve) resolve(ok ? data : null);
+		};
+	}
+	return _geoParseWorker;
+}
+
+function _fetchViaWorker(url) {
+	return new Promise((resolve) => {
+		const id = ++_geoParseReqId;
+		_geoParsePending.set(id, resolve);
+		_getGeoParseWorker().postMessage({ url, id });
+	});
+}
 
 let baseImageryLayer = null;
 const imagerySelect = document.getElementById("imagery-select");
