@@ -49,6 +49,7 @@ import {
 	loadCities,
 	loadingBar,
 	loadingTip,
+	mapSettingsMissilesCheckbox,
 	mainMenu,
 	mapUi,
 
@@ -100,6 +101,19 @@ import {
 	updateSidesUI,
 	worldHeightDeg,
 	worldWidthDeg,
+	noNationsModal,
+	randomNationsCountInput,
+	resetBtn,
+	setRefOpacity,
+	setRefScale,
+	setupPanel,
+	sides,
+	skipRandomGenBtn,
+	spawnRandomNationsAcrossMap,
+	statsPanel,
+	statusText,
+	terrainTypeSelect,
+	units,
 } from "./main.js";
 
 function updateCountryFlag(countryId, url) {
