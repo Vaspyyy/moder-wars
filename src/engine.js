@@ -3,6 +3,8 @@ import {
 	MAX_SIDES,
 	_cachedFrontierCells,
 	_frontierScanCounter,
+	frontlineDirLat,
+	frontlineDirLng,
 	gridWidth,
 	setDominantSideMap,
 	setFrontlineDirLat,
