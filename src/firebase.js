@@ -1,4 +1,5 @@
 import {
+	SCENARIO_MENU_BGS,
 	countryInspector,
 	currentUsername,
 	enterScenarioBtn,
@@ -17,7 +18,6 @@ import {
 	renderCountryLibrary,
 	renderFlagLibrary,
 	room,
-	SCENARIO_MENU_BGS,
 	scenarioHubModal,
 	setGameState,
 	setHubReturnState,
