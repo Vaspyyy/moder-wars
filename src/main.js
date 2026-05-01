@@ -5699,12 +5699,8 @@ export async function _startWarInner() {
 				}
 
 				// Spread units widely along the frontline, distributing evenly
-				// Use cycle-based distribution so units don't all pick the same cell
-				const fIdx = fronts ? j % fronts.length : 0;
-				const pick = fronts ? fronts[fIdx] : fData;
-
-				const py = Math.floor(pick.idx / gridWidth);
-				const px = pick.idx % gridWidth;
+				const py = Math.floor(fData.idx / gridWidth);
+				const px = fData.idx % gridWidth;
 
 				const jitterRange = CONFIG.GRID_RES * 1.5;
 				const pushBack = fromFront ? CONFIG.GRID_RES * 0.6 : 0;
@@ -5713,12 +5709,12 @@ export async function _startWarInner() {
 					py * CONFIG.GRID_RES -
 					90 +
 					(Math.random() - 0.5) * jitterRange +
-					pick.vy * pushBack;
+					fData.vy * pushBack;
 				let lng =
 					px * CONFIG.GRID_RES -
 					180 +
 					(Math.random() - 0.5) * jitterRange +
-					pick.vx * pushBack;
+					fData.vx * pushBack;
 
 				// Validation: Ensure final coordinate is within the country's sovereign grid
 				const finalIdx = getGridIndex(lat, lng);
