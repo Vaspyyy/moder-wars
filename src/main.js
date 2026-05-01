@@ -8399,6 +8399,52 @@ export function performSimulationTick() {
 				let moveDirLat = dLat / dist;
 				let moveDirLng = dLng / dist;
 
+				// ── War Plan Movement: override direction based on active plan ──
+				let planSpeedMult = 1.0;
+				let planDirLat = 0, planDirLng = 0, isPlanUnit = false;
+				const activePlan = _warPlan[u.sideIndex];
+
+				if (!shouldMopUp && !retreatVector && activePlan && activePlan.type !== "DEFEND") {
+					isPlanUnit = true;
+					if (activePlan.phase === "PREPARATION" && activePlan.stagingCells?.length > 0) {
+						// Move toward nearest staging cell at 2x speed
+						let bestDist = Infinity, bestSC = null;
+						for (const sc of activePlan.stagingCells) {
+							let sdLng = sc.lng - u.lng;
+							if (sdLng > 180) sdLng -= 360; else if (sdLng < -180) sdLng += 360;
+							const dSq = (u.lat - sc.lat) ** 2 + sdLng ** 2;
+							if (dSq < bestDist) { bestDist = dSq; bestSC = sc; }
+						}
+						if (bestSC) {
+							let pdLat = bestSC.lat - u.lat;
+							let pdLng = bestSC.lng - u.lng;
+							if (pdLng > 180) pdLng -= 360; else if (pdLng < -180) pdLng += 360;
+							const pd = Math.sqrt(pdLat * pdLat + pdLng * pdLng);
+							if (pd > 0.01) { planDirLat = pdLat / pd; planDirLng = pdLng / pd; }
+							planSpeedMult = 2.0;
+						}
+					} else if (activePlan.phase === "EXECUTION" && activePlan.target) {
+						// Push toward plan objective at 1.3x speed
+						let pdLat = activePlan.target.lat - u.lat;
+						let pdLng = activePlan.target.lng - u.lng;
+						if (pdLng > 180) pdLng -= 360; else if (pdLng < -180) pdLng += 360;
+						const pd = Math.sqrt(pdLat * pdLat + pdLng * pdLng);
+						if (pd > 0.01) { planDirLat = pdLat / pd; planDirLng = pdLng / pd; }
+						planSpeedMult = 1.3;
+						// Track progress: reduce distance to target
+						activePlan.progress = Math.min(1.0, Math.max(0, 1.0 - pd / 5.0));
+					}
+				}
+
+				// Blend plan direction into movement
+				if (isPlanUnit && (planDirLat !== 0 || planDirLng !== 0)) {
+					const planBlend = activePlan && activePlan.phase === "PREPARATION" ? 0.8 : 0.5;
+					moveDirLat = moveDirLat * (1 - planBlend) + planDirLat * planBlend;
+					moveDirLng = moveDirLng * (1 - planBlend) + planDirLng * planBlend;
+					const magP = Math.sqrt(moveDirLat * moveDirLat + moveDirLng * moveDirLng);
+					if (magP > 0) { moveDirLat /= magP; moveDirLng /= magP; }
+				}
+
 				// Front-slot positioning: pull toward assigned frontline slot to
 				// spread units evenly along the war front.
 				if (u.frontSlot && !shouldMopUp && !retreatVector && !isEngaged) {
@@ -8808,6 +8854,7 @@ export function performSimulationTick() {
 				const moveDist =
 					baseSpeed *
 					speedMult *
+					planSpeedMult *
 					neutralPenalty *
 					retreatBoost *
 					pushReadiness *
