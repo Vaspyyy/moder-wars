@@ -3,6 +3,7 @@ import {
 	MAX_SIDES,
 	_cachedFrontierCells,
 	_frontierScanCounter,
+	_frontlinePolys,
 	frontlineDirLat,
 	frontlineDirLng,
 	gridWidth,
@@ -11,6 +12,7 @@ import {
 	setFrontlineDirLng,
 	setSideInfluenceMaps,
 	setFrontierScanCounter,
+	setFrontlinePolys,
 	set_frontlineSourceCell,
 	dominantSideMap,
 	gridHeight,
@@ -183,7 +185,7 @@ function rebuildFrontlineField() {
 }
 
 function computeFrontlinePolys() {
-	_frontlinePolys = {};
+	setFrontlinePolys({});
 	const total = gridWidth * gridHeight;
 	if (!dominantSideMap || !landMask) return;
 

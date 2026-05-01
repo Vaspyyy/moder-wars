@@ -1950,6 +1950,9 @@ export function setRefScale(val) {
 export function setSideInfluenceMaps(val) {
 	sideInfluenceMaps = val;
 }
+export function setFrontlinePolys(val) {
+	_frontlinePolys = val;
+}
 export function setDominantSideMap(val) {
 	dominantSideMap = val;
 }
