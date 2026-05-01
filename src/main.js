@@ -1807,6 +1807,7 @@ export const UNIT_HASH_CELL_SIZE = 2.5; // Degrees per spatial bucket
 
 // Temporary diagnostics for cross-war state/capitulation bugs.
 export const aiCountryState = new Map();
+export let _sidePosture = []; // per-side auto posture (OFFENSIVE/BALANCED/DEFENSIVE)
 export const AI_DESPERATION = {
 	OFFENSE_MIN_WAR_TICKS: 1200, // ~20s at 60fps
 	OFFENSE_STALL_TICKS: 900, // sustained stall before "push harder"
@@ -7006,6 +7007,77 @@ export function performSimulationTick() {
 
 			aiCountryState.set(country.id, profile);
 		});
+	}
+
+	// ── Auto Posture: per-side strength ratio → OFFENSIVE/BALANCED/DEFENSIVE ──
+	const sideStrength = new Array(sides.length).fill(0);
+	const sideUnitCounts = new Array(sides.length).fill(0);
+	for (let i = 0; i < units.length; i++) {
+		const u = units[i];
+		if (u.deployTicks > 0) continue;
+		const si = u.sideIndex;
+		if (si < 0 || si >= sides.length) continue;
+		sideUnitCounts[si]++;
+		const meta = countryMetadata[u.sovereignId - 1];
+		const buff = getEffectiveBuffState(
+			sides[si]?.find((c) => c.id === u.sovereignId),
+			meta || null,
+		);
+		const buffMult = {
+			buff: 2.5, super: 10, godly: 40,
+			weakened: 0.7, crippled: 0.4,
+		}[buff] || 1.0;
+		sideStrength[si] += buffMult * (u.health / CONFIG.UNIT_HEALTH);
+	}
+
+	_sidePosture = new Array(sides.length).fill("BALANCED");
+	for (let si = 0; si < sides.length; si++) {
+		if (sideUnitCounts[si] === 0) continue;
+		let totalEnemyStrength = 0;
+		let totalEnemyUnits = 0;
+		for (let ej = 0; ej < sides.length; ej++) {
+			if (ej === si) continue;
+			totalEnemyStrength += sideStrength[ej];
+			totalEnemyUnits += sideUnitCounts[ej];
+		}
+		// Check if this side has LAST_STAND or OFFENSIVE_DESPERATION countries
+		let hasLastStand = false;
+		let hasOffDesp = false;
+		sides[si].forEach((c) => {
+			const prof = aiCountryState.get(c.id);
+			if (prof?.mode === "LAST_STAND") hasLastStand = true;
+			if (prof?.mode === "OFFENSIVE_DESPERATION") hasOffDesp = true;
+		});
+
+		if (hasLastStand) {
+			_sidePosture[si] = "DEFENSIVE";
+		} else if (hasOffDesp) {
+			_sidePosture[si] = "OFFENSIVE";
+		} else if (totalEnemyUnits > 0) {
+			const ratio = sideStrength[si] / Math.max(1, totalEnemyStrength);
+			if (ratio > 1.5) _sidePosture[si] = "OFFENSIVE";
+			else if (ratio < 0.7) _sidePosture[si] = "DEFENSIVE";
+		}
+
+		// Apply posture to country profiles
+		if (_sidePosture[si] === "DEFENSIVE") {
+			sides[si].forEach((c) => {
+				const prof = aiCountryState.get(c.id);
+				if (prof) {
+					prof.forceDefensive = true;
+					prof.frontlineBlend = Math.min(prof.frontlineBlend, 0.3);
+					prof.speedMult = Math.min(prof.speedMult, 0.96);
+				}
+			});
+		} else if (_sidePosture[si] === "OFFENSIVE") {
+			sides[si].forEach((c) => {
+				const prof = aiCountryState.get(c.id);
+				if (prof) {
+					prof.forceDefensive = false;
+					prof.frontlineBlend = Math.max(prof.frontlineBlend, 0.4);
+				}
+			});
+		}
 	}
 
 	// Mid-War Recruitment (Steady, Land-Capped, and Underdog-Aware)
