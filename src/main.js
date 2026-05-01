@@ -4071,6 +4071,17 @@ export function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
 					}
 
 					sideInfluenceMaps[mySideIdx][idx] = newInfluence;
+					// Decay opposing sides' influence when we enter a cell
+					for (let si = 0; si < sideInfluenceMaps.length; si++) {
+						if (si !== mySideIdx && sideInfluenceMaps[si][idx] > 0) {
+							sideInfluenceMaps[si][idx] = Math.max(0,
+								sideInfluenceMaps[si][idx] - cellDelta * 0.5);
+						}
+					}
+					// De-jure owner reclaim bonus: 1.5x influence when retaking own territory
+					if (worldControlMap[idx] === u.sovereignId) {
+						sideInfluenceMaps[mySideIdx][idx] *= 1.5;
+					}
 					syncOccupationFromSideInfluence(idx);
 				}
 			}
