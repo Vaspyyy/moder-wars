@@ -113,6 +113,9 @@ import {
 	updateSidesUI,
 	worldHeightDeg,
 	worldWidthDeg,
+,
+	gridHeight,
+	worldControlMap
 } from "./main.js";
 
 function updateCountryFlag(countryId, url) {

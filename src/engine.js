@@ -10,6 +10,12 @@ import {
 	setFrontlineDirLng,
 	setSideInfluenceMaps,
 	set_frontlineSourceCell,
+,
+	dominantSideMap,
+	gridHeight,
+	landMask,
+	occupationMap,
+	sideInfluenceMaps
 } from "./main.js";
 
 function syncOccupationFromSideInfluence(idx) {

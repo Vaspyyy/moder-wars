@@ -51,6 +51,16 @@ import {
 	viewMode,
 	worldHeightDeg,
 	worldWidthDeg,
+,
+	biomeMask,
+	dominantSideMap,
+	gridHeight,
+	landMask,
+	map,
+	occupationMap,
+	primaryOccupierMap,
+	terrainMask,
+	worldControlMap
 } from "./main.js";
 
 const ControlMapLayer = L.Layer.extend({
