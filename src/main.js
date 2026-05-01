@@ -1,45 +1,115 @@
 import JSZip from "jszip";
 
 // ── State setters for module imports (ES imports are read-only) ────
-export function setAdjacencyCache(val) { adjacencyCache = val; }
-export function setBombsDisabled(val) { bombsDisabled = val; }
-export function setCities(val) { cities = val; }
-export function setCountryMetadata(val) { countryMetadata = val; }
-export function setCustomSatelliteImg(val) { customSatelliteImg = val; }
-export function setCustomSatelliteUrl(val) { customSatelliteUrl = val; }
-export function setGameState(val) { gameState = val; }
-export function setHubReturnState(val) { hubReturnState = val; }
-export function setHubWasInEditor(val) { hubWasInEditor = val; }
-export function setGodBombActive(val) { godBombActive = val; }
-export function setGodBombSourceId(val) { godBombSourceId = val; }
-export function setBuffedSideIdx(val) { buffedSideIdx = val; }
-export function setImportScenarioBuffer(val) { importScenarioBuffer = val; }
-export function setDisableCountryGradient(val) { disableCountryGradient = val; }
-export function setGameMode(val) { gameMode = val; }
-export function setInitialCitiesSnapshot(val) { initialCitiesSnapshot = val; }
-export function setInitialCountryMetadataSnapshot(val) { initialCountryMetadataSnapshot = val; }
-export function setInitialDeJureMapSnapshot(val) { initialDeJureMapSnapshot = val; }
-export function setInitialLandMaskSnapshot(val) { initialLandMaskSnapshot = val; }
-export function setInitialProvinceMapSnapshot(val) { initialProvinceMapSnapshot = val; }
-export function setInitialWorldControlMapSnapshot(val) { initialWorldControlMapSnapshot = val; }
-export function setIsCustomTerrain(val) { isCustomTerrain = val; }
-export function setMissilesEnabled(val) { missilesEnabled = val; }
-export function setRawGeoJsonData(val) { rawGeoJsonData = val; }
-export function setRefAboveTerrain(val) { refAboveTerrain = val; }
-export function setReferenceImageUrl(val) { referenceImageUrl = val; }
-export function setSelectedImportCountryId(val) { selectedImportCountryId = val; }
-export function setHubScenarioCache(val) { hubScenarioCache = val; }
-export function setQueuedScenarioAction(val) { queuedScenarioAction = val; }
-export function setRefOpacity(val) { refOpacity = val; }
-export function setRefScale(val) { refScale = val; }
-export function setReferenceOverlay(val) { referenceOverlay = val; }
-export function setFrontlineDirLat(val) { frontlineDirLat = val; }
-export function setFrontlineDirLng(val) { frontlineDirLng = val; }
-export function set_frontlineSourceCell(val) { _frontlineSourceCell = val; }
+export function setAdjacencyCache(val) {
+	adjacencyCache = val;
+}
+export function setBombsDisabled(val) {
+	bombsDisabled = val;
+}
+export function setCities(val) {
+	cities = val;
+}
+export function setCountryMetadata(val) {
+	countryMetadata = val;
+}
+export function setCustomSatelliteImg(val) {
+	customSatelliteImg = val;
+}
+export function setCustomSatelliteUrl(val) {
+	customSatelliteUrl = val;
+}
+export function setGameState(val) {
+	gameState = val;
+}
+export function setHubReturnState(val) {
+	hubReturnState = val;
+}
+export function setHubWasInEditor(val) {
+	hubWasInEditor = val;
+}
+export function setGodBombActive(val) {
+	godBombActive = val;
+}
+export function setGodBombSourceId(val) {
+	godBombSourceId = val;
+}
+export function setBuffedSideIdx(val) {
+	buffedSideIdx = val;
+}
+export function setImportScenarioBuffer(val) {
+	importScenarioBuffer = val;
+}
+export function setDisableCountryGradient(val) {
+	disableCountryGradient = val;
+}
+export function setGameMode(val) {
+	gameMode = val;
+}
+export function setInitialCitiesSnapshot(val) {
+	initialCitiesSnapshot = val;
+}
+export function setInitialCountryMetadataSnapshot(val) {
+	initialCountryMetadataSnapshot = val;
+}
+export function setInitialDeJureMapSnapshot(val) {
+	initialDeJureMapSnapshot = val;
+}
+export function setInitialLandMaskSnapshot(val) {
+	initialLandMaskSnapshot = val;
+}
+export function setInitialProvinceMapSnapshot(val) {
+	initialProvinceMapSnapshot = val;
+}
+export function setInitialWorldControlMapSnapshot(val) {
+	initialWorldControlMapSnapshot = val;
+}
+export function setIsCustomTerrain(val) {
+	isCustomTerrain = val;
+}
+export function setMissilesEnabled(val) {
+	missilesEnabled = val;
+}
+export function setRawGeoJsonData(val) {
+	rawGeoJsonData = val;
+}
+export function setRefAboveTerrain(val) {
+	refAboveTerrain = val;
+}
+export function setReferenceImageUrl(val) {
+	referenceImageUrl = val;
+}
+export function setSelectedImportCountryId(val) {
+	selectedImportCountryId = val;
+}
+export function setHubScenarioCache(val) {
+	hubScenarioCache = val;
+}
+export function setQueuedScenarioAction(val) {
+	queuedScenarioAction = val;
+}
+export function setRefOpacity(val) {
+	refOpacity = val;
+}
+export function setRefScale(val) {
+	refScale = val;
+}
+export function setReferenceOverlay(val) {
+	referenceOverlay = val;
+}
+export function setFrontlineDirLat(val) {
+	frontlineDirLat = val;
+}
+export function setFrontlineDirLng(val) {
+	frontlineDirLng = val;
+}
+export function set_frontlineSourceCell(val) {
+	_frontlineSourceCell = val;
+}
 
 import L from "leaflet";
 import { CONFIG } from "./config.js";
-import { fetchJSONWithCache, _geoCacheGet } from "./geo.js";
+import { fetchJSONWithCache } from "./geo.js";
 
 /**
  * TRANSLATION SYSTEM (i18n)
@@ -1297,7 +1367,9 @@ export const peaceUrl = "/assets/audio/peace.wav";
 export const warAmbianceUrl = "/assets/audio/modern-war-129016.mp3";
 
 // Initialize Audio Context immediately so it's ready for early decoding
-export const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+export const audioCtx = new (
+	window.AudioContext || window.webkitAudioContext
+)();
 export let explosionBuffer = null;
 export let clickBuffer = null;
 // Background music buffers keyed by URL
@@ -1621,7 +1693,14 @@ document.addEventListener(
 /**
  * CONFIGURATION & STATE
  */
-export const BUFF_STATES = ["crippled", "weakened", "none", "buff", "super", "godly"];
+export const BUFF_STATES = [
+	"crippled",
+	"weakened",
+	"none",
+	"buff",
+	"super",
+	"godly",
+];
 export const BUFF_METADATA = {
 	crippled: {
 		label: "MAJOR PENALTY",
@@ -1687,7 +1766,6 @@ export function cycleBuffState(current, direction) {
 	const nextIndex = (baseIndex + dir + BUFF_STATES.length) % BUFF_STATES.length;
 	return BUFF_STATES[nextIndex];
 }
-
 
 export function getOptimizationFactor() {
 	// More active sides => higher factor => more aggressive optimization
@@ -1790,7 +1868,8 @@ export let _provincesEnabled = false;
 export let showUnitsVisually = true;
 export let disableCountryGradient = false;
 // When false, hiddenBuffState is ignored and only visible buffState is used.
-export let invisibleBuffsEnabled = getCookie("mw_disable_invis_buffs") !== "true";
+export let invisibleBuffsEnabled =
+	getCookie("mw_disable_invis_buffs") !== "true";
 export let cityEditMode = null; // 'CREATE' | 'MOVE' | null
 export let animationFrameId = null;
 export let backgroundTickId = null;
@@ -1865,8 +1944,6 @@ export const FRONTLINE_FIELD_UPDATE_INTERVAL = 15; // rebuild every N ticks (not
 export let _simWorker = null; // Web Worker for async frontline BFS
 export let _workerBusy = false; // prevent overlapping rebuild requests
 
-
-
 // Grid dimensions calculated after settings choice
 export let gridWidth,
 	gridHeight,
@@ -1880,13 +1957,6 @@ export let gridWidth,
 	landMask,
 	biomeMask,
 	terrainMask;
-
-
-
-
-
-
-
 
 // Snapshots of borders at scenario start for quick restart
 export let initialWorldControlMapSnapshot = null;
@@ -1913,7 +1983,9 @@ export const editorLoadBtn = document.getElementById("editor-load-btn");
 export const editorShareBtn = document.getElementById("editor-share-btn");
 export const editorHubBtn = document.getElementById("editor-hub-btn");
 export const editorLibraryBtn = document.getElementById("editor-library-btn");
-export const editorFlagLibraryBtn = document.getElementById("editor-flag-library-btn");
+export const editorFlagLibraryBtn = document.getElementById(
+	"editor-flag-library-btn",
+);
 export const editorPaintBtn = document.getElementById("editor-paint-btn");
 export const editorFillBtn = document.getElementById("editor-fill-btn");
 export const editorUnclaimBtn = document.getElementById("editor-unclaim-btn");
@@ -1923,21 +1995,39 @@ export const terrainControls = document.getElementById("terrain-controls");
 export const editorPlaceDivisionBtn = document.getElementById(
 	"editor-place-division-btn",
 );
-export const editorSaveMultiBtn = document.getElementById("editor-save-multi-btn");
-export const editorSaveAllZipBtn = document.getElementById("editor-save-all-zip-btn");
+export const editorSaveMultiBtn = document.getElementById(
+	"editor-save-multi-btn",
+);
+export const editorSaveAllZipBtn = document.getElementById(
+	"editor-save-all-zip-btn",
+);
 export const editorLoadZipBtn = document.getElementById("editor-load-zip-btn");
 export const editorImportCountryBtn = document.getElementById(
 	"editor-import-country-from-scenario-btn",
 );
 export const editorCityNewBtn = document.getElementById("editor-city-new-btn");
-export const editorCityClearBtn = document.getElementById("editor-city-clear-btn");
-export const editorToolsPage1Btn = document.getElementById("editor-tools-page-1-btn");
-export const editorToolsPage2Btn = document.getElementById("editor-tools-page-2-btn");
-export const editorToolsPage3Btn = document.getElementById("editor-tools-page-3-btn");
-export const editorToolsPage4Btn = document.getElementById("editor-tools-page-4-btn");
-export const editorToolsPage5Btn = document.getElementById("editor-tools-page-5-btn");
+export const editorCityClearBtn = document.getElementById(
+	"editor-city-clear-btn",
+);
+export const editorToolsPage1Btn = document.getElementById(
+	"editor-tools-page-1-btn",
+);
+export const editorToolsPage2Btn = document.getElementById(
+	"editor-tools-page-2-btn",
+);
+export const editorToolsPage3Btn = document.getElementById(
+	"editor-tools-page-3-btn",
+);
+export const editorToolsPage4Btn = document.getElementById(
+	"editor-tools-page-4-btn",
+);
+export const editorToolsPage5Btn = document.getElementById(
+	"editor-tools-page-5-btn",
+);
 export const editorExitBtn = document.getElementById("editor-exit-btn");
-export const editorMapSettingsBtn = document.getElementById("editor-map-settings-btn");
+export const editorMapSettingsBtn = document.getElementById(
+	"editor-map-settings-btn",
+);
 export const brushControls = document.getElementById("brush-controls");
 export const brushSizeSlider = document.getElementById("brush-size-slider");
 export const brushSizeVal = document.getElementById("brush-size-val");
@@ -1946,7 +2036,9 @@ export const arrowsToggleBtn = document.getElementById("arrows-toggle-btn");
 export const battlesToggleBtn = document.getElementById("battles-toggle-btn");
 export const labelsToggleBtn = document.getElementById("labels-toggle-btn");
 export const citiesToggleBtn = document.getElementById("cities-toggle-btn");
-export const allianceViewCheckbox = document.getElementById("alliance-view-checkbox");
+export const allianceViewCheckbox = document.getElementById(
+	"alliance-view-checkbox",
+);
 
 // Fully retire the legacy ARROWS button so it no longer appears or controls alliance view.
 if (arrowsToggleBtn) {
@@ -1970,9 +2062,15 @@ export const itemModalPreview = document.getElementById("item-modal-preview");
 export const itemCommentsList = document.getElementById("item-comments-list");
 export const itemCommentInput = document.getElementById("item-comment-input");
 export const itemCommentSubmit = document.getElementById("item-comment-submit");
-export const itemReplyIndicator = document.getElementById("item-reply-indicator");
-export const itemCancelReplyBtn = document.getElementById("item-comment-cancel-reply");
-export const closeItemModalBtn = document.getElementById("close-item-modal-btn");
+export const itemReplyIndicator = document.getElementById(
+	"item-reply-indicator",
+);
+export const itemCancelReplyBtn = document.getElementById(
+	"item-comment-cancel-reply",
+);
+export const closeItemModalBtn = document.getElementById(
+	"close-item-modal-btn",
+);
 export const itemModalActions = document.getElementById("item-modal-actions");
 export const itemModalPlayBtn = document.getElementById("item-modal-play");
 export const itemModalRemixBtn = document.getElementById("item-modal-remix");
@@ -1999,7 +2097,9 @@ export let commentsUnsubscribe = null;
 // Global chat state
 export let globalChatUnsubscribe = null;
 
-export const uploadDetailsModal = document.getElementById("upload-details-modal");
+export const uploadDetailsModal = document.getElementById(
+	"upload-details-modal",
+);
 export const confirmUploadBtn = document.getElementById("confirm-upload-btn");
 export const cancelUploadBtn = document.getElementById("cancel-upload-btn");
 export const uploadNameInput = document.getElementById("upload-scenario-name");
@@ -2012,36 +2112,60 @@ export const confirmShareCountryBtn = document.getElementById(
 export const cancelShareCountryBtn = document.getElementById(
 	"cancel-share-country-btn",
 );
-export const shareCountryNameInput = document.getElementById("share-country-name");
-export const shareCountryDescInput = document.getElementById("share-country-desc");
+export const shareCountryNameInput =
+	document.getElementById("share-country-name");
+export const shareCountryDescInput =
+	document.getElementById("share-country-desc");
 
 export const shareFlagModal = document.getElementById("share-flag-modal");
 export const releaseModal = document.getElementById("release-modal");
-export const releasableListContainer = document.getElementById("releasable-list");
-export const closeReleaseModalBtn = document.getElementById("close-release-modal");
-export const confirmShareFlagBtn = document.getElementById("confirm-share-flag-btn");
-export const cancelShareFlagBtn = document.getElementById("cancel-share-flag-btn");
+export const releasableListContainer =
+	document.getElementById("releasable-list");
+export const closeReleaseModalBtn = document.getElementById(
+	"close-release-modal",
+);
+export const confirmShareFlagBtn = document.getElementById(
+	"confirm-share-flag-btn",
+);
+export const cancelShareFlagBtn = document.getElementById(
+	"cancel-share-flag-btn",
+);
 export const shareFlagNameInput = document.getElementById("share-flag-name");
 export const shareFlagDescInput = document.getElementById("share-flag-desc");
 export const shareFlagBtn = document.getElementById("share-flag-btn");
 
-export const createCountryModal = document.getElementById("create-country-modal");
+export const createCountryModal = document.getElementById(
+	"create-country-modal",
+);
 export const confirmCreateBtn = document.getElementById("confirm-create-btn");
 export const cancelCreateBtn = document.getElementById("cancel-create-btn");
 export const newCountryNameInput = document.getElementById("new-country-name");
-export const newCountryColorInput = document.getElementById("new-country-color");
+export const newCountryColorInput =
+	document.getElementById("new-country-color");
 export const newCountryFlagInput = document.getElementById("new-country-flag");
 
 export const countryInspector = document.getElementById("country-inspector");
 export const inspectNameInput = document.getElementById("inspect-name-input");
 export const inspectFlagInput = document.getElementById("inspect-flag-input");
-export const inspectFetchFlagBtn = document.getElementById("inspect-fetch-flag-btn");
-export const inspectHubFlagBtn = document.getElementById("inspect-hub-flag-btn");
-export const inspectFlagPreview = document.getElementById("inspect-flag-preview");
-export const inspectColorSwatch = document.getElementById("inspect-color-swatch");
-export const inspectColorPicker = document.getElementById("inspect-color-picker");
+export const inspectFetchFlagBtn = document.getElementById(
+	"inspect-fetch-flag-btn",
+);
+export const inspectHubFlagBtn = document.getElementById(
+	"inspect-hub-flag-btn",
+);
+export const inspectFlagPreview = document.getElementById(
+	"inspect-flag-preview",
+);
+export const inspectColorSwatch = document.getElementById(
+	"inspect-color-swatch",
+);
+export const inspectColorPicker = document.getElementById(
+	"inspect-color-picker",
+);
 export const inspectPaintBtn = document.getElementById("inspect-paint-btn");
-export const inspectAnnexClickBtn = document.getElementById("inspect-annex-click-btn");
+export const inspectAnnexClickBtn = document.getElementById(
+	"inspect-annex-click-btn",
+);
 export const shareCountryBtn = document.getElementById("share-country-btn");
 export const closeInspectorBtn = document.getElementById("close-inspector-btn");
 export const inspectBuffBtn = document.getElementById("inspect-buff-btn");
@@ -2056,10 +2180,18 @@ export const allianceFlagInput = document.getElementById("alliance-flag-input");
 export const cityInspector = document.getElementById("city-inspector");
 
 // Import-from-scenario modal elements
-export const importCountryModal = document.getElementById("import-country-modal");
-export const importScenarioSelect = document.getElementById("import-scenario-select");
-export const importScenarioFileInput = document.getElementById("import-scenario-file");
-export const importCountrySearch = document.getElementById("import-country-search");
+export const importCountryModal = document.getElementById(
+	"import-country-modal",
+);
+export const importScenarioSelect = document.getElementById(
+	"import-scenario-select",
+);
+export const importScenarioFileInput = document.getElementById(
+	"import-scenario-file",
+);
+export const importCountrySearch = document.getElementById(
+	"import-country-search",
+);
 export const importCountryCardList = document.getElementById(
 	"import-country-card-list",
 );
@@ -2138,7 +2270,9 @@ if (importCountrySearch) {
 }
 export const cityNameInput = document.getElementById("city-name-input");
 export const cityOwnerSelect = document.getElementById("city-owner-select");
-export const cityCapitalCheckbox = document.getElementById("city-capital-checkbox");
+export const cityCapitalCheckbox = document.getElementById(
+	"city-capital-checkbox",
+);
 export const cityMoveBtn = document.getElementById("city-move-btn");
 export const cityDeleteBtn = document.getElementById("city-delete-btn");
 export const cityCloseBtn = document.getElementById("city-close-btn");
@@ -2153,7 +2287,9 @@ export const mapResSelect = document.getElementById("map-res-select");
 export const gridResSelect = document.getElementById("grid-res-select");
 export const unitLimitSelect = document.getElementById("unit-limit-select");
 export const customTrackInput = document.getElementById("custom-track-input");
-export const clearCustomTrackBtn = document.getElementById("clear-custom-track-btn");
+export const clearCustomTrackBtn = document.getElementById(
+	"clear-custom-track-btn",
+);
 export const disableUnitsVisuallyCheckbox = document.getElementById(
 	"disable-units-visually-checkbox",
 );
@@ -2275,17 +2411,27 @@ export function setLoadingThematic(enabled) {
 export const playModeBtn = document.getElementById("play-mode-btn");
 export const editorModeBtn = document.getElementById("editor-mode-btn");
 export const editorChoiceModal = document.getElementById("editor-choice-modal");
-export const choiceIngameEditor = document.getElementById("choice-ingame-editor");
-export const choiceExternalEditor = document.getElementById("choice-external-editor");
-export const cancelEditorChoice = document.getElementById("cancel-editor-choice");
+export const choiceIngameEditor = document.getElementById(
+	"choice-ingame-editor",
+);
+export const choiceExternalEditor = document.getElementById(
+	"choice-external-editor",
+);
+export const cancelEditorChoice = document.getElementById(
+	"cancel-editor-choice",
+);
 
 export const editorSourceModal = document.getElementById("editor-source-modal");
 export const choiceSourceEarth = document.getElementById("choice-source-earth");
 export const choiceSourceBlank = document.getElementById("choice-source-blank");
-export const cancelSourceChoice = document.getElementById("cancel-source-choice");
+export const cancelSourceChoice = document.getElementById(
+	"cancel-source-choice",
+);
 
 export const mapSettingsModal = document.getElementById("map-settings-modal");
-export const mapSettingsNameInput = document.getElementById("map-settings-name-input");
+export const mapSettingsNameInput = document.getElementById(
+	"map-settings-name-input",
+);
 export const mapSettingsWidthInput = document.getElementById(
 	"map-settings-width-input",
 );
@@ -2295,10 +2441,16 @@ export const mapSettingsHeightInput = document.getElementById(
 export const mapSettingsMissilesCheckbox = document.getElementById(
 	"map-settings-missiles-checkbox",
 );
-export const mapSettingsApplyBtn = document.getElementById("map-settings-apply-btn");
-export const mapSettingsCancelBtn = document.getElementById("map-settings-cancel-btn");
+export const mapSettingsApplyBtn = document.getElementById(
+	"map-settings-apply-btn",
+);
+export const mapSettingsCancelBtn = document.getElementById(
+	"map-settings-cancel-btn",
+);
 
-export const conquestChoiceModal = document.getElementById("conquest-choice-modal");
+export const conquestChoiceModal = document.getElementById(
+	"conquest-choice-modal",
+);
 export const eraModernTabBtn = document.getElementById("era-tab-modern");
 export const eraWarsTabBtn = document.getElementById("era-tab-wars");
 export const eraHistoryTabBtn = document.getElementById("era-tab-history");
@@ -2311,25 +2463,45 @@ export const eraPageHistory = document.getElementById("era-page-history");
 export const eraPageStates = document.getElementById("era-page-states");
 export const eraPageAlt = document.getElementById("era-page-alt");
 export const choiceModernDay = document.getElementById("choice-modern-day");
-export const choice1936Scenario = document.getElementById("choice-1936-scenario");
-export const choice1942Scenario = document.getElementById("choice-1942-scenario");
+export const choice1936Scenario = document.getElementById(
+	"choice-1936-scenario",
+);
+export const choice1942Scenario = document.getElementById(
+	"choice-1942-scenario",
+);
 export const choiceWW1Scenario = document.getElementById("choice-ww1-1914");
-export const choice1804Scenario = document.getElementById("choice-1804-scenario");
-export const choice1492Scenario = document.getElementById("choice-1492-scenario");
+export const choice1804Scenario = document.getElementById(
+	"choice-1804-scenario",
+);
+export const choice1492Scenario = document.getElementById(
+	"choice-1492-scenario",
+);
 export const choice1ADScenario = document.getElementById("choice-1ad-scenario");
-export const choice1974Scenario = document.getElementById("choice-1974-scenario");
+export const choice1974Scenario = document.getElementById(
+	"choice-1974-scenario",
+);
 export const choiceUSStates = document.getElementById("choice-us-states");
-export const choiceCanadaStates = document.getElementById("choice-canada-states");
+export const choiceCanadaStates = document.getElementById(
+	"choice-canada-states",
+);
 export const choiceKaiserreichScenario = document.getElementById(
 	"choice-kaiserreich-scenario",
 );
 export const choiceFireRisesScenario = document.getElementById(
 	"choice-fire-rises-scenario",
 );
-export const choiceGermanyStates = document.getElementById("choice-germany-states");
-export const choiceEnglandStates = document.getElementById("choice-england-states");
-export const choice1984Scenario = document.getElementById("choice-1984-scenario");
-export const cancelConquestChoice = document.getElementById("cancel-conquest-choice");
+export const choiceGermanyStates = document.getElementById(
+	"choice-germany-states",
+);
+export const choiceEnglandStates = document.getElementById(
+	"choice-england-states",
+);
+export const choice1984Scenario = document.getElementById(
+	"choice-1984-scenario",
+);
+export const cancelConquestChoice = document.getElementById(
+	"cancel-conquest-choice",
+);
 export const menuLoadPlayBtn = document.getElementById("menu-load-play-btn");
 export const mainSettingsBtn = document.getElementById("main-settings-btn");
 export const minimizeSetupBtn = document.getElementById("minimize-setup-btn");
@@ -2564,7 +2736,9 @@ if (rebellionBtn) {
 }
 export const densitySlider = document.getElementById("density-slider");
 export const noPeaceCheckbox = document.getElementById("no-peace-checkbox");
-export const disableBombsCheckbox = document.getElementById("disable-bombs-checkbox");
+export const disableBombsCheckbox = document.getElementById(
+	"disable-bombs-checkbox",
+);
 export const cityFocusCheckbox = document.getElementById("city-focus-checkbox");
 export const setupDisableMountainsCheckbox = document.getElementById(
 	"setup-disable-mountains-checkbox",
@@ -2583,13 +2757,19 @@ export const mainDisableProvincesCheckbox = document.getElementById(
 );
 
 export const casualtyPanel = document.getElementById("casualty-panel");
-export const leaderboardOverlay = document.getElementById("leaderboard-overlay");
+export const leaderboardOverlay = document.getElementById(
+	"leaderboard-overlay",
+);
 export const leaderboardList = document.getElementById("leaderboard-list");
-export const closeLeaderboardBtn = document.getElementById("close-leaderboard-btn");
+export const closeLeaderboardBtn = document.getElementById(
+	"close-leaderboard-btn",
+);
 
 // Status & control panels
 export const statsPanel = document.getElementById("stats-panel");
-export const restartScenarioBtn = document.getElementById("restart-scenario-btn");
+export const restartScenarioBtn = document.getElementById(
+	"restart-scenario-btn",
+);
 export const quickRestartBtn = document.getElementById("quick-restart-btn");
 export const resetBtn = document.getElementById("reset-btn");
 
@@ -2632,7 +2812,9 @@ export const godModeBtn = document.getElementById("god-mode-btn");
 export const godBombBtn = document.getElementById("god-bomb-btn");
 export const forcePeaceBtn = document.getElementById("force-peace-btn");
 export const statsGrid = document.getElementById("stats-grid");
-export const tugOfWarContainer = document.getElementById("tug-of-war-container");
+export const tugOfWarContainer = document.getElementById(
+	"tug-of-war-container",
+);
 export const coordsDisplay = document.getElementById("coords");
 export const unitCountsDiv = document.getElementById("unit-counts");
 export const unitCountsDisplay = document.getElementById("unit-counts-display");
@@ -2667,10 +2849,18 @@ export function rebuildStatsPanel() {
 	_cachedTerritoryCtrlEls = [];
 	_cachedTerritorySegEls = [];
 	for (const s of activeSides) {
-		_cachedSoldierEls[s.idx] = document.querySelector(`[data-sidesoldiers="${s.idx}"]`);
-		_cachedCityEls[s.idx] = document.querySelector(`[data-sidecities="${s.idx}"]`);
-		_cachedTerritoryCtrlEls[s.idx] = document.querySelector(`[data-sidecontrol="${s.idx}"]`);
-		_cachedTerritorySegEls[s.idx] = document.querySelector(`[data-tugsegment="${s.idx}"]`);
+		_cachedSoldierEls[s.idx] = document.querySelector(
+			`[data-sidesoldiers="${s.idx}"]`,
+		);
+		_cachedCityEls[s.idx] = document.querySelector(
+			`[data-sidecities="${s.idx}"]`,
+		);
+		_cachedTerritoryCtrlEls[s.idx] = document.querySelector(
+			`[data-sidecontrol="${s.idx}"]`,
+		);
+		_cachedTerritorySegEls[s.idx] = document.querySelector(
+			`[data-tugsegment="${s.idx}"]`,
+		);
 	}
 
 	if (unitCountsDisplay) {
@@ -2702,7 +2892,7 @@ export function rebuildStatsPanel() {
 		const color = sideColors[s.idx].replace(rgbaRe, "1)");
 		tugHtml += `<span class="control-pct" data-sidecontrol="${s.idx}" style="color:${color};">${Math.floor(100 / activeSides.length)}%</span>`;
 	});
-	tugHtml += '</div>';
+	tugHtml += "</div>";
 	tugOfWarContainer.innerHTML = tugHtml;
 }
 export const treatyAlert = document.getElementById("treaty-alert");
@@ -2723,7 +2913,9 @@ export function rebuildManpowerInputs() {
 }
 rebuildManpowerInputs();
 export const treatyMsg = document.getElementById("treaty-msg");
-export const timeSystemCheckbox = document.getElementById("enable-time-checkbox");
+export const timeSystemCheckbox = document.getElementById(
+	"enable-time-checkbox",
+);
 export const timeYearInput = document.getElementById("time-year-input");
 export const timeMonthInput = document.getElementById("time-month-input");
 export const timeDayInput = document.getElementById("time-day-input");
@@ -2748,9 +2940,13 @@ export const map = L.map("map", {
 
 // Create Web Worker for async frontline BFS rebuilds
 _simWorker = new Worker("../workers/simulation-worker.js");
-_simWorker.onmessage = function (evt) {
+_simWorker.onmessage = (evt) => {
 	_workerBusy = false;
-	const { frontlineDirLat: latBuf, frontlineDirLng: lngBuf, sourceCell: srcBuf } = evt.data;
+	const {
+		frontlineDirLat: latBuf,
+		frontlineDirLng: lngBuf,
+		sourceCell: srcBuf,
+	} = evt.data;
 	frontlineDirLat = new Float32Array(latBuf);
 	frontlineDirLng = new Float32Array(lngBuf);
 	_frontlineSourceCell = new Int32Array(srcBuf);
@@ -2828,10 +3024,42 @@ if (imagerySelect) {
 	});
 }
 
+import {
+	applyPaintAt,
+	fillTerrainAt,
+	generatePresetData,
+	importSingleCountryFromScenario,
+	loadCountries,
+	loadScenarioForCountryImportFromBlob,
+	loadScenarioForCountryImportFromUrl,
+	loadTerrain,
+	paintAt,
+	performPresetLoad,
+	updateCountryFlag,
+	updateEditorToolPage,
+	updateLandMask,
+} from "./editor.js";
+import {
+	clearCellInfluence,
+	getBorderDirection,
+	getGridIndex,
+	initSideInfluenceMaps,
+	isEnemyTerritory,
+	isMyTerritory,
+	myInfluenceAt,
+	rebuildFrontlineField,
+	resetSideInfluenceMaps,
+	syncOccupationFromSideInfluence,
+} from "./engine.js";
+import {
+	closeHub,
+	openHub,
+	renderHub,
+	selectScenario,
+	switchHubTab,
+} from "./firebase.js";
 import { ControlMapLayer } from "./renderer.js";
-import { updateCountryFlag, updateLandMask, loadTerrain, loadCountries, fillTerrainAt, applyPaintAt, paintAt, updateEditorToolPage, generatePresetData, performPresetLoad, loadScenarioForCountryImportFromBlob, loadScenarioForCountryImportFromUrl, importSingleCountryFromScenario } from "./editor.js";
-import { openHub, closeHub, switchHubTab, renderHub, selectScenario } from "./firebase.js";
-import { syncOccupationFromSideInfluence, initSideInfluenceMaps, resetSideInfluenceMaps, clearCellInfluence, isMyTerritory, isEnemyTerritory, myInfluenceAt, getGridIndex, rebuildFrontlineField, getBorderDirection } from "./engine.js";
+
 export { getGridIndex, resetSideInfluenceMaps };
 
 influenceLayer = new ControlMapLayer().addTo(map);
@@ -2894,7 +3122,11 @@ export function generateProvinces() {
 	}
 }
 
-export function applyWorldBounds(widthDeg, heightDeg, allowImagerySwitch = true) {
+export function applyWorldBounds(
+	widthDeg,
+	heightDeg,
+	allowImagerySwitch = true,
+) {
 	// Clamp to safe ranges
 	const w = Math.max(10, Math.min(360, widthDeg || 360));
 	const h = Math.max(10, Math.min(180, heightDeg || 180));
@@ -2984,7 +3216,6 @@ export function getAllianceMembers(startId) {
 	}
 	return Array.from(visited);
 }
-
 
 export function recalculateAllBounds(forceFullScan = false) {
 	if (!countryMetadata || !worldControlMap) return;
@@ -3564,7 +3795,8 @@ export function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
 
 			const y = Math.floor(idx / gridWidth);
 			const x = idx % gridWidth;
-			if (x <= 0 || x >= gridWidth - 1 || y <= 0 || y >= gridHeight - 1) continue;
+			if (x <= 0 || x >= gridWidth - 1 || y <= 0 || y >= gridHeight - 1)
+				continue;
 
 			const blur = 0.25;
 			for (let si = 0; si < sideInfluenceMaps.length; si++) {
@@ -3876,7 +4108,6 @@ export function isPointInFeature(lat, lng, feature) {
 	return false;
 }
 
-
 /**
  * Procedurally generates desert biomes based on known global geographical coordinates.
  * This provides visual variety in 'Simplified Mode' for real-earth scenarios.
@@ -3922,7 +4153,6 @@ export function applyEarthDeserts() {
 		}
 	}
 }
-
 
 export async function loadFlagCodes() {
 	if (flagCodes) return;
@@ -4290,7 +4520,8 @@ export function findCodeByName(name) {
 export async function loadCities() {
 	try {
 		// Upgrade to 50m resolution for a significantly higher city count (thousands vs hundreds)
-		const url = "https://raw.githubusercontent.com/martynafford/natural-earth-geojson/master/50m/cultural/ne_50m_populated_places_simple.json";
+		const url =
+			"https://raw.githubusercontent.com/martynafford/natural-earth-geojson/master/50m/cultural/ne_50m_populated_places_simple.json";
 		const data = await fetchJSONWithCache(url);
 		cities = data.features.map((f, idx) => ({
 			id: idx + 1,
@@ -4319,8 +4550,12 @@ export async function loadCities() {
 	}
 }
 
-
-export function handleCountryClick(_feature, _layer, latlng, originalEvent = null) {
+export function handleCountryClick(
+	_feature,
+	_layer,
+	latlng,
+	originalEvent = null,
+) {
 	const idx = getGridIndex(latlng.lat, latlng.lng);
 
 	const isCtrlClick = !!(
@@ -4720,7 +4955,11 @@ export function handleCountryClick(_feature, _layer, latlng, originalEvent = nul
 	}
 }
 
-export function spawnSingleUnit(sideIdx, sovereignId, preferEnemyFront = false) {
+export function spawnSingleUnit(
+	sideIdx,
+	sovereignId,
+	preferEnemyFront = false,
+) {
 	// Enforce per‑side unit cap: if this side is already at or above the limit, do not spawn.
 	const sideUnits = units.filter((u) => u.sideIndex === sideIdx).length;
 	if (sideUnits >= CONFIG.MAX_UNITS_PER_SIDE) return false;
@@ -4945,12 +5184,20 @@ export function deepClone(obj) {
 	try {
 		return structuredClone(obj);
 	} catch (_e) {
-		return JSON.parse(JSON.stringify(obj, (_k, v) => {
-			if (v && typeof v === "object" && (v instanceof HTMLImageElement || v instanceof HTMLCanvasElement || v instanceof Node)) {
-				return undefined;
-			}
-			return v;
-		}));
+		return JSON.parse(
+			JSON.stringify(obj, (_k, v) => {
+				if (
+					v &&
+					typeof v === "object" &&
+					(v instanceof HTMLImageElement ||
+						v instanceof HTMLCanvasElement ||
+						v instanceof Node)
+				) {
+					return undefined;
+				}
+				return v;
+			}),
+		);
 	}
 }
 
@@ -4970,21 +5217,19 @@ export async function startWar() {
 	await new Promise((r) => setTimeout(r, 50));
 
 	try {
-	await _startWarInner();
+		await _startWarInner();
 	} catch (err) {
 		console.error("[MW] startWar FAILED:", err);
 		loadingOverlay.style.display = "none";
-		alert("War failed to start: " + err.message);
+		alert(`War failed to start: ${err.message}`);
 	}
 }
 
 export async function _startWarInner() {
-
 	initAudio().then(() => {
 		playWarAmbiance();
 	});
 	playWarStartSound();
-
 
 	// Capture a clean snapshot of the scenario just before the war starts
 	// so QUICK RESTART can restore it instantly with no loading screen.
@@ -6184,7 +6429,6 @@ export function performSimulationTick() {
 		}
 	} // end shouldCountLand guard for territorial integrity
 
-
 	// 2. Statistics & Soldiers (Dynamic based on units)
 	// PERF: Full 2.88M-cell occupationMap scan throttled to shouldCountLand frames only.
 	//       Was 29% total time — now runs every 15+ frames and caches the result.
@@ -6330,8 +6574,8 @@ export function performSimulationTick() {
 		sides.flat().forEach((c) => {
 			countryFrontlines.set(c.id, 0);
 		});
-		let warCells = 0;
-		let orphanWarCells = 0;
+		let _warCells = 0;
+		let _orphanWarCells = 0;
 		let minX = Infinity,
 			minY = Infinity,
 			maxX = -Infinity,
@@ -6339,7 +6583,7 @@ export function performSimulationTick() {
 
 		for (let i = 0; i < worldControlMap.length; i++) {
 			if (landMask[i] === 2) {
-				warCells++;
+				_warCells++;
 				const y = Math.floor(i / gridWidth);
 				const x = i % gridWidth;
 				if (x < minX) minX = x;
@@ -6349,7 +6593,7 @@ export function performSimulationTick() {
 
 				const sid = worldControlMap[i];
 				const stats = countryStats.get(sid);
-				if (!combatantIds.has(sid)) orphanWarCells++;
+				if (!combatantIds.has(sid)) _orphanWarCells++;
 				if (stats) {
 					// Raw ownership in the active warzone, independent of occupation polarity.
 					// This is used by capitulation fail-safes for edge cases (exiled/naval remnants).
@@ -6378,7 +6622,6 @@ export function performSimulationTick() {
 				}
 			}
 		}
-
 
 		// Determine saturation for each country
 		sides.flat().forEach((c) => {
@@ -6802,7 +7045,6 @@ export function performSimulationTick() {
 		if (m && m.id !== undefined) _metadataById.set(m.id, m);
 	}
 
-
 	for (let i = units.length - 1; i >= 0; i--) {
 		const u = units[i];
 
@@ -7098,7 +7340,8 @@ export function performSimulationTick() {
 		}
 
 		// Attrition logic: logistics strain increases the further you push into large nations
-		const inEnemyTerritory = !isAtSea && isEnemyTerritory(gridIdxNow, u.sideIndex);
+		const inEnemyTerritory =
+			!isAtSea && isEnemyTerritory(gridIdxNow, u.sideIndex);
 
 		// Attrition is disabled during Victory Boost (momentum) to prevent breakthroughs from stalling instantly
 		if (
@@ -7228,131 +7471,133 @@ export function performSimulationTick() {
 		// Only search adjacent 3x3 hash cells (approx 6x6 degrees footprint).
 		// Skip for tactically idle units at high sim speeds to reduce CPU load.
 		if (!isTacticallyIdle) {
-		for (let dy = -1; dy <= 1; dy++) {
-			for (let dx = -1; dx <= 1; dx++) {
-				let cx = kx + dx;
-				const cy = ky + dy;
+			for (let dy = -1; dy <= 1; dy++) {
+				for (let dx = -1; dx <= 1; dx++) {
+					let cx = kx + dx;
+					const cy = ky + dy;
 
-				if (cx < 0) cx += maxKx;
-				else if (cx >= maxKx) cx -= maxKx;
+					if (cx < 0) cx += maxKx;
+					else if (cx >= maxKx) cx -= maxKx;
 
-				const arr = unitHash.get(`${cx}_${cy}`);
-				if (!arr) continue;
+					const arr = unitHash.get(`${cx}_${cy}`);
+					if (!arr) continue;
 
-				for (let j = 0; j < arr.length; j++) {
-					const e = arr[j];
-					if (e === u) continue;
+					for (let j = 0; j < arr.length; j++) {
+						const e = arr[j];
+						if (e === u) continue;
 
-					const isEnemy = e.sideIndex !== sideIndex;
+						const isEnemy = e.sideIndex !== sideIndex;
 
-					let deLng = e.lng - u.lng;
-					if (deLng > 180) deLng -= 360;
-					else if (deLng < -180) deLng += 360;
+						let deLng = e.lng - u.lng;
+						if (deLng > 180) deLng -= 360;
+						else if (deLng < -180) deLng += 360;
 
-					const dSq = (u.lat - e.lat) ** 2 + deLng ** 2;
+						const dSq = (u.lat - e.lat) ** 2 + deLng ** 2;
 
-					if (isEnemy) {
-						const eIdx = getGridIndex(e.lat, e.lng);
-						const eAtSea = eIdx === -1 || landMask[eIdx] === 0;
+						if (isEnemy) {
+							const eIdx = getGridIndex(e.lat, e.lng);
+							const eAtSea = eIdx === -1 || landMask[eIdx] === 0;
 
-						if ((effectiveDefensive || isRebelUnit) && !isAtSea) {
-							const isEnemyInMyMandatedLand =
-								eIdx !== -1 &&
-								(isRebelUnit
-									? deJureMap[eIdx] === u.sovereignId
-									: worldControlMap[eIdx] === u.sovereignId);
-							if (!isEnemyInMyMandatedLand && dSq > 0.09) continue;
-						}
+							if ((effectiveDefensive || isRebelUnit) && !isAtSea) {
+								const isEnemyInMyMandatedLand =
+									eIdx !== -1 &&
+									(isRebelUnit
+										? deJureMap[eIdx] === u.sovereignId
+										: worldControlMap[eIdx] === u.sovereignId);
+								if (!isEnemyInMyMandatedLand && dSq > 0.09) continue;
+							}
 
-						const distMult = eAtSea && !isAtSea ? 50.0 : 1.0;
-						const noise = Math.sin(u.id + simFrameCount * 0.02) * 0.03;
-						const noisyDSq =
-							((u.lat - e.lat + noise) ** 2 + (deLng + noise) ** 2) * distMult;
+							const distMult = eAtSea && !isAtSea ? 50.0 : 1.0;
+							const noise = Math.sin(u.id + simFrameCount * 0.02) * 0.03;
+							const noisyDSq =
+								((u.lat - e.lat + noise) ** 2 + (deLng + noise) ** 2) *
+								distMult;
 
-						if (noisyDSq < minDist) {
-							minDist = noisyDSq;
-							target = e;
-						}
+							if (noisyDSq < minDist) {
+								minDist = noisyDSq;
+								target = e;
+							}
 
-						if (dSq < tacticalRadiusSq) {
-							let eWeight = 1;
-							if (eAtSea) eWeight *= isAtSea ? 0.6 : 0.2;
+							if (dSq < tacticalRadiusSq) {
+								let eWeight = 1;
+								if (eAtSea) eWeight *= isAtSea ? 0.6 : 0.2;
 
-							const eSideIdx = countryToSideMap.get(e.sovereignId);
-							const eCountry =
-								eSideIdx !== undefined
-									? sides[eSideIdx].find((c) => c.id === e.sovereignId)
-									: null;
+								const eSideIdx = countryToSideMap.get(e.sovereignId);
+								const eCountry =
+									eSideIdx !== undefined
+										? sides[eSideIdx].find((c) => c.id === e.sovereignId)
+										: null;
 
-							if (eCountry?.buffState === "super") eWeight *= 200;
-							else if (eCountry?.buffState === "buff") eWeight *= 50;
+								if (eCountry?.buffState === "super") eWeight *= 200;
+								else if (eCountry?.buffState === "buff") eWeight *= 50;
 
-							localEnemyCount += eWeight;
-							enemyCentroidLat += e.lat * eWeight;
-							enemyCentroidLng += e.lng * eWeight;
+								localEnemyCount += eWeight;
+								enemyCentroidLat += e.lat * eWeight;
+								enemyCentroidLng += e.lng * eWeight;
 
-							if (dSq < 0.04) {
-								let proximityDamage =
-									CONFIG.COMBAT_DAMAGE *
-									0.07 *
-									damageDealtMult *
-									(1.0 - Math.sqrt(dSq) / 0.2);
-								if (isAtSea && eAtSea) proximityDamage *= 2.2;
+								if (dSq < 0.04) {
+									let proximityDamage =
+										CONFIG.COMBAT_DAMAGE *
+										0.07 *
+										damageDealtMult *
+										(1.0 - Math.sqrt(dSq) / 0.2);
+									if (isAtSea && eAtSea) proximityDamage *= 2.2;
 
-								recordDamage(e, proximityDamage, u);
-								recordDamage(u, proximityDamage * 0.8 * damageTakenMult, e);
+									recordDamage(e, proximityDamage, u);
+									recordDamage(u, proximityDamage * 0.8 * damageTakenMult, e);
 
-								u.lastCombatTick = simFrameCount;
-								e.lastCombatTick = simFrameCount;
-								if (e.health <= 0) u.victoryBoostTicks = 240;
+									u.lastCombatTick = simFrameCount;
+									e.lastCombatTick = simFrameCount;
+									if (e.health <= 0) u.victoryBoostTicks = 240;
 
-								const existing = activeBattles.find(
-									(b) => (u.lat - b.lat) ** 2 + (u.lng - b.lng) ** 2 < 0.16,
-								);
-								if (existing) {
-									existing.participants++;
-									existing.lat =
-										(existing.lat * (existing.participants - 1) +
-											(u.lat + e.lat) / 2) /
-										existing.participants;
-									existing.lng =
-										(existing.lng * (existing.participants - 1) +
-											(u.lng + e.lng) / 2) /
-										existing.participants;
-								} else {
-									activeBattles.push({
-										lat: (u.lat + e.lat) / 2,
-										lng: (u.lng + e.lng) / 2,
-										participants: 2,
-									});
+									const existing = activeBattles.find(
+										(b) => (u.lat - b.lat) ** 2 + (u.lng - b.lng) ** 2 < 0.16,
+									);
+									if (existing) {
+										existing.participants++;
+										existing.lat =
+											(existing.lat * (existing.participants - 1) +
+												(u.lat + e.lat) / 2) /
+											existing.participants;
+										existing.lng =
+											(existing.lng * (existing.participants - 1) +
+												(u.lng + e.lng) / 2) /
+											existing.participants;
+									} else {
+										activeBattles.push({
+											lat: (u.lat + e.lat) / 2,
+											lng: (u.lng + e.lng) / 2,
+											participants: 2,
+										});
+									}
 								}
 							}
-						}
-					} else {
-						// Allies logic
-						if (dSq < tacticalRadiusSq) {
-							let aWeight = 1;
-							const aSideIdx = countryToSideMap.get(e.sovereignId);
-							const aCountry =
-								aSideIdx !== undefined
-									? sides[aSideIdx].find((c) => c.id === e.sovereignId)
-									: null;
-							if (aCountry?.buffState === "super") aWeight *= 200;
-							else if (aCountry?.buffState === "buff") aWeight *= 50;
+						} else {
+							// Allies logic
+							if (dSq < tacticalRadiusSq) {
+								let aWeight = 1;
+								const aSideIdx = countryToSideMap.get(e.sovereignId);
+								const aCountry =
+									aSideIdx !== undefined
+										? sides[aSideIdx].find((c) => c.id === e.sovereignId)
+										: null;
+								if (aCountry?.buffState === "super") aWeight *= 200;
+								else if (aCountry?.buffState === "buff") aWeight *= 50;
 
-							localAllyCount += aWeight;
+								localAllyCount += aWeight;
 
-							if (dSq < repulsionRadiusSq && dSq > 0.00001) {
-								const d = Math.sqrt(dSq);
-								if (!u.repulsionVector) u.repulsionVector = { lat: 0, lng: 0 };
-								u.repulsionVector.lat += (u.lat - e.lat) / d;
-								u.repulsionVector.lng += (u.lng - e.lng) / d;
+								if (dSq < repulsionRadiusSq && dSq > 0.00001) {
+									const d = Math.sqrt(dSq);
+									if (!u.repulsionVector)
+										u.repulsionVector = { lat: 0, lng: 0 };
+									u.repulsionVector.lat += (u.lat - e.lat) / d;
+									u.repulsionVector.lng += (u.lng - e.lng) / d;
+								}
 							}
 						}
 					}
 				}
 			}
-		}
 		} // !isTacticallyIdle
 
 		u.lastAllyCount = localAllyCount;
@@ -7769,7 +8014,6 @@ export function performSimulationTick() {
 			// Store target position for the renderer's operational arrows
 			u.activeTargetPos = { lat: target.lat, lng: target.lng };
 
-
 			// Spatial Jitter: Add a small, unit-specific offset to the target destination
 			// to prevent multiple units from converging on the exact same coordinate.
 			const jitterScale = 0.08;
@@ -7955,11 +8199,12 @@ export function performSimulationTick() {
 					u.lng + moveDirLng * lookAheadDist,
 				);
 
-				const lookAheadIsNeutral =
-					lookIdx !== -1 && isNeutralCountry(lookIdx);
+				const lookAheadIsNeutral = lookIdx !== -1 && isNeutralCountry(lookIdx);
 
 				if (
-					(isProtectedSupport(lookIdx) || isInsideNeutralProtected || lookAheadIsNeutral) &&
+					(isProtectedSupport(lookIdx) ||
+						isInsideNeutralProtected ||
+						lookAheadIsNeutral) &&
 					movedEnoughForNeutralCheck
 				) {
 					// Record position so we don't re-sweep until the unit moves again
@@ -8087,7 +8332,9 @@ export function performSimulationTick() {
 						u._neutralBlocked = true;
 					}
 				} else if (
-					(isProtectedSupport(lookIdx) || isInsideNeutralProtected || lookAheadIsNeutral) &&
+					(isProtectedSupport(lookIdx) ||
+						isInsideNeutralProtected ||
+						lookAheadIsNeutral) &&
 					!movedEnoughForNeutralCheck
 				) {
 					// Reuse cached corridor result from last sweep
@@ -8196,7 +8443,6 @@ export function performSimulationTick() {
 					retreatBoost *
 					pushReadiness *
 					0.8; // Reduced movement speed
-
 
 				// Safety: Prevent NaN from propagating if moveDir calculation fails
 				if (
@@ -8324,7 +8570,6 @@ export function performSimulationTick() {
 			units.splice(i, 1);
 		}
 	}
-
 
 	// NOTE: even if sideSoldiers reach 0, sides remain on the field and can still recruit.
 	// This keeps wars from hard-locking when a side's manpower bar is exhausted.
@@ -9076,7 +9321,9 @@ export function capitulateCountry(country, sideIndex) {
 	// Assign each unoccupied tile to the nearest qualifying attacker, weighted by casualty share
 	const affectedIndices = [];
 	const attackerTileCounts = new Map();
-	qualifyingAttackers.forEach((qa) => attackerTileCounts.set(qa.sovereignId, 0));
+	qualifyingAttackers.forEach((qa) =>
+		attackerTileCounts.set(qa.sovereignId, 0),
+	);
 
 	// Compute proportional tile quotas
 	const totalUnoccupied = (() => {
@@ -9142,9 +9389,10 @@ export function capitulateCountry(country, sideIndex) {
 	}
 
 	// Determine primary annexer (highest casualty contributor) for releasable transfer
-	const primaryAnnexerId = qualifyingAttackers.length > 0
-		? qualifyingAttackers[0].sovereignId
-		: fallbackWinnerId;
+	const primaryAnnexerId =
+		qualifyingAttackers.length > 0
+			? qualifyingAttackers[0].sovereignId
+			: fallbackWinnerId;
 
 	// Re-evaluate warzone status for newly annexed tiles so winners can keep pushing
 	affectedIndices.forEach((idx) => {
@@ -10712,13 +10960,9 @@ export async function initMultiplayer() {
 	});
 }
 
-
-
-
 tabScenariosBtn.onclick = () => switchHubTab("scenarios");
 tabCountriesBtn.onclick = () => switchHubTab("countries");
 tabFlagsBtn.onclick = () => switchHubTab("flags");
-
 
 window.deleteScenario = async (id) => {
 	if (!confirm("Are you sure you want to delete this scenario?")) return;
@@ -11687,7 +11931,6 @@ export const SCENARIO_MENU_BGS = {
 
 export let queuedScenarioAction = null;
 export const enterScenarioBtn = document.getElementById("enter-scenario-btn");
-
 
 enterScenarioBtn.onclick = () => {
 	if (queuedScenarioAction) {
@@ -13009,7 +13252,6 @@ export async function placeNewCountry(latlng) {
 	influenceLayer.render();
 }
 
-
 export function fillAt(latlng) {
 	const isUnclaiming = gameState === "EDITOR_UNCLAIMING";
 	if (!isUnclaiming && editingCountryId <= 0) return;
@@ -13087,8 +13329,6 @@ export function fillAt(latlng) {
 		influenceLayer.render();
 	}, 10);
 }
-
-
 
 map.on("mousedown", (e) => {
 	// If the user is interacting with reference image handles, do NOT start painting or terrain tools.
@@ -14145,7 +14385,6 @@ export function updateRefHandles() {
 	});
 }
 
-
 if (editorToolsPage1Btn) {
 	editorToolsPage1Btn.addEventListener("click", () => updateEditorToolPage(1));
 }
@@ -14182,7 +14421,6 @@ editorTestBtn.addEventListener("click", () => {
 	updateSidesUI();
 	influenceLayer.render();
 });
-
 
 editorSaveBtn.addEventListener("click", () => {
 	const presetName = prompt(
@@ -14243,7 +14481,6 @@ export function resetConflictSetupState() {
 	restartScenarioBtn.style.display = "block";
 	updateRestartVisibility();
 }
-
 
 editorLoadBtn.addEventListener("click", () => {
 	initAudio();
@@ -14613,8 +14850,12 @@ document
 // -------- Procedural Nation Generation (For empty presets) --------
 
 export const noNationsModal = document.getElementById("no-nations-modal");
-export const randomNationsCountInput = document.getElementById("random-nations-count");
-export const confirmRandomGenBtn = document.getElementById("confirm-random-gen-btn");
+export const randomNationsCountInput = document.getElementById(
+	"random-nations-count",
+);
+export const confirmRandomGenBtn = document.getElementById(
+	"confirm-random-gen-btn",
+);
 export const skipRandomGenBtn = document.getElementById("skip-random-gen-btn");
 
 /**
@@ -14836,8 +15077,6 @@ export async function spawnRandomNationsAcrossMap(count) {
 }
 
 // -------- Import Country From Scenario (editor / godmode) --------
-
-
 
 export function populateImportCountrySelect() {
 	if (!importScenarioBuffer || !importCountryCardList || !importCountrySearch)
