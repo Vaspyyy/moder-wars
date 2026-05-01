@@ -1,18 +1,25 @@
 import L from "leaflet";
 import { CONFIG } from "./config.js";
 import {
-	MAX_SIDES,
-	UNIT_HASH_CELL_SIZE,
 	_cachedTerritoryCtrlEls,
 	_cachedTerritorySegEls,
+	_frontlinePolys,
+	activeBattles,
 	activeTheaterCities,
 	allianceViewEnabled,
 	animationFrameId,
+	bases,
+	biomeMask,
+	bombs,
 	cinematicMode,
 	cities,
+	countryCasualties,
 	countryMetadata,
+	deJureMap,
 	disableCountryGradient,
+	dominantSideMap,
 	editingCountryId,
+	explosions,
 	flagProcessedBuffer,
 	gameMode,
 	gameState,
@@ -20,16 +27,22 @@ import {
 	getGridIndex,
 	godModeActive,
 	gridWidth,
+	imagerySelect,
 	influenceLayer,
+	initialCombatants,
 	isCustomTerrain,
 	isPaused,
+	landMask,
+	MAX_SIDES,
 	map,
 	mountainsEnabled,
+	occupationMap,
 	preGodModeState,
+	primaryOccupierMap,
 	refAboveTerrain,
-	refOpacity,
 	referenceImageUrl,
 	referenceOverlay,
+	refOpacity,
 	rgbaRe,
 	showBattleIndicators,
 	showCountryLabels,
@@ -40,8 +53,12 @@ import {
 	simFrameCount,
 	simSpeed,
 	soldiersPerUnit,
+	terrainMask,
+	UNIT_HASH_CELL_SIZE,
 	units,
+	unitSpatialHash,
 	viewMode,
+	worldControlMap,
 	worldHeightDeg,
 	worldWidthDeg,
 } from "./main.js";
@@ -851,7 +868,9 @@ const ControlMapLayer = L.Layer.extend({
 							}
 						}
 						if (!meshBatch.has(resolvedFill)) meshBatch.set(resolvedFill, []);
-						meshBatch.get(resolvedFill).push([drawX - 0.25, drawY - 0.25, drawW + 0.5, drawH + 0.5]);
+						meshBatch
+							.get(resolvedFill)
+							.push([drawX - 0.25, drawY - 0.25, drawW + 0.5, drawH + 0.5]);
 					}
 
 					// Mark as processed
@@ -1684,7 +1703,7 @@ const ControlMapLayer = L.Layer.extend({
 				return;
 			}
 			const gIdx = getGridIndex(city.lat, city.lng);
-			const ds = (gIdx !== -1 && dominantSideMap) ? dominantSideMap[gIdx] : -1;
+			const ds = gIdx !== -1 && dominantSideMap ? dominantSideMap[gIdx] : -1;
 			const isCapital = city.isCapital;
 			const actualSize = isCapital ? citySize * 1.6 : citySize;
 
@@ -2418,7 +2437,6 @@ const ControlMapLayer = L.Layer.extend({
 			panelY += h + 15;
 		}
 	},
-
 });
 
 export { ControlMapLayer };
