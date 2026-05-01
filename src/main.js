@@ -8390,6 +8390,7 @@ export function performSimulationTick() {
 		// Reserve doctrine: a slice of units stay one layer behind and guard cities/cores
 		// unless local contact is high. This makes fronts feel less all-in and more human.
 		const reserveRoll = (Math.floor(u.id * 1000000) % 1000) / 1000;
+		const isReserveUnit = reserveRoll < aiProfile.reserveShare;
 		const garrisonReq = _garrisonRequirement.get(u.sovereignId) || 0;
 		const isGarrisonUnit = isReserveUnit || (
 			garrisonReq > 0 &&
