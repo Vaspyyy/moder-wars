@@ -5723,8 +5723,8 @@ export async function _startWarInner() {
 				// Validation: Ensure final coordinate is within the country's sovereign grid
 				const finalIdx = getGridIndex(lat, lng);
 				if (finalIdx === -1 || worldControlMap[finalIdx] !== c.id) {
-					lat = y * CONFIG.GRID_RES - 90 + CONFIG.GRID_RES / 2;
-					lng = x * CONFIG.GRID_RES - 180 + CONFIG.GRID_RES / 2;
+					lat = py * CONFIG.GRID_RES - 90 + CONFIG.GRID_RES / 2;
+					lng = px * CONFIG.GRID_RES - 180 + CONFIG.GRID_RES / 2;
 				}
 
 				const isMountainCell = terrainMask && terrainMask[fData.idx] > 0.35;
