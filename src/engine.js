@@ -1,13 +1,14 @@
 import { CONFIG } from "./config.js";
 import {
-	MAX_SIDES,
 	_frontlineSourceCell,
 	frontlineDirLat,
 	frontlineDirLng,
 	gridWidth,
+	MAX_SIDES,
+	set_frontlineSourceCell,
+	setFrontlineDirLat,
+	setFrontlineDirLng,
 } from "./main.js";
-
-import { set_frontlineSourceCell, setFrontlineDirLat, setFrontlineDirLng } from "./main.js";
 
 function syncOccupationFromSideInfluence(idx) {
 	let bestSide = -1,
@@ -83,9 +84,9 @@ function rebuildFrontlineField() {
 	const total = gridWidth * gridHeight;
 
 	if (!frontlineDirLat || frontlineDirLat.length !== total) {
-		setFrontlineDirLat(new Float32Array)(total);
-		setFrontlineDirLng(new Float32Array)(total);
-		set_frontlineSourceCell(new Int32Array)(total);
+		setFrontlineDirLat(new Float32Array(total));
+		setFrontlineDirLng(new Float32Array(total));
+		set_frontlineSourceCell(new Int32Array(total));
 	}
 
 	frontlineDirLat.fill(0);
@@ -185,16 +186,15 @@ function getBorderDirection(unit) {
 	return null;
 }
 
-
 export {
-	syncOccupationFromSideInfluence,
-	initSideInfluenceMaps,
-	resetSideInfluenceMaps,
 	clearCellInfluence,
-	isMyTerritory,
-	isEnemyTerritory,
-	myInfluenceAt,
-	getGridIndex,
-	rebuildFrontlineField,
 	getBorderDirection,
+	getGridIndex,
+	initSideInfluenceMaps,
+	isEnemyTerritory,
+	isMyTerritory,
+	myInfluenceAt,
+	rebuildFrontlineField,
+	resetSideInfluenceMaps,
+	syncOccupationFromSideInfluence,
 };

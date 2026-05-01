@@ -2,9 +2,7 @@
 // The 20-31MB JSON.parse blocks the main thread for 2-5 seconds on first load.
 // Running it in a worker keeps the loading spinner responsive.
 
-
-
-self.onmessage = function (evt) {
+self.onmessage = (evt) => {
 	const { url, id } = evt.data;
 	fetch(url)
 		.then((r) => r.json())
