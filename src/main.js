@@ -4975,106 +4975,67 @@ export function spawnSingleUnit(
 	const sideUnits = units.filter((u) => u.sideIndex === sideIdx).length;
 	if (sideUnits >= CONFIG.MAX_UNITS_PER_SIDE) return false;
 
-	const theaterIndices = [];
-	const frontlines = [];
 	const supplyFailed = capitalLostCountries?.has(sovereignId);
 
-	const step = Math.max(1, Math.floor(landMask.length / 500000));
-	for (let i = 0; i < landMask.length; i += step) {
-		if (landMask[i] === 2 && worldControlMap[i] === sovereignId) {
-			if (dominantSideMap[i] === sideIdx) {
-				theaterIndices.push(i);
+	// ── Spawn from friendly cities ──────────────────────────────────────
+	const friendlyCities = cities.filter((c) => {
+		if (!c.ownerId || c.ownerId !== sovereignId) return false;
+		const cIdx = getGridIndex(c.lat, c.lng);
+		if (cIdx === -1 || landMask[cIdx] === 0) return false;
+		if (dominantSideMap[cIdx] !== sideIdx) return false;
+		return true;
+	});
 
-				const neighbors = [i + 1, i - 1, i + gridWidth, i - gridWidth];
-				let isF = false;
-				for (const n of neighbors) {
-					if (n >= 0 && n < landMask.length) {
-						const nId = worldControlMap[n];
-						if (nId > 0 && nId !== sovereignId) {
-							const nSide = sides.findIndex((s) => s.some((c) => c.id === nId));
-							if (nSide !== -1 && nSide !== sideIdx) {
-								isF = true;
-								break;
-							}
-						}
-					}
-				}
-				if (isF) frontlines.push(i);
-			}
-		}
-	}
-
-	if (theaterIndices.length === 0) return false;
-
-	let idx;
+	let lat, lng;
 	let isFromFront = false;
 
-	// When we want reinforcements close to the enemy (losing but not on the brink),
-	// bias heavily toward true frontline cells, falling back to interior if none exist.
-	if (preferEnemyFront && frontlines.length > 0 && !supplyFailed) {
-		idx = frontlines[Math.floor(Math.random() * frontlines.length)];
-		isFromFront = true;
-	} else if (frontlines.length > 0 && (Math.random() < 0.85 || supplyFailed)) {
-		// Default behaviour: strong but not absolute preference for frontlines
-		idx = frontlines[Math.floor(Math.random() * frontlines.length)];
-		isFromFront = true;
-	} else {
-		idx = theaterIndices[Math.floor(Math.random() * theaterIndices.length)];
-	}
-
-	const y = Math.floor(idx / gridWidth);
-	const x = idx % gridWidth;
-
-	// Calculate direction away from enemies for pushback
-	let vx = 0,
-		vy = 0;
-	if (isFromFront) {
-		const neighbors = [
-			{ id: idx + 1, dx: 1, dy: 0 },
-			{ id: idx - 1, dx: -1, dy: 0 },
-			{ id: idx + gridWidth, dx: 0, dy: 1 },
-			{ id: idx - gridWidth, dx: 0, dy: -1 },
-		];
-		for (const n of neighbors) {
-			if (n.id >= 0 && n.id < landMask.length) {
-				const nId = worldControlMap[n.id];
-				if (nId > 0 && nId !== sovereignId) {
-					const nSide = sides.findIndex((s) => s.some((c) => c.id === nId));
-					if (nSide !== -1 && nSide !== sideIdx) {
-						vx -= n.dx;
-						vy -= n.dy;
-					}
+	if (friendlyCities.length > 0) {
+		// Pick a random friendly city, bias toward frontline-adjacent ones
+		const frontlineCities = friendlyCities.filter((c) => {
+			const cIdx = getGridIndex(c.lat, c.lng);
+			const neighbors = [cIdx + 1, cIdx - 1, cIdx + gridWidth, cIdx - gridWidth];
+			for (const n of neighbors) {
+				if (n >= 0 && n < landMask.length) {
+					const nds = dominantSideMap[n];
+					if (nds >= 0 && nds !== sideIdx) return true;
 				}
 			}
+			return false;
+		});
+
+		const pick = (frontlineCities.length > 0 && !supplyFailed)
+			? frontlineCities[Math.floor(Math.random() * frontlineCities.length)]
+			: friendlyCities[Math.floor(Math.random() * friendlyCities.length)];
+
+		lat = pick.lat + (Math.random() - 0.5) * CONFIG.GRID_RES * 0.8;
+		lng = pick.lng + (Math.random() - 0.5) * CONFIG.GRID_RES * 0.8;
+
+		// Validate: ensure still within friendly territory
+		const vIdx = getGridIndex(lat, lng);
+		if (vIdx === -1 || worldControlMap[vIdx] !== sovereignId || dominantSideMap[vIdx] !== sideIdx) {
+			lat = pick.lat;
+			lng = pick.lng;
 		}
-	}
+	} else {
+		// Fallback: spawn in friendly warzone territory
+		const theaterIndices = [];
+		const step = Math.max(1, Math.floor(landMask.length / 500000));
+		for (let i = 0; i < landMask.length; i += step) {
+			if (landMask[i] === 2 && worldControlMap[i] === sovereignId && dominantSideMap[i] === sideIdx) {
+				theaterIndices.push(i);
+			}
+		}
+		if (theaterIndices.length === 0) return false;
 
-	const mag = Math.sqrt(vx * vx + vy * vy);
-	// Reduced pushback to stay within sovereign borders (0.35x grid resolution)
-	const pushBack = isFromFront && mag > 0 ? CONFIG.GRID_RES * 0.35 : 0;
-	const pvx = mag > 0 ? vx / mag : 0;
-	const pvy = mag > 0 ? vy / mag : 0;
-
-	let lat =
-		y * CONFIG.GRID_RES -
-		90 +
-		(Math.random() - 0.5) * CONFIG.GRID_RES * 0.8 +
-		pvy * pushBack;
-	let lng =
-		x * CONFIG.GRID_RES -
-		180 +
-		(Math.random() - 0.5) * CONFIG.GRID_RES * 0.8 +
-		pvx * pushBack;
-
-	// Sovereign Integrity Check: Ensure units don't spawn in neighbors (like France when Belgium is fighting Germany)
-	const finalIdx = getGridIndex(lat, lng);
-	if (finalIdx === -1 || worldControlMap[finalIdx] !== sovereignId) {
-		// Fallback to strict cell center to guarantee sovereign location
+		const idx = theaterIndices[Math.floor(Math.random() * theaterIndices.length)];
+		const y = Math.floor(idx / gridWidth);
+		const x = idx % gridWidth;
 		lat = y * CONFIG.GRID_RES - 90 + CONFIG.GRID_RES / 2;
 		lng = x * CONFIG.GRID_RES - 180 + CONFIG.GRID_RES / 2;
 	}
 
-	const isMountainCell = terrainMask && terrainMask[idx] > 0.35;
+	const finalIdx = getGridIndex(lat, lng);
+	const isMountainCell = terrainMask && finalIdx >= 0 ? terrainMask[finalIdx] > 0.35 : false;
 	// Alpenjägers: mostly drawn from mountainous recruitment cells
 	const isAlpen = isMountainCell && Math.random() < 0.4;
 
@@ -5706,41 +5667,60 @@ export async function _startWarInner() {
 			if (count <= 0) return;
 
 			for (let j = 0; j < count; j++) {
-				// At war start, only a minority deploy directly on the frontline;
-				// most formations begin deeper and mobilize forward over time.
-				let fData;
+				// At war start, spread units along the frontline with city preference.
 				let fromFront = false;
+				let fData;
+
 				if (
 					fronts &&
 					fronts.length > 0 &&
 					Math.random() < AI_MOBILIZATION.START_FROM_FRONT_CHANCE
 				) {
-					fData = fronts[Math.floor(Math.random() * fronts.length)];
+					// Cycle-based frontline distribution
+					const fIdx = j % fronts.length;
+					fData = fronts[fIdx];
 					fromFront = true;
 				} else {
-					const tidx =
-						theaterIndices[Math.floor(Math.random() * theaterIndices.length)];
-					fData = { idx: tidx, vx: 0, vy: 0 };
+					// Prefer spawning near friendly cities if available
+					const friendlyCities = cities.filter((city) => {
+						if (!city.ownerId || city.ownerId !== c.id) return false;
+						const cIdx = getGridIndex(city.lat, city.lng);
+						return cIdx !== -1 && landMask[cIdx] !== 0;
+					});
+					if (friendlyCities.length > 0) {
+						const pick = friendlyCities[Math.floor(Math.random() * friendlyCities.length)];
+						const cIdx = getGridIndex(pick.lat, pick.lng);
+						fData = { idx: cIdx, vx: 0, vy: 0 };
+					} else {
+						const tidx =
+							theaterIndices[Math.floor(Math.random() * theaterIndices.length)];
+						fData = { idx: tidx, vx: 0, vy: 0 };
+					}
 				}
 
-				const y = Math.floor(fData.idx / gridWidth);
-				const x = fData.idx % gridWidth;
+				// Spread units widely along the frontline, distributing evenly
+				// Use cycle-based distribution so units don't all pick the same cell
+				const fIdx = fronts ? j % fronts.length : 0;
+				const pick = fronts ? fronts[fIdx] : fData;
 
-				// Spread units slightly but keep them in their territory and on the line
-				// Reduced jitter and pushback to 0.4x grid res to prevent spawning across allied borders
-				const jitterRange = CONFIG.GRID_RES * 0.4;
-				const pushBack = fromFront ? CONFIG.GRID_RES * 0.4 : 0;
+				const py = Math.floor(pick.idx / gridWidth);
+				const px = pick.idx % gridWidth;
+
+				const jitterRange = CONFIG.GRID_RES * 1.5;
+				const pushBack = fromFront ? CONFIG.GRID_RES * 0.6 : 0;
+				const py = Math.floor(pick.idx / gridWidth);
+				const px = pick.idx % gridWidth;
 
 				let lat =
-					y * CONFIG.GRID_RES -
+					py * CONFIG.GRID_RES -
 					90 +
 					(Math.random() - 0.5) * jitterRange +
-					fData.vy * pushBack;
+					pick.vy * pushBack;
 				let lng =
-					x * CONFIG.GRID_RES -
+					px * CONFIG.GRID_RES -
 					180 +
 					(Math.random() - 0.5) * jitterRange +
-					fData.vx * pushBack;
+					pick.vx * pushBack;
 
 				// Validation: Ensure final coordinate is within the country's sovereign grid
 				const finalIdx = getGridIndex(lat, lng);
