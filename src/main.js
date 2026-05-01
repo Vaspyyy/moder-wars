@@ -2817,6 +2817,7 @@ import { ControlMapLayer } from "./renderer.js";
 import { updateCountryFlag, updateLandMask, loadTerrain, loadCountries, fillTerrainAt, applyPaintAt, paintAt, updateEditorToolPage, generatePresetData, performPresetLoad, loadScenarioForCountryImportFromBlob, loadScenarioForCountryImportFromUrl, importSingleCountryFromScenario } from "./editor.js";
 import { openHub, closeHub, switchHubTab, renderHub, selectScenario } from "./firebase.js";
 import { syncOccupationFromSideInfluence, initSideInfluenceMaps, resetSideInfluenceMaps, clearCellInfluence, isMyTerritory, isEnemyTerritory, myInfluenceAt, getGridIndex, rebuildFrontlineField, getBorderDirection } from "./engine.js";
+export { getGridIndex, resetSideInfluenceMaps } from "./engine.js";
 
 influenceLayer = new ControlMapLayer().addTo(map);
 

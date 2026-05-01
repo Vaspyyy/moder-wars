@@ -84,6 +84,7 @@ import {
 	updateRefHandles,
 	updateRestartVisibility,
 	updateSidesUI,
+	resetSideInfluenceMaps,
 	worldHeightDeg,
 	worldWidthDeg,
 } from "./main.js";
