@@ -49,7 +49,7 @@ async function _cachePut(url, data) {
 	});
 }
 
-async function fetchJSONWithCache(url) {
+async function _fetchJSONWithCache(url) {
 	// Normalize relative URLs to absolute so cache keys are stable across redirects / origins
 	const key = new URL(url, window.location.href).href;
 	const cached = await _geoCacheGet(key);
@@ -67,7 +67,6 @@ async function fetchJSONWithCache(url) {
 	return data;
 }
 
-
 // ─── End Cache ─────────────────────────────────────────────────────────────
 
 // GeoJSON parse worker — offloads 20-31MB JSON.parse from main thread
@@ -78,7 +77,7 @@ const _geoParsePending = new Map();
 function _getPw() {
 	if (!_geoParseWorker) {
 		_geoParseWorker = new Worker("geo-parse-worker.js");
-		_geoParseWorker.onmessage = function (evt) {
+		_geoParseWorker.onmessage = (evt) => {
 			const { id, ok, data } = evt.data;
 			const resolve = _geoParsePending.get(id);
 			_geoParsePending.delete(id);
