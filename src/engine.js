@@ -3,9 +3,6 @@ import {
 	MAX_SIDES,
 	_cachedFrontierCells,
 	_frontierScanCounter,
-	_frontlineSourceCell,
-	frontlineDirLat,
-	frontlineDirLng,
 	gridWidth,
 	setDominantSideMap,
 	setFrontlineDirLat,
@@ -94,18 +91,13 @@ function getGridIndex(lat, lng) {
 function rebuildFrontlineField() {
 	const total = gridWidth * gridHeight;
 
-	let fdl = frontlineDirLat;
-	let fdlng = frontlineDirLng;
-	let fsrc = _frontlineSourceCell;
+	const fdl = new Float32Array(total);
+	const fdlng = new Float32Array(total);
+	const fsrc = new Int32Array(total);
 
-	if (!fdl || fdl.length !== total) {
-		fdl = new Float32Array(total);
-		fdlng = new Float32Array(total);
-		fsrc = new Int32Array(total);
-		setFrontlineDirLat(fdl);
-		setFrontlineDirLng(fdlng);
-		set_frontlineSourceCell(fsrc);
-	}
+	setFrontlineDirLat(fdl);
+	setFrontlineDirLng(fdlng);
+	set_frontlineSourceCell(fsrc);
 
 	fdl.fill(0);
 	fdlng.fill(0);
