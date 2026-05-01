@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>MW-V0.9.3</title>
+    <title>MW-V0.15.7</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
     <script type="importmap">
       {
@@ -1577,10 +1577,10 @@
             return true;
         };
     </script>
-    <script type="module" src="main.js"></script>
+    <script type="module" src="src/main.js"></script>
 <script>
 if ('serviceWorker' in navigator) {
-	navigator.serviceWorker.register('/service-worker.js');
+	navigator.serviceWorker.register('workers/service-worker.js');
 }
 </script>
 </body>

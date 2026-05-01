@@ -82,7 +82,7 @@ html {
 	left: 0;
 	width: 100vw;
 	height: 100vh;
-	background: url("/2022.webp") no-repeat center center;
+	background: url("../assets/images/2022.webp") no-repeat center center;
 	background-size: cover;
 	z-index: 2000;
 	display: flex;
@@ -361,7 +361,7 @@ html {
 }
 
 .status-panel.minimized #unit-counts {
-	display: none !important;
+	display: none;
 }
 
 .status-left {
@@ -468,7 +468,7 @@ html {
 .side-header.active {
 	background: rgba(255, 255, 255, 0.05);
 	box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
-	color: #fff !important;
+	color: #fff;
 }
 
 .side-header.active::after {
@@ -679,7 +679,7 @@ html {
 .setup-panel.minimized .setup-sides,
 .setup-panel.minimized #setup-prompt,
 .setup-panel.minimized #setup-options {
-	display: none !important;
+	display: none;
 }
 
 .setup-panel.minimized {
@@ -689,7 +689,7 @@ html {
 
 .stats-panel.minimized .stats-grid,
 .stats-panel.minimized .tug-of-war {
-	display: none !important;
+	display: none;
 }
 
 .stats-panel.minimized {
@@ -946,11 +946,11 @@ html {
 /* Map Overrides */
 .leaflet-container {
 	/* Pitch black base to ensure the canvas gradient is the primary visual */
-	background: #000 !important;
+	background: #000;
 }
 
 .leaflet-control-attribution {
-	display: none !important;
+	display: none;
 }
 
 /* Custom Marker Styles */
@@ -1300,7 +1300,7 @@ html {
 .era-tabs .mini-btn,
 .hub-tabs .mini-btn {
 	background: transparent;
-	border: none !important;
+	border: none;
 	color: rgba(255, 255, 255, 0.4);
 	padding: 8px 16px;
 	border-radius: 1px;
@@ -1323,9 +1323,9 @@ html {
 .settings-tab-btn.active,
 .era-tabs .mini-btn.active,
 .hub-tabs .mini-btn.active {
-	background: #ff4757 !important;
-	color: #fff !important;
-	box-shadow: 0 4px 15px rgba(255, 71, 87, 0.3) !important;
+	background: #ff4757;
+	color: #fff;
+	box-shadow: 0 4px 15px rgba(255, 71, 87, 0.3);
 }
 
 .era-page {
@@ -1458,7 +1458,7 @@ html {
 }
 
 .painting-cursor {
-	cursor: crosshair !important;
+	cursor: crosshair;
 }
 
 /* Loading Overlay Styles */
@@ -1524,15 +1524,15 @@ html {
 }
 
 #loading-overlay.thematic-overlay #loading-standard-content {
-	display: none !important;
+	display: none;
 }
 
 #loading-overlay:not(.thematic-overlay) #loading-thematic-content {
-	display: none !important;
+	display: none;
 }
 
 #loading-overlay.thematic-overlay #loading-thematic-content {
-	display: flex !important;
+	display: flex;
 }
 
 .thematic-overlay .menu-v2-container {
@@ -1576,9 +1576,9 @@ html {
 }
 
 .hub-tabs .mini-btn.active {
-	background: #ff4757 !important;
-	color: #fff !important;
-	border-color: #ff4757 !important;
+	background: #ff4757;
+	color: #fff;
+	border-color: #ff4757;
 }
 
 .tutorial-popup-container {
@@ -1860,7 +1860,7 @@ html {
 
 /* Global chat scroll area */
 #global-chat-list {
-	overflow-y: auto !important;
+	overflow-y: auto;
 	-webkit-overflow-scrolling: touch;
 	max-height: 320px; /* ensure a scrollable window inside the modal */
 }
