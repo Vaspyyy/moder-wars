@@ -5708,8 +5708,6 @@ export async function _startWarInner() {
 
 				const jitterRange = CONFIG.GRID_RES * 1.5;
 				const pushBack = fromFront ? CONFIG.GRID_RES * 0.6 : 0;
-				const py = Math.floor(pick.idx / gridWidth);
-				const px = pick.idx % gridWidth;
 
 				let lat =
 					py * CONFIG.GRID_RES -
