@@ -5335,7 +5335,7 @@ export async function _startWarInner() {
 	// teams toward the same stale hotspot from the previous conflict.
 	frontlineFieldTick = -999;
 	_workerBusy = false;
-	_cachedFrontierCells = null;
+	_cachedFrontierCells = [];
 	_frontierScanCounter = 0;
 
 	// Reset cached frontline field state between wars.
@@ -9486,7 +9486,7 @@ export function capitulateCountry(country, sideIndex) {
 	adjacencyCache = null;
 	frontlineFieldTick = -999;
 	_workerBusy = false;
-	_cachedFrontierCells = null;
+	_cachedFrontierCells = [];
 	_frontierScanCounter = 0;
 
 	// Refresh UI

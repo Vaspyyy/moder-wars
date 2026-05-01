@@ -1,6 +1,8 @@
 import { CONFIG } from "./config.js";
 import {
 	MAX_SIDES,
+	_cachedFrontierCells,
+	_frontierScanCounter,
 	_frontlineSourceCell,
 	frontlineDirLat,
 	frontlineDirLng,
@@ -105,11 +107,9 @@ function rebuildFrontlineField() {
 	let qHead = 0,
 		qTail = 0;
 
-	// Incremental seed: full frontier scan only every 3rd rebuild (every ~45 ticks).
-	// Between full scans, reuse previous frontier cells as seeds — frontiers move
-	// slowly and this avoids the 2.88M-cell scan 67% of the time.
-	if (!_cachedFrontierCells) _cachedFrontierCells = [];
-	if (!_frontierScanCounter) _frontierScanCounter = 0;
+	// Incremental seed: full frontier scan only every 3rd rebuild.
+	// _cachedFrontierCells initialized as [] in main.js, reused here.
+	if (!_cachedFrontierCells) _cachedFrontierCells.length = 0;
 	_frontierScanCounter = (_frontierScanCounter + 1) % 3;
 
 	if (_frontierScanCounter === 0 || _cachedFrontierCells.length === 0) {
