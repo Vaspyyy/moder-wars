@@ -74,7 +74,7 @@ import {
 	updateRestartVisibility,
 	updateSidesUI,
 	worldHeightDeg,
-	worldWidthDeg,,
+	worldWidthDeg,
 	confirmRandomGenBtn,
 	countryInspector,
 	disableBombsCheckbox,

@@ -13,7 +13,7 @@ import {
 	setHubReturnState,
 	setHubScenarioCache,
 	setHubWasInEditor,
-	setQueuedScenarioAction,,
+	setQueuedScenarioAction,
 	countryInspector,
 	enterScenarioBtn,
 	flagLibraryList,
