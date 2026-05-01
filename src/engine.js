@@ -12,6 +12,7 @@ import {
 	set_frontlineSourceCell,
 	setFrontlineDirLat,
 	setFrontlineDirLng,
+	setSideInfluenceMaps,
 	sideInfluenceMaps,
 } from "./main.js";
 
@@ -35,7 +36,7 @@ function syncOccupationFromSideInfluence(idx) {
 }
 
 function initSideInfluenceMaps() {
-	sideInfluenceMaps = [];
+	setSideInfluenceMaps([]);
 	for (let s = 0; s < MAX_SIDES; s++) {
 		sideInfluenceMaps[s] = new Float32Array(gridWidth * gridHeight);
 	}
