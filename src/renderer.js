@@ -5,6 +5,7 @@ import {
 	UNIT_HASH_CELL_SIZE,
 	_cachedTerritoryCtrlEls,
 	_cachedTerritorySegEls,
+	_frontlinePolys,
 	activeBattles,
 	activeTheaterCities,
 	allianceViewEnabled,
@@ -2161,6 +2162,25 @@ const ControlMapLayer = L.Layer.extend({
 				ctx.globalAlpha = refOpacity;
 				ctx.drawImage(img, pTL.x, pTL.y, pBR.x - pTL.x, pBR.y - pTL.y);
 				ctx.restore();
+			}
+		}
+
+		// Draw frontline polylines between warring sides
+		if (isWar && _frontlinePolys && Object.keys(_frontlinePolys).length > 0) {
+			for (const [key, poly] of Object.entries(_frontlinePolys)) {
+				if (poly.length < 2) continue;
+				const [sa, sb] = key.split("_").map(Number);
+				const color = sideColors[sa] || "rgba(255,255,0,0.4)";
+				ctx.strokeStyle = color.replace(rgbaRe, "0.5)");
+				ctx.lineWidth = 1.5;
+				ctx.beginPath();
+				let started = false;
+				for (let p = 0; p < poly.length; p++) {
+					const pt = map.latLngToContainerPoint([poly[p].lat, poly[p].lng]);
+					if (!started) { ctx.moveTo(pt.x, pt.y); started = true; }
+					else ctx.lineTo(pt.x, pt.y);
+				}
+				ctx.stroke();
 			}
 		}
 

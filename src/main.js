@@ -1835,7 +1835,12 @@ export let frontlineFieldTick = -999; // last simFrameCount when field was rebui
 export let _frontlineSourceCell = null; // reusable Int32Array for BFS — allocated once
 export const FRONTLINE_FIELD_UPDATE_INTERVAL = 15; // rebuild every N ticks (not every 4 — grid is 2.88M cells)
 export let _simWorker = null; // Web Worker for async frontline BFS
-export let _workerBusy = false; // prevent overlapping rebuild requests
+export let _workerBusy = false;
+// Frontline polyline system: distributed unit stationing along war fronts
+export let _frontlinePolys = {};
+export let _frontlinePolyTick = -999;
+export const FRONTLINE_POLY_UPDATE_INTERVAL = 15;
+export let _workerBusy = false;
 export let _cachedFrontierCells = []; // cached BFS frontier seed cells (incremental rebuild)
 export let _frontierScanCounter = 0; // counter for full-scan cadence
 
@@ -5314,6 +5319,8 @@ export async function _startWarInner() {
 	_workerBusy = false;
 	_cachedFrontierCells = [];
 	_frontierScanCounter = 0;
+	_frontlinePolys = {};
+	_frontlinePolyTick = -999;
 
 	// Reset cached frontline field state between wars.
 	_frontlineSourceCell = null;
@@ -6239,6 +6246,93 @@ export function launchBomb(fromLat, fromLng, toLat, toLng, sideIdx) {
  * Falls back to the old scan only if the field hasn't been built yet.
  */
 
+export function assignFrontlineSlots() {
+
+	if (!_frontlinePolys || Object.keys(_frontlinePolys).length === 0) return;
+
+	// Build a map: sideIndex → list of side-pair keys this side participates in
+	const sideFronts = {};
+	for (let si = 0; si < sides.length; si++) {
+		sideFronts[si] = [];
+	}
+	for (const key of Object.keys(_frontlinePolys)) {
+		const [a, b] = key.split("_").map(Number);
+		if (sideFronts[a]) sideFronts[a].push(key);
+		if (sideFronts[b]) sideFronts[b].push(key);
+	}
+
+	// For each unit without a slot, assign to nearest polyline segment
+	for (let ui = 0; ui < units.length; ui++) {
+		const u = units[ui];
+		if (u.deployTicks > 0) continue;
+		const si = u.sideIndex;
+		const fronts = sideFronts[si] || [];
+		if (fronts.length === 0) continue;
+
+		// If already has a slot, update its position if polyline changed
+		if (u.frontSlot) {
+			const poly = _frontlinePolys[u.frontSlot.pairKey];
+			if (!poly || u.frontSlot.segmentIdx >= poly.length) {
+				u.frontSlot = null; // Slot invalidated — reassign below
+			}
+		}
+
+		if (!u.frontSlot) {
+			// Find nearest polyline segment across all fronts this side is on
+			let bestDist = Infinity;
+			let bestPair = null;
+			let bestIdx = -1;
+
+			for (let f = 0; f < fronts.length; f++) {
+				const pairKey = fronts[f];
+				const poly = _frontlinePolys[pairKey];
+				if (!poly) continue;
+				// Sample every Nth segment for performance
+				const step = Math.max(1, Math.floor(poly.length / 300));
+				for (let s = 0; s < poly.length; s += step) {
+					const dSq = (u.lat - poly[s].lat) ** 2 + (u.lng - poly[s].lng) ** 2;
+					if (dSq < bestDist) {
+						bestDist = dSq;
+						bestPair = pairKey;
+						bestIdx = s;
+					}
+				}
+			}
+
+			if (bestPair) {
+				u.frontSlot = {
+					pairKey: bestPair,
+					segmentIdx: bestIdx,
+					targetLat: _frontlinePolys[bestPair][bestIdx].lat,
+					targetLng: _frontlinePolys[bestPair][bestIdx].lng,
+				};
+			}
+		}
+	}
+
+	// Spread units that are clustered: move their slots apart
+	const slotOccupancy = {};
+	for (let ui = 0; ui < units.length; ui++) {
+		const u = units[ui];
+		if (!u.frontSlot) continue;
+		const key = `${u.frontSlot.pairKey}_${u.frontSlot.segmentIdx}`;
+		if (slotOccupancy[key]) {
+			// Multiple units on same slot — spread them
+			const poly = _frontlinePolys[u.frontSlot.pairKey];
+			if (poly) {
+				const spread = Math.max(1, Math.floor(poly.length / 5));
+				let newIdx = (u.frontSlot.segmentIdx + spread * slotOccupancy[key]) % poly.length;
+				if (newIdx < 0) newIdx += poly.length;
+				u.frontSlot.segmentIdx = newIdx;
+				u.frontSlot.targetLat = poly[newIdx].lat;
+				u.frontSlot.targetLng = poly[newIdx].lng;
+			}
+		}
+		slotOccupancy[key] = (slotOccupancy[key] || 0) + 1;
+	}
+
+}
+
 export function performSimulationTick() {
 	// If war is over, stop simulation mechanics (but update loop may continue for aftermath recording)
 	if (gameState === "WAR_OVER") return false;
@@ -6497,6 +6591,13 @@ export function performSimulationTick() {
 			rebuildFrontlineField();
 		}
 	}
+
+	// Compute frontline polylines between warring sides (throttled)
+	if (simFrameCount - _frontlinePolyTick >= FRONTLINE_POLY_UPDATE_INTERVAL) {
+		computeFrontlinePolys();
+		_frontlinePolyTick = simFrameCount;
+	}
+	assignFrontlineSlots();
 
 	// --- UNIT CONSOLIDATION (Merge Stacks) ---
 	// Periodically merge units of the same team that are virtually overlapping.
@@ -8043,6 +8144,23 @@ export function performSimulationTick() {
 				let moveDirLat = dLat / dist;
 				let moveDirLng = dLng / dist;
 
+				// Front-slot positioning: pull toward assigned frontline slot to
+				// spread units evenly along the war front.
+				if (u.frontSlot && !shouldMopUp && !retreatVector && !isEngaged) {
+					const sdLat = u.frontSlot.targetLat - u.lat;
+					let sdLng = u.frontSlot.targetLng - u.lng;
+					if (sdLng > 180) sdLng -= 360;
+					else if (sdLng < -180) sdLng += 360;
+					const sdDist = Math.sqrt(sdLat * sdLat + sdLng * sdLng);
+					if (sdDist > 0.01) {
+						const slotStrength = Math.min(0.45, dist * 2);
+						moveDirLat = moveDirLat * (1 - slotStrength) + (sdLat / sdDist) * slotStrength;
+						moveDirLng = moveDirLng * (1 - slotStrength) + (sdLng / sdDist) * slotStrength;
+						const magSlot = Math.sqrt(moveDirLat * moveDirLat + moveDirLng * moveDirLng);
+						if (magSlot > 0) { moveDirLat /= magSlot; moveDirLng /= magSlot; }
+					}
+				}
+
 				// Pull towards nearby frontline so units hug the border instead of roaming deep interiors
 				if (borderDir && !isAtSea) {
 					// Force units to prioritize the frontline even more heavily to prevent the "interior roaming" seen in clusters.
@@ -9482,6 +9600,8 @@ export function capitulateCountry(country, sideIndex) {
 	_workerBusy = false;
 	_cachedFrontierCells = [];
 	_frontierScanCounter = 0;
+	_frontlinePolys = {};
+	_frontlinePolyTick = -999;
 
 	// Refresh UI
 	recalculateAllBounds();

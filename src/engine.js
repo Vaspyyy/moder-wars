@@ -182,6 +182,106 @@ function rebuildFrontlineField() {
 	}
 }
 
+function computeFrontlinePolys() {
+	_frontlinePolys = {};
+	const total = gridWidth * gridHeight;
+	if (!dominantSideMap || !landMask) return;
+
+	// Collect frontier cells per side-pair
+	const frontierSets = {};
+
+	for (let i = 0; i < total; i++) {
+		if (landMask[i] !== 2) continue;
+		const ds = dominantSideMap[i];
+		if (ds < 0) continue;
+
+		// Check 4 neighbors for different sides
+		const neighbors = [
+			i + 1,
+			i - 1,
+			i + gridWidth,
+			i - gridWidth,
+		];
+		for (let n = 0; n < neighbors.length; n++) {
+			const nb = neighbors[n];
+			if (nb < 0 || nb >= total) continue;
+			if (landMask[nb] !== 2) continue;
+			const nds = dominantSideMap[nb];
+			if (nds < 0 || nds === ds) continue;
+
+			// Normalize pair key (lower side first)
+			const key = ds < nds ? `${ds}_${nds}` : `${nds}_${ds}`;
+			if (!frontierSets[key]) frontierSets[key] = new Set();
+			frontierSets[key].add(i);
+			frontierSets[key].add(nb);
+			break; // Count each cell once per pair
+		}
+	}
+
+	// Convert sets to arrays and sort into rough polylines (by latitude + longitude)
+	for (const key of Object.keys(frontierSets)) {
+		const cells = Array.from(frontierSets[key]);
+		const poly = [];
+		const visited = new Set();
+
+		// Simple polyline ordering: start from one end, walk nearest-neighbor
+		const getCoord = (idx) => {
+			const y = Math.floor(idx / gridWidth);
+			const x = idx % gridWidth;
+			return { x, y, lat: y * CONFIG.GRID_RES - 90, lng: x * CONFIG.GRID_RES - 180 };
+		};
+
+		// Find a start point (any unvisited cell)
+		const findStart = () => {
+			for (let c = 0; c < cells.length; c++) {
+				if (!visited.has(cells[c])) return cells[c];
+			}
+			return -1;
+		};
+
+		let start = findStart();
+		while (start !== -1) {
+			const segment = [];
+			let cur = start;
+			visited.add(cur);
+			const curCoord = getCoord(cur);
+			segment.push(curCoord);
+
+			// Walk forward from start, picking nearest unvisited neighbor at each step
+			let prev = -1;
+			// eslint-disable-next-line no-constant-condition
+			while (true) {
+				let bestDist = Infinity;
+				let best = -1;
+				const cc = getCoord(cur);
+				for (let c = 0; c < cells.length; c++) {
+					if (visited.has(cells[c])) continue;
+					const nc = getCoord(cells[c]);
+					const dSq = (cc.lat - nc.lat) ** 2 + (cc.lng - nc.lng) ** 2;
+					// Prefer cells within 2 grid cells to keep the line contiguous
+					if (dSq < bestDist && dSq < (CONFIG.GRID_RES * 3) ** 2) {
+						bestDist = dSq;
+						best = cells[c];
+					}
+				}
+				if (best === -1) break; // No more connected cells
+				prev = cur;
+				cur = best;
+				visited.add(cur);
+				segment.push(getCoord(cur));
+			}
+			if (segment.length > 0) {
+				poly.push(...segment);
+			}
+			start = findStart();
+		}
+
+		if (poly.length > 0) {
+			_frontlinePolys[key] = poly;
+		}
+	}
+}
+
 function getBorderDirection(unit) {
 	if (!worldControlMap || !landMask) return null;
 	const idx = getGridIndex(unit.lat, unit.lng);
@@ -207,4 +307,5 @@ export {
 	rebuildFrontlineField,
 	resetSideInfluenceMaps,
 	syncOccupationFromSideInfluence,
+	computeFrontlinePolys,
 };
