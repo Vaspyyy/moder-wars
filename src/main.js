@@ -1,5 +1,7 @@
 import JSZip from "jszip";
 import L from "leaflet";
+import { CONFIG } from "./config.js";
+import { fetchJSONWithCache, _geoCacheGet } from "./geo.js";
 
 /**
  * TRANSLATION SYSTEM (i18n)
@@ -1270,8 +1272,8 @@ async function generatePuppetFlag(puppetId, overlordId) {
 	if (influenceLayer) influenceLayer.render();
 }
 
-const explosionUrl = "explosion-pas-61639.mp3";
-const clickUrl = "low-button-click-331780.mp3";
+const explosionUrl = "/assets/audio/explosion-pas-61639.mp3";
+const clickUrl = "/assets/audio/low-button-click-331780.mp3";
 
 // Background music playlist: Replaced with MW ST folder assets
 const bgMusicUrls = [
@@ -1287,9 +1289,9 @@ const bgMusicUrls = [
 	"/mw st/mw new ost/Kevin MacLeod [Official] - Killers - incompetech.com.m4a",
 ];
 
-const warStartUrl = "war.wav";
-const peaceUrl = "peace.wav";
-const warAmbianceUrl = "modern-war-129016.mp3";
+const warStartUrl = "/assets/audio/war.wav";
+const peaceUrl = "/assets/audio/peace.wav";
+const warAmbianceUrl = "/assets/audio/modern-war-129016.mp3";
 
 // Initialize Audio Context immediately so it's ready for early decoding
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1683,140 +1685,6 @@ function cycleBuffState(current, direction) {
 	return BUFF_STATES[nextIndex];
 }
 
-const CONFIG = {
-	GEOJSON_BASE:
-		"https://raw.githubusercontent.com/martynafford/natural-earth-geojson/master/",
-	GRID_RES: 0.15,
-	INFLUENCE_RATE: 0.18,
-	INFLUENCE_RADIUS: 0.4,
-	UNIT_SPAWN_COUNT: 60, // Base count
-	MAX_UNITS_PER_SIDE: 1800,
-	UNIT_DENSITY_FACTOR: 0.022, // Slightly increased density for modestly more units
-	HOI4_COLORS: {
-		Germany: "#6e6e6e",
-		Russia: "#911c1c",
-		"Soviet Union": "#911c1c",
-		"United Kingdom": "#bd9c61",
-		"United States of America": "#3a5c32",
-		"United States": "#3a5c32",
-		France: "#304f9e",
-		Italy: "#4d6e35",
-		Japan: "#d4d4d4",
-		China: "#ded433",
-		Poland: "#f59595",
-		Turkey: "#8f1d1d",
-		Brazil: "#3da33d",
-		Canada: "#e31e24",
-		Australia: "#2e41a3",
-		India: "#e39d3b",
-		Spain: "#d1bc4d",
-		Mexico: "#d3a550",
-		Argentina: "#75aadb",
-		Chile: "#d43b3b",
-		Egypt: "#e3d17d",
-		"South Africa": "#de8664",
-		Israel: "#2e86de",
-		Mongolia: "#943821",
-		Iran: "#1a8227",
-		Iraq: "#7a6021",
-		"Saudi Arabia": "#2e7a3e",
-		Sweden: "#3a7bad",
-		Norway: "#4e5b8a",
-		Finland: "#7798ab",
-		Romania: "#b59b31",
-		Hungary: "#396b41",
-		Yugoslavia: "#bd8c42",
-		Greece: "#4a7ea3",
-		"South Korea": "#2e86de",
-		"North Korea": "#ff4757",
-		Vietnam: "#cc3333",
-		Ukraine: "#ffdd00",
-	},
-	UNIT_SPEED: 0.003,
-	UNIT_NAVAL_SPEED: 0.025, // Significantly faster for swift naval invasions
-	UNIT_TO_SOLDIER_RATIO: 5000,
-	UNIT_HEALTH: 100,
-	// Alpenjäger tuning: small, subtle advantages
-	ALPEN_HEALTH_MULT: 1.25, // +25% health
-	ALPEN_MTN_SPEED_MULT: 1.4, // faster in mountains
-	ALPEN_COMBAT_MULT: 1.12, // +12% damage, -12% damage taken
-	COMBAT_DAMAGE: 0.7,
-	ATTRITION_DAMAGE: 0.06,
-	REINFORCEMENT_RATE: 0.006,
-	ENCIRCLEMENT_DAMAGE_MULT: 2.5,
-	ENCIRCLEMENT_RADIUS: 0.7,
-	TEAM_A_COLOR: "rgba(255, 50, 50, 0.5)",
-	TEAM_B_COLOR: "rgba(50, 100, 255, 0.5)",
-	FRONTLINE_COLOR: "rgba(0, 0, 0, 1.0)",
-};
-
-// ─── IndexedDB GeoJSON Cache ───────────────────────────────────────────────
-// On first load, parsed GeoJSON is stored in IndexedDB (keyed by URL).
-// Subsequent loads skip the network + JSON.parse entirely — removes the
-// 20-31MB main-thread stall on revisits.
-
-async function _geoCacheOpen() {
-	return new Promise((resolve, reject) => {
-		const req = indexedDB.open("mw-geocache", 1);
-		req.onupgradeneeded = () => {
-			if (!req.result.objectStoreNames.contains("geojson")) {
-				req.result.createObjectStore("geojson", { keyPath: "url" });
-			}
-		};
-		req.onsuccess = () => resolve(req.result);
-		req.onerror = () => reject(req.error);
-	});
-}
-
-async function _geoCacheGet(url) {
-	const db = await _geoCacheOpen();
-	return new Promise((resolve, _reject) => {
-		const tx = db.transaction("geojson", "readonly");
-		const req = tx.objectStore("geojson").get(url);
-		req.onsuccess = () => {
-			const entry = req.result;
-			if (entry?.data) {
-				const age = Date.now() - (entry.timestamp || 0);
-				if (age < 7 * 24 * 60 * 60 * 1000) {
-					resolve(entry.data);
-					return;
-				}
-			}
-			resolve(null);
-		};
-		req.onerror = () => resolve(null);
-	});
-}
-
-async function _geoCachePut(url, data) {
-	const db = await _geoCacheOpen();
-	return new Promise((resolve) => {
-		const tx = db.transaction("geojson", "readwrite");
-		tx.objectStore("geojson").put({ url, data, timestamp: Date.now() });
-		tx.oncomplete = () => resolve();
-		tx.onerror = () => resolve();
-	});
-}
-
-async function fetchJSONWithCache(url) {
-	// Normalize relative URLs to absolute so cache keys are stable across redirects / origins
-	const key = new URL(url, window.location.href).href;
-	const cached = await _geoCacheGet(key);
-	if (cached) return cached;
-	// Offload fetch + JSON.parse to Web Worker (keeps main thread responsive during 2-5s parse)
-	let data;
-	if (_geoParseWorker || typeof Worker !== "undefined") {
-		data = await _fetchViaWorker(url);
-		if (!data) throw new Error("Worker parse failed");
-	} else {
-		const response = await fetch(url);
-		data = await response.json();
-	}
-	_geoCachePut(key, data);
-	return data;
-}
-
-// ─── End Cache ─────────────────────────────────────────────────────────────
 
 function getOptimizationFactor() {
 	// More active sides => higher factor => more aggressive optimization
@@ -2930,7 +2798,7 @@ const map = L.map("map", {
 });
 
 // Create Web Worker for async frontline BFS rebuilds
-_simWorker = new Worker("simulation-worker.js");
+_simWorker = new Worker("../workers/simulation-worker.js");
 _simWorker.onmessage = function (evt) {
 	_workerBusy = false;
 	const { frontlineDirLat: latBuf, frontlineDirLng: lngBuf, sourceCell: srcBuf } = evt.data;
@@ -2938,32 +2806,6 @@ _simWorker.onmessage = function (evt) {
 	frontlineDirLng = new Float32Array(lngBuf);
 	_frontlineSourceCell = new Int32Array(srcBuf);
 };
-
-// GeoJSON parse worker — offloads 20-31MB JSON.parse from main thread
-let _geoParseWorker = null;
-let _geoParseReqId = 0;
-const _geoParsePending = new Map();
-
-function _getGeoParseWorker() {
-	if (!_geoParseWorker) {
-		_geoParseWorker = new Worker("geo-parse-worker.js");
-		_geoParseWorker.onmessage = function (evt) {
-			const { id, ok, data, error } = evt.data;
-			const resolve = _geoParsePending.get(id);
-			_geoParsePending.delete(id);
-			if (resolve) resolve(ok ? data : null);
-		};
-	}
-	return _geoParseWorker;
-}
-
-function _fetchViaWorker(url) {
-	return new Promise((resolve) => {
-		const id = ++_geoParseReqId;
-		_geoParsePending.set(id, resolve);
-		_getGeoParseWorker().postMessage({ url, id });
-	});
-}
 
 let baseImageryLayer = null;
 const imagerySelect = document.getElementById("imagery-select");
@@ -14545,13 +14387,13 @@ window.remixFromHub = async (url, sourceId, sourceName, ownerUsername) => {
  */
 function preloadAssets() {
 	const assets = [
-		"/2022.webp",
-		"/1974.webp",
-		"/1942.webp",
-		"/1936.webp",
-		"/1914.webp",
-		"/1804.webp",
-		"/1492.webp",
+		"/assets/images/2022.webp",
+		"/assets/images/1974.webp",
+		"/assets/images/1942.webp",
+		"/assets/images/1936.webp",
+		"/assets/images/1914.webp",
+		"/assets/images/1804.webp",
+		"/assets/images/1492.webp",
 	];
 	assets.forEach((src) => {
 		const img = new Image();
@@ -14942,24 +14784,24 @@ document.getElementById("back-to-nav-btn").addEventListener("click", () => {
  * DYNAMIC MENU BACKGROUND SYSTEM
  */
 const SCENARIO_MENU_BGS = {
-	"scroller-choice-modern": "/2022.webp",
-	"scroller-choice-1974": "/1974.webp",
+	"scroller-choice-modern": "/assets/images/2022.webp",
+	"scroller-choice-1974": "/assets/images/1974.webp",
 
-	"scroller-choice-1942": "/1942.webp",
-	"scroller-choice-1936": "/1936.webp",
-	"scroller-choice-1914": "/1914.webp",
-	"scroller-choice-1804": "/1804.webp",
-	"scroller-choice-1492": "/1492.webp",
-	"scroller-choice-1ad": "/1492.webp",
-	"scroller-choice-canada": "/2022.webp",
-	"scroller-choice-france": "/2022.webp",
-	"scroller-choice-germany": "/2022.webp",
-	"scroller-choice-england": "/2022.webp",
-	"scroller-choice-us": "/2022.webp",
-	"scroller-choice-poland": "/2022.webp",
-	"scroller-choice-kaiserreich": "/1936.webp",
-	"scroller-choice-fire": "/2022.webp",
-	"scroller-choice-1984-alt": "/1974.webp",
+	"scroller-choice-1942": "/assets/images/1942.webp",
+	"scroller-choice-1936": "/assets/images/1936.webp",
+	"scroller-choice-1914": "/assets/images/1914.webp",
+	"scroller-choice-1804": "/assets/images/1804.webp",
+	"scroller-choice-1492": "/assets/images/1492.webp",
+	"scroller-choice-1ad": "/assets/images/1492.webp",
+	"scroller-choice-canada": "/assets/images/2022.webp",
+	"scroller-choice-france": "/assets/images/2022.webp",
+	"scroller-choice-germany": "/assets/images/2022.webp",
+	"scroller-choice-england": "/assets/images/2022.webp",
+	"scroller-choice-us": "/assets/images/2022.webp",
+	"scroller-choice-poland": "/assets/images/2022.webp",
+	"scroller-choice-kaiserreich": "/assets/images/1936.webp",
+	"scroller-choice-fire": "/assets/images/2022.webp",
+	"scroller-choice-1984-alt": "/assets/images/1974.webp",
 };
 
 let queuedScenarioAction = null;
@@ -14974,7 +14816,7 @@ function selectScenario(cardId, action) {
 	if (selectedCard) selectedCard.classList.add("selected");
 
 	// 2. Change Menu Background
-	const bgUrl = SCENARIO_MENU_BGS[cardId] || "/2022.webp";
+	const bgUrl = SCENARIO_MENU_BGS[cardId] || "/assets/images/2022.webp";
 	if (mainMenu) {
 		mainMenu.style.backgroundImage = `url('${bgUrl}')`;
 	}
@@ -15201,7 +15043,7 @@ choiceModernDay.onclick = async () => {
 	loadingOverlay.style.display = "flex";
 
 	try {
-		const url = "world map 2022.json";
+		const url = "/assets/maps/world map 2022.json";
 		const response = await fetch(url);
 		if (!response.ok) throw new Error("Failed to fetch modern map");
 		const blob = await response.blob();
@@ -15241,7 +15083,7 @@ choice1936Scenario.onclick = async () => {
 	loadingOverlay.style.display = "flex";
 
 	try {
-		const url = "WW2 Peru Update.json";
+		const url = "/assets/maps/WW2 Peru Update.json";
 		const response = await fetch(url);
 		if (!response.ok) throw new Error("Failed to fetch WW2 Peru Update");
 		const blob = await response.blob();
@@ -15311,7 +15153,7 @@ choiceWW1Scenario.onclick = async () => {
 	loadingOverlay.style.display = "flex";
 
 	try {
-		const url = "world_war_1__1914_.json";
+		const url = "/assets/maps/world_war_1__1914_.json";
 		const response = await fetch(url);
 		if (!response.ok) throw new Error("Failed to fetch 1914 map");
 		const blob = await response.blob();
@@ -19185,9 +19027,9 @@ if (importScenarioSelect) {
 		// Map built‑in keys to local preset JSONs
 		const keyToUrl = {
 			"builtin:modern_2022": "@2022 world invis.json",
-			"builtin:ww2_1936": "WW2 Peru Update.json",
+			"builtin:ww2_1936": "/assets/maps/WW2 Peru Update.json",
 			"builtin:ww2_1942": "1942.json",
-			"builtin:ww1_1914": "world_war_1__1914_.json",
+			"builtin:ww1_1914": "/assets/maps/world_war_1__1914_.json",
 			"builtin:coldwar_1974": "better_cold_war_preset.json",
 			"builtin:coldwar_1948": "1948 (1).json",
 			"builtin:france_states": "France_states_preset (2).json",
