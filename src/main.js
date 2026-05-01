@@ -3964,12 +3964,10 @@ export function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
 				if (
 					idx < 0 ||
 					idx >= landMask.length ||
-					landMask[idx] === 0
+					landMask[idx] === 0 ||
+					landMask[idx] !== 2
 				)
 					continue;
-
-				// Promote neutral land to warzone when contested by a unit
-				if (landMask[idx] === 1) landMask[idx] = 2;
 
 				// City Resistance: Cells containing cities are much harder for frontlines to pass through
 				let cellDelta = delta;
@@ -9432,10 +9430,14 @@ export function capitulateCountry(country, sideIndex) {
 			syncOccupationFromSideInfluence(idx);
 			primaryOccupierMap[idx] = ownerId;
 		} else {
-			landMask[idx] = 1;
-			for (let s = 0; s < sideInfluenceMaps.length; s++)
-				sideInfluenceMaps[s][idx] = 0;
-			syncOccupationFromSideInfluence(idx);
+			// Keep warzone if the cell still has occupation from a combatant side
+			const hasOccupation = dominantSideMap[idx] !== -1;
+			landMask[idx] = hasOccupation ? 2 : 1;
+			if (!hasOccupation) {
+				for (let s = 0; s < sideInfluenceMaps.length; s++)
+					sideInfluenceMaps[s][idx] = 0;
+				syncOccupationFromSideInfluence(idx);
+			}
 			primaryOccupierMap[idx] = 0;
 		}
 	});
