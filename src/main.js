@@ -1958,7 +1958,6 @@ export function setAdjacencyCache(val) {
 	adjacencyCache = val;
 }
 
-
 // Snapshots of borders at scenario start for quick restart
 export let initialWorldControlMapSnapshot = null;
 export let initialDeJureMapSnapshot = null;
