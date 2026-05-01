@@ -1960,6 +1960,9 @@ export function setFrontlineDirLng(val) {
 export function set_frontlineSourceCell(val) {
 	_frontlineSourceCell = val;
 }
+export function setFrontierScanCounter(val) {
+	_frontierScanCounter = val;
+}
 
 // ── State setters for module imports (ES imports are read-only) ────
 export function setAdjacencyCache(val) {
