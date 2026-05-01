@@ -1808,6 +1808,9 @@ export const UNIT_HASH_CELL_SIZE = 2.5; // Degrees per spatial bucket
 // Temporary diagnostics for cross-war state/capitulation bugs.
 export const aiCountryState = new Map();
 export let _sidePosture = []; // per-side auto posture (OFFENSIVE/BALANCED/DEFENSIVE)
+export let _warPlan = []; // per-side war plan: { type, phase, target, ... }
+export const WAR_PLAN_TYPES = ["DEFEND", "PUSH_FRONT", "CAPTURE_CITY", "ENCIRCLE"];
+export const WAR_PLAN_PHASES = ["PREPARATION", "EXECUTION", "CONSOLIDATION"];
 export const AI_DESPERATION = {
 	OFFENSE_MIN_WAR_TICKS: 1200, // ~20s at 60fps
 	OFFENSE_STALL_TICKS: 900, // sustained stall before "push harder"
@@ -5269,6 +5272,7 @@ export async function _startWarInner() {
 	_cachedSideTerritoryCounts = [];
 	latestCountryStats.clear();
 	aiCountryState.clear();
+	_warPlan = [];
 	sides.flat().forEach((c) => {
 		if (!c) return;
 		c.lastControlledCount = undefined;
@@ -6337,6 +6341,179 @@ export function assignFrontlineSlots() {
 
 }
 
+/**
+ * Generate a war plan for a side based on posture and available objectives.
+ * Called on shouldCountLand frames after posture is determined.
+ */
+export function generateWarPlan(sideIdx) {
+	const posture = _sidePosture[sideIdx] || "BALANCED";
+	const sideCountries = sides[sideIdx] || [];
+
+	// Default to DEFEND if no units or defensive posture
+	const unitCount = units.filter((u) => u.sideIndex === sideIdx && u.deployTicks === 0).length;
+	if (unitCount === 0 || posture === "DEFENSIVE") {
+		_warPlan[sideIdx] = { type: "DEFEND", phase: "PREPARATION", target: null,
+			startedTick: simFrameCount, lastProgressTick: simFrameCount, progress: 0 };
+		return;
+	}
+
+	// Find nearest enemy-controlled city (via dominantSideMap)
+	const enemyCities = [];
+	const myAllyIds = new Set(sideCountries.map((c) => c.id));
+	for (let ci = 0; ci < activeTheaterCities.length; ci++) {
+		const city = activeTheaterCities[ci];
+		const cIdx = getGridIndex(city.lat, city.lng);
+		if (cIdx === -1) continue;
+		const ownerId = city.ownerId || 0;
+		if (myAllyIds.has(ownerId)) continue; // skip friendly cities
+		const ds = dominantSideMap[cIdx];
+		if (ds !== sideIdx) {
+			enemyCities.push({ city, dist: 0, isCapital: city.isCapital || false });
+		}
+	}
+
+	// Score: prefer capitals, then proximity to frontline
+	if (enemyCities.length > 0) {
+		// Find center of friendly frontline for distance reference
+		let fLat = 0, fLng = 0, fCount = 0;
+		for (const key of Object.keys(_frontlinePolys || {})) {
+			const [a, b] = key.split("_").map(Number);
+			if (a !== sideIdx && b !== sideIdx) continue;
+			const poly = _frontlinePolys[key];
+			if (!poly) continue;
+			for (let p = 0; p < poly.length; p += Math.max(1, Math.floor(poly.length / 20))) {
+				fLat += poly[p].lat;
+				fLng += poly[p].lng;
+				fCount++;
+			}
+		}
+		if (fCount > 0) { fLat /= fCount; fLng /= fCount; }
+
+		let bestScore = -Infinity, bestCity = null;
+		for (const ec of enemyCities) {
+			let deLng = ec.city.lng - fLng;
+			if (deLng > 180) deLng -= 360; else if (deLng < -180) deLng += 360;
+			const dSq = (ec.city.lat - fLat) ** 2 + deLng ** 2;
+			let score = -(dSq * 0.5);
+			if (ec.isCapital) score += 200;
+			if (score > bestScore) { bestScore = score; bestCity = ec.city; }
+		}
+
+		if (bestCity) {
+			// Find frontline segment nearest to the target city
+			const stagingCells = [];
+			for (const key of Object.keys(_frontlinePolys || {})) {
+				const [a, b] = key.split("_").map(Number);
+				if (a !== sideIdx && b !== sideIdx) continue;
+				const poly = _frontlinePolys[key];
+				if (!poly) continue;
+				for (let p = 0; p < poly.length; p++) {
+					let dLng = bestCity.lng - poly[p].lng;
+					if (dLng > 180) dLng -= 360; else if (dLng < -180) dLng += 360;
+					const dSq = (bestCity.lat - poly[p].lat) ** 2 + dLng ** 2;
+					stagingCells.push({ ...poly[p], dSq });
+				}
+			}
+			stagingCells.sort((a, b) => a.dSq - b.dSq);
+			const staging = stagingCells.slice(0, Math.max(3, Math.floor(stagingCells.length / 4)));
+
+			// Generate arrow points: from staging center to target city
+			let sLat = 0, sLng = 0;
+			for (const sc of staging) { sLat += sc.lat; sLng += sc.lng; }
+			sLat /= staging.length; sLng /= staging.length;
+			const arrowPoints = [{ lat: sLat, lng: sLng }, { lat: bestCity.lat, lng: bestCity.lng }];
+
+			_warPlan[sideIdx] = {
+				type: "CAPTURE_CITY",
+				phase: "PREPARATION",
+				target: { lat: bestCity.lat, lng: bestCity.lng, name: bestCity.name || "Enemy City" },
+				stagingCells: staging,
+				arrowPoints,
+				startedTick: simFrameCount,
+				lastProgressTick: simFrameCount,
+				progress: 0,
+			};
+			return;
+		}
+	}
+
+	// No enemy city found → PUSH_FRONT (uniform advance)
+	_warPlan[sideIdx] = {
+		type: "PUSH_FRONT",
+		phase: "EXECUTION",
+		target: null,
+		startedTick: simFrameCount,
+		lastProgressTick: simFrameCount,
+		progress: 0,
+	};
+}
+
+/**
+ * Evaluate all war plans: mark complete/failed, regenerate as needed.
+ * Called on shouldCountLand frames.
+ */
+export function evaluateAllPlans() {
+	for (let si = 0; si < sides.length; si++) {
+		if (!sides[si] || sides[si].length === 0) continue;
+		const plan = _warPlan[si];
+		if (!plan) {
+			generateWarPlan(si);
+			continue;
+		}
+
+		const ticksSinceStart = simFrameCount - (plan.startedTick || simFrameCount);
+		const ticksSinceProgress = simFrameCount - (plan.lastProgressTick || simFrameCount);
+
+		if (plan.type === "CAPTURE_CITY" && plan.target) {
+			// Check if city is now under friendly control
+			const tIdx = getGridIndex(plan.target.lat, plan.target.lng);
+			const captured = tIdx !== -1 && dominantSideMap[tIdx] === si;
+			if (captured) {
+				plan.phase = "CONSOLIDATION";
+				plan.progress = 1.0;
+				// After consolidation period, generate next plan
+				if (ticksSinceProgress > 1800) { // ~30 seconds at 60fps
+					generateWarPlan(si);
+				}
+				continue;
+			}
+
+			// Check for stall
+			if (ticksSinceProgress > 1800 && ticksSinceStart > 600) {
+				generateWarPlan(si); // Failed — reassess
+				continue;
+			}
+
+			// Check if posture changed
+			const posture = _sidePosture[si] || "BALANCED";
+			if (posture === "DEFENSIVE" && plan.phase !== "CONSOLIDATION") {
+				generateWarPlan(si); // Posture override
+				continue;
+			}
+		}
+
+		if (plan.type === "DEFEND" || plan.type === "PUSH_FRONT") {
+			const posture = _sidePosture[si] || "BALANCED";
+			if (posture === "OFFENSIVE" && plan.type === "DEFEND") {
+				generateWarPlan(si); // Switch to offensive plan
+				continue;
+			}
+			if (posture === "DEFENSIVE" && plan.type !== "DEFEND") {
+				generateWarPlan(si); // Switch to defensive plan
+				continue;
+			}
+		}
+
+		// Refresh plan progress tracking
+		plan.lastProgressTick = simFrameCount;
+	}
+
+	// Clean up plans for inactive sides
+	for (let si = sides.length; si < _warPlan.length; si++) {
+		_warPlan[si] = null;
+	}
+}
+
 export function performSimulationTick() {
 	// If war is over, stop simulation mechanics (but update loop may continue for aftermath recording)
 	if (gameState === "WAR_OVER") return false;
@@ -7082,6 +7259,9 @@ export function performSimulationTick() {
 			});
 		}
 	}
+
+	// Evaluate war plans — check completion/failure, regenerate if needed
+	evaluateAllPlans();
 
 	// Mid-War Recruitment (Steady, Land-Capped, and Underdog-Aware)
 	sides.forEach((side, sIdx) => {
@@ -9906,6 +10086,7 @@ export function applyTreaty(type, winnerPoleOverride = null) {
 	units = [];
 	unitSpatialHash.clear();
 	aiCountryState.clear();
+	_warPlan = [];
 	activeBattles = [];
 	bombs = [];
 	explosions = [];
