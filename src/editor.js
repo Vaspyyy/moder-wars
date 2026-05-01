@@ -113,7 +113,6 @@ import {
 	updateSidesUI,
 	worldHeightDeg,
 	worldWidthDeg,
-,
 	gridHeight,
 	worldControlMap
 } from "./main.js";

@@ -51,7 +51,6 @@ import {
 	viewMode,
 	worldHeightDeg,
 	worldWidthDeg,
-,
 	biomeMask,
 	dominantSideMap,
 	gridHeight,

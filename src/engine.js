@@ -10,7 +10,6 @@ import {
 	setFrontlineDirLng,
 	setSideInfluenceMaps,
 	set_frontlineSourceCell,
-,
 	dominantSideMap,
 	gridHeight,
 	landMask,
