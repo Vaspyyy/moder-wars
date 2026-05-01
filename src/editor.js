@@ -101,6 +101,7 @@ import {
 	updateSidesUI,
 	worldHeightDeg,
 	worldWidthDeg,
+	getGridIndex,
 	noNationsModal,
 	randomNationsCountInput,
 	resetBtn,
