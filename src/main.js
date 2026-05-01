@@ -3964,10 +3964,12 @@ export function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
 				if (
 					idx < 0 ||
 					idx >= landMask.length ||
-					landMask[idx] === 0 ||
-					landMask[idx] !== 2
+					landMask[idx] === 0
 				)
 					continue;
+
+				// Promote neutral land to warzone when contested by a unit
+				if (landMask[idx] === 1) landMask[idx] = 2;
 
 				// City Resistance: Cells containing cities are much harder for frontlines to pass through
 				let cellDelta = delta;
