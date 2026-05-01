@@ -6487,21 +6487,6 @@ export function evaluateAllPlans() {
 				continue;
 			}
 
-			// Interrupt: cancel offensive plans if enemy is deep in our territory elsewhere
-			if (plan.type !== "DEFEND") {
-				let enemyDeepCount = 0;
-				for (const c of sides[si] || []) {
-					const stats = countryStats.get(c.id);
-					if (!stats) continue;
-					const ratio = (stats.controlled || 0) / Math.max(1, (stats.owned || 1));
-					if (ratio < 0.5) enemyDeepCount++;
-				}
-				if (enemyDeepCount >= sides[si].length * 0.4 && sides[si].length > 0) {
-					generateWarPlan(si); // Switch to defensive — enemy breakthrough elsewhere
-					continue;
-				}
-			}
-
 			// Check if posture changed
 			const posture = _sidePosture[si] || "BALANCED";
 			if (posture === "DEFENSIVE" && plan.phase !== "CONSOLIDATION") {
