@@ -8442,41 +8442,33 @@ export function performSimulationTick() {
 				let planDirLat = 0, planDirLng = 0, isPlanUnit = false;
 				const activePlan = _warPlan[u.sideIndex];
 
-				if (!shouldMopUp && !retreatVector && activePlan && activePlan.type !== "DEFEND") {
+				// Only apply plan when safe: no nearby enemies, not engaged, not retreating
+				if (!shouldMopUp && !retreatVector && !isEngaged && localEnemyCount < 2 && activePlan && activePlan.type !== "DEFEND") {
 					isPlanUnit = true;
 					if (activePlan.phase === "PREPARATION" && activePlan.stagingCells?.length > 0) {
-						// Move toward nearest staging cell at 2x speed
-						let bestDist = Infinity, bestSC = null;
-						for (const sc of activePlan.stagingCells) {
-							let sdLng = sc.lng - u.lng;
-							if (sdLng > 180) sdLng -= 360; else if (sdLng < -180) sdLng += 360;
-							const dSq = (u.lat - sc.lat) ** 2 + sdLng ** 2;
-							if (dSq < bestDist) { bestDist = dSq; bestSC = sc; }
-						}
-						if (bestSC) {
-							let pdLat = bestSC.lat - u.lat;
-							let pdLng = bestSC.lng - u.lng;
-							if (pdLng > 180) pdLng -= 360; else if (pdLng < -180) pdLng += 360;
-							const pd = Math.sqrt(pdLat * pdLat + pdLng * pdLng);
-							if (pd > 0.01) { planDirLat = pdLat / pd; planDirLng = pdLng / pd; }
-							planSpeedMult = 2.0;
-						}
+						// Round-robin staging: each unit gets a different cell so they spread out
+						const sc = activePlan.stagingCells[(Math.abs(u.id * 1000000) % activePlan.stagingCells.length) % activePlan.stagingCells.length];
+						let pdLat = sc.lat - u.lat;
+						let pdLng = sc.lng - u.lng;
+						if (pdLng > 180) pdLng -= 360; else if (pdLng < -180) pdLng += 360;
+						const pd = Math.sqrt(pdLat * pdLat + pdLng * pdLng);
+						if (pd > 0.01) { planDirLat = pdLat / pd; planDirLng = pdLng / pd; }
+						planSpeedMult = 1.8;
 					} else if (activePlan.phase === "EXECUTION" && activePlan.target) {
-						// Push toward plan objective at 1.3x speed
+						// Gentle nudge toward objective — tactical + slot movement still dominate
 						let pdLat = activePlan.target.lat - u.lat;
 						let pdLng = activePlan.target.lng - u.lng;
 						if (pdLng > 180) pdLng -= 360; else if (pdLng < -180) pdLng += 360;
 						const pd = Math.sqrt(pdLat * pdLat + pdLng * pdLng);
 						if (pd > 0.01) { planDirLat = pdLat / pd; planDirLng = pdLng / pd; }
-						planSpeedMult = 1.3;
-						// Track progress: reduce distance to target
+						planSpeedMult = 1.15;
 						activePlan.progress = Math.min(1.0, Math.max(0, 1.0 - pd / 5.0));
 					}
 				}
 
-				// Blend plan direction into movement
+				// Blend plan direction into movement (gentle weight to preserve formation)
 				if (isPlanUnit && (planDirLat !== 0 || planDirLng !== 0)) {
-					const planBlend = activePlan && activePlan.phase === "PREPARATION" ? 0.8 : 0.5;
+					const planBlend = activePlan && activePlan.phase === "PREPARATION" ? 0.5 : 0.2;
 					moveDirLat = moveDirLat * (1 - planBlend) + planDirLat * planBlend;
 					moveDirLng = moveDirLng * (1 - planBlend) + planDirLng * planBlend;
 					const magP = Math.sqrt(moveDirLat * moveDirLat + moveDirLng * moveDirLng);
