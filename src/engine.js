@@ -94,15 +94,22 @@ function getGridIndex(lat, lng) {
 function rebuildFrontlineField() {
 	const total = gridWidth * gridHeight;
 
-	if (!frontlineDirLat || frontlineDirLat.length !== total) {
-		setFrontlineDirLat(new Float32Array(total));
-		setFrontlineDirLng(new Float32Array(total));
-		set_frontlineSourceCell(new Int32Array(total));
+	let fdl = frontlineDirLat;
+	let fdlng = frontlineDirLng;
+	let fsrc = _frontlineSourceCell;
+
+	if (!fdl || fdl.length !== total) {
+		fdl = new Float32Array(total);
+		fdlng = new Float32Array(total);
+		fsrc = new Int32Array(total);
+		setFrontlineDirLat(fdl);
+		setFrontlineDirLng(fdlng);
+		set_frontlineSourceCell(fsrc);
 	}
 
-	frontlineDirLat.fill(0);
-	frontlineDirLng.fill(0);
-	_frontlineSourceCell.fill(-1);
+	fdl.fill(0);
+	fdlng.fill(0);
+	fsrc.fill(-1);
 
 	const queue = new Int32Array(total);
 	let qHead = 0,
@@ -148,7 +155,7 @@ function rebuildFrontlineField() {
 		const i = _cachedFrontierCells[f];
 		if (landMask[i] === 2 && dominantSideMap[i] >= 0) {
 			queue[qTail++] = i;
-			_frontlineSourceCell[i] = i;
+			fsrc[i] = i;
 		}
 	}
 
@@ -156,7 +163,7 @@ function rebuildFrontlineField() {
 
 	while (qHead < qTail) {
 		const cur = queue[qHead++];
-		const src = _frontlineSourceCell[cur];
+		const src = fsrc[cur];
 
 		const cy = Math.floor(cur / gridWidth);
 		const cx = cur % gridWidth;
@@ -166,16 +173,16 @@ function rebuildFrontlineField() {
 		const dLng = (sx - cx) * CONFIG.GRID_RES;
 		const mag = Math.sqrt(dLat * dLat + dLng * dLng);
 		if (mag > 0) {
-			frontlineDirLat[cur] = dLat / mag;
-			frontlineDirLng[cur] = dLng / mag;
+			fdl[cur] = dLat / mag;
+			fdlng[cur] = dLng / mag;
 		}
 
 		for (let d = 0; d < 4; d++) {
 			const nb = cur + dirs[d];
 			if (nb < 0 || nb >= total) continue;
-			if (_frontlineSourceCell[nb] !== -1) continue;
+			if (fsrc[nb] !== -1) continue;
 			if (landMask[nb] === 0) continue;
-			_frontlineSourceCell[nb] = src;
+			fsrc[nb] = src;
 			queue[qTail++] = nb;
 		}
 	}
