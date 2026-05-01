@@ -110,11 +110,18 @@ import {
 	units,
 	updateRefHandles,
 	updateRestartVisibility,
+	occupationMap,
 	updateSidesUI,
 	worldHeightDeg,
 	worldWidthDeg,
 	gridHeight,
-	worldControlMap
+	worldControlMap,
+	biomeMask,
+	deJureMap,
+	landMask,
+	primaryOccupierMap,
+	provinceMap,
+	terrainMask
 } from "./main.js";
 
 function updateCountryFlag(countryId, url) {

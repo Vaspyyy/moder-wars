@@ -59,7 +59,8 @@ import {
 	occupationMap,
 	primaryOccupierMap,
 	terrainMask,
-	worldControlMap
+	worldControlMap,
+	sideInfluenceMaps
 } from "./main.js";
 
 const ControlMapLayer = L.Layer.extend({

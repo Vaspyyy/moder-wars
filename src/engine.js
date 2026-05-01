@@ -14,7 +14,8 @@ import {
 	gridHeight,
 	landMask,
 	occupationMap,
-	sideInfluenceMaps
+	sideInfluenceMaps,
+	worldControlMap
 } from "./main.js";
 
 function syncOccupationFromSideInfluence(idx) {
