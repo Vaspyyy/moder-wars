@@ -1841,7 +1841,6 @@ export let _workerBusy = false;
 export let _frontlinePolys = {};
 export let _frontlinePolyTick = -999;
 export const FRONTLINE_POLY_UPDATE_INTERVAL = 15;
-export let _workerBusy = false;
 export let _cachedFrontierCells = []; // cached BFS frontier seed cells (incremental rebuild)
 export let _frontierScanCounter = 0; // counter for full-scan cadence
 
