@@ -1836,6 +1836,8 @@ export let _frontlineSourceCell = null; // reusable Int32Array for BFS — alloc
 export const FRONTLINE_FIELD_UPDATE_INTERVAL = 15; // rebuild every N ticks (not every 4 — grid is 2.88M cells)
 export let _simWorker = null; // Web Worker for async frontline BFS
 export let _workerBusy = false; // prevent overlapping rebuild requests
+export let _cachedFrontierCells = []; // cached BFS frontier seed cells (incremental rebuild)
+export let _frontierScanCounter = 0; // counter for full-scan cadence
 
 // Grid dimensions calculated after settings choice
 export let gridWidth,
