@@ -8447,13 +8447,16 @@ export function performSimulationTick() {
 					isPlanUnit = true;
 					if (activePlan.phase === "PREPARATION" && activePlan.stagingCells?.length > 0) {
 						// Round-robin staging: each unit gets a different cell so they spread out
-						const sc = activePlan.stagingCells[(Math.abs(u.id * 1000000) % activePlan.stagingCells.length) % activePlan.stagingCells.length];
-						let pdLat = sc.lat - u.lat;
-						let pdLng = sc.lng - u.lng;
-						if (pdLng > 180) pdLng -= 360; else if (pdLng < -180) pdLng += 360;
-						const pd = Math.sqrt(pdLat * pdLat + pdLng * pdLng);
-						if (pd > 0.01) { planDirLat = pdLat / pd; planDirLng = pdLng / pd; }
-						planSpeedMult = 1.8;
+						const staging = activePlan.stagingCells;
+						const sc = staging[Math.floor(Math.abs(u.id * 1000000) % staging.length)];
+						if (sc) {
+							let pdLat = sc.lat - u.lat;
+							let pdLng = sc.lng - u.lng;
+							if (pdLng > 180) pdLng -= 360; else if (pdLng < -180) pdLng += 360;
+							const pd = Math.sqrt(pdLat * pdLat + pdLng * pdLng);
+							if (pd > 0.01) { planDirLat = pdLat / pd; planDirLng = pdLng / pd; }
+							planSpeedMult = 1.8;
+						}
 					} else if (activePlan.phase === "EXECUTION" && activePlan.target) {
 						// Gentle nudge toward objective — tactical + slot movement still dominate
 						let pdLat = activePlan.target.lat - u.lat;
