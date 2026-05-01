@@ -1943,6 +1943,9 @@ export function setRefScale(val) {
 export function setSideInfluenceMaps(val) {
 	sideInfluenceMaps = val;
 }
+export function setDominantSideMap(val) {
+	dominantSideMap = val;
+}
 export function setReferenceOverlay(val) {
 	referenceOverlay = val;
 }

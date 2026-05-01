@@ -13,6 +13,7 @@ import {
 	setFrontlineDirLat,
 	setFrontlineDirLng,
 	setSideInfluenceMaps,
+	setDominantSideMap,
 	sideInfluenceMaps,
 } from "./main.js";
 
@@ -44,7 +45,7 @@ function initSideInfluenceMaps() {
 	if (dominantSideMap && dominantSideMap.length === gridSize) {
 		dominantSideMap.fill(-1);
 	} else {
-		dominantSideMap = new Int8Array(gridSize).fill(-1);
+		setDominantSideMap(new Int8Array(gridSize).fill(-1));
 	}
 }
 
