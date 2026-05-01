@@ -1238,8 +1238,8 @@ export async function generatePuppetFlag(puppetId, overlordId) {
 	if (influenceLayer) influenceLayer.render();
 }
 
-export const explosionUrl = "/assets/audio/explosion-pas-61639.mp3";
-export const clickUrl = "/assets/audio/low-button-click-331780.mp3";
+export const explosionUrl = "assets/audio/explosion-pas-61639.mp3";
+export const clickUrl = "assets/audio/low-button-click-331780.mp3";
 
 // Background music playlist: Replaced with MW ST folder assets
 export const bgMusicUrls = [
@@ -1255,9 +1255,9 @@ export const bgMusicUrls = [
 	"/mw st/mw new ost/Kevin MacLeod [Official] - Killers - incompetech.com.m4a",
 ];
 
-export const warStartUrl = "/assets/audio/war.wav";
-export const peaceUrl = "/assets/audio/peace.wav";
-export const warAmbianceUrl = "/assets/audio/modern-war-129016.mp3";
+export const warStartUrl = "assets/audio/war.wav";
+export const peaceUrl = "assets/audio/peace.wav";
+export const warAmbianceUrl = "assets/audio/modern-war-129016.mp3";
 
 // Initialize Audio Context immediately so it's ready for early decoding
 export const audioCtx = new (
@@ -11518,13 +11518,13 @@ window.remixFromHub = async (url, sourceId, sourceName, ownerUsername) => {
  */
 export function preloadAssets() {
 	const assets = [
-		"/assets/images/2022.webp",
-		"/assets/images/1974.webp",
-		"/assets/images/1942.webp",
-		"/assets/images/1936.webp",
-		"/assets/images/1914.webp",
-		"/assets/images/1804.webp",
-		"/assets/images/1492.webp",
+		"assets/images/2022.webp",
+		"assets/images/1974.webp",
+		"assets/images/1942.webp",
+		"assets/images/1936.webp",
+		"assets/images/1914.webp",
+		"assets/images/1804.webp",
+		"assets/images/1492.webp",
 	];
 	assets.forEach((src) => {
 		const img = new Image();
@@ -11915,24 +11915,24 @@ document.getElementById("back-to-nav-btn").addEventListener("click", () => {
  * DYNAMIC MENU BACKGROUND SYSTEM
  */
 export const SCENARIO_MENU_BGS = {
-	"scroller-choice-modern": "/assets/images/2022.webp",
-	"scroller-choice-1974": "/assets/images/1974.webp",
+	"scroller-choice-modern": "assets/images/2022.webp",
+	"scroller-choice-1974": "assets/images/1974.webp",
 
-	"scroller-choice-1942": "/assets/images/1942.webp",
-	"scroller-choice-1936": "/assets/images/1936.webp",
-	"scroller-choice-1914": "/assets/images/1914.webp",
-	"scroller-choice-1804": "/assets/images/1804.webp",
-	"scroller-choice-1492": "/assets/images/1492.webp",
-	"scroller-choice-1ad": "/assets/images/1492.webp",
-	"scroller-choice-canada": "/assets/images/2022.webp",
-	"scroller-choice-france": "/assets/images/2022.webp",
-	"scroller-choice-germany": "/assets/images/2022.webp",
-	"scroller-choice-england": "/assets/images/2022.webp",
-	"scroller-choice-us": "/assets/images/2022.webp",
-	"scroller-choice-poland": "/assets/images/2022.webp",
-	"scroller-choice-kaiserreich": "/assets/images/1936.webp",
-	"scroller-choice-fire": "/assets/images/2022.webp",
-	"scroller-choice-1984-alt": "/assets/images/1974.webp",
+	"scroller-choice-1942": "assets/images/1942.webp",
+	"scroller-choice-1936": "assets/images/1936.webp",
+	"scroller-choice-1914": "assets/images/1914.webp",
+	"scroller-choice-1804": "assets/images/1804.webp",
+	"scroller-choice-1492": "assets/images/1492.webp",
+	"scroller-choice-1ad": "assets/images/1492.webp",
+	"scroller-choice-canada": "assets/images/2022.webp",
+	"scroller-choice-france": "assets/images/2022.webp",
+	"scroller-choice-germany": "assets/images/2022.webp",
+	"scroller-choice-england": "assets/images/2022.webp",
+	"scroller-choice-us": "assets/images/2022.webp",
+	"scroller-choice-poland": "assets/images/2022.webp",
+	"scroller-choice-kaiserreich": "assets/images/1936.webp",
+	"scroller-choice-fire": "assets/images/2022.webp",
+	"scroller-choice-1984-alt": "assets/images/1974.webp",
 };
 
 export let queuedScenarioAction = null;
@@ -12151,7 +12151,7 @@ choiceModernDay.onclick = async () => {
 	loadingOverlay.style.display = "flex";
 
 	try {
-		const url = "/assets/maps/world map 2022.json";
+		const url = "assets/maps/world map 2022.json";
 		const response = await fetch(url);
 		if (!response.ok) throw new Error("Failed to fetch modern map");
 		const blob = await response.blob();
@@ -12191,7 +12191,7 @@ choice1936Scenario.onclick = async () => {
 	loadingOverlay.style.display = "flex";
 
 	try {
-		const url = "/assets/maps/WW2 Peru Update.json";
+		const url = "assets/maps/WW2 Peru Update.json";
 		const response = await fetch(url);
 		if (!response.ok) throw new Error("Failed to fetch WW2 Peru Update");
 		const blob = await response.blob();
@@ -12261,7 +12261,7 @@ choiceWW1Scenario.onclick = async () => {
 	loadingOverlay.style.display = "flex";
 
 	try {
-		const url = "/assets/maps/world_war_1__1914_.json";
+		const url = "assets/maps/world_war_1__1914_.json";
 		const response = await fetch(url);
 		if (!response.ok) throw new Error("Failed to fetch 1914 map");
 		const blob = await response.blob();
@@ -15237,9 +15237,9 @@ if (importScenarioSelect) {
 		// Map built‑in keys to local preset JSONs
 		const keyToUrl = {
 			"builtin:modern_2022": "@2022 world invis.json",
-			"builtin:ww2_1936": "/assets/maps/WW2 Peru Update.json",
+			"builtin:ww2_1936": "assets/maps/WW2 Peru Update.json",
 			"builtin:ww2_1942": "1942.json",
-			"builtin:ww1_1914": "/assets/maps/world_war_1__1914_.json",
+			"builtin:ww1_1914": "assets/maps/world_war_1__1914_.json",
 			"builtin:coldwar_1974": "better_cold_war_preset.json",
 			"builtin:coldwar_1948": "1948 (1).json",
 			"builtin:france_states": "France_states_preset (2).json",
