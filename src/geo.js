@@ -49,7 +49,7 @@ async function _cachePut(url, data) {
 	});
 }
 
-async function _fetchJSONWithCache(url) {
+export async function fetchJSONWithCache(url) {
 	// Normalize relative URLs to absolute so cache keys are stable across redirects / origins
 	const key = new URL(url, window.location.href).href;
 	const cached = await _geoCacheGet(key);
@@ -76,7 +76,7 @@ const _geoParsePending = new Map();
 
 function _getPw() {
 	if (!_geoParseWorker) {
-		_geoParseWorker = new Worker("geo-parse-worker.js");
+		_geoParseWorker = new Worker("../workers/geo-parse-worker.js");
 		_geoParseWorker.onmessage = (evt) => {
 			const { id, ok, data } = evt.data;
 			const resolve = _geoParsePending.get(id);
