@@ -50,47 +50,14 @@ async function _cachePut(url, data) {
 }
 
 export async function fetchJSONWithCache(url) {
-	// Normalize relative URLs to absolute so cache keys are stable across redirects / origins
 	const key = new URL(url, window.location.href).href;
 	const cached = await _geoCacheGet(key);
 	if (cached) return cached;
-	// Offload fetch + JSON.parse to Web Worker (keeps main thread responsive during 2-5s parse)
-	let data;
-	if (_geoParseWorker || typeof Worker !== "undefined") {
-		data = await _fetchW(url);
-		if (!data) throw new Error("Worker parse failed");
-	} else {
-		const response = await fetch(url);
-		data = await response.json();
-	}
+	const response = await fetch(url);
+	if (!response.ok) throw new Error(`HTTP ${response.status}`);
+	const data = await response.json();
 	_cachePut(key, data);
 	return data;
 }
 
 // ─── End Cache ─────────────────────────────────────────────────────────────
-
-// GeoJSON parse worker — offloads 20-31MB JSON.parse from main thread
-let _geoParseWorker = null;
-let _geoParseReqId = 0;
-const _geoParsePending = new Map();
-
-function _getPw() {
-	if (!_geoParseWorker) {
-		_geoParseWorker = new Worker("../workers/geo-parse-worker.js");
-		_geoParseWorker.onmessage = (evt) => {
-			const { id, ok, data } = evt.data;
-			const resolve = _geoParsePending.get(id);
-			_geoParsePending.delete(id);
-			if (resolve) resolve(ok ? data : null);
-		};
-	}
-	return _geoParseWorker;
-}
-
-function _fetchW(url) {
-	return new Promise((resolve) => {
-		const id = ++_geoParseReqId;
-		_geoParsePending.set(id, resolve);
-		_getPw().postMessage({ url, id });
-	});
-}
