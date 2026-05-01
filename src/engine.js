@@ -1,13 +1,18 @@
 import { CONFIG } from "./config.js";
 import {
 	_frontlineSourceCell,
+	dominantSideMap,
 	frontlineDirLat,
 	frontlineDirLng,
+	gridHeight,
 	gridWidth,
+	landMask,
 	MAX_SIDES,
+	occupationMap,
 	set_frontlineSourceCell,
 	setFrontlineDirLat,
 	setFrontlineDirLng,
+	sideInfluenceMaps,
 } from "./main.js";
 
 function syncOccupationFromSideInfluence(idx) {
