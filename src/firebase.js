@@ -13,7 +13,20 @@ import {
 	setHubReturnState,
 	setHubScenarioCache,
 	setHubWasInEditor,
-	setQueuedScenarioAction,
+	setQueuedScenarioAction,,
+	countryInspector,
+	enterScenarioBtn,
+	flagLibraryList,
+	hubList,
+	libraryList,
+	mainMenu,
+	mapUi,
+	openItemModal,
+	room,
+	scenarioHubModal,
+	tabCountriesBtn,
+	tabFlagsBtn,
+	tabScenariosBtn
 } from "./main.js";
 
 function openHub(initialTab = "scenarios") {
