@@ -1,112 +1,5 @@
 import JSZip from "jszip";
 
-// ── State setters for module imports (ES imports are read-only) ────
-export function setAdjacencyCache(val) {
-	adjacencyCache = val;
-}
-export function setBombsDisabled(val) {
-	bombsDisabled = val;
-}
-export function setCities(val) {
-	cities = val;
-}
-export function setCountryMetadata(val) {
-	countryMetadata = val;
-}
-export function setCustomSatelliteImg(val) {
-	customSatelliteImg = val;
-}
-export function setCustomSatelliteUrl(val) {
-	customSatelliteUrl = val;
-}
-export function setGameState(val) {
-	gameState = val;
-}
-export function setHubReturnState(val) {
-	hubReturnState = val;
-}
-export function setHubWasInEditor(val) {
-	hubWasInEditor = val;
-}
-export function setGodBombActive(val) {
-	godBombActive = val;
-}
-export function setGodBombSourceId(val) {
-	godBombSourceId = val;
-}
-export function setBuffedSideIdx(val) {
-	buffedSideIdx = val;
-}
-export function setImportScenarioBuffer(val) {
-	importScenarioBuffer = val;
-}
-export function setDisableCountryGradient(val) {
-	disableCountryGradient = val;
-}
-export function setGameMode(val) {
-	gameMode = val;
-}
-export function setInitialCitiesSnapshot(val) {
-	initialCitiesSnapshot = val;
-}
-export function setInitialCountryMetadataSnapshot(val) {
-	initialCountryMetadataSnapshot = val;
-}
-export function setInitialDeJureMapSnapshot(val) {
-	initialDeJureMapSnapshot = val;
-}
-export function setInitialLandMaskSnapshot(val) {
-	initialLandMaskSnapshot = val;
-}
-export function setInitialProvinceMapSnapshot(val) {
-	initialProvinceMapSnapshot = val;
-}
-export function setInitialWorldControlMapSnapshot(val) {
-	initialWorldControlMapSnapshot = val;
-}
-export function setIsCustomTerrain(val) {
-	isCustomTerrain = val;
-}
-export function setMissilesEnabled(val) {
-	missilesEnabled = val;
-}
-export function setRawGeoJsonData(val) {
-	rawGeoJsonData = val;
-}
-export function setRefAboveTerrain(val) {
-	refAboveTerrain = val;
-}
-export function setReferenceImageUrl(val) {
-	referenceImageUrl = val;
-}
-export function setSelectedImportCountryId(val) {
-	selectedImportCountryId = val;
-}
-export function setHubScenarioCache(val) {
-	hubScenarioCache = val;
-}
-export function setQueuedScenarioAction(val) {
-	queuedScenarioAction = val;
-}
-export function setRefOpacity(val) {
-	refOpacity = val;
-}
-export function setRefScale(val) {
-	refScale = val;
-}
-export function setReferenceOverlay(val) {
-	referenceOverlay = val;
-}
-export function setFrontlineDirLat(val) {
-	frontlineDirLat = val;
-}
-export function setFrontlineDirLng(val) {
-	frontlineDirLng = val;
-}
-export function set_frontlineSourceCell(val) {
-	_frontlineSourceCell = val;
-}
-
 import L from "leaflet";
 import { CONFIG } from "./config.js";
 import { fetchJSONWithCache } from "./geo.js";
@@ -1957,6 +1850,114 @@ export let gridWidth,
 	landMask,
 	biomeMask,
 	terrainMask;
+export function setBombsDisabled(val) {
+	bombsDisabled = val;
+}
+export function setCities(val) {
+	cities = val;
+}
+export function setCountryMetadata(val) {
+	countryMetadata = val;
+}
+export function setCustomSatelliteImg(val) {
+	customSatelliteImg = val;
+}
+export function setCustomSatelliteUrl(val) {
+	customSatelliteUrl = val;
+}
+export function setGameState(val) {
+	gameState = val;
+}
+export function setHubReturnState(val) {
+	hubReturnState = val;
+}
+export function setHubWasInEditor(val) {
+	hubWasInEditor = val;
+}
+export function setGodBombActive(val) {
+	godBombActive = val;
+}
+export function setGodBombSourceId(val) {
+	godBombSourceId = val;
+}
+export function setBuffedSideIdx(val) {
+	buffedSideIdx = val;
+}
+export function setImportScenarioBuffer(val) {
+	importScenarioBuffer = val;
+}
+export function setDisableCountryGradient(val) {
+	disableCountryGradient = val;
+}
+export function setGameMode(val) {
+	gameMode = val;
+}
+export function setInitialCitiesSnapshot(val) {
+	initialCitiesSnapshot = val;
+}
+export function setInitialCountryMetadataSnapshot(val) {
+	initialCountryMetadataSnapshot = val;
+}
+export function setInitialDeJureMapSnapshot(val) {
+	initialDeJureMapSnapshot = val;
+}
+export function setInitialLandMaskSnapshot(val) {
+	initialLandMaskSnapshot = val;
+}
+export function setInitialProvinceMapSnapshot(val) {
+	initialProvinceMapSnapshot = val;
+}
+export function setInitialWorldControlMapSnapshot(val) {
+	initialWorldControlMapSnapshot = val;
+}
+export function setIsCustomTerrain(val) {
+	isCustomTerrain = val;
+}
+export function setMissilesEnabled(val) {
+	missilesEnabled = val;
+}
+export function setRawGeoJsonData(val) {
+	rawGeoJsonData = val;
+}
+export function setRefAboveTerrain(val) {
+	refAboveTerrain = val;
+}
+export function setReferenceImageUrl(val) {
+	referenceImageUrl = val;
+}
+export function setSelectedImportCountryId(val) {
+	selectedImportCountryId = val;
+}
+export function setHubScenarioCache(val) {
+	hubScenarioCache = val;
+}
+export function setQueuedScenarioAction(val) {
+	queuedScenarioAction = val;
+}
+export function setRefOpacity(val) {
+	refOpacity = val;
+}
+export function setRefScale(val) {
+	refScale = val;
+}
+export function setReferenceOverlay(val) {
+	referenceOverlay = val;
+}
+export function setFrontlineDirLat(val) {
+	frontlineDirLat = val;
+}
+export function setFrontlineDirLng(val) {
+	frontlineDirLng = val;
+}
+export function set_frontlineSourceCell(val) {
+	_frontlineSourceCell = val;
+}
+
+// ── State setters for module imports (ES imports are read-only) ────
+export function setAdjacencyCache(val) {
+	adjacencyCache = val;
+}
+
 
 // Snapshots of borders at scenario start for quick restart
 export let initialWorldControlMapSnapshot = null;
