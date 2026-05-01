@@ -3057,6 +3057,7 @@ import {
 } from "./editor.js";
 import {
 	clearCellInfluence,
+	computeFrontlinePolys,
 	getBorderDirection,
 	getGridIndex,
 	initSideInfluenceMaps,
