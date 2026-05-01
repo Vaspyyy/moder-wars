@@ -1682,6 +1682,7 @@ export let showNonCapitalCities = true;
 // Cache for screen-space label curves so they don't move with the camera
 export const countryLabelAnchors = new Map(); // key: `${countryId}:${regionIndex}` -> { name, points, fontSize }
 export let showBattleIndicators = false;
+export let showWarPlans = false;
 export let cityFocusMode = false;
 // High‑level commanders ("generals") for each side, used to model strong plans.
 export let generals = [];
@@ -1811,6 +1812,7 @@ export let _sidePosture = []; // per-side auto posture (OFFENSIVE/BALANCED/DEFEN
 export let _warPlan = []; // per-side war plan: { type, phase, target, ... }
 export const WAR_PLAN_TYPES = ["DEFEND", "PUSH_FRONT", "CAPTURE_CITY", "ENCIRCLE"];
 export const WAR_PLAN_PHASES = ["PREPARATION", "EXECUTION", "CONSOLIDATION"];
+export const _garrisonRequirement = new Map(); // countryId → required garrison count
 export const AI_DESPERATION = {
 	OFFENSE_MIN_WAR_TICKS: 1200, // ~20s at 60fps
 	OFFENSE_STALL_TICKS: 900, // sustained stall before "push harder"
@@ -2058,6 +2060,7 @@ export const arrowsToggleBtn = document.getElementById("arrows-toggle-btn");
 export const battlesToggleBtn = document.getElementById("battles-toggle-btn");
 export const labelsToggleBtn = document.getElementById("labels-toggle-btn");
 export const citiesToggleBtn = document.getElementById("cities-toggle-btn");
+export const warplansToggleBtn = document.getElementById("warplans-toggle-btn");
 export const allianceViewCheckbox = document.getElementById(
 	"alliance-view-checkbox",
 );
@@ -7263,6 +7266,32 @@ export function performSimulationTick() {
 	// Evaluate war plans — check completion/failure, regenerate if needed
 	evaluateAllPlans();
 
+	// ── Garrison System: compute border reserves per country ──
+	if (adjacencyCache) {
+		_garrisonRequirement.clear();
+		const neighborThreat = new Map(); // countryId → enemy unit count on border
+		for (const [countryId, neighbors] of adjacencyCache.entries()) {
+			if (!combatantIds.has(countryId)) continue;
+			let borderThreat = 0;
+			// Count enemy units near this country's borders
+			for (const nId of neighbors) {
+				if (combatantIds.has(nId)) continue; // skip other combatants
+				// Count units of the neutral neighbor
+				const neighborUnits = units.filter((u) => u.sovereignId === nId).length;
+				borderThreat = Math.max(borderThreat, neighborUnits);
+			}
+			if (borderThreat > 0) {
+				neighborThreat.set(countryId, borderThreat);
+			}
+		}
+		for (const [countryId, threat] of neighborThreat.entries()) {
+			const prof = aiCountryState.get(countryId);
+			const reserveShare = prof?.reserveShare || 0.02;
+			const requirement = Math.ceil(threat * 1.2 * (1 - reserveShare));
+			_garrisonRequirement.set(countryId, requirement);
+		}
+	}
+
 	// Mid-War Recruitment (Steady, Land-Capped, and Underdog-Aware)
 	sides.forEach((side, sIdx) => {
 		side.forEach((country) => {
@@ -8346,9 +8375,17 @@ export function performSimulationTick() {
 		// Reserve doctrine: a slice of units stay one layer behind and guard cities/cores
 		// unless local contact is high. This makes fronts feel less all-in and more human.
 		const reserveRoll = (Math.floor(u.id * 1000000) % 1000) / 1000;
-		const isReserveUnit = reserveRoll < aiProfile.reserveShare;
+		const garrisonReq = _garrisonRequirement.get(u.sovereignId) || 0;
+		const isGarrisonUnit = isReserveUnit || (
+			garrisonReq > 0 &&
+			units.filter((uu) => uu.sovereignId === u.sovereignId && uu.deployTicks === 0).indexOf(u) < garrisonReq &&
+			!shouldMopUp &&
+			localEnemyCount < 3
+		);
+		u.isGarrison = isGarrisonUnit;
+
 		if (
-			isReserveUnit &&
+			isGarrisonUnit &&
 			!shouldMopUp &&
 			localEnemyCount < 2 &&
 			!retreatVector &&
@@ -10492,6 +10529,14 @@ if (citiesToggleBtn) {
 	citiesToggleBtn.addEventListener("click", () => {
 		showNonCapitalCities = !showNonCapitalCities;
 		citiesToggleBtn.classList.toggle("active", showNonCapitalCities);
+		if (influenceLayer) influenceLayer.render();
+	});
+}
+
+if (warplansToggleBtn) {
+	warplansToggleBtn.addEventListener("click", () => {
+		showWarPlans = !showWarPlans;
+		warplansToggleBtn.classList.toggle("active", showWarPlans);
 		if (influenceLayer) influenceLayer.render();
 	});
 }

@@ -6,6 +6,7 @@ import {
 	_cachedTerritoryCtrlEls,
 	_cachedTerritorySegEls,
 	_frontlinePolys,
+	_warPlan,
 	activeBattles,
 	activeTheaterCities,
 	allianceViewEnabled,
@@ -42,6 +43,7 @@ import {
 	showCountryLabels,
 	showNonCapitalCities,
 	showUnitsVisually,
+	showWarPlans,
 	sideColors,
 	sides,
 	simFrameCount,
@@ -2181,6 +2183,49 @@ const ControlMapLayer = L.Layer.extend({
 					else ctx.lineTo(pt.x, pt.y);
 				}
 				ctx.stroke();
+			}
+		}
+
+		// Draw war plan arrows between warring sides
+		if (isWar && showWarPlans && _warPlan && _warPlan.length > 0) {
+			for (let si = 0; si < _warPlan.length; si++) {
+				const plan = _warPlan[si];
+				if (!plan || !plan.arrowPoints || plan.arrowPoints.length < 2) continue;
+				const color = sideColors[si] || "rgba(255,255,0,0.6)";
+				const isDashed = plan.phase === "PREPARATION";
+				ctx.strokeStyle = color.replace(rgbaRe, isDashed ? "0.4)" : "0.7)");
+				ctx.lineWidth = 2 + (plan.type === "CAPTURE_CITY" ? 1 : 0);
+				if (isDashed) ctx.setLineDash([8, 6]);
+				else ctx.setLineDash([]);
+
+				ctx.beginPath();
+				// Draw curved arrow from staging to target
+				const pts = plan.arrowPoints;
+				const p0 = map.latLngToContainerPoint([pts[0].lat, pts[0].lng]);
+				const p1 = map.latLngToContainerPoint([pts[1].lat, pts[1].lng]);
+				const midX = (p0.x + p1.x) / 2;
+				const midY = (p0.y + p1.y) / 2 - 40; // arc upward
+				ctx.moveTo(p0.x, p0.y);
+				ctx.quadraticCurveTo(midX, midY, p1.x, p1.y);
+				ctx.stroke();
+				ctx.setLineDash([]);
+
+				// Draw arrowhead at target
+				const angle = Math.atan2(p1.y - midY, p1.x - midX);
+				const headLen = 12;
+				ctx.beginPath();
+				ctx.moveTo(p1.x, p1.y);
+				ctx.lineTo(
+					p1.x - headLen * Math.cos(angle - 0.5),
+					p1.y - headLen * Math.sin(angle - 0.5),
+				);
+				ctx.lineTo(
+					p1.x - headLen * Math.cos(angle + 0.5),
+					p1.y - headLen * Math.sin(angle + 0.5),
+				);
+				ctx.closePath();
+				ctx.fillStyle = ctx.strokeStyle;
+				ctx.fill();
 			}
 		}
 
