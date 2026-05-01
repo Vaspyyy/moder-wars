@@ -24,6 +24,7 @@ import {
 	getCookie,
 	getGridIndex,
 	godModeActive,
+	gridHeight,
 	gridWidth,
 	imagerySelect,
 	influenceLayer,

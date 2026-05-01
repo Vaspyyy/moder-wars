@@ -51,7 +51,9 @@ import {
 	loadingTip,
 	mainMenu,
 	mapUi,
-	loadFlagCodes,
+
+	gridHeight,
+	worldControlMap,	loadFlagCodes,
 	loadingOverlay,
 	loadingStatus,
 	missilesEnabled,
