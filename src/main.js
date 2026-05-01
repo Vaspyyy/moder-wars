@@ -1940,6 +1940,9 @@ export function setRefOpacity(val) {
 export function setRefScale(val) {
 	refScale = val;
 }
+export function setSideInfluenceMaps(val) {
+	sideInfluenceMaps = val;
+}
 export function setReferenceOverlay(val) {
 	referenceOverlay = val;
 }
