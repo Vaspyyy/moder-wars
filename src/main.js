@@ -4956,7 +4956,15 @@ export function spawnSingleUnit(
 ) {
 	// Enforce per‑side unit cap: if this side is already at or above the limit, do not spawn.
 	const sideUnits = units.filter((u) => u.sideIndex === sideIdx).length;
-	if (sideUnits >= CONFIG.MAX_UNITS_PER_SIDE) return false;
+	const manualMP = manualSideManpower[sideIdx];
+	const effectiveMax =
+		manualMP !== null
+			? Math.max(
+					CONFIG.MAX_UNITS_PER_SIDE,
+					Math.min(10000, Math.floor(manualMP / CONFIG.UNIT_TO_SOLDIER_RATIO)),
+				)
+			: CONFIG.MAX_UNITS_PER_SIDE;
+	if (sideUnits >= effectiveMax) return false;
 
 	const supplyFailed = capitalLostCountries?.has(sovereignId);
 
@@ -7585,6 +7593,15 @@ export function performSimulationTick() {
 			let absoluteCap = Math.min(landBasedCap, flexibleLimit);
 			if (aiProfile) {
 				absoluteCap = Math.floor(absoluteCap * aiProfile.recruitCapMult);
+			}
+
+			// When manual manpower is set, allow recruiting up to the manpower-based cap
+			const manualMP = manualSideManpower[sIdx];
+			if (manualMP !== null) {
+				absoluteCap = Math.max(
+					absoluteCap,
+					Math.floor(manualMP / CONFIG.UNIT_TO_SOLDIER_RATIO),
+				);
 			}
 
 			// GODLY Buff: Higher cap and ignores flexible limits
