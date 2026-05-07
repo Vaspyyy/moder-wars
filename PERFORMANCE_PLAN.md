@@ -1,472 +1,322 @@
 # Performance Optimization Plan — Modern Wars
 
-## Baseline
+## Target Platform
 
-- ~20K-line monolithic `main.js` SPA (vanilla JS, no framework, no bundler)
-- Custom Canvas 2D render engine on Leaflet map overlay
-- Grid-based simulation: 0.15° default resolution → ~2.88M cells (~360°/0.15° × 180°/0.15°)
-- Up to 8 sides, each with its own `Float32Array` influence map
-- Each grid array: ~11.5MB. Total grid memory with 8 sides: **~170-200MB**
-- GeoJSON world maps: 20-31MB loaded + parsed at runtime
-- No build pipeline (no minification, no tree shaking, no image optimization)
+Mid-range mobile phones (e.g., Pixel 6a, iPhone 13, Galaxy A54). Current frame time: ~65ms (15 FPS). Target: **16ms (60 FPS)** with 3000+ units actively fighting.
 
-### Key Metrics
+## Current Bottleneck Profile
 
-| Metric | Current |
-|--------|---------|
-| JS parse size | ~500KB+ |
-| Grid memory (8 sides) | ~170-200MB |
-| GeoJSON load + parse | 20-31MB blocking |
-| Canvas draw calls/frame | Tens of thousands (`fillRect`) |
-| DOM writes/frame | `innerText`/`innerHTML` on stats, counts, casualties |
-| BFS frontline rebuild | Every 15 ticks, full grid scan |
+| Source | % of frame | Cost |
+|--------|-----------|------|
+| Simulation tick (`performSimulationTick`) | ~86% | ~56ms |
+| Canvas rendering (`renderer.js`) | ~14% | ~9ms |
+| DOM updates (innerHTML every 5 frames) | intermittent | spike |
+| GC pauses (5000 Maps/tick allocations) | intermittent | spike |
 
----
+The simulation tick is the dominant bottleneck. Within it, the top costs are:
 
-## Phase 1 — Low-Hanging Fruit (Quick Wins)
-
-### 1.1 Replace `innerHTML` with `textContent` / Targeted DOM Updates
-
-**Location:** `updateLoop()` (line ~11561), stats panels, casualty panels, unit counts.
-
-**Problem:** Setting `innerHTML` destroys and recreates child DOM nodes every frame, triggering GC, reflow, and recalc.
-
-**Fix:**
-- Replace `el.innerText = val` with `el.textContent = val` where only text changes
-- Where HTML structure must change, use `DocumentFragment` or accumulate changes and write once
-- Batch DOM reads/writes to avoid layout thrashing
-
-**Files:** `main.js`
-
-**Effort:** Low | **Impact:** Medium (reduces GC pressure, smoother frames)
+1. Tactical 3×3 spatial hash sweep — every unit checks all others in 9 buckets (O(units × local density))
+2. Full 2.88M-cell grid scans (3 per `shouldCountLand` frame)
+3. Mop-up target search: 250 random grid samples per unit
+4. Object allocation: 5000+ `new Map()` per tick + per-unit `{lat, lng}` objects
+5. `units.filter()` called repeatedly creating intermediate arrays
+6. Double-nested `units.filter()` calls inside garrison neighbor-threat loop
+7. Influence propagation: `new Map()` allocated per influenced cell on enemy territory
 
 ---
 
-### 1.2 Add IndexedDB Cache for GeoJSON
+## Phase 1 — High-ROI Immediate Wins
 
-**Location:** GeoJSON fetch sites (line ~7116, ~14946, ~17841, etc.)
+### Goal
+Reduce frame time from 65ms to ~40ms with ~10 targeted changes. Estimated 38% improvement.
 
-**Problem:** 20-31MB GeoJSON files are fetched and parsed fresh on every scenario load, blocking the main thread for seconds.
+### Files involved
+`src/main.js`, `src/config.js`
 
-**Fix:**
-- On first load, store the parsed JSON in IndexedDB keyed by URL
-- On subsequent loads, read from IndexedDB, skipping both network and parse
-- Use a version/hash check to invalidate stale cache (e.g., ETag or last-modified)
+### Concrete steps
 
-**Pattern:**
-```js
-async function loadGeoJSON(url) {
-    const db = await openDB('mw-cache', 1);
-    const cached = await db.get('geojson', url);
-    if (cached) return cached;
-    const resp = await fetch(url);
-    const data = await resp.json();
-    await db.put('geojson', data, url);
-    return data;
-}
-```
+**1.1 Eliminate 5000 Maps/tick in occupancy smoothing** (`main.js:6808`)
+The occupancy smoothing loop creates `new Map()` per sample (up to 5000 per tick). Replace with a pre-allocated `Uint8Array` counter.
+- **Impact:** Removes 5000 heap allocations per tick. Reduces GC pauses.
+- **Risk:** Low — counting neighbors doesn't need a Map
+- **Gain:** ~3-5ms per frame at high unit counts
 
-**Files:** `main.js`
+**1.2 Remove per-unit `activeTargetPos` object allocation** (`main.js:8662`)
+Every unit allocates `u.activeTargetPos = {lat, lng}` every tick. Cache a reusable object or use two number fields (`u.targetLat`, `u.targetLng`).
+- **Impact:** Eliminates 1000+ allocations/tick
+- **Risk:** Low — renderer needs updating to read new fields (1 line in renderer.js)
+- **Gain:** ~2-3ms
 
-**Effort:** Medium | **Impact:** High (eliminates 2-5s pause on reloads)
+**1.3 Combine duplicate `units.filter()` calls in garrison block** (`main.js:7534, 7548`)
+Two separate `.filter()` passes over all units per neighbor country. Pre-compute unit counts by sovereign once, reuse.
+- **Impact:** Removes O(neighbors × units) filtering
+- **Risk:** Low
+- **Gain:** ~2-4ms on `shouldCountLand` frames
 
----
+**1.4 Replace `units.filter().indexOf()` garrison check** (`main.js:8651`)
+Per garrison unit: full filter pass + indexOf scan. Pre-build a `sovereignUnitList` map once per tick.
+- **Impact:** Removes O(garrison × units) scanning
+- **Risk:** Low
+- **Gain:** ~2-3ms
 
-### 1.3 Cache Flag Images + GeoJSON with Service Worker / Cache API
+**1.5 Pathfinding result caching in unit loop** (`main.js:9055-9141`)
+The 96-angle neutral pathfinding sweep runs per unit. A position-cache already exists but is scope-limited. Broaden the cache or skip for units that haven't moved.
+- **Impact:** Reduces per-moving-unit cost
+- **Risk:** Medium — must not break pathfinding around dynamic obstacles
+- **Gain:** ~3-5ms when many units are pathfinding
 
-**Location:** Flag CDN fetches, GeoJSON fetches.
+**1.6 Move theater stats full-grid scan to simulation tick** (`renderer.js:1617-1636`)
+The renderer scans all 2.88M `dominantSideMap` cells every 10 frames. The simulation tick already scans these grids on `shouldCountLand` frames. Expose the pre-computed territory percentages from the sim tick and have the renderer read cached values.
+- **Impact:** Eliminates redundant O(2.88M) scan every 10 frames
+- **Risk:** Low — data is already available in main.js, just needs exposure
+- **Gain:** ~2-4ms every 10th frame (spike removal)
 
-**Problem:** Every flag image (`flagcdn.com/w320/*.png`) and every GeoJSON fetch hits the network. No browser caching strategy.
+**1.7 Throttle spatial hash rebuild frequency** (`main.js:6935`)
+Currently cleared and rebuilt every tick. For static position changes, rebuild every 2-3 ticks.
+- **Impact:** ~1ms saved on alternate ticks
+- **Risk:** Low — units move slowly (0.003 deg/tick); hash cell is 2.5° across
+- **Gain:** ~1ms
 
-**Fix:**
-- Register a minimal service worker that caches `flagcdn.com/*` and GeoJSON URLs
-- Alternatively, use `Cache-Control` headers + `fetch` with `cache: 'force-cache'`
-- Pre-cache the 7 background PNGs in the service worker install event
+**1.8 Add passive flag to mousemove listeners** (`main.js:10835, 13644`)
+Two non-passive `mousemove` listeners on the map prevent the browser from optimizing compositing.
+- **Impact:** Reduces compositor jank on mobile touch drags
+- **Risk:** None
+- **Gain:** Smoother panning, no direct frame-time reduction
 
-**Files:** New `sw.js`, `index.html` (registration), `main.js` (fetch options)
+**1.9 Add `<link rel="modulepreload" href="src/main.js">`** (`index.html:10`)
+The importmap blocks module resolution until parsed. Preloading `main.js` lets the browser start fetching while parsing the importmap.
+- **Impact:** Faster first paint
+- **Risk:** None
+- **Gain:** ~200-500ms initial load improvement
 
-**Effort:** Medium | **Impact:** Medium (faster repeat loads, offline support)
+**1.10 Stop rebuilding casualty panel via innerHTML every 5 frames** (`main.js:9902`)
+Replace `innerHTML` string concatenation with cached DOM element references and `textContent` updates.
+- **Impact:** Eliminates DOM parse + layout + paint cycle every 5 frames
+- **Risk:** Low — simple string → textContent migration
+- **Gain:** ~2-5ms spike removal
 
----
-
-### 1.4 Optimize Background Images
-
-**Location:** `*.png` files (1492.png ~1.5MB, 1914.png ~1.5MB, 1936.png ~1.5MB, etc.)
-
-**Problem:** Era/background PNGs are 1.5-3MB each, loaded eagerly.
-
-**Fix:**
-- Convert to WebP (lossy quality 80) — expect 70-80% size reduction
-- Add `loading="lazy"` and `decoding="async"` attributes
-- Use `<picture>` with WebP + PNG fallback
-
-**Files:** All `*.png` → `*.webp`, `index.html`
-
-**Effort:** Low | **Impact:** Low-Medium
-
----
-
-## Phase 2 — Rendering Pipeline
-
-### 2.1 Replace `fillRect` Loop with `ImageData` Bulk Write
-
-**Location:** `ControlMapLayer.render()` (line ~2982), territory color painting.
-
-**Problem:** Territory colors are painted pixel-by-pixel with `ctx.fillRect(cx, cy, 1, 1)` in a nested loop over visible grid cells. At standard zoom on 1920×1080 with 0.15° grid, this is ~10K-50K individual draw calls per frame — all CPU-bound Canvas 2D.
-
-**Fix:**
-- Allocate one `ImageData` buffer per frame for the visible viewport
-- Write pixel values into the buffer directly (Uint8ClampedArray)
-- Single `ctx.putImageData(buffer, 0, 0)` call
-
-**Before:**
-```js
-for (let y = yMin; y <= yMax; y++) {
-    for (let x = xMin; x <= xMax; x++) {
-        ctx.fillStyle = getColor(x, y);
-        ctx.fillRect(cx * dpr, cy * dpr, dpr, dpr);
-    }
-}
-```
-
-**After:**
-```js
-const img = ctx.createImageData(viewportW, viewportH);
-const pixels = img.data;
-for (let y = yMin; y <= yMax; y++) {
-    for (let x = xMin; x <= xMax; x++) {
-        const [r, g, b, a] = getColorRGBA(x, y);
-        const off = (py * viewportW + px) * 4;
-        pixels[off] = r; pixels[off+1] = g; pixels[off+2] = b; pixels[off+3] = a;
-    }
-}
-ctx.putImageData(img, 0, 0);
-```
-
-**Files:** `main.js` — `render()` function
-
-**Effort:** Medium | **Impact:** High (~10-50x speedup on territory painting)
+### Expected gains
+~15-25ms reduction in average frame time. 65ms → ~40ms (25-40 FPS).
 
 ---
 
-### 2.2 Use OffscreenCanvas for Background Composition
+## Phase 2 — Major Architectural Improvements
 
-**Location:** `ControlMapLayer` constructor (line ~2880), `render()` method.
+### Goal
+Restructure hot data paths to avoid repeated work. Reduce per-frame allocations by 90%. Target 40ms → ~25ms.
 
-**Problem:** The canvas is drawn on the main thread. Complex drawing (satellite tile compositing, province borders, labels) blocks the UI.
+### Files involved
+`src/main.js`, `src/engine.js`, `src/renderer.js`
 
-**Fix:**
-- Create an `OffscreenCanvas` for territory + border rendering
-- Compose the final frame by `drawImage(offscreenCanvas, 0, 0)` (fast GPU blit)
-- For tiles, already conditionally skipped (line ~3031: only when `cinematicMode || this._isCapturing`) — smart
+### Concrete steps
 
-**Note:** The existing code already conditionally skips tile compositing — good. The territory raster is the main remaining target.
+**2.1 Object pool for frequently allocated objects**
+Create a ring-buffer pool for `{lat, lng}` objects, `{pairKey, segmentIdx, ...}` front slots, and retreat vectors. Allocate once (pool size = max units × 3), recycle.
+- **Files:** `src/main.js` (all object allocation sites)
+- **Impact:** Eliminates 99% of per-tick heap allocations
+- **Risk:** Medium — must ensure objects are returned to pool after use
+- **Gain:** ~5-10ms (eliminates most GC pauses)
 
-**Files:** `main.js` — `ControlMapLayer`
+**2.2 Pre-allocate and reuse all per-tick Maps and Sets**
+Create persistent Maps/Sets at module scope and `.clear()` them each tick instead of `new Map()`/`new Set()`.
+- Current allocations: `combatantIds`, `countryToSideMap`, `countryFrontlines`, `countryToCityCount`, `countryCapitalLost`, `neighborThreat`, `_citiesBySovereign`, `_metadataById`, `activeSideSet`, `effectiveSideSet`, `unitsToRemove`
+- All become persistent with `.clear()` instead of `new`
+- **Gain:** Eliminates ~15 Map/Set allocations per tick → removes ~3ms of GC pressure
 
-**Effort:** Medium | **Impact:** Medium
+**2.3 Remove double-nested frontline cell scanning in `generateWarPlan()`** (`main.js:6414-6447`)
+The ENCIRCLE plan generation loops over frontline cells × all units — triple nested. Cache unit counts by grid region instead of iterating all units per cell.
+- Pre-build a `regionUnitCounts` grid (subsampled at coarser resolution) in the spatial hash build
+- Query the region count instead of iterating all units
+- **Gain:** ~5-10ms when war plans are generated (sporadic but critically expensive)
 
----
+**2.4 Convert `units.filter()` chains to pre-built lookup maps**
+All per-tick `.filter()` calls over the units array should use pre-built Maps keyed by sovereign/side:
+- `unitsBySovereignId` (Map: countryId → unit[])
+- `unitsBySideIdx` (Map: sideIdx → unit[])
+- `unitCountBySovereignId` (Map: countryId → count)
+Build these once in the spatial hash pass (which already iterates all units).
+- **Gain:** ~5-8ms
 
-### 2.3 Canvas Context Optimization
+**2.5 Incremental grid scanning instead of full 2.88M scans**
+All three full-grid scans (lines 6908, 7061, 9506) iterate the entire grid even when only a small fraction changed. Use dirty-region tracking or incremental delta accumulation:
+- Track cells that changed ownership each tick (already partially done via `syncOccupationFromSideInfluence`)
+- Accumulate territory counts incrementally instead of re-scanning
+- **Gain:** ~8-12ms on `shouldCountLand` frames
+- **Risk:** High — must maintain correctness; implement as opt-in behind a flag first
 
-**Location:** `render()` (line ~3011: `this._container.getContext("2d")`).
+**2.6 Simplify encirclement detection to single grid sample** (`main.js:7972-7984`)
+The 8-point radial sample uses `getControlValue()` + `getGridIndex()` per point. Can reduce to 4 cardinal samples without meaningful accuracy loss.
+- **Gain:** Marginal per unit (~0.5ms total) but compounds
 
-**Problem:** Default `getContext("2d")` context assumes frequent CPU readback. Adding options signals GPU-backed rendering.
-
-**Fix:**
-```js
-const ctx = this._container.getContext("2d", { willReadFrequently: false, alpha: false });
-```
-
-- `willReadFrequently: false` — GPU-backed, fast draw operations
-- `alpha: false` — eliminates compositing with page background (map is opaque)
-
-**Files:** `main.js` — `render()` and `_update()`
-
-**Effort:** Trivial | **Impact:** Low (free win)
-
----
-
-### 2.4 Cache `sovereignSideMap` Between Frames
-
-**Location:** `render()` (line ~3068).
-
-**Problem:** A new `Int8Array(metaMaxId+1)` is allocated and filled every frame to map country IDs → side indices. This is a small array, but it's created every frame unnecessarily.
-
-**Fix:**
-- Allocate `sovereignSideMap` once, rebuild only when `sides` composition changes
-- Set a dirty flag when countries are added/removed from sides
-
-**Files:** `main.js` — `render()`
-
-**Effort:** Low | **Impact:** Low
+### Expected gains
+~15-20ms further reduction. 40ms → ~20-25ms (40-50 FPS).
 
 ---
 
-## Phase 3 — Grid & Simulation Engine
+## Phase 3 — Simulation Tick Overhaul
 
-### 3.1 Sparse Grid Storage
+### Goal
+Restructure the main unit loop (1700 lines, `main.js:7700-9402`) into distinct, cullable passes. Target 20ms → ~8-10ms per tick.
 
-**Location:** All grid arrays (`worldControlMap`, `occupationMap`, `sideInfluenceMaps[]`, `frontlineDirLat/Lng`, `dominantSideMap`, etc.)
+### Files involved
+`src/main.js`
 
-**Problem:** Every grid array allocates `gridWidth × gridHeight` elements (~2.88M each). Most cells are water (unused for simulation). With 8 sides: ~170-200MB total.
+### Concrete steps
 
-**Fix:**
-- First, identify land cells from `landMask`. Create a lookup: `landCellToGridIndex`
-- Store influence/occupation only for land cells using `Map<cellIndex, value>` or a packed `Float32Array` indexed by land-cell-index rather than grid-cell-index
-- Alternatively: use `Uint16Array` instead of `Float32Array` for values that can be quantized (e.g., `sideInfluenceMaps` values 0.0-1.0 can be stored as 0-65535)
+**3.1 Split the monolithic unit loop into discrete passes**
+The current loop interleaves target acquisition, combat, movement, pathfinding, retreat, mop-up, and war plan execution in one 1700-line block. Split into:
+- **Pass A: Scan** — spatial hash build + target finding (all units)
+- **Pass B: Plan** — war plan assignment + direction computation (plan units only)
+- **Pass C: Move** — movement + pathfinding + retreat (moving units only)
+- **Pass D: Fight** — proximity combat + encirclement + attrition (engaged units only)
+- Each pass can skip idle units early using pre-computed flags.
+- **Gain:** Better cache locality; passes can be individually throttled
 
-**Memory comparison (0.15° grid, ~2.88M cells):**
-| Array | Current Type | Size | Sparse/Optimized | New Size |
-|-------|-------------|------|-----------------|----------|
-| worldControlMap | Int32Array | 11.5MB | Uint16Array | 5.7MB |
-| deJureMap | Int32Array | 11.5MB | Uint16Array | 5.7MB |
-| sideInfluenceMaps (×8) | Float32Array | 92MB | Spare land-only | ~10-20MB |
-| occupationMap | Float32Array | 11.5MB | Spare land-only | ~2MB |
-| dominantSideMap | Int8Array | 2.9MB | Int8Array (keep) | 2.9MB |
-| frontlineDirLat/Lng (×2) | Float32Array | 23MB | Float16 (quantized) | 5.7MB |
-| **Total** | | **~170MB** | | **~40-55MB** |
+**3.2 Tactical scan: check 1 bucket instead of 9 for idle units** (`main.js:8126`)
+Units with `isEngaged = false` and no recent combat don't need a 3×3 sweep. Check the center bucket only. Only expand to 3×3 when local enemies are detected.
+- **Gain:** ~5-8ms at high unit counts (most units are not actively fighting)
 
-**Files:** `main.js` — grid allocation sites, all grid read/write sites
+**3.3 Mop-up: reduce 250 samples → 50 samples** (`main.js:8473-8545`)
+250 random grid samples per mop-up unit is excessive. 50 samples covers the same area with acceptable accuracy for territory capture.
+- **Gain:** ~3-5ms during mop-up phase
 
-**Effort:** High (touches many sites) | **Impact:** High (memory cut by 4-5x)
+**3.4 Pre-compute garrison unit lists instead of per-unit checks** (`main.js:8631-8641`)
+The `units.filter().indexOf()` per garrison unit is O(n^2). Build garrison unit lists once after flagging, then batch-process.
+- **Gain:** ~2-3ms (eliminates quadratic garrison check)
 
----
+**3.5 Move influence propagation completely off the critical path**
+Influence updates (`updatePersistentInfluence`, line 3745) currently run in-section inside the tick. Decouple: run influence in a microtask or separate `requestAnimationFrame` callback. Influence lag of 1 frame is invisible at 30+ FPS.
+- **Risk:** Medium — territory capture feels slightly delayed
+- **Gain:** ~5-8ms removed from tick budget
 
-### 3.2 Move Heavy Grid Operations to Web Workers
+**3.6 Skip frontline poly recompute if front hasn't changed** (`engine.js:187`)
+`computeFrontlinePolys()` runs every 15 ticks regardless of whether the frontline moved. Compare a hash of changed cells since last call; skip if unchanged.
+- **Gain:** Eliminates ~10ms compute spikes on static fronts
 
-**Location:** `rebuildFrontlineField()`, influence blur/smoothing passes, `shouldCountLand` territory scan.
-
-**Problem:** BFS frontline field rebuild runs on the main thread, expanding across all grid cells. Influence blur and territory counting also block the main thread for milliseconds per operation, causing frames to drop.
-
-**Fix:**
-- Create a `simulation-worker.js` Web Worker
-- Post grid data to worker as `Transferable` typed arrays (zero-copy transfers)
-- Worker performs BFS, blur, counting and posts results back
-- Main thread reads results from shared `SharedArrayBuffer` or receives results via `postMessage`
-- Workers can also handle `occupationLayer._update()` call for influence spreading
-
-**Architecture:**
-```
-Main Thread                    Simulation Worker
-    │                                │
-    │── grid buffers (transfer) ──→  │
-    │                                ├── BFS frontline field
-    │                                ├── Influence blur/smooth
-    │                                ├── Territory counting
-    │←── results ──────────────────  │
-    │                                │
-    └── render() uses results        │
-```
-
-**Files:** New `simulation-worker.js`, `main.js` (Worker creation + message handling)
-
-**Effort:** High | **Impact:** High (eliminates main-thread jank during heavy ticks)
+### Expected gains
+~10-12ms reduction. 20ms → ~8-10ms per tick. Combined with Phases 1-2: target 60 FPS achievable.
 
 ---
 
-### 3.3 Incremental Frontline Field Update
+## Phase 4 — Rendering + Memory Optimization
 
-**Location:** `rebuildFrontlineField()`.
+### Goal
+Reduce render cost from ~9ms to ~3ms. Eliminate GC pressure completely.
 
-**Problem:** Full BFS expansion across all grid cells every 15 ticks is expensive. Most frontline cells change slowly.
+### Files involved
+`src/renderer.js`, `src/main.js`, `styles/style.css`
 
-**Fix:**
-- Run full BFS only on war start and after major territory shifts
-- Each tick, only recompute BFS from cells where units moved or territory changed hands
-- Use a dirty-cell queue; BFS expands only from dirty cells
+### Concrete steps
 
-**Files:** `main.js` — `rebuildFrontlineField()`
+**4.1 Cache grid-to-screen projections per frame** (`renderer.js:772-777`)
+`getGridPoint()` is called thousands of times per frame, each calling `map.latLngToContainerPoint()`. Cache projection results keyed by grid coordinates for the frame duration.
+- **Gain:** ~2-3ms
 
-**Effort:** Medium | **Impact:** Medium
+**4.2 Render only changed territory cells** (`renderer.js:627-767`)
+The territory fill pre-calculation iterates all visible cells every frame. Track which cells changed this tick (via dirty-cell Set from influence updates) and only re-compute fills for those cells.
+- **Gain:** ~2-4ms on static viewpoints
 
----
+**4.3 Disable backdrop-filter on mobile** (`style.css:46, 61, 385, 2019`)
+14 backdrop-filter rules consume significant GPU compositing budget on mobile. Detect mobile via `max-width` media query or JS and disable.
+- **Gain:** ~2-5ms render time on mobile, also reduces thermal throttling
 
-### 3.4 Reduce Unit Stats Loop Cost
+**4.4 Flag image preloading with dimensions** (`renderer.js:1860`)
+Flag images (`new Image()`) are loaded lazily. Preload all active country flags with explicit dimensions to avoid layout shift and per-frame image decode costs.
+- **Gain:** Eliminates first-load jank; marginal ongoing improvement
 
-**Location:** `updateLoop()` (line ~11612).
+**4.5 Remove `getComputedStyle()` call in cinematic mode** (`renderer.js:224`)
+Forces style recalculation. Replace with a boolean flag or cached opacity value.
+- **Gain:** Minor — only in cinematic mode
 
-**Problem:** The unit stats loop iterates the full `units[]` array every visual frame to count units and estimate soldiers — even when counts haven't changed since last tick.
+**4.6 Use `OffscreenCanvas` for territory rendering on supporting browsers**
+Territory fills and meshes could render on an `OffscreenCanvas` in a web worker, then `drawImage()` onto the main canvas. Only viable on Chrome (Firefox/Safari support is limited).
+- **Risk:** High — limited browser support; implement as progressive enhancement
+- **Gain:** ~5ms moved off main thread
 
-**Fix:**
-- Track cumulative unit counts/soldiers during `performSimulationTick()` (where units are already being iterated for combat/movement)
-- Only recompute in the visual loop if a dirty flag is set
-- Incrementally update counts when units are created/destroyed in simulation
+**4.7 TypedArray reuse instead of per-frame allocation** (`renderer.js:610-613`)
+`viewportFills`, `processedCells`, `gridXPositions`, `gridYPositions` are re-created if size is insufficient. Pre-allocate at max size once.
+- **Gain:** Eliminates occasional large allocations
 
-**Files:** `main.js` — `updateLoop()`, `performSimulationTick()`
-
-**Effort:** Low | **Impact:** Low-Medium
-
----
-
-### 3.5 Avoid Deep Clone for War Restarts
-
-**Location:** `startWar()` — `JSON.parse(JSON.stringify(countryMetadata))` and `JSON.parse(JSON.stringify(cities))`.
-
-**Problem:** `JSON.parse(JSON.stringify(...))` is blocking on large data structures (hundreds of countries, thousands of cities).
-
-**Fix:**
-- Use `structuredClone()` (native, faster, handles more types)
-- Or store snapshots as serialized blobs in IndexedDB
-- Or keep a lightweight diff — only clone the fields that change during simulation
-
-**Files:** `main.js` — war initialization
-
-**Effort:** Low | **Impact:** Low (only happens at war start)
+### Expected gains
+~6ms render reduction. 9ms → ~3ms.
 
 ---
 
-## Phase 4 — Code Architecture
+## Phase 5 — Mobile-Specific Hardening
 
-### 4.1 Split `main.js` into ES Modules
+### Goal
+Ensure stable 30+ FPS on mid-range phones under thermal throttling. Handle background/foreground transitions, memory pressure, touch input efficiently.
 
-**Location:** Entire codebase.
+### Files involved
+`src/main.js`, `index.html`, `workers/service-worker.js`, `styles/style.css`, `src/config.js`
 
-**Problem:** 20K lines in one file. Full parse + evaluation before anything renders. No code splitting possible.
+### Concrete steps
 
-**Proposed module split:**
+**5.1 Dynamic quality scaling based on frame budget**
+Monitor `performance.now()` delta in the update loop. If frame time exceeds 16ms for 30 consecutive frames, progressively degrade:
+- Reduce `CONFIG.MAX_UNITS_PER_SIDE` by 20%
+- Increase `simulation-worker.js` BFS interval from 15 → 30 ticks
+- Skip occupancy smoothing (section 1a) entirely
+- Reduce render step from 1 → 2 (coarser territory rendering)
+- Restore when frame time drops below 12ms for 60 frames
+- **Gain:** Adaptive to device capability without code changes
 
-| Module | Lines (est.) | Responsibility |
-|--------|-------------|----------------|
-| `config.js` | ~200 | CONFIG, constants, settings defaults |
-| `i18n.js` | ~300 | Translation dictionaries + lookup |
-| `engine.js` | ~4000 | Grid arrays, influence, simulation tick, frontline, pathfinding |
-| `renderer.js` | ~2500 | ControlMapLayer, canvas drawing, territory/unit/city rendering |
-| `ui.js` | ~3000 | DOM manipulation, menus, settings, stats panels |
-| `setup.js` | ~2000 | War setup, country selection, side assignment |
-| `audio.js` | ~400 | Web Audio, sound loading/playback |
-| `editor.js` | ~3500 | Map editor, scenario import/export |
-| `firebase.js` | ~2000 | Hub, chat, leaderboard, Firebase integration |
-| `main.js` | ~1000 | Entry point, glue, initialization |
-| `geo.js` | ~1000 | GeoJSON loading, caching, coordinate utils |
+**5.2 Replace `setInterval` background tick with `requestAnimationFrame` throttling** (`main.js:16352`)
+`setInterval(100ms)` fires even during layout. Use a delta-time accumulator within the raF loop that simulates ticks when tab is backgrounded.
+- **Risk:** Medium — must ensure correct timing
+- **Gain:** Cleaner background behavior, no interval overhead
 
-**Fix:**
-- Identify seams where variables are only used within a domain
-- Extract into ES modules using the existing `importmap` infrastructure
-- Use `import()` dynamic imports for editor, firebase (only when needed)
+**5.3 Add `will-change: transform` to frequently animated elements** (`style.css`)
+Elements with transition on `transform` (lines 91, 166, 240, etc.) should declare `will-change: transform` to promote to GPU layer before animation starts. Remove `will-change` after animation ends.
+- **Gain:** Smoother UI transitions on mobile
 
-**Files:** New `src/` module files, `index.html` (import map), `main.js` (imports)
+**5.4 Service worker: add stale-while-revalidate for static assets** (`service-worker.js:43`)
+Current cache-first strategy never updates assets after initial install. Use stale-while-revalidate so returning users get cached content immediately while background update checks.
+- **Gain:** Faster repeat loads
 
-**Effort:** Very High | **Impact:** High (enables code splitting + faster parse + better maintainability)
+**5.5 Memory pressure: evict IndexedDB cache on low-memory event** (`geo.js:9`)
+Listen for `navigator.storage.estimate()` and `pressure` events. Clear old GeoJSON cache entries when storage quota is near limit.
+- **Gain:** Prevents IndexedDB quota errors on low-storage phones
 
----
+**5.6 Reduce `GRID_RES` for mobile** via adaptive config
+At initial load, check `navigator.hardwareConcurrency` and `deviceMemory`. On <4 cores or <4GB RAM: use `GRID_RES = 0.20` (reduces grid cells from 2.88M → 1.62M — 44% reduction).
+- **Risk:** Medium — map details become coarser
+- **Gain:** All O(grid) operations become 44% cheaper
 
-### 4.2 Dynamic Import for Heavy Dependencies
+**5.7 Disable terrain rasterization on low-memory devices** (`editor.js:355-371`)
+The existing guard skips terrain processing at `totalCells > 600000`. On mobile with adaptive GRID_RES, this threshold should trigger more aggressively.
 
-**Location:** `index.html` import map, `main.js`.
+**5.8 Touch event optimization**
+Replace `map.on("mousemove")` with `map.on("touchmove", {passive: true})` for mobile to prevent compositor-blocking.
+- **Gain:** Smoother pan gestures
 
-**Problem:** `jszip` (3.10.1), Firebase SDK, and editor code are loaded eagerly even though most users only simulate or view the map.
-
-**Fix:**
-- Move `jszip` to a dynamic `import("jszip")` call only in editor mode
-- Load Firebase SDK dynamically when hub/chat is first opened
-- Dynamic `import("./editor.js")` when editor mode is activated
-
-**Files:** `index.html`, `main.js`
-
-**Effort:** Medium | **Impact:** Medium (reduces initial JS weight by ~30-40%)
-
----
-
-### 4.3 Streaming JSON Parse for Large GeoJSON
-
-**Location:** GeoJSON fetch sites.
-
-**Problem:** `response.json()` blocks the main thread for the entire 20-31MB parse.
-
-**Fix:**
-- Use `ReadableStream` to incrementally parse GeoJSON
-- Query only the fields needed (geometry coordinates, properties) and discard the rest
-- Or use `fetch()` + `Response.body.getReader()` + a streaming JSON parser (e.g., `oboe.js` or custom)
-
-**Alternative:** Pre-process GeoJSON into a binary format (FlatBuffers/protobuf) stored alongside the JSON and fetch that instead.
-
-**Files:** `main.js` — GeoJSON loading functions
-
-**Effort:** Medium | **Impact:** High (eliminates multi-second main-thread block)
+### Expected gains
+Mobile-specific: prevents thermal throttling degradation. Maintains 30+ FPS even under sustained load.
 
 ---
 
-## Phase 5 — Build Pipeline (Optional, Higher Effort)
+## Implementation Order & Dependencies
 
-### 5.1 Add Vite or esbuild Bundler
+| Phase | Depends on | Effort | Risk |
+|-------|-----------|--------|------|
+| 1 — Quick Wins | — | ~4 hours | Low |
+| 2 — Architecture | Phase 1 | ~8 hours | Medium |
+| 3 — Tick Overhaul | Phase 2 | ~12 hours | High |
+| 4 — Render/Memory | Phase 2 | ~6 hours | Medium |
+| 5 — Mobile | Phase 3, 4 | ~4 hours | Low-Medium |
 
-**Problem:** No minification, no tree shaking, no dead code elimination.
-
-**Fix:**
-- Add `vite` or `esbuild` as a dev dependency
-- Configure output as ES modules with `type: "module"` to preserve import map workflow
-- Minified output would cut JS from ~500KB to ~150KB
-- Tree shaking removes unused Firebase/editor code from initial chunk
-
-**Files:** New `package.json`, `vite.config.js` (or `build.js`)
-
-**Effort:** Medium | **Impact:** Medium (faster download + parse, enables code splitting)
+**Total: ~34 hours, targeting 65ms → 16ms per frame (15 FPS → 60 FPS).**
 
 ---
 
-### 5.2 Add Subresource Integrity (SRI) Hashes
+## Metrics to Track
 
-**Location:** `index.html` — `<script>` tags, `<link>` tags.
-
-**Problem:** CDN scripts (`esm.sh/leaflet`, `unpkg.com/leaflet.css`, Firebase CDN) lack `integrity` attributes — supply chain risk and no cache validation.
-
-**Fix:**
-- Generate SRI hashes for all third-party resources
-- Add `integrity` + `crossorigin="anonymous"` attributes
-
-**Files:** `index.html`
-
-**Effort:** Low | **Impact:** Low (security, not performance)
-
----
-
-## Existing Optimizations (Already Done)
-
-The codebase already has several smart optimizations — these should be preserved:
-
-| Optimization | Location | Description |
-|-------------|----------|-------------|
-| Render skip at high sim speeds | `updateLoop()` ~11594 | `simSpeed >= 5` → render every 5th frame; `>= 3` → every 3rd; `>= 2` → every 2nd |
-| Conditional tile compositing | `render()` ~3031 | Only copies Leaflet tiles to canvas when `cinematicMode || isCapturing` |
-| Spatial hash for units | `unitSpatialHash` ~1883 | O(1) unit lookup by grid region for combat/rendering culling |
-| Occupancy scan throttling | `performSimulationTick()` ~9112 | Full territory scan only every 15+ ticks, cached between scans |
-| Gradient cache | `render()` ~3669 | `Map<string, CanvasGradient>` avoids repeated gradient creation |
-| `sovereignSideMap` precomputation | `render()` ~3068 | Int8Array lookup table per frame (small, but could be cached — see 2.4) |
-| Terrain processing guard | `loadTerrain()` ~6537 | Skips terrain if too many cells; shows "simplified for performance" |
-| Unit consolidation | `performSimulationTick()` ~9170 | Merges stacked units to reduce array size |
-| City pre-grouping | `performSimulationTick()` ~9688 | Groups cities by sovereignId once instead of `filter()` per unit |
-| Metadata pre-indexing | `performSimulationTick()` ~9705 | `Map<id, metadata>` for O(1) lookup instead of `find()` |
-| Tab-hidden efficiency | `updateLoop()` ~11570 | Skips visual loop entirely when `document.hidden`; uses `setInterval(100ms)` for background ticks |
-| `willReadFrequently` already set? | (check) | Verify if the canvas context already uses this optimization |
-
----
-
-## Execution Order (Recommended)
-
-**By impact-per-effort ratio:**
-
-1. **Phase 1.2** — IndexedDB GeoJSON cache (High impact, Medium effort)
-2. **Phase 2.1** — ImageData bulk rendering (High impact, Medium effort)
-3. **Phase 1.1** — innerHTML → textContent (Medium impact, Low effort)
-4. **Phase 2.3** — Canvas context options (Low impact, Trivial effort)
-5. **Phase 3.4** — Reduce unit stats loop cost (Low-Medium impact, Low effort)
-6. **Phase 3.5** — structuredClone for snapshots (Low impact, Low effort)
-7. **Phase 3.2** — Web Worker grid ops (High impact, High effort)
-8. **Phase 3.1** — Sparse grid storage (High impact, High effort)
-9. **Phase 4.1** — Split into modules (High impact, Very High effort)
-10. **Phase 3.3** — Incremental BFS (Medium impact, Medium effort)
-11. **Phase 1.4** — Optimize images (Low-Medium impact, Low effort)
-12. **Phase 4.2** — Dynamic imports (Medium impact, Medium effort)
-13. **Phase 4.3** — Streaming JSON parse (High impact, Medium effort)
-14. **Phase 1.3** — Service worker caching (Medium impact, Medium effort)
-15. **Phase 5.1** — Build pipeline (Medium impact, Medium effort)
-
----
-
-## Notes
-
-- The existing `plans/plan.md` covers an architectural refactor for N-sided combat — coordinate with that plan to avoid conflicts
-- The settings panel already offers grid density, map resolution, and visual toggles (mountains, provinces, units, gradient) — consider adding a "Performance Mode" toggle that enables several of the above optimizations at once
-- Firebase/Firestore listeners (hub, chat, leaderboard) remain active during simulation — consider pausing Firestore listeners during active simulation to free network/CPU
+| Metric | Current | Phase 1 target | Phase 3 target | Final target |
+|--------|---------|---------------|---------------|-------------|
+| Frame avg (ms) | 65 | 40 | 20 | 16 |
+| FPS | 15 | 25 | 50 | 60 |
+| Render % of frame | 14% | 20% | 30% | 35% |
+| GC pauses/sec | ~5 | ~2 | ~0.5 | ~0.2 |
+| allocations/tick (objects) | ~6000 | ~1000 | ~200 | ~50 |
+| Memory baseline (MB) | ~150 | ~120 | ~90 | ~70 |
+| `shouldCountLand` spike (ms) | ~120 | ~60 | ~30 | ~20 |
