@@ -269,3 +269,58 @@ war plan generation/execution) and `src/renderer.js` (arrow drawing).
   execution phase (breakthrough point logic)
 - Country roles (`OFFENSE` / `SUPPORT`) become plan owners vs. plan supporters
   (Phase 3)
+
+---
+
+## TODO — HOI4-Style Army Control System
+
+Major feature: replace the current abstract unit blob with a structured
+Hearts of Iron 4-style army management layer.
+
+### Generals & Field Marshals
+- Countries gain general/f.marshal slots based on army size / tech level
+- Generals command up to 24 division-equivalents; field marshals oversee army groups
+- Each general has traits (aggressive, defensive, logistically skilled, etc.) that modify
+  combat/speed/attrition for their assigned units
+- Field marshals provide a weaker buff to all generals in their army group
+
+### Divisions & Templates
+- Replace opaque "units" with division templates (infantry, armor, motorized, etc.)
+- Player/AI designs templates: battalion composition, support companies
+- Templates have equipment requirements that feed into production
+- Divisions carry org (organization), strength, and equipment status
+
+### Recruitment & Manpower
+- Countries have a recruitment panel: queue divisions, set priority, assign deployment
+  locations
+- Divisions train to full strength before deploying (or deploy early at reduced org)
+- Manpower pool drawn from controlled territory population; scales with conscription law
+- Equipment stockpile from production must match queued division needs
+
+### War Support & Stability
+- Two sliders (0–100%): War Support and Stability
+- War Support: affects surrender limit, mobilization speed, resistance in occupied territory
+- Stability: affects factory output, political power gain, resistance to coups/rebellions
+- Both decay from casualties, bombing, convoy raiding; boosted by propaganda, victories
+
+### Production & Equipment
+- Military factories produce equipment types (infantry kits, artillery, tanks, planes)
+- Civilian factories build infrastructure, repair damaged buildings, consume for consumer
+  goods
+- Production efficiency: factories ramp up over time when assigned to a line
+- Equipment stockpile tracked per type; shortages reduce division strength
+
+### Logistics & Supply
+- Supply zones based on infrastructure level and distance from capital / supply hubs
+- Divisions in low-supply zones suffer attrition, org loss, speed reduction
+- Supply can be improved via infrastructure construction, convoy routes, air supply
+
+### Integration with existing systems
+- The existing frontline + war plan system feeds into the army control layer
+- War plans are assigned to army groups, not per-side
+- Generals execute plans within their assigned front sector
+- The auto-posture system operates per-army instead of per-side
+- City garrison / border garrison becomes a general order type ("Area Defense")
+
+### Effort estimate
+~3,000+ lines across new modules. Multi-phase; each phase independently testable.
