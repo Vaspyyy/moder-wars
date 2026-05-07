@@ -1849,6 +1849,7 @@ export let _simWorker = null; // Web Worker for async frontline BFS
 export let _workerBusy = false;
 // Frontline polyline system: distributed unit stationing along war fronts
 export let _frontlinePolys = {};
+export let _neutralBorderPolys = {}; // combatant-vs-neutral border polylines for garrison stationing
 export let _frontlinePolyTick = -999;
 export const FRONTLINE_POLY_UPDATE_INTERVAL = 15;
 export let _cachedFrontierCells = []; // cached BFS frontier seed cells (incremental rebuild)
@@ -1962,6 +1963,9 @@ export function setSideInfluenceMaps(val) {
 }
 export function setFrontlinePolys(val) {
 	_frontlinePolys = val;
+}
+export function setNeutralBorderPolys(val) {
+	_neutralBorderPolys = val;
 }
 export function setDominantSideMap(val) {
 	dominantSideMap = val;
@@ -5300,6 +5304,7 @@ export async function _startWarInner() {
 	_cachedFrontierCells = [];
 	_frontierScanCounter = 0;
 	_frontlinePolys = {};
+	_neutralBorderPolys = {};
 	_frontlinePolyTick = -999;
 
 	// Reset cached frontline field state between wars.
@@ -6241,10 +6246,10 @@ export function assignFrontlineSlots() {
 		if (sideFronts[b]) sideFronts[b].push(key);
 	}
 
-	// Validate existing slots, collect units needing new slots grouped by side+front
-	const unslottedBySideFront = {};
+	// Collect ALL units for proportional redistribution grouped by side+front
+	const allBySideFront = {};
 	for (let si = 0; si < sides.length; si++) {
-		unslottedBySideFront[si] = {};
+		allBySideFront[si] = {};
 	}
 
 	for (let ui = 0; ui < units.length; ui++) {
@@ -6253,13 +6258,6 @@ export function assignFrontlineSlots() {
 		const si = u.sideIndex;
 		const fronts = sideFronts[si] || [];
 		if (fronts.length === 0) continue;
-
-		// Validate existing slot
-		if (u.frontSlot) {
-			const poly = _frontlinePolys[u.frontSlot.pairKey];
-			if (poly && u.frontSlot.segmentIdx < poly.length) continue; // Still valid
-			u.frontSlot = null;
-		}
 
 		// Find which front this unit belongs to (nearest polyline midpoint)
 		let bestDist = Infinity;
@@ -6278,22 +6276,24 @@ export function assignFrontlineSlots() {
 			}
 		}
 		if (bestKey) {
-			if (!unslottedBySideFront[si][bestKey])
-				unslottedBySideFront[si][bestKey] = [];
-			unslottedBySideFront[si][bestKey].push(u);
+			if (!allBySideFront[si][bestKey]) allBySideFront[si][bestKey] = [];
+			allBySideFront[si][bestKey].push(u);
 		}
 	}
 
-	// Proportional distribution: spread units evenly along each frontline polyline
+	// Proportional distribution: spread ALL units evenly along each frontline polyline
 	for (let si = 0; si < sides.length; si++) {
-		const frontMap = unslottedBySideFront[si] || {};
+		const frontMap = allBySideFront[si] || {};
 		for (const pairKey of Object.keys(frontMap)) {
 			const unitList = frontMap[pairKey];
 			const poly = _frontlinePolys[pairKey];
 			if (!poly || unitList.length === 0 || poly.length === 0) continue;
 
-			// Sort units by latitude so they distribute north-to-south along the front
-			unitList.sort((a, b) => b.lat - a.lat);
+			// Sort by current slot index to preserve relative front position while spreading
+			unitList.sort(
+				(a, b) =>
+					(a.frontSlot?.segmentIdx || 0) - (b.frontSlot?.segmentIdx || 0),
+			);
 
 			const n = unitList.length;
 			const step = Math.max(1, Math.floor(poly.length / n));
@@ -6308,6 +6308,43 @@ export function assignFrontlineSlots() {
 					targetLng: poly[idx].lng,
 				};
 			}
+		}
+	}
+}
+
+/**
+ * Assign proportional slots to garrison units along neutral border polylines
+ * so they spread evenly instead of clustering at cities.
+ */
+export function assignGarrisonSlots() {
+	const countryGarrisons = {};
+	for (let ui = 0; ui < units.length; ui++) {
+		const u = units[ui];
+		if (!u.isGarrison || u.deployTicks > 0) continue;
+		if (!countryGarrisons[u.sovereignId]) countryGarrisons[u.sovereignId] = [];
+		countryGarrisons[u.sovereignId].push(u);
+	}
+
+	for (const cId of Object.keys(countryGarrisons)) {
+		const garrisonList = countryGarrisons[cId];
+		const poly = _neutralBorderPolys[cId];
+		if (!poly || poly.length === 0) {
+			for (let gi = 0; gi < garrisonList.length; gi++) {
+				garrisonList[gi].neutralBorderSlot = null;
+			}
+			continue;
+		}
+
+		garrisonList.sort((a, b) => a.lat - b.lat);
+		const n = garrisonList.length;
+		const step = Math.max(1, Math.floor(poly.length / n));
+
+		for (let i = 0; i < n; i++) {
+			const idx = Math.min(poly.length - 1, Math.floor(i * step));
+			garrisonList[i].neutralBorderSlot = {
+				targetLat: poly[idx].lat,
+				targetLng: poly[idx].lng,
+			};
 		}
 	}
 }
@@ -7391,9 +7428,63 @@ export function performSimulationTick() {
 	// Evaluate war plans — check completion/failure, regenerate if needed
 	evaluateAllPlans();
 
-	// ── Garrison System: compute border reserves per country ──
+	// ── Garrison System: compute border reserves + neutral border polylines ──
 	if (adjacencyCache) {
 		_garrisonRequirement.clear();
+		_neutralBorderPolys = {};
+
+		// Identify combatant countries with neutral neighbors
+		const combatantNeutralBorders = {};
+		for (const [countryId, neighbors] of adjacencyCache.entries()) {
+			if (!combatantIds.has(countryId)) continue;
+			const neutralNeighbors = [];
+			for (const nId of neighbors) {
+				if (combatantIds.has(nId)) continue;
+				neutralNeighbors.push(nId);
+			}
+			if (neutralNeighbors.length > 0) {
+				combatantNeutralBorders[countryId] = new Set();
+			}
+		}
+
+		// Full-grid scan to find frontier cells between combatants and neutrals
+		if (Object.keys(combatantNeutralBorders).length > 0) {
+			const total = gridWidth * gridHeight;
+			for (let i = 0; i < total; i++) {
+				if (landMask[i] !== 2) continue;
+				const owner = worldControlMap[i];
+				if (!combatantNeutralBorders[owner]) continue;
+				const nb4 = [i + 1, i - 1, i + gridWidth, i - gridWidth];
+				for (let nb = 0; nb < 4; nb++) {
+					const ni = nb4[nb];
+					if (ni < 0 || ni >= total) continue;
+					if (landMask[ni] !== 2) continue;
+					const nbOwner = worldControlMap[ni];
+					if (nbOwner === 0 || nbOwner === owner) continue;
+					if (!combatantIds.has(nbOwner)) {
+						combatantNeutralBorders[owner].add(i);
+						break;
+					}
+				}
+			}
+
+			for (const [countryId, cells] of Object.entries(
+				combatantNeutralBorders,
+			)) {
+				if (cells.size === 0) continue;
+				const poly = [];
+				for (const idx of cells) {
+					const y = Math.floor(idx / gridWidth);
+					const x = idx % gridWidth;
+					poly.push({
+						lat: y * CONFIG.GRID_RES - 90,
+						lng: x * CONFIG.GRID_RES - 180,
+					});
+				}
+				_neutralBorderPolys[countryId] = poly;
+			}
+		}
+
 		const neighborThreat = new Map(); // countryId → enemy unit count on border
 		for (const [countryId, neighbors] of adjacencyCache.entries()) {
 			if (!combatantIds.has(countryId)) continue;
@@ -8479,24 +8570,18 @@ export function performSimulationTick() {
 			target = cityFocusTarget;
 		}
 
-		// If this unit is a city garrison, keep its primary target anchored to its city
-		if (u.isGarrison && garrisonCity) {
-			// When enemies are near, move to meet them but don't chase far away
-			if (
-				enemyNearGarrison &&
-				target &&
-				target.lat !== undefined &&
-				target.lng !== undefined
-			) {
-				// Blend between city center and enemy so garrison steps out a bit but stays local
-				const blend = 0.5;
+		// If this unit is a border garrison, station along the neutral border polyline
+		if (u.isGarrison) {
+			if (u.neutralBorderSlot) {
 				target = {
-					lat: garrisonCity.lat * (1 - blend) + target.lat * blend,
-					lng: garrisonCity.lng * (1 - blend) + target.lng * blend,
+					lat: u.neutralBorderSlot.targetLat,
+					lng: u.neutralBorderSlot.targetLng,
 				};
-			} else {
-				// No nearby enemies: hold position around the city
+			} else if (garrisonCity) {
+				// Fallback: station at friendly city if no neutral border polyline
 				target = { lat: garrisonCity.lat, lng: garrisonCity.lng };
+			} else if (groupCentroid) {
+				target = { lat: groupCentroid.lat, lng: groupCentroid.lng };
 			}
 		}
 
@@ -8516,21 +8601,6 @@ export function performSimulationTick() {
 				!shouldMopUp &&
 				localEnemyCount < 3);
 		u.isGarrison = isGarrisonUnit;
-
-		if (
-			isGarrisonUnit &&
-			!shouldMopUp &&
-			localEnemyCount < 2 &&
-			!retreatVector &&
-			!cityFocusMode &&
-			aiProfile.mode !== "OFFENSIVE_DESPERATION"
-		) {
-			if (garrisonCity) {
-				target = { lat: garrisonCity.lat, lng: garrisonCity.lng };
-			} else if (groupCentroid) {
-				target = { lat: groupCentroid.lat, lng: groupCentroid.lng };
-			}
-		}
 
 		if (target) {
 			// Store target position for the renderer's operational arrows
@@ -9269,6 +9339,9 @@ export function performSimulationTick() {
 			units.splice(i, 1);
 		}
 	}
+
+	// Assign garrison slots after all units have been flagged
+	assignGarrisonSlots();
 
 	// NOTE: even if sideSoldiers reach 0, sides remain on the field and can still recruit.
 	// This keeps wars from hard-locking when a side's manpower bar is exhausted.
@@ -10189,6 +10262,7 @@ export function capitulateCountry(country, sideIndex) {
 	_cachedFrontierCells = [];
 	_frontierScanCounter = 0;
 	_frontlinePolys = {};
+	_neutralBorderPolys = {};
 	_frontlinePolyTick = -999;
 
 	// Refresh UI
