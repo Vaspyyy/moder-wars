@@ -6241,7 +6241,12 @@ export function assignFrontlineSlots() {
 		if (sideFronts[b]) sideFronts[b].push(key);
 	}
 
-	// For each unit without a slot, assign to nearest polyline segment
+	// Validate existing slots, collect units needing new slots grouped by side+front
+	const unslottedBySideFront = {};
+	for (let si = 0; si < sides.length; si++) {
+		unslottedBySideFront[si] = {};
+	}
+
 	for (let ui = 0; ui < units.length; ui++) {
 		const u = units[ui];
 		if (u.deployTicks > 0) continue;
@@ -6249,67 +6254,61 @@ export function assignFrontlineSlots() {
 		const fronts = sideFronts[si] || [];
 		if (fronts.length === 0) continue;
 
-		// If already has a slot, update its position if polyline changed
+		// Validate existing slot
 		if (u.frontSlot) {
 			const poly = _frontlinePolys[u.frontSlot.pairKey];
-			if (!poly || u.frontSlot.segmentIdx >= poly.length) {
-				u.frontSlot = null; // Slot invalidated — reassign below
-			}
+			if (poly && u.frontSlot.segmentIdx < poly.length) continue; // Still valid
+			u.frontSlot = null;
 		}
 
-		if (!u.frontSlot) {
-			// Find nearest polyline segment across all fronts this side is on
-			let bestDist = Infinity;
-			let bestPair = null;
-			let bestIdx = -1;
-
-			for (let f = 0; f < fronts.length; f++) {
-				const pairKey = fronts[f];
-				const poly = _frontlinePolys[pairKey];
-				if (!poly) continue;
-				// Sample every Nth segment for performance
-				const step = Math.max(1, Math.floor(poly.length / 300));
-				for (let s = 0; s < poly.length; s += step) {
-					const dSq = (u.lat - poly[s].lat) ** 2 + (u.lng - poly[s].lng) ** 2;
-					if (dSq < bestDist) {
-						bestDist = dSq;
-						bestPair = pairKey;
-						bestIdx = s;
-					}
-				}
+		// Find which front this unit belongs to (nearest polyline midpoint)
+		let bestDist = Infinity;
+		let bestKey = null;
+		for (let f = 0; f < fronts.length; f++) {
+			const poly = _frontlinePolys[fronts[f]];
+			if (!poly) continue;
+			const mid = poly[Math.floor(poly.length / 2)];
+			let dLng = mid.lng - u.lng;
+			if (dLng > 180) dLng -= 360;
+			else if (dLng < -180) dLng += 360;
+			const dSq = (u.lat - mid.lat) ** 2 + dLng ** 2;
+			if (dSq < bestDist) {
+				bestDist = dSq;
+				bestKey = fronts[f];
 			}
-
-			if (bestPair) {
-				u.frontSlot = {
-					pairKey: bestPair,
-					segmentIdx: bestIdx,
-					targetLat: _frontlinePolys[bestPair][bestIdx].lat,
-					targetLng: _frontlinePolys[bestPair][bestIdx].lng,
-				};
-			}
+		}
+		if (bestKey) {
+			if (!unslottedBySideFront[si][bestKey])
+				unslottedBySideFront[si][bestKey] = [];
+			unslottedBySideFront[si][bestKey].push(u);
 		}
 	}
 
-	// Spread units that are clustered: move their slots apart
-	const slotOccupancy = {};
-	for (let ui = 0; ui < units.length; ui++) {
-		const u = units[ui];
-		if (!u.frontSlot) continue;
-		const key = `${u.frontSlot.pairKey}_${u.frontSlot.segmentIdx}`;
-		if (slotOccupancy[key]) {
-			// Multiple units on same slot — spread them
-			const poly = _frontlinePolys[u.frontSlot.pairKey];
-			if (poly) {
-				const spread = Math.max(1, Math.floor(poly.length / 5));
-				let newIdx =
-					(u.frontSlot.segmentIdx + spread * slotOccupancy[key]) % poly.length;
-				if (newIdx < 0) newIdx += poly.length;
-				u.frontSlot.segmentIdx = newIdx;
-				u.frontSlot.targetLat = poly[newIdx].lat;
-				u.frontSlot.targetLng = poly[newIdx].lng;
+	// Proportional distribution: spread units evenly along each frontline polyline
+	for (let si = 0; si < sides.length; si++) {
+		const frontMap = unslottedBySideFront[si] || {};
+		for (const pairKey of Object.keys(frontMap)) {
+			const unitList = frontMap[pairKey];
+			const poly = _frontlinePolys[pairKey];
+			if (!poly || unitList.length === 0 || poly.length === 0) continue;
+
+			// Sort units by latitude so they distribute north-to-south along the front
+			unitList.sort((a, b) => b.lat - a.lat);
+
+			const n = unitList.length;
+			const step = Math.max(1, Math.floor(poly.length / n));
+
+			for (let i = 0; i < n; i++) {
+				const u = unitList[i];
+				const idx = Math.min(poly.length - 1, Math.floor(i * step));
+				u.frontSlot = {
+					pairKey,
+					segmentIdx: idx,
+					targetLat: poly[idx].lat,
+					targetLng: poly[idx].lng,
+				};
 			}
 		}
-		slotOccupancy[key] = (slotOccupancy[key] || 0) + 1;
 	}
 }
 
@@ -8725,7 +8724,7 @@ export function performSimulationTick() {
 					else if (sdLng < -180) sdLng += 360;
 					const sdDist = Math.sqrt(sdLat * sdLat + sdLng * sdLng);
 					if (sdDist > 0.01) {
-						const slotStrength = Math.min(0.45, dist * 2);
+						const slotStrength = Math.min(0.6, dist * 2);
 						moveDirLat =
 							moveDirLat * (1 - slotStrength) + (sdLat / sdDist) * slotStrength;
 						moveDirLng =
