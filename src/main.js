@@ -1768,6 +1768,7 @@ export let cityEditMode = null; // 'CREATE' | 'MOVE' | null
 export let animationFrameId = null;
 export let backgroundTickId = null;
 export let simFrameCount = 0;
+let warGraceEndTick = 0;
 export let simSpeed = 3.0;
 export let _cachedP1T = 0,
 	_cachedP2T = 0;
@@ -5253,6 +5254,7 @@ export async function _startWarInner() {
 
 	gameState = "SIMULATING";
 	isPaused = false;
+	warGraceEndTick = simFrameCount + CONFIG.WAR_GRACE_TICKS;
 
 	// Hard reset dynamic war-state before building a new theater.
 	// This prevents stale frontline/occupation data from previous wars from
@@ -8202,6 +8204,8 @@ export function performSimulationTick() {
 								enemyCentroidLng += e.lng * eWeight;
 
 								if (dSq < 0.04) {
+									const inWarGrace = simFrameCount < warGraceEndTick;
+									if (inWarGrace) continue;
 									let proximityDamage =
 										CONFIG.COMBAT_DAMAGE *
 										0.07 *
