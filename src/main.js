@@ -7729,7 +7729,7 @@ export function performSimulationTick() {
 			(inEnemyTerritory || isEncircled) &&
 			!isMega &&
 			!isSuper &&
-			u.victoryBoostTicks <= 0
+			(u.victoryBoostTicks <= 0 || isEncircled)
 		) {
 			// Logistics Strain: Attrition scales with the target's total land area
 			let targetLandSize = 0;
@@ -7759,7 +7759,7 @@ export function performSimulationTick() {
 			recordDamage(u, dmg * damageTakenMult);
 
 			// Instant death triggers full remaining health as casualties
-			if (isEncircled && Math.random() < 0.001) {
+			if (isEncircled && Math.random() < 0.025) {
 				recordDamage(u, u.health);
 			}
 		}
@@ -8005,6 +8005,8 @@ export function performSimulationTick() {
 			target && (targetIdx === -1 || landMask[targetIdx] === 0);
 
 		const totalEnemiesCount = units.length - unitsBySide[sideIndex].length;
+
+		const pocketContained = localEnemyCount > 0 && localAllyCount > localEnemyCount * 3;
 
 		// Global Target Fallback (if no enemies were found in the local 6-degree spatial hash but enemies exist somewhere)
 		if (!target && !cityFocusTarget && totalEnemiesCount > 0) {
@@ -8443,7 +8445,7 @@ export function performSimulationTick() {
 				const activePlan = _warPlan[u.sideIndex];
 
 				// Only apply plan when safe: no nearby enemies, not engaged, not retreating
-				if (!shouldMopUp && !retreatVector && !isEngaged && localEnemyCount < 2 && activePlan && activePlan.type !== "DEFEND") {
+				if (!shouldMopUp && !retreatVector && !isEngaged && (localEnemyCount < 2 || pocketContained) && activePlan && activePlan.type !== "DEFEND") {
 					isPlanUnit = true;
 					if (activePlan.phase === "PREPARATION" && activePlan.stagingCells?.length > 0) {
 						// Round-robin staging: each unit gets a different cell so they spread out
@@ -8471,7 +8473,7 @@ export function performSimulationTick() {
 
 				// Blend plan direction into movement (gentle weight to preserve formation)
 				if (isPlanUnit && (planDirLat !== 0 || planDirLng !== 0)) {
-					const planBlend = activePlan && activePlan.phase === "PREPARATION" ? 0.5 : 0.2;
+					const planBlend = activePlan && activePlan.phase === "PREPARATION" ? (pocketContained ? 0.9 : 0.5) : (pocketContained ? 0.6 : 0.2);
 					moveDirLat = moveDirLat * (1 - planBlend) + planDirLat * planBlend;
 					moveDirLng = moveDirLng * (1 - planBlend) + planDirLng * planBlend;
 					const magP = Math.sqrt(moveDirLat * moveDirLat + moveDirLng * moveDirLng);
