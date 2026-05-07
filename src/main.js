@@ -6247,6 +6247,7 @@ export function assignFrontlineSlots() {
 	}
 
 	// Collect ALL units per side for proportional multi-front distribution
+	const allBySideFront = {};
 	const sideUnits = {};
 	for (let si = 0; si < sides.length; si++) {
 		sideUnits[si] = [];
