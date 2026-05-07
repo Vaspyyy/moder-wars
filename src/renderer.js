@@ -1,8 +1,6 @@
 import L from "leaflet";
 import { CONFIG } from "./config.js";
 import {
-	MAX_SIDES,
-	UNIT_HASH_CELL_SIZE,
 	_cachedTerritoryCtrlEls,
 	_cachedTerritorySegEls,
 	_frontlinePolys,
@@ -12,12 +10,14 @@ import {
 	allianceViewEnabled,
 	animationFrameId,
 	bases,
+	biomeMask,
 	bombs,
 	cinematicMode,
 	cities,
 	countryCasualties,
 	countryMetadata,
 	disableCountryGradient,
+	dominantSideMap,
 	editingCountryId,
 	explosions,
 	flagProcessedBuffer,
@@ -26,18 +26,24 @@ import {
 	getCookie,
 	getGridIndex,
 	godModeActive,
+	gridHeight,
 	gridWidth,
 	imagerySelect,
 	influenceLayer,
 	initialCombatants,
 	isCustomTerrain,
 	isPaused,
+	landMask,
+	MAX_SIDES,
+	map,
 	mountainsEnabled,
+	occupationMap,
 	preGodModeState,
+	primaryOccupierMap,
 	refAboveTerrain,
-	refOpacity,
 	referenceImageUrl,
 	referenceOverlay,
+	refOpacity,
 	rgbaRe,
 	showBattleIndicators,
 	showCountryLabels,
@@ -45,25 +51,19 @@ import {
 	showUnitsVisually,
 	showWarPlans,
 	sideColors,
+	sideInfluenceMaps,
 	sides,
 	simFrameCount,
 	simSpeed,
 	soldiersPerUnit,
+	terrainMask,
+	UNIT_HASH_CELL_SIZE,
 	unitSpatialHash,
 	units,
 	viewMode,
+	worldControlMap,
 	worldHeightDeg,
 	worldWidthDeg,
-	biomeMask,
-	dominantSideMap,
-	gridHeight,
-	landMask,
-	map,
-	occupationMap,
-	primaryOccupierMap,
-	terrainMask,
-	worldControlMap,
-	sideInfluenceMaps
 } from "./main.js";
 
 const ControlMapLayer = L.Layer.extend({
@@ -2171,7 +2171,7 @@ const ControlMapLayer = L.Layer.extend({
 		if (isWar && _frontlinePolys && Object.keys(_frontlinePolys).length > 0) {
 			for (const [key, poly] of Object.entries(_frontlinePolys)) {
 				if (poly.length < 2) continue;
-				const [sa, sb] = key.split("_").map(Number);
+				const [sa, _sb] = key.split("_").map(Number);
 				const color = sideColors[sa] || "rgba(255,255,0,0.4)";
 				ctx.strokeStyle = color.replace(rgbaRe, "0.5)");
 				ctx.lineWidth = 1.5;
@@ -2179,8 +2179,10 @@ const ControlMapLayer = L.Layer.extend({
 				let started = false;
 				for (let p = 0; p < poly.length; p++) {
 					const pt = map.latLngToContainerPoint([poly[p].lat, poly[p].lng]);
-					if (!started) { ctx.moveTo(pt.x, pt.y); started = true; }
-					else ctx.lineTo(pt.x, pt.y);
+					if (!started) {
+						ctx.moveTo(pt.x, pt.y);
+						started = true;
+					} else ctx.lineTo(pt.x, pt.y);
 				}
 				ctx.stroke();
 			}
@@ -2190,11 +2192,14 @@ const ControlMapLayer = L.Layer.extend({
 		if (isWar && showWarPlans && _warPlan && _warPlan.length > 0) {
 			for (let si = 0; si < _warPlan.length; si++) {
 				const plan = _warPlan[si];
-				if (!plan || !plan.arrowPoints || plan.arrowPoints.length < 2) continue;
+				if (!plan?.arrowPoints || plan.arrowPoints.length < 2) continue;
 				const color = sideColors[si] || "rgba(255,255,0,0.6)";
 				const isDashed = plan.phase === "PREPARATION";
 				ctx.strokeStyle = color.replace(rgbaRe, isDashed ? "0.4)" : "0.7)");
-				ctx.lineWidth = Math.max(2, Math.min(6, 2 + Math.floor((plan.activeUnitCount || 0) / 5)));
+				ctx.lineWidth = Math.max(
+					2,
+					Math.min(6, 2 + Math.floor((plan.activeUnitCount || 0) / 5)),
+				);
 				if (isDashed) ctx.setLineDash([8, 6]);
 				else ctx.setLineDash([]);
 

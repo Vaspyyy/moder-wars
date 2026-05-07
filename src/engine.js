@@ -1,25 +1,25 @@
 import { CONFIG } from "./config.js";
 import {
-	MAX_SIDES,
 	_cachedFrontierCells,
 	_frontierScanCounter,
 	_frontlinePolys,
+	dominantSideMap,
 	frontlineDirLat,
 	frontlineDirLng,
+	gridHeight,
 	gridWidth,
+	landMask,
+	MAX_SIDES,
+	occupationMap,
+	set_frontlineSourceCell,
 	setDominantSideMap,
+	setFrontierScanCounter,
 	setFrontlineDirLat,
 	setFrontlineDirLng,
-	setSideInfluenceMaps,
-	setFrontierScanCounter,
 	setFrontlinePolys,
-	set_frontlineSourceCell,
-	dominantSideMap,
-	gridHeight,
-	landMask,
-	occupationMap,
+	setSideInfluenceMaps,
 	sideInfluenceMaps,
-	worldControlMap
+	worldControlMap,
 } from "./main.js";
 
 function syncOccupationFromSideInfluence(idx) {
@@ -198,12 +198,7 @@ function computeFrontlinePolys() {
 		if (ds < 0) continue;
 
 		// Check 4 neighbors for different sides
-		const neighbors = [
-			i + 1,
-			i - 1,
-			i + gridWidth,
-			i - gridWidth,
-		];
+		const neighbors = [i + 1, i - 1, i + gridWidth, i - gridWidth];
 		for (let n = 0; n < neighbors.length; n++) {
 			const nb = neighbors[n];
 			if (nb < 0 || nb >= total) continue;
@@ -230,7 +225,12 @@ function computeFrontlinePolys() {
 		const getCoord = (idx) => {
 			const y = Math.floor(idx / gridWidth);
 			const x = idx % gridWidth;
-			return { x, y, lat: y * CONFIG.GRID_RES - 90, lng: x * CONFIG.GRID_RES - 180 };
+			return {
+				x,
+				y,
+				lat: y * CONFIG.GRID_RES - 90,
+				lng: x * CONFIG.GRID_RES - 180,
+			};
 		};
 
 		// Find a start point (any unvisited cell)
@@ -250,7 +250,7 @@ function computeFrontlinePolys() {
 			segment.push(curCoord);
 
 			// Walk forward from start, picking nearest unvisited neighbor at each step
-			let prev = -1;
+			let _prev = -1;
 			// eslint-disable-next-line no-constant-condition
 			while (true) {
 				let bestDist = Infinity;
@@ -267,7 +267,7 @@ function computeFrontlinePolys() {
 					}
 				}
 				if (best === -1) break; // No more connected cells
-				prev = cur;
+				_prev = cur;
 				cur = best;
 				visited.add(cur);
 				segment.push(getCoord(cur));
@@ -300,6 +300,7 @@ function getBorderDirection(unit) {
 
 export {
 	clearCellInfluence,
+	computeFrontlinePolys,
 	getBorderDirection,
 	getGridIndex,
 	initSideInfluenceMaps,
@@ -309,5 +310,4 @@ export {
 	rebuildFrontlineField,
 	resetSideInfluenceMaps,
 	syncOccupationFromSideInfluence,
-	computeFrontlinePolys,
 };

@@ -1810,7 +1810,12 @@ export const UNIT_HASH_CELL_SIZE = 2.5; // Degrees per spatial bucket
 export const aiCountryState = new Map();
 export let _sidePosture = []; // per-side auto posture (OFFENSIVE/BALANCED/DEFENSIVE)
 export let _warPlan = []; // per-side war plan: { type, phase, target, ... }
-export const WAR_PLAN_TYPES = ["DEFEND", "PUSH_FRONT", "CAPTURE_CITY", "ENCIRCLE"];
+export const WAR_PLAN_TYPES = [
+	"DEFEND",
+	"PUSH_FRONT",
+	"CAPTURE_CITY",
+	"ENCIRCLE",
+];
 export const WAR_PLAN_PHASES = ["PREPARATION", "EXECUTION", "CONSOLIDATION"];
 export const _garrisonRequirement = new Map(); // countryId → required garrison count
 export const AI_DESPERATION = {
@@ -4035,8 +4040,10 @@ export function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
 					// Decay opposing sides' influence when we enter a cell
 					for (let si = 0; si < sideInfluenceMaps.length; si++) {
 						if (si !== mySideIdx && sideInfluenceMaps[si][idx] > 0) {
-							sideInfluenceMaps[si][idx] = Math.max(0,
-								sideInfluenceMaps[si][idx] - cellDelta * 0.5);
+							sideInfluenceMaps[si][idx] = Math.max(
+								0,
+								sideInfluenceMaps[si][idx] - cellDelta * 0.5,
+							);
 						}
 					}
 					// De-jure owner reclaim bonus: 1.5x influence when retaking own territory
@@ -4941,7 +4948,7 @@ export function handleCountryClick(
 export function spawnSingleUnit(
 	sideIdx,
 	sovereignId,
-	preferEnemyFront = false,
+	_preferEnemyFront = false,
 ) {
 	// Enforce per‑side unit cap: if this side is already at or above the limit, do not spawn.
 	const sideUnits = units.filter((u) => u.sideIndex === sideIdx).length;
@@ -4959,13 +4966,18 @@ export function spawnSingleUnit(
 	});
 
 	let lat, lng;
-	let isFromFront = false;
+	const _isFromFront = false;
 
 	if (friendlyCities.length > 0) {
 		// Pick a random friendly city, bias toward frontline-adjacent ones
 		const frontlineCities = friendlyCities.filter((c) => {
 			const cIdx = getGridIndex(c.lat, c.lng);
-			const neighbors = [cIdx + 1, cIdx - 1, cIdx + gridWidth, cIdx - gridWidth];
+			const neighbors = [
+				cIdx + 1,
+				cIdx - 1,
+				cIdx + gridWidth,
+				cIdx - gridWidth,
+			];
 			for (const n of neighbors) {
 				if (n >= 0 && n < landMask.length) {
 					const nds = dominantSideMap[n];
@@ -4975,16 +4987,21 @@ export function spawnSingleUnit(
 			return false;
 		});
 
-		const pick = (frontlineCities.length > 0 && !supplyFailed)
-			? frontlineCities[Math.floor(Math.random() * frontlineCities.length)]
-			: friendlyCities[Math.floor(Math.random() * friendlyCities.length)];
+		const pick =
+			frontlineCities.length > 0 && !supplyFailed
+				? frontlineCities[Math.floor(Math.random() * frontlineCities.length)]
+				: friendlyCities[Math.floor(Math.random() * friendlyCities.length)];
 
 		lat = pick.lat + (Math.random() - 0.5) * CONFIG.GRID_RES * 0.8;
 		lng = pick.lng + (Math.random() - 0.5) * CONFIG.GRID_RES * 0.8;
 
 		// Validate: ensure still within friendly territory
 		const vIdx = getGridIndex(lat, lng);
-		if (vIdx === -1 || worldControlMap[vIdx] !== sovereignId || dominantSideMap[vIdx] !== sideIdx) {
+		if (
+			vIdx === -1 ||
+			worldControlMap[vIdx] !== sovereignId ||
+			dominantSideMap[vIdx] !== sideIdx
+		) {
 			lat = pick.lat;
 			lng = pick.lng;
 		}
@@ -4993,13 +5010,18 @@ export function spawnSingleUnit(
 		const theaterIndices = [];
 		const step = Math.max(1, Math.floor(landMask.length / 500000));
 		for (let i = 0; i < landMask.length; i += step) {
-			if (landMask[i] === 2 && worldControlMap[i] === sovereignId && dominantSideMap[i] === sideIdx) {
+			if (
+				landMask[i] === 2 &&
+				worldControlMap[i] === sovereignId &&
+				dominantSideMap[i] === sideIdx
+			) {
 				theaterIndices.push(i);
 			}
 		}
 		if (theaterIndices.length === 0) return false;
 
-		const idx = theaterIndices[Math.floor(Math.random() * theaterIndices.length)];
+		const idx =
+			theaterIndices[Math.floor(Math.random() * theaterIndices.length)];
 		const y = Math.floor(idx / gridWidth);
 		const x = idx % gridWidth;
 		lat = y * CONFIG.GRID_RES - 90 + CONFIG.GRID_RES / 2;
@@ -5007,7 +5029,8 @@ export function spawnSingleUnit(
 	}
 
 	const finalIdx = getGridIndex(lat, lng);
-	const isMountainCell = terrainMask && finalIdx >= 0 ? terrainMask[finalIdx] > 0.35 : false;
+	const isMountainCell =
+		terrainMask && finalIdx >= 0 ? terrainMask[finalIdx] > 0.35 : false;
 	// Alpenjägers: mostly drawn from mountainous recruitment cells
 	const isAlpen = isMountainCell && Math.random() < 0.4;
 
@@ -5663,7 +5686,8 @@ export async function _startWarInner() {
 						return cIdx !== -1 && landMask[cIdx] !== 0;
 					});
 					if (friendlyCities.length > 0) {
-						const pick = friendlyCities[Math.floor(Math.random() * friendlyCities.length)];
+						const pick =
+							friendlyCities[Math.floor(Math.random() * friendlyCities.length)];
 						const cIdx = getGridIndex(pick.lat, pick.lng);
 						fData = { idx: cIdx, vx: 0, vy: 0 };
 					} else {
@@ -6204,7 +6228,6 @@ export function launchBomb(fromLat, fromLng, toLat, toLng, sideIdx) {
  */
 
 export function assignFrontlineSlots() {
-
 	if (!_frontlinePolys || Object.keys(_frontlinePolys).length === 0) return;
 
 	// Build a map: sideIndex → list of side-pair keys this side participates in
@@ -6278,7 +6301,8 @@ export function assignFrontlineSlots() {
 			const poly = _frontlinePolys[u.frontSlot.pairKey];
 			if (poly) {
 				const spread = Math.max(1, Math.floor(poly.length / 5));
-				let newIdx = (u.frontSlot.segmentIdx + spread * slotOccupancy[key]) % poly.length;
+				let newIdx =
+					(u.frontSlot.segmentIdx + spread * slotOccupancy[key]) % poly.length;
 				if (newIdx < 0) newIdx += poly.length;
 				u.frontSlot.segmentIdx = newIdx;
 				u.frontSlot.targetLat = poly[newIdx].lat;
@@ -6287,7 +6311,6 @@ export function assignFrontlineSlots() {
 		}
 		slotOccupancy[key] = (slotOccupancy[key] || 0) + 1;
 	}
-
 }
 
 /**
@@ -6299,85 +6322,108 @@ export function generateWarPlan(sideIdx) {
 	const sideCountries = sides[sideIdx] || [];
 
 	// Default to DEFEND if no units or defensive posture
-	const unitCount = units.filter((u) => u.sideIndex === sideIdx && u.deployTicks === 0).length;
-		if (unitCount === 0 || posture === "DEFENSIVE") {
-			_warPlan[sideIdx] = { type: "DEFEND", phase: "PREPARATION", target: null,
-				startedTick: simFrameCount, lastProgressTick: simFrameCount, progress: 0,
-				activeUnitCount: 0 };
+	const unitCount = units.filter(
+		(u) => u.sideIndex === sideIdx && u.deployTicks === 0,
+	).length;
+	if (unitCount === 0 || posture === "DEFENSIVE") {
+		_warPlan[sideIdx] = {
+			type: "DEFEND",
+			phase: "PREPARATION",
+			target: null,
+			startedTick: simFrameCount,
+			lastProgressTick: simFrameCount,
+			progress: 0,
+			activeUnitCount: 0,
+		};
+		return;
+	}
+
+	// ENCIRCLE plan: detect pockets where we have 3×+ local superiority
+	if (posture === "OFFENSIVE" && unitCount > 10) {
+		const frontlineKeys = Object.keys(_frontlinePolys || {});
+		let bestEncirclement = null,
+			bestScore = 0;
+
+		for (const key of frontlineKeys) {
+			const [a, b] = key.split("_").map(Number);
+			if (a !== sideIdx && b !== sideIdx) continue;
+			const poly = _frontlinePolys[key];
+			if (!poly || poly.length < 5) continue;
+
+			const stride = Math.max(1, Math.floor(poly.length / 20));
+			for (let ci = 0; ci < Math.min(500, poly.length); ci += stride) {
+				const cell = poly[ci];
+				let friendlyCount = 0,
+					enemyCount = 0;
+				const radSq = 1.0;
+
+				for (let ui = 0; ui < units.length; ui++) {
+					const other = units[ui];
+					if (other.deployTicks > 0) continue;
+					const dLat = other.lat - cell.lat;
+					let dLng = other.lng - cell.lng;
+					if (dLng > 180) dLng -= 360;
+					else if (dLng < -180) dLng += 360;
+					if (dLat * dLat + dLng * dLng > radSq) continue;
+					if (other.sideIndex === sideIdx) friendlyCount++;
+					else enemyCount++;
+				}
+
+				if (enemyCount >= 2 && friendlyCount >= enemyCount * 3) {
+					const score = enemyCount * 10 + friendlyCount;
+					if (score > bestScore) {
+						bestScore = score;
+						bestEncirclement = { lat: cell.lat, lng: cell.lng, poly };
+					}
+				}
+			}
+		}
+
+		if (bestEncirclement) {
+			const { lat: tLat, lng: tLng, poly } = bestEncirclement;
+			const staging = [];
+			for (let p = 0; p < poly.length; p++) {
+				let dLng = tLng - poly[p].lng;
+				if (dLng > 180) dLng -= 360;
+				else if (dLng < -180) dLng += 360;
+				const dSq = (tLat - poly[p].lat) ** 2 + dLng ** 2;
+				staging.push({ lat: poly[p].lat, lng: poly[p].lng, dSq });
+			}
+			staging.sort((a, b) => a.dSq - b.dSq);
+			const stagingCells = staging.slice(
+				0,
+				Math.max(5, Math.floor(staging.length / 3)),
+			);
+
+			let sLat = 0,
+				sLng = 0;
+			for (const sc of stagingCells) {
+				sLat += sc.lat;
+				sLng += sc.lng;
+			}
+			sLat /= stagingCells.length;
+			sLng /= stagingCells.length;
+			const arrowPoints = [
+				{ lat: sLat, lng: sLng },
+				{ lat: tLat, lng: tLng },
+			];
+
+			_warPlan[sideIdx] = {
+				type: "ENCIRCLE",
+				phase: "PREPARATION",
+				target: { lat: tLat, lng: tLng, name: "Encirclement Pocket" },
+				stagingCells,
+				arrowPoints,
+				startedTick: simFrameCount,
+				lastProgressTick: simFrameCount,
+				progress: 0,
+				activeUnitCount: 0,
+			};
 			return;
 		}
+	}
 
-		// ENCIRCLE plan: detect pockets where we have 3×+ local superiority
-		if (posture === "OFFENSIVE" && unitCount > 10) {
-			const frontlineKeys = Object.keys(_frontlinePolys || {});
-			let bestEncirclement = null, bestScore = 0;
-
-			for (const key of frontlineKeys) {
-				const [a, b] = key.split("_").map(Number);
-				if (a !== sideIdx && b !== sideIdx) continue;
-				const poly = _frontlinePolys[key];
-				if (!poly || poly.length < 5) continue;
-
-				const stride = Math.max(1, Math.floor(poly.length / 20));
-				for (let ci = 0; ci < Math.min(500, poly.length); ci += stride) {
-					const cell = poly[ci];
-					let friendlyCount = 0, enemyCount = 0;
-					const radSq = 1.0;
-
-					for (let ui = 0; ui < units.length; ui++) {
-						const other = units[ui];
-						if (other.deployTicks > 0) continue;
-						const dLat = other.lat - cell.lat;
-						let dLng = other.lng - cell.lng;
-						if (dLng > 180) dLng -= 360; else if (dLng < -180) dLng += 360;
-						if (dLat * dLat + dLng * dLng > radSq) continue;
-						if (other.sideIndex === sideIdx) friendlyCount++;
-						else enemyCount++;
-					}
-
-					if (enemyCount >= 2 && friendlyCount >= enemyCount * 3) {
-						const score = enemyCount * 10 + friendlyCount;
-						if (score > bestScore) {
-							bestScore = score;
-							bestEncirclement = { lat: cell.lat, lng: cell.lng, poly };
-						}
-					}
-				}
-			}
-
-			if (bestEncirclement) {
-				const { lat: tLat, lng: tLng, poly } = bestEncirclement;
-				const staging = [];
-				for (let p = 0; p < poly.length; p++) {
-					let dLng = tLng - poly[p].lng;
-					if (dLng > 180) dLng -= 360; else if (dLng < -180) dLng += 360;
-					const dSq = (tLat - poly[p].lat) ** 2 + dLng ** 2;
-					staging.push({ lat: poly[p].lat, lng: poly[p].lng, dSq });
-				}
-				staging.sort((a, b) => a.dSq - b.dSq);
-				const stagingCells = staging.slice(0, Math.max(5, Math.floor(staging.length / 3)));
-
-				let sLat = 0, sLng = 0;
-				for (const sc of stagingCells) { sLat += sc.lat; sLng += sc.lng; }
-				sLat /= stagingCells.length; sLng /= stagingCells.length;
-				const arrowPoints = [{ lat: sLat, lng: sLng }, { lat: tLat, lng: tLng }];
-
-				_warPlan[sideIdx] = {
-					type: "ENCIRCLE",
-					phase: "PREPARATION",
-					target: { lat: tLat, lng: tLng, name: "Encirclement Pocket" },
-					stagingCells,
-					arrowPoints,
-					startedTick: simFrameCount,
-					lastProgressTick: simFrameCount,
-					progress: 0,
-					activeUnitCount: 0,
-				};
-				return;
-			}
-		}
-
-		// Find nearest enemy-controlled city (via dominantSideMap)
+	// Find nearest enemy-controlled city (via dominantSideMap)
 	const enemyCities = [];
 	const myAllyIds = new Set(sideCountries.map((c) => c.id));
 	for (let ci = 0; ci < activeTheaterCities.length; ci++) {
@@ -6395,28 +6441,42 @@ export function generateWarPlan(sideIdx) {
 	// Score: prefer capitals, then proximity to frontline
 	if (enemyCities.length > 0) {
 		// Find center of friendly frontline for distance reference
-		let fLat = 0, fLng = 0, fCount = 0;
+		let fLat = 0,
+			fLng = 0,
+			fCount = 0;
 		for (const key of Object.keys(_frontlinePolys || {})) {
 			const [a, b] = key.split("_").map(Number);
 			if (a !== sideIdx && b !== sideIdx) continue;
 			const poly = _frontlinePolys[key];
 			if (!poly) continue;
-			for (let p = 0; p < poly.length; p += Math.max(1, Math.floor(poly.length / 20))) {
+			for (
+				let p = 0;
+				p < poly.length;
+				p += Math.max(1, Math.floor(poly.length / 20))
+			) {
 				fLat += poly[p].lat;
 				fLng += poly[p].lng;
 				fCount++;
 			}
 		}
-		if (fCount > 0) { fLat /= fCount; fLng /= fCount; }
+		if (fCount > 0) {
+			fLat /= fCount;
+			fLng /= fCount;
+		}
 
-		let bestScore = -Infinity, bestCity = null;
+		let bestScore = -Infinity,
+			bestCity = null;
 		for (const ec of enemyCities) {
 			let deLng = ec.city.lng - fLng;
-			if (deLng > 180) deLng -= 360; else if (deLng < -180) deLng += 360;
+			if (deLng > 180) deLng -= 360;
+			else if (deLng < -180) deLng += 360;
 			const dSq = (ec.city.lat - fLat) ** 2 + deLng ** 2;
 			let score = -(dSq * 0.5);
 			if (ec.isCapital) score += 200;
-			if (score > bestScore) { bestScore = score; bestCity = ec.city; }
+			if (score > bestScore) {
+				bestScore = score;
+				bestCity = ec.city;
+			}
 		}
 
 		if (bestCity) {
@@ -6429,24 +6489,40 @@ export function generateWarPlan(sideIdx) {
 				if (!poly) continue;
 				for (let p = 0; p < poly.length; p++) {
 					let dLng = bestCity.lng - poly[p].lng;
-					if (dLng > 180) dLng -= 360; else if (dLng < -180) dLng += 360;
+					if (dLng > 180) dLng -= 360;
+					else if (dLng < -180) dLng += 360;
 					const dSq = (bestCity.lat - poly[p].lat) ** 2 + dLng ** 2;
 					stagingCells.push({ ...poly[p], dSq });
 				}
 			}
 			stagingCells.sort((a, b) => a.dSq - b.dSq);
-			const staging = stagingCells.slice(0, Math.max(3, Math.floor(stagingCells.length / 4)));
+			const staging = stagingCells.slice(
+				0,
+				Math.max(3, Math.floor(stagingCells.length / 4)),
+			);
 
 			// Generate arrow points: from staging center to target city
-			let sLat = 0, sLng = 0;
-			for (const sc of staging) { sLat += sc.lat; sLng += sc.lng; }
-			sLat /= staging.length; sLng /= staging.length;
-			const arrowPoints = [{ lat: sLat, lng: sLng }, { lat: bestCity.lat, lng: bestCity.lng }];
+			let sLat = 0,
+				sLng = 0;
+			for (const sc of staging) {
+				sLat += sc.lat;
+				sLng += sc.lng;
+			}
+			sLat /= staging.length;
+			sLng /= staging.length;
+			const arrowPoints = [
+				{ lat: sLat, lng: sLng },
+				{ lat: bestCity.lat, lng: bestCity.lng },
+			];
 
 			_warPlan[sideIdx] = {
 				type: "CAPTURE_CITY",
 				phase: "PREPARATION",
-				target: { lat: bestCity.lat, lng: bestCity.lng, name: bestCity.name || "Enemy City" },
+				target: {
+					lat: bestCity.lat,
+					lng: bestCity.lng,
+					name: bestCity.name || "Enemy City",
+				},
 				stagingCells: staging,
 				arrowPoints,
 				startedTick: simFrameCount,
@@ -6487,9 +6563,13 @@ export function evaluateAllPlans() {
 		plan.activeUnitCount = 0;
 
 		const ticksSinceStart = simFrameCount - (plan.startedTick || simFrameCount);
-		const ticksSinceProgress = simFrameCount - (plan.lastProgressTick || simFrameCount);
+		const ticksSinceProgress =
+			simFrameCount - (plan.lastProgressTick || simFrameCount);
 
-		if ((plan.type === "CAPTURE_CITY" || plan.type === "ENCIRCLE") && plan.target) {
+		if (
+			(plan.type === "CAPTURE_CITY" || plan.type === "ENCIRCLE") &&
+			plan.target
+		) {
 			// Check if target area is now under friendly control
 			const tIdx = getGridIndex(plan.target.lat, plan.target.lng);
 			const captured = tIdx !== -1 && dominantSideMap[tIdx] === si;
@@ -6497,7 +6577,8 @@ export function evaluateAllPlans() {
 				plan.phase = "CONSOLIDATION";
 				plan.progress = 1.0;
 				// After consolidation period, generate next plan
-				if (ticksSinceProgress > 1800) { // ~30 seconds at 60fps
+				if (ticksSinceProgress > 1800) {
+					// ~30 seconds at 60fps
 					generateWarPlan(si);
 				}
 				continue;
@@ -6515,7 +6596,8 @@ export function evaluateAllPlans() {
 				const firstCountry = sideCountries[0];
 				const stats = latestCountryStats.get(firstCountry.id);
 				if (stats && plan._territoryAtStart !== undefined) {
-					const territoryLoss = plan._territoryAtStart - (stats.controlled || 0);
+					const territoryLoss =
+						plan._territoryAtStart - (stats.controlled || 0);
 					if (territoryLoss > 50) {
 						generateWarPlan(si); // Enemy counter-offensive → reassess
 						continue;
@@ -7246,10 +7328,14 @@ export function performSimulationTick() {
 			sides[si]?.find((c) => c.id === u.sovereignId),
 			meta || null,
 		);
-		const buffMult = {
-			buff: 2.5, super: 10, godly: 40,
-			weakened: 0.7, crippled: 0.4,
-		}[buff] || 1.0;
+		const buffMult =
+			{
+				buff: 2.5,
+				super: 10,
+				godly: 40,
+				weakened: 0.7,
+				crippled: 0.4,
+			}[buff] || 1.0;
 		sideStrength[si] += buffMult * (u.health / CONFIG.UNIT_HEALTH);
 	}
 
@@ -8046,7 +8132,8 @@ export function performSimulationTick() {
 
 		const totalEnemiesCount = units.length - unitsBySide[sideIndex].length;
 
-		const pocketContained = localEnemyCount > 0 && localAllyCount > localEnemyCount * 3;
+		const pocketContained =
+			localEnemyCount > 0 && localAllyCount > localEnemyCount * 3;
 
 		// Global Target Fallback (if no enemies were found in the local 6-degree spatial hash but enemies exist somewhere)
 		if (!target && !cityFocusTarget && totalEnemiesCount > 0) {
@@ -8419,12 +8506,16 @@ export function performSimulationTick() {
 		const reserveRoll = (Math.floor(u.id * 1000000) % 1000) / 1000;
 		const isReserveUnit = reserveRoll < aiProfile.reserveShare;
 		const garrisonReq = _garrisonRequirement.get(u.sovereignId) || 0;
-		const isGarrisonUnit = isReserveUnit || (
-			garrisonReq > 0 &&
-			units.filter((uu) => uu.sovereignId === u.sovereignId && uu.deployTicks === 0).indexOf(u) < garrisonReq &&
-			!shouldMopUp &&
-			localEnemyCount < 3
-		);
+		const isGarrisonUnit =
+			isReserveUnit ||
+			(garrisonReq > 0 &&
+				units
+					.filter(
+						(uu) => uu.sovereignId === u.sovereignId && uu.deployTicks === 0,
+					)
+					.indexOf(u) < garrisonReq &&
+				!shouldMopUp &&
+				localEnemyCount < 3);
 		u.isGarrison = isGarrisonUnit;
 
 		if (
@@ -8481,48 +8572,70 @@ export function performSimulationTick() {
 
 				// ── War Plan Movement: override direction based on active plan ──
 				let planSpeedMult = 1.0;
-				let planDirLat = 0, planDirLng = 0, isPlanUnit = false;
+				let planDirLat = 0,
+					planDirLng = 0,
+					isPlanUnit = false;
 				const activePlan = _warPlan[u.sideIndex];
 
 				// Only apply plan when safe: no nearby enemies, not engaged, not retreating
-				if (!shouldMopUp && !retreatVector && !isEngaged && (localEnemyCount < 2 || pocketContained) && activePlan && activePlan.type !== "DEFEND") {
+				if (
+					!shouldMopUp &&
+					!retreatVector &&
+					!isEngaged &&
+					(localEnemyCount < 2 || pocketContained) &&
+					activePlan &&
+					activePlan.type !== "DEFEND"
+				) {
 					isPlanUnit = true;
-					if (activePlan.activeUnitCount !== undefined) activePlan.activeUnitCount++;
+					if (activePlan.activeUnitCount !== undefined)
+						activePlan.activeUnitCount++;
 
-					if (activePlan.phase === "PREPARATION" && activePlan.stagingCells?.length > 0) {
+					if (
+						activePlan.phase === "PREPARATION" &&
+						activePlan.stagingCells?.length > 0
+					) {
 						// Rally to staging cells at 2× speed
 						const staging = activePlan.stagingCells;
-						const sc = staging[Math.floor(Math.abs(u.id * 1000000) % staging.length)];
+						const sc =
+							staging[Math.floor(Math.abs(u.id * 1000000) % staging.length)];
 						if (sc) {
-							let pdLat = sc.lat - u.lat;
+							const pdLat = sc.lat - u.lat;
 							let pdLng = sc.lng - u.lng;
-							if (pdLng > 180) pdLng -= 360; else if (pdLng < -180) pdLng += 360;
+							if (pdLng > 180) pdLng -= 360;
+							else if (pdLng < -180) pdLng += 360;
 							const pd = Math.sqrt(pdLat * pdLat + pdLng * pdLng);
-							if (pd > 0.01) { planDirLat = pdLat / pd; planDirLng = pdLng / pd; }
+							if (pd > 0.01) {
+								planDirLat = pdLat / pd;
+								planDirLng = pdLng / pd;
+							}
 							planSpeedMult = 2.0;
 						}
 						// Zero out target direction so plan dominates; skip combat engagement
 						moveDirLat = 0;
 						moveDirLng = 0;
-
 					} else if (activePlan.phase === "EXECUTION" && activePlan.target) {
-						let pdLat = activePlan.target.lat - u.lat;
+						const pdLat = activePlan.target.lat - u.lat;
 						let pdLng = activePlan.target.lng - u.lng;
-						if (pdLng > 180) pdLng -= 360; else if (pdLng < -180) pdLng += 360;
+						if (pdLng > 180) pdLng -= 360;
+						else if (pdLng < -180) pdLng += 360;
 						const pd = Math.sqrt(pdLat * pdLat + pdLng * pdLng);
 
 						if (activePlan.type === "ENCIRCLE") {
 							const role = u.id % 3;
 							if (role === 0) {
 								// Pin: hold position, minimal advance
-								if (pd > 0.01) { planDirLat = pdLat / pd; planDirLng = pdLng / pd; }
+								if (pd > 0.01) {
+									planDirLat = pdLat / pd;
+									planDirLng = pdLng / pd;
+								}
 								planSpeedMult = 0.4;
 							} else {
 								// Flank: curve around pocket at breakthrough speed
 								const flankAngle = role === 1 ? -70 : 70;
-								const rad = flankAngle * Math.PI / 180;
+								const rad = (flankAngle * Math.PI) / 180;
 								if (pd > 0.01) {
-									const nx = pdLat / pd, ny = pdLng / pd;
+									const nx = pdLat / pd,
+										ny = pdLng / pd;
 									planDirLat = nx * Math.cos(rad) - ny * Math.sin(rad);
 									planDirLng = nx * Math.sin(rad) + ny * Math.cos(rad);
 								}
@@ -8530,27 +8643,40 @@ export function performSimulationTick() {
 							}
 						} else {
 							// CAPTURE_CITY / PUSH_FRONT: breakthrough push with spearhead variation
-							if (pd > 0.01) { planDirLat = pdLat / pd; planDirLng = pdLng / pd; }
+							if (pd > 0.01) {
+								planDirLat = pdLat / pd;
+								planDirLng = pdLng / pd;
+							}
 							const spearhead = 0.8 + (Math.sin(u.id * 777) * 0.5 + 0.5) * 0.8;
 							planSpeedMult = 2.0 * spearhead;
 						}
 						activePlan.progress = Math.min(1.0, Math.max(0, 1.0 - pd / 5.0));
-
-					} else if (activePlan.phase === "CONSOLIDATION" && activePlan.target) {
+					} else if (
+						activePlan.phase === "CONSOLIDATION" &&
+						activePlan.target
+					) {
 						// Spread outward from captured objective toward new frontline
 						let bestDist = Infinity;
-						let bestLat = 0, bestLng = 0;
+						let bestLat = 0,
+							bestLng = 0;
 						for (const fk of Object.keys(_frontlinePolys || {})) {
 							const [fa, fb] = fk.split("_").map(Number);
 							if (fa !== u.sideIndex && fb !== u.sideIndex) continue;
 							const poly = _frontlinePolys[fk];
 							if (!poly) continue;
-							const idx = Math.floor(Math.abs(u.id * 777 + simFrameCount) % poly.length);
+							const idx = Math.floor(
+								Math.abs(u.id * 777 + simFrameCount) % poly.length,
+							);
 							const fc = poly[idx];
 							let fLng = fc.lng - u.lng;
-							if (fLng > 180) fLng -= 360; else if (fLng < -180) fLng += 360;
+							if (fLng > 180) fLng -= 360;
+							else if (fLng < -180) fLng += 360;
 							const dSq = (fc.lat - u.lat) ** 2 + fLng ** 2;
-							if (dSq < bestDist) { bestDist = dSq; bestLat = fc.lat; bestLng = fc.lng; }
+							if (dSq < bestDist) {
+								bestDist = dSq;
+								bestLat = fc.lat;
+								bestLng = fc.lng;
+							}
 						}
 						if (bestDist < Infinity && bestDist > 0.0001) {
 							const d = Math.sqrt(bestDist);
@@ -8566,17 +8692,33 @@ export function performSimulationTick() {
 
 				// Blend plan direction into movement
 				if (isPlanUnit && (planDirLat !== 0 || planDirLng !== 0)) {
-					const isStagePhase = activePlan && (activePlan.phase === "PREPARATION" || activePlan.phase === "CONSOLIDATION");
-					const planBlend = isStagePhase ? 1.0 : (pocketContained ? 0.6 : 0.2);
+					const isStagePhase =
+						activePlan &&
+						(activePlan.phase === "PREPARATION" ||
+							activePlan.phase === "CONSOLIDATION");
+					const planBlend = isStagePhase ? 1.0 : pocketContained ? 0.6 : 0.2;
 					moveDirLat = moveDirLat * (1 - planBlend) + planDirLat * planBlend;
 					moveDirLng = moveDirLng * (1 - planBlend) + planDirLng * planBlend;
-					const magP = Math.sqrt(moveDirLat * moveDirLat + moveDirLng * moveDirLng);
-					if (magP > 0) { moveDirLat /= magP; moveDirLng /= magP; }
+					const magP = Math.sqrt(
+						moveDirLat * moveDirLat + moveDirLng * moveDirLng,
+					);
+					if (magP > 0) {
+						moveDirLat /= magP;
+						moveDirLng /= magP;
+					}
 				}
 
 				// Front-slot positioning: pull toward assigned frontline slot
 				// Disabled during staging phases so units rally/spread freely
-				if (u.frontSlot && !shouldMopUp && !retreatVector && !isEngaged && (!activePlan || (activePlan.phase !== "PREPARATION" && activePlan.phase !== "CONSOLIDATION"))) {
+				if (
+					u.frontSlot &&
+					!shouldMopUp &&
+					!retreatVector &&
+					!isEngaged &&
+					(!activePlan ||
+						(activePlan.phase !== "PREPARATION" &&
+							activePlan.phase !== "CONSOLIDATION"))
+				) {
 					const sdLat = u.frontSlot.targetLat - u.lat;
 					let sdLng = u.frontSlot.targetLng - u.lng;
 					if (sdLng > 180) sdLng -= 360;
@@ -8584,15 +8726,28 @@ export function performSimulationTick() {
 					const sdDist = Math.sqrt(sdLat * sdLat + sdLng * sdLng);
 					if (sdDist > 0.01) {
 						const slotStrength = Math.min(0.45, dist * 2);
-						moveDirLat = moveDirLat * (1 - slotStrength) + (sdLat / sdDist) * slotStrength;
-						moveDirLng = moveDirLng * (1 - slotStrength) + (sdLng / sdDist) * slotStrength;
-						const magSlot = Math.sqrt(moveDirLat * moveDirLat + moveDirLng * moveDirLng);
-						if (magSlot > 0) { moveDirLat /= magSlot; moveDirLng /= magSlot; }
+						moveDirLat =
+							moveDirLat * (1 - slotStrength) + (sdLat / sdDist) * slotStrength;
+						moveDirLng =
+							moveDirLng * (1 - slotStrength) + (sdLng / sdDist) * slotStrength;
+						const magSlot = Math.sqrt(
+							moveDirLat * moveDirLat + moveDirLng * moveDirLng,
+						);
+						if (magSlot > 0) {
+							moveDirLat /= magSlot;
+							moveDirLng /= magSlot;
+						}
 					}
 				}
 
 				// Pull towards nearby frontline — disabled during plan staging phases
-				if (borderDir && !isAtSea && (!activePlan || (activePlan.phase !== "PREPARATION" && activePlan.phase !== "CONSOLIDATION"))) {
+				if (
+					borderDir &&
+					!isAtSea &&
+					(!activePlan ||
+						(activePlan.phase !== "PREPARATION" &&
+							activePlan.phase !== "CONSOLIDATION"))
+				) {
 					// Force units to prioritize the frontline even more heavily to prevent the "interior roaming" seen in clusters.
 					const blendStrength = aiProfile.frontlineBlend;
 					moveDirLat =
@@ -9806,9 +9961,12 @@ export function capitulateCountry(country, sideIndex) {
 
 	// Build set of active combatant IDs (countries still in the war)
 	const activeCombatantIds = new Set();
-	sides.forEach((s) => {
-		s.forEach((c) => activeCombatantIds.add(c.id));
-	});
+	for (let si = 0; si < sides.length; si++) {
+		const s = sides[si];
+		for (let ci = 0; ci < s.length; ci++) {
+			activeCombatantIds.add(s[ci].id);
+		}
+	}
 
 	// Build list of qualifying attackers: { sovereignId, loss, share }
 	// Only include attackers that are still active combatants
@@ -9866,9 +10024,9 @@ export function capitulateCountry(country, sideIndex) {
 	// Assign each unoccupied tile to the nearest qualifying attacker, weighted by casualty share
 	const affectedIndices = [];
 	const attackerTileCounts = new Map();
-	qualifyingAttackers.forEach((qa) =>
-		attackerTileCounts.set(qa.sovereignId, 0),
-	);
+	for (let qi = 0; qi < qualifyingAttackers.length; qi++) {
+		attackerTileCounts.set(qualifyingAttackers[qi].sovereignId, 0);
+	}
 
 	// Compute proportional tile quotas
 	const totalUnoccupied = (() => {

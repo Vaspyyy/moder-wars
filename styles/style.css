@@ -2189,7 +2189,6 @@ html {
 	gap: 12px;
 	max-height: 300px;
 	overflow-y: auto;
-	padding-right: 10px;
 	background: rgba(0, 0, 0, 0.2);
 	border-radius: 4px;
 	padding: 10px;
