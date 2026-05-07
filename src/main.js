@@ -6246,9 +6246,10 @@ export function assignFrontlineSlots() {
 		if (sideFronts[b]) sideFronts[b].push(key);
 	}
 
-	// Collect ALL units for proportional redistribution grouped by side+front
-	const allBySideFront = {};
+	// Collect ALL units per side for proportional multi-front distribution
+	const sideUnits = {};
 	for (let si = 0; si < sides.length; si++) {
+		sideUnits[si] = [];
 		allBySideFront[si] = {};
 	}
 
@@ -6257,27 +6258,47 @@ export function assignFrontlineSlots() {
 		if (u.deployTicks > 0) continue;
 		const si = u.sideIndex;
 		const fronts = sideFronts[si] || [];
-		if (fronts.length === 0) continue;
+		if (fronts.length > 0) sideUnits[si].push(u);
+	}
 
-		// Find which front this unit belongs to (nearest polyline midpoint)
-		let bestDist = Infinity;
-		let bestKey = null;
-		for (let f = 0; f < fronts.length; f++) {
-			const poly = _frontlinePolys[fronts[f]];
-			if (!poly) continue;
-			const mid = poly[Math.floor(poly.length / 2)];
-			let dLng = mid.lng - u.lng;
-			if (dLng > 180) dLng -= 360;
-			else if (dLng < -180) dLng += 360;
-			const dSq = (u.lat - mid.lat) ** 2 + dLng ** 2;
-			if (dSq < bestDist) {
-				bestDist = dSq;
-				bestKey = fronts[f];
-			}
+	// Distribute units across fronts proportionally by frontline polyline length
+	for (let si = 0; si < sides.length; si++) {
+		const fronts = sideFronts[si] || [];
+		const allUnits = sideUnits[si] || [];
+		if (fronts.length === 0 || allUnits.length === 0) continue;
+
+		if (fronts.length === 1) {
+			allBySideFront[si][fronts[0]] = allUnits;
+			continue;
 		}
-		if (bestKey) {
-			if (!allBySideFront[si][bestKey]) allBySideFront[si][bestKey] = [];
-			allBySideFront[si][bestKey].push(u);
+
+		const frontLengths = {};
+		let totalLen = 0;
+		for (const key of fronts) {
+			const len = _frontlinePolys[key]?.length || 0;
+			frontLengths[key] = len;
+			totalLen += len;
+		}
+		if (totalLen === 0) {
+			for (const key of fronts) allBySideFront[si][key] = [];
+			continue;
+		}
+
+		allUnits.sort((a, b) => a.lat - b.lat);
+		let cursor = 0;
+		for (const key of fronts) {
+			const count = Math.max(
+				1,
+				Math.floor((allUnits.length * frontLengths[key]) / totalLen),
+			);
+			const end = Math.min(allUnits.length, cursor + count);
+			if (cursor < allUnits.length) {
+				if (!allBySideFront[si][key]) allBySideFront[si][key] = [];
+				for (let i = cursor; i < end; i++) {
+					allBySideFront[si][key].push(allUnits[i]);
+				}
+			}
+			cursor = end;
 		}
 	}
 
@@ -7511,7 +7532,15 @@ export function performSimulationTick() {
 		for (const [countryId, threat] of neighborThreat.entries()) {
 			const prof = aiCountryState.get(countryId);
 			const reserveShare = prof?.reserveShare || 0.02;
-			const requirement = Math.ceil(threat * 1.2 * (1 - reserveShare));
+			// Match 30% of neutral army (not 120%), with floor of 5
+			const threatMatch = Math.max(5, Math.ceil(threat * 0.3));
+			let requirement = Math.ceil(threatMatch * (1 - reserveShare));
+			// Cap garrison at 25% of own unit count so majority fights the real war
+			const ownUnits = units.filter(
+				(u) => u.sovereignId === countryId && u.deployTicks === 0,
+			).length;
+			const maxGarrison = Math.floor(ownUnits * 0.25);
+			requirement = Math.min(requirement, maxGarrison);
 			_garrisonRequirement.set(countryId, requirement);
 		}
 	}
@@ -8734,6 +8763,9 @@ export function performSimulationTick() {
 								planSpeedMult = 2.0 * spearhead;
 							}
 							activePlan.progress = Math.min(1.0, Math.max(0, 1.0 - pd / 5.0));
+							// Zero out target direction so plan dominates; units follow the plan
+							moveDirLat = 0;
+							moveDirLng = 0;
 						} else if (
 							activePlan.phase === "CONSOLIDATION" &&
 							activePlan.target
@@ -8776,11 +8808,7 @@ export function performSimulationTick() {
 
 				// Blend plan direction into movement
 				if (isPlanUnit && (planDirLat !== 0 || planDirLng !== 0)) {
-					const isStagePhase =
-						activePlan &&
-						(activePlan.phase === "PREPARATION" ||
-							activePlan.phase === "CONSOLIDATION");
-					const planBlend = isStagePhase ? 1.0 : pocketContained ? 0.6 : 0.2;
+					const planBlend = 1.0;
 					moveDirLat = moveDirLat * (1 - planBlend) + planDirLat * planBlend;
 					moveDirLng = moveDirLng * (1 - planBlend) + planDirLng * planBlend;
 					const magP = Math.sqrt(

@@ -2239,6 +2239,11 @@ const ControlMapLayer = L.Layer.extend({
 				ctx.closePath();
 				ctx.fillStyle = ctx.strokeStyle;
 				ctx.fill();
+
+				// Phase label near arrow midpoint
+				ctx.font = "bold 10px monospace";
+				ctx.fillStyle = color;
+				ctx.fillText(plan.phase, midX + 10, midY - 2);
 			}
 		}
 
