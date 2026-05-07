@@ -324,3 +324,20 @@ Hearts of Iron 4-style army management layer.
 
 ### Effort estimate
 ~3,000+ lines across new modules. Multi-phase; each phase independently testable.
+
+---
+
+## TODO — Real-Data Manpower & Recruitment
+
+Recruitment and manpower numbers should be pulled from real data (population × economy)
+rather than the current territory-based formula. Current `UNIT_DENSITY_FACTOR` and
+territory-cell-count scaling produce arbitrary army sizes that don't reflect actual
+national capacity.
+
+### Planned
+- Per-country population data (sourced from real-world census / estimates per era)
+- GDP / industrial output modifier per country per era
+- Conscription law slider affecting available manpower percentage
+- Recruitment rate = f(population, economy, conscription law, war exhaustion)
+- Territory control still matters (occupied pop counts toward occupier at reduced rate)
+- Remove `UNIT_DENSITY_FACTOR` territory-scaling in favor of data-driven caps
