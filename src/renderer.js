@@ -2194,7 +2194,7 @@ const ControlMapLayer = L.Layer.extend({
 				const color = sideColors[si] || "rgba(255,255,0,0.6)";
 				const isDashed = plan.phase === "PREPARATION";
 				ctx.strokeStyle = color.replace(rgbaRe, isDashed ? "0.4)" : "0.7)");
-				ctx.lineWidth = 2 + (plan.type === "CAPTURE_CITY" ? 1 : 0);
+				ctx.lineWidth = Math.max(2, Math.min(6, 2 + Math.floor((plan.activeUnitCount || 0) / 5)));
 				if (isDashed) ctx.setLineDash([8, 6]);
 				else ctx.setLineDash([]);
 

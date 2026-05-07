@@ -6242,13 +6242,84 @@ export function generateWarPlan(sideIdx) {
 
 	// Default to DEFEND if no units or defensive posture
 	const unitCount = units.filter((u) => u.sideIndex === sideIdx && u.deployTicks === 0).length;
-	if (unitCount === 0 || posture === "DEFENSIVE") {
-		_warPlan[sideIdx] = { type: "DEFEND", phase: "PREPARATION", target: null,
-			startedTick: simFrameCount, lastProgressTick: simFrameCount, progress: 0 };
-		return;
-	}
+		if (unitCount === 0 || posture === "DEFENSIVE") {
+			_warPlan[sideIdx] = { type: "DEFEND", phase: "PREPARATION", target: null,
+				startedTick: simFrameCount, lastProgressTick: simFrameCount, progress: 0,
+				activeUnitCount: 0 };
+			return;
+		}
 
-	// Find nearest enemy-controlled city (via dominantSideMap)
+		// ENCIRCLE plan: detect pockets where we have 3×+ local superiority
+		if (posture === "OFFENSIVE" && unitCount > 10) {
+			const frontlineKeys = Object.keys(_frontlinePolys || {});
+			let bestEncirclement = null, bestScore = 0;
+
+			for (const key of frontlineKeys) {
+				const [a, b] = key.split("_").map(Number);
+				if (a !== sideIdx && b !== sideIdx) continue;
+				const poly = _frontlinePolys[key];
+				if (!poly || poly.length < 5) continue;
+
+				const stride = Math.max(1, Math.floor(poly.length / 20));
+				for (let ci = 0; ci < Math.min(500, poly.length); ci += stride) {
+					const cell = poly[ci];
+					let friendlyCount = 0, enemyCount = 0;
+					const radSq = 1.0;
+
+					for (let ui = 0; ui < units.length; ui++) {
+						const other = units[ui];
+						if (other.deployTicks > 0) continue;
+						const dLat = other.lat - cell.lat;
+						let dLng = other.lng - cell.lng;
+						if (dLng > 180) dLng -= 360; else if (dLng < -180) dLng += 360;
+						if (dLat * dLat + dLng * dLng > radSq) continue;
+						if (other.sideIndex === sideIdx) friendlyCount++;
+						else enemyCount++;
+					}
+
+					if (enemyCount >= 2 && friendlyCount >= enemyCount * 3) {
+						const score = enemyCount * 10 + friendlyCount;
+						if (score > bestScore) {
+							bestScore = score;
+							bestEncirclement = { lat: cell.lat, lng: cell.lng, poly };
+						}
+					}
+				}
+			}
+
+			if (bestEncirclement) {
+				const { lat: tLat, lng: tLng, poly } = bestEncirclement;
+				const staging = [];
+				for (let p = 0; p < poly.length; p++) {
+					let dLng = tLng - poly[p].lng;
+					if (dLng > 180) dLng -= 360; else if (dLng < -180) dLng += 360;
+					const dSq = (tLat - poly[p].lat) ** 2 + dLng ** 2;
+					staging.push({ lat: poly[p].lat, lng: poly[p].lng, dSq });
+				}
+				staging.sort((a, b) => a.dSq - b.dSq);
+				const stagingCells = staging.slice(0, Math.max(5, Math.floor(staging.length / 3)));
+
+				let sLat = 0, sLng = 0;
+				for (const sc of stagingCells) { sLat += sc.lat; sLng += sc.lng; }
+				sLat /= stagingCells.length; sLng /= stagingCells.length;
+				const arrowPoints = [{ lat: sLat, lng: sLng }, { lat: tLat, lng: tLng }];
+
+				_warPlan[sideIdx] = {
+					type: "ENCIRCLE",
+					phase: "PREPARATION",
+					target: { lat: tLat, lng: tLng, name: "Encirclement Pocket" },
+					stagingCells,
+					arrowPoints,
+					startedTick: simFrameCount,
+					lastProgressTick: simFrameCount,
+					progress: 0,
+					activeUnitCount: 0,
+				};
+				return;
+			}
+		}
+
+		// Find nearest enemy-controlled city (via dominantSideMap)
 	const enemyCities = [];
 	const myAllyIds = new Set(sideCountries.map((c) => c.id));
 	for (let ci = 0; ci < activeTheaterCities.length; ci++) {
@@ -6323,6 +6394,7 @@ export function generateWarPlan(sideIdx) {
 				startedTick: simFrameCount,
 				lastProgressTick: simFrameCount,
 				progress: 0,
+				activeUnitCount: 0,
 			};
 			return;
 		}
@@ -6336,6 +6408,7 @@ export function generateWarPlan(sideIdx) {
 		startedTick: simFrameCount,
 		lastProgressTick: simFrameCount,
 		progress: 0,
+		activeUnitCount: 0,
 	};
 }
 
@@ -6352,11 +6425,14 @@ export function evaluateAllPlans() {
 			continue;
 		}
 
+		// Reset per-tick unit count
+		plan.activeUnitCount = 0;
+
 		const ticksSinceStart = simFrameCount - (plan.startedTick || simFrameCount);
 		const ticksSinceProgress = simFrameCount - (plan.lastProgressTick || simFrameCount);
 
-		if (plan.type === "CAPTURE_CITY" && plan.target) {
-			// Check if city is now under friendly control
+		if ((plan.type === "CAPTURE_CITY" || plan.type === "ENCIRCLE") && plan.target) {
+			// Check if target area is now under friendly control
 			const tIdx = getGridIndex(plan.target.lat, plan.target.lng);
 			const captured = tIdx !== -1 && dominantSideMap[tIdx] === si;
 			if (captured) {
@@ -6373,6 +6449,24 @@ export function evaluateAllPlans() {
 			if (ticksSinceProgress > 1800 && ticksSinceStart > 600) {
 				generateWarPlan(si); // Failed — reassess
 				continue;
+			}
+
+			// Counter-offensive interrupt: if enemy pushes back significantly, abort
+			const sideCountries = sides[si] || [];
+			if (sideCountries.length > 0) {
+				const firstCountry = sideCountries[0];
+				const stats = countryStats.get(firstCountry.id);
+				if (stats && plan._territoryAtStart !== undefined) {
+					const territoryLoss = plan._territoryAtStart - (stats.controlled || 0);
+					if (territoryLoss > 50) {
+						generateWarPlan(si); // Enemy counter-offensive → reassess
+						continue;
+					}
+				}
+				// Track territory at plan start for interrupt detection
+				if (stats && plan._territoryAtStart === undefined) {
+					plan._territoryAtStart = stats.controlled || 0;
+				}
 			}
 
 			// Check if posture changed
@@ -8335,8 +8429,10 @@ export function performSimulationTick() {
 				// Only apply plan when safe: no nearby enemies, not engaged, not retreating
 				if (!shouldMopUp && !retreatVector && !isEngaged && (localEnemyCount < 2 || pocketContained) && activePlan && activePlan.type !== "DEFEND") {
 					isPlanUnit = true;
+					if (activePlan.activeUnitCount !== undefined) activePlan.activeUnitCount++;
+
 					if (activePlan.phase === "PREPARATION" && activePlan.stagingCells?.length > 0) {
-						// Round-robin staging: each unit gets a different cell so they spread out
+						// Rally to staging cells at 2× speed
 						const staging = activePlan.stagingCells;
 						const sc = staging[Math.floor(Math.abs(u.id * 1000000) % staging.length)];
 						if (sc) {
@@ -8345,32 +8441,84 @@ export function performSimulationTick() {
 							if (pdLng > 180) pdLng -= 360; else if (pdLng < -180) pdLng += 360;
 							const pd = Math.sqrt(pdLat * pdLat + pdLng * pdLng);
 							if (pd > 0.01) { planDirLat = pdLat / pd; planDirLng = pdLng / pd; }
-							planSpeedMult = 1.8;
+							planSpeedMult = 2.0;
 						}
+						// Zero out target direction so plan dominates; skip combat engagement
+						moveDirLat = 0;
+						moveDirLng = 0;
+
 					} else if (activePlan.phase === "EXECUTION" && activePlan.target) {
-						// Gentle nudge toward objective — tactical + slot movement still dominate
 						let pdLat = activePlan.target.lat - u.lat;
 						let pdLng = activePlan.target.lng - u.lng;
 						if (pdLng > 180) pdLng -= 360; else if (pdLng < -180) pdLng += 360;
 						const pd = Math.sqrt(pdLat * pdLat + pdLng * pdLng);
-						if (pd > 0.01) { planDirLat = pdLat / pd; planDirLng = pdLng / pd; }
-						planSpeedMult = 1.15;
+
+						if (activePlan.type === "ENCIRCLE") {
+							const role = u.id % 3;
+							if (role === 0) {
+								// Pin: hold position, minimal advance
+								if (pd > 0.01) { planDirLat = pdLat / pd; planDirLng = pdLng / pd; }
+								planSpeedMult = 0.4;
+							} else {
+								// Flank: curve around pocket at breakthrough speed
+								const flankAngle = role === 1 ? -70 : 70;
+								const rad = flankAngle * Math.PI / 180;
+								if (pd > 0.01) {
+									const nx = pdLat / pd, ny = pdLng / pd;
+									planDirLat = nx * Math.cos(rad) - ny * Math.sin(rad);
+									planDirLng = nx * Math.sin(rad) + ny * Math.cos(rad);
+								}
+								planSpeedMult = 2.0;
+							}
+						} else {
+							// CAPTURE_CITY / PUSH_FRONT: breakthrough push with spearhead variation
+							if (pd > 0.01) { planDirLat = pdLat / pd; planDirLng = pdLng / pd; }
+							const spearhead = 0.8 + (Math.sin(u.id * 777) * 0.5 + 0.5) * 0.8;
+							planSpeedMult = 2.0 * spearhead;
+						}
 						activePlan.progress = Math.min(1.0, Math.max(0, 1.0 - pd / 5.0));
+
+					} else if (activePlan.phase === "CONSOLIDATION" && activePlan.target) {
+						// Spread outward from captured objective toward new frontline
+						let bestDist = Infinity;
+						let bestLat = 0, bestLng = 0;
+						for (const fk of Object.keys(_frontlinePolys || {})) {
+							const [fa, fb] = fk.split("_").map(Number);
+							if (fa !== u.sideIndex && fb !== u.sideIndex) continue;
+							const poly = _frontlinePolys[fk];
+							if (!poly) continue;
+							const idx = Math.floor(Math.abs(u.id * 777 + simFrameCount) % poly.length);
+							const fc = poly[idx];
+							let fLng = fc.lng - u.lng;
+							if (fLng > 180) fLng -= 360; else if (fLng < -180) fLng += 360;
+							const dSq = (fc.lat - u.lat) ** 2 + fLng ** 2;
+							if (dSq < bestDist) { bestDist = dSq; bestLat = fc.lat; bestLng = fc.lng; }
+						}
+						if (bestDist < Infinity && bestDist > 0.0001) {
+							const d = Math.sqrt(bestDist);
+							planDirLat = (bestLat - u.lat) / d;
+							planDirLng = (bestLng - u.lng) / d;
+							planSpeedMult = 1.5;
+						}
+						// During consolidation, zero out target direction so plan dominates
+						moveDirLat = 0;
+						moveDirLng = 0;
 					}
 				}
 
-				// Blend plan direction into movement (gentle weight to preserve formation)
+				// Blend plan direction into movement
 				if (isPlanUnit && (planDirLat !== 0 || planDirLng !== 0)) {
-					const planBlend = activePlan && activePlan.phase === "PREPARATION" ? (pocketContained ? 0.9 : 0.5) : (pocketContained ? 0.6 : 0.2);
+					const isStagePhase = activePlan && (activePlan.phase === "PREPARATION" || activePlan.phase === "CONSOLIDATION");
+					const planBlend = isStagePhase ? 1.0 : (pocketContained ? 0.6 : 0.2);
 					moveDirLat = moveDirLat * (1 - planBlend) + planDirLat * planBlend;
 					moveDirLng = moveDirLng * (1 - planBlend) + planDirLng * planBlend;
 					const magP = Math.sqrt(moveDirLat * moveDirLat + moveDirLng * moveDirLng);
 					if (magP > 0) { moveDirLat /= magP; moveDirLng /= magP; }
 				}
 
-				// Front-slot positioning: pull toward assigned frontline slot to
-				// spread units evenly along the war front.
-				if (u.frontSlot && !shouldMopUp && !retreatVector && !isEngaged) {
+				// Front-slot positioning: pull toward assigned frontline slot
+				// Disabled during staging phases so units rally/spread freely
+				if (u.frontSlot && !shouldMopUp && !retreatVector && !isEngaged && (!activePlan || (activePlan.phase !== "PREPARATION" && activePlan.phase !== "CONSOLIDATION"))) {
 					const sdLat = u.frontSlot.targetLat - u.lat;
 					let sdLng = u.frontSlot.targetLng - u.lng;
 					if (sdLng > 180) sdLng -= 360;
@@ -8385,8 +8533,8 @@ export function performSimulationTick() {
 					}
 				}
 
-				// Pull towards nearby frontline so units hug the border instead of roaming deep interiors
-				if (borderDir && !isAtSea) {
+				// Pull towards nearby frontline — disabled during plan staging phases
+				if (borderDir && !isAtSea && (!activePlan || (activePlan.phase !== "PREPARATION" && activePlan.phase !== "CONSOLIDATION"))) {
 					// Force units to prioritize the frontline even more heavily to prevent the "interior roaming" seen in clusters.
 					const blendStrength = aiProfile.frontlineBlend;
 					moveDirLat =

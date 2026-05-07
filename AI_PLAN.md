@@ -70,7 +70,7 @@ _sidePosture[sideIdx] = "POSTURE_OFFENSIVE" | "POSTURE_BALANCED" | "POSTURE_DEFE
 
 ---
 
-## Phase 3 — War Plan Generation
+## Phase 3 — War Plan Generation [IMPLEMENTED]
 
 ### Plan types
 
@@ -79,7 +79,7 @@ _sidePosture[sideIdx] = "POSTURE_OFFENSIVE" | "POSTURE_BALANCED" | "POSTURE_DEFE
 | `DEFEND` | Defensive posture | Hold frontline at current position, no advance |
 | `CAPTURE_CITY` | Offensive posture, enemy city within reach | Concentrate forces at the nearest high‑value enemy city, push to capture it |
 | `PUSH_FRONT` | Offensive posture, no nearby city target | Uniform push along the entire frontline |
-| `ENCIRCLE` | 3×+ local numerical superiority | Pin the center, send flanking force around to pocket enemies |
+| `ENCIRCLE` | 3×+ local numerical superiority | Pin the center, send flanking forces around to pocket enemies |
 
 ### Plan lifecycle
 1. **Generation** — when posture changes or current plan completes, evaluate objectives
@@ -102,14 +102,17 @@ _warPlan[sideIdx] = {
   stagingSegment: [{lat, lng}, ...],   // frontline cells nearest to objective
   progress: 0.0,                        // 0 → 1 as units approach objective
   arrowPoints: [{lat, lng}, ...],       // for UI rendering
+  activeUnitCount: 0,                   // per-tick counter
 };
 ```
 
 ### Files
-`src/main.js` — `generateWarPlan(sideIdx)`, `evaluatePlan(sideIdx)`
+`src/main.js` — `generateWarPlan(sideIdx)`
 
 ### Effort
-~350 lines | **High effort**
+~350 lines | **High effort** — Implemented
+
+---
 
 ---
 
@@ -144,7 +147,7 @@ repulsion, and neutral corridor pathfinding.
 `src/main.js` — `executeWarPlan(unit, plan)` called from the per‑unit loop
 
 ### Effort
-~250 lines | **High effort**
+~250 lines | **High effort** — Implemented
 
 ---
 
@@ -243,14 +246,14 @@ war plan generation/execution) and `src/renderer.js` (arrow drawing).
 | Phase | Depends on | Est. lines | Risk |
 |-------|-----------|------------|------|
 | 1 — Frontline Stationing | — | Done | Done |
-| 2 — Auto Posture | 1 | 80 | Low |
-| 3 — War Plan Generation | 1, 2 | 350 | High |
-| 4 — Plan Execution | 1, 3 | 250 | High |
-| 5 — Garrison System | 1, 2 | 120 | Medium |
-| 6 — UI Arrows | 3 | 120 | Low‑Medium |
-| 7 — Plan Evaluation | 3, 4 | 60 | Low |
+| 2 — Auto Posture | 1 | Done | Done |
+| 3 — War Plan Generation | 1, 2 | Done | Done |
+| 4 — Plan Execution | 1, 3 | Done | Done |
+| 5 — Garrison System | 1, 2 | Done | Done |
+| 6 — UI Arrows | 3 | Done | Done |
+| 7 — Plan Evaluation | 3, 4 | Done | Done |
 
-**Total new code: ~980 lines** across 6 remaining phases.
+**All phases implemented.**
 
 ---
 
