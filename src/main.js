@@ -6513,7 +6513,7 @@ export function evaluateAllPlans() {
 			const sideCountries = sides[si] || [];
 			if (sideCountries.length > 0) {
 				const firstCountry = sideCountries[0];
-				const stats = countryStats.get(firstCountry.id);
+				const stats = latestCountryStats.get(firstCountry.id);
 				if (stats && plan._territoryAtStart !== undefined) {
 					const territoryLoss = plan._territoryAtStart - (stats.controlled || 0);
 					if (territoryLoss > 50) {
