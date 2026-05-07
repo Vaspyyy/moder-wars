@@ -2333,6 +2333,9 @@ export const disableAutoFullscreenCheckbox = document.getElementById(
 export const disableCountryGradientCheckbox = document.getElementById(
 	"disable-country-gradient-checkbox",
 );
+export const useSystemFontCheckbox = document.getElementById(
+	"use-system-font-checkbox",
+);
 export const disableInvisibleBuffsCheckbox = document.getElementById(
 	"disable-invisible-buffs-checkbox",
 );
@@ -2376,6 +2379,17 @@ if (disableAutoFullscreenCheckbox) {
 	disableAutoFullscreenCheckbox.addEventListener("change", (e) => {
 		disableFullscreen = e.target.checked;
 		setCookie("mw_disable_fullscreen", disableFullscreen ? "true" : "false");
+	});
+}
+
+if (useSystemFontCheckbox) {
+	useSystemFontCheckbox.addEventListener("change", (e) => {
+		if (e.target.checked) {
+			document.body.classList.add("use-system-font");
+		} else {
+			document.body.classList.remove("use-system-font");
+		}
+		setCookie("mw_use_system_font", e.target.checked ? "true" : "false");
 	});
 }
 
@@ -12552,6 +12566,12 @@ launchBtn.addEventListener("click", () => {
 				disableAutoFullscreenCheckbox.checked ? "true" : "false",
 			);
 		}
+		if (useSystemFontCheckbox) {
+			setCookie(
+				"mw_use_system_font",
+				useSystemFontCheckbox.checked ? "true" : "false",
+			);
+		}
 	} else {
 		setCookie("mw_skip_settings", "false");
 	}
@@ -12633,6 +12653,16 @@ export function checkAutoLaunch() {
 			disableAutoFullscreenCheckbox.checked = fullscreenSaved === "true";
 		}
 		disableFullscreen = fullscreenSaved === "true";
+
+		const systemFontSaved = getCookie("mw_use_system_font");
+		if (useSystemFontCheckbox) {
+			useSystemFontCheckbox.checked = systemFontSaved === "true";
+			if (systemFontSaved === "true") {
+				document.body.classList.add("use-system-font");
+			} else {
+				document.body.classList.remove("use-system-font");
+			}
+		}
 
 		saveSkipCheckbox.checked = true;
 
