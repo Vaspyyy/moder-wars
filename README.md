@@ -8,7 +8,7 @@ A browser-based grand strategy war simulation played on a real-world map. Pick a
 
 ## Running
 
-Open `index.html` in a browser. No build step, no dependencies to install.
+Open https://vaspyyy.github.io/moder-wars/ in a browser. No build step, no dependencies to install.
 
 ## Eras
 
