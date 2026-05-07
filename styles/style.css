@@ -17,7 +17,10 @@ html {
 	background: #0a0a0c;
 }
 
-/* Override custom Playfair Display font with system default when the setting is enabled */
+/* Override custom Playfair Display font with browser's native default when the setting is enabled */
+body.use-system-font {
+	font-family: initial;
+}
 body.use-system-font .menu-v2-title,
 body.use-system-font .menu-v2-author,
 body.use-system-font .menu-v2-link,
@@ -30,9 +33,7 @@ body.use-system-font .settings-tab-btn,
 body.use-system-font .thematic-loading-body .loading-status-text,
 body.use-system-font .selection-title,
 body.use-system-font .scroller-card-name {
-	font-family:
-		-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
-		sans-serif;
+	font-family: inherit;
 }
 
 .ui-overlay {
