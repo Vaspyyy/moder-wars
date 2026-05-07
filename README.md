@@ -4,11 +4,11 @@ A browser-based grand strategy war simulation played on a real-world map. Pick a
 
 ## Status
 
-**Active development** -- this is a dev build. Expect bugs, crashes, and incomplete features. Things will break. If you find an issue, report it.
+**Active development** this is a dev build. Expect bugs, crashes, and incomplete features.
 
 ## Running
 
-Open https://vaspyyy.github.io/moder-wars/ in a browser. No build step, no dependencies to install.
+Open https://vaspyyy.github.io/moder-wars/ in a browser.
 
 ## Eras
 
@@ -18,12 +18,11 @@ Open https://vaspyyy.github.io/moder-wars/ in a browser. No build step, no depen
 
 ## Controls
 
-- **PLAY** -- choose an era and start a war
-- **SETTINGS** -- engine settings (speed, map options)
+- **PLAY** choose an era and start a war
+- **SETTINGS** engine settings (speed, map options)
 - Click-and-drag to pan, scroll to zoom
 - Click a country to inspect it
-- Toggle **WAR PLANS** in the ingame UI to see AI plan arrows
 
 ## Tech
 
-Vanilla JavaScript, Leaflet map, Canvas overlay, Web Workers for frontline computation. No framework, no bundler.
+Vanilla JavaScript, Leaflet map, Canvas overlay, Web Workers for frontline computation.
