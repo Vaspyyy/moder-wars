@@ -2206,6 +2206,14 @@ const ControlMapLayer = L.Layer.extend({
 				ctx.beginPath();
 				// Draw curved arrow from staging to target
 				const pts = plan.arrowPoints;
+				if (
+					Number.isNaN(pts[0].lat) ||
+					Number.isNaN(pts[0].lng) ||
+					Number.isNaN(pts[1].lat) ||
+					Number.isNaN(pts[1].lng)
+				) {
+					continue;
+				}
 				const p0 = map.latLngToContainerPoint([pts[0].lat, pts[0].lng]);
 				const p1 = map.latLngToContainerPoint([pts[1].lat, pts[1].lng]);
 				const midX = (p0.x + p1.x) / 2;

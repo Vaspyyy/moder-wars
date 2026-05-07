@@ -6438,8 +6438,10 @@ export function generateWarPlan(sideIdx) {
 				sLat += sc.lat;
 				sLng += sc.lng;
 			}
-			sLat /= stagingCells.length;
-			sLng /= stagingCells.length;
+			if (stagingCells.length > 0) {
+				sLat /= stagingCells.length;
+				sLng /= stagingCells.length;
+			}
 			const arrowPoints = [
 				{ lat: sLat, lng: sLng },
 				{ lat: tLat, lng: tLng },
@@ -6546,8 +6548,10 @@ export function generateWarPlan(sideIdx) {
 				sLat += sc.lat;
 				sLng += sc.lng;
 			}
-			sLat /= staging.length;
-			sLng /= staging.length;
+			if (staging.length > 0) {
+				sLat /= staging.length;
+				sLng /= staging.length;
+			}
 			const arrowPoints = [
 				{ lat: sLat, lng: sLng },
 				{ lat: bestCity.lat, lng: bestCity.lng },
