@@ -2434,6 +2434,64 @@ export function setLoadingThematic(enabled) {
 	}
 }
 export const playModeBtn = document.getElementById("play-mode-btn");
+export const editorChoiceModal = document.getElementById("editor-choice-modal");
+export const choiceIngameEditor = document.getElementById(
+	"choice-ingame-editor",
+);
+export const choiceExternalEditor = document.getElementById(
+	"choice-external-editor",
+);
+export const cancelEditorChoice = document.getElementById(
+	"cancel-editor-choice",
+);
+
+export const editorSourceModal = document.getElementById("editor-source-modal");
+export const choiceSourceEarth = document.getElementById("choice-source-earth");
+export const choiceSourceBlank = document.getElementById("choice-source-blank");
+export const cancelSourceChoice = document.getElementById(
+	"cancel-source-choice",
+);
+
+export const mapSettingsModal = document.getElementById("map-settings-modal");
+export const mapSettingsNameInput = document.getElementById(
+	"map-settings-name-input",
+);
+export const mapSettingsWidthInput = document.getElementById(
+	"map-settings-width-input",
+);
+export const mapSettingsHeightInput = document.getElementById(
+	"map-settings-height-input",
+);
+export const mapSettingsMissilesCheckbox = document.getElementById(
+	"map-settings-missiles-checkbox",
+);
+export const mapSettingsApplyBtn = document.getElementById(
+	"map-settings-apply-btn",
+);
+export const mapSettingsCancelBtn = document.getElementById(
+	"map-settings-cancel-btn",
+);
+
+export const conquestChoiceModal = document.getElementById(
+	"conquest-choice-modal",
+);
+
+export const eraPageModern = document.getElementById("era-page-modern");
+export const eraPageWars = document.getElementById("era-page-wars");
+export const choiceModernDay = document.getElementById("choice-modern-day");
+export const choice1936Scenario = document.getElementById(
+	"choice-1936-scenario",
+);
+export const choiceWW1Scenario = document.getElementById("choice-ww1-1914");
+export const cancelConquestChoice = document.getElementById(
+	"cancel-conquest-choice",
+);
+export const mainSettingsBtn = document.getElementById("main-settings-btn");
+export const minimizeSetupBtn = document.getElementById("minimize-setup-btn");
+export const minimizeStatsBtn = document.getElementById("minimize-stats-btn");
+export const minimizeStatusBtn = document.getElementById("minimize-status-btn");
+export const muteBtn = document.getElementById("mute-btn");
+export const ingameSettingsBtn = document.getElementById("ingame-settings-btn");
 
 export const tutorialOverlay = document.getElementById("tutorial-overlay");
 export const tutorialStepContainer = document.getElementById(
