@@ -6369,6 +6369,7 @@ export function generateWarPlan(sideIdx) {
 			startedTick: simFrameCount,
 			lastProgressTick: simFrameCount,
 			progress: 0,
+			maxAssignedUnits: unitCount,
 			activeUnitCount: 0,
 		};
 		return;
@@ -6453,6 +6454,7 @@ export function generateWarPlan(sideIdx) {
 				startedTick: simFrameCount,
 				lastProgressTick: simFrameCount,
 				progress: 0,
+				maxAssignedUnits: Math.ceil(unitCount * 0.6),
 				activeUnitCount: 0,
 			};
 			return;
@@ -6564,6 +6566,7 @@ export function generateWarPlan(sideIdx) {
 				startedTick: simFrameCount,
 				lastProgressTick: simFrameCount,
 				progress: 0,
+				maxAssignedUnits: Math.ceil(unitCount * 0.5),
 				activeUnitCount: 0,
 			};
 			return;
@@ -6578,6 +6581,7 @@ export function generateWarPlan(sideIdx) {
 		startedTick: simFrameCount,
 		lastProgressTick: simFrameCount,
 		progress: 0,
+		maxAssignedUnits: Math.ceil(unitCount * 0.8),
 		activeUnitCount: 0,
 	};
 }
@@ -8655,107 +8659,114 @@ export function performSimulationTick() {
 					activePlan &&
 					activePlan.type !== "DEFEND"
 				) {
-					isPlanUnit = true;
-					if (activePlan.activeUnitCount !== undefined)
-						activePlan.activeUnitCount++;
-
-					if (
-						activePlan.phase === "PREPARATION" &&
-						activePlan.stagingCells?.length > 0
-					) {
-						// Rally to staging cells at 2× speed
-						const staging = activePlan.stagingCells;
-						const sc =
-							staging[Math.floor(Math.abs(u.id * 1000000) % staging.length)];
-						if (sc) {
-							const pdLat = sc.lat - u.lat;
-							let pdLng = sc.lng - u.lng;
-							if (pdLng > 180) pdLng -= 360;
-							else if (pdLng < -180) pdLng += 360;
-							const pd = Math.sqrt(pdLat * pdLat + pdLng * pdLng);
-							if (pd > 0.01) {
-								planDirLat = pdLat / pd;
-								planDirLng = pdLng / pd;
-							}
-							planSpeedMult = 2.0;
+					const planFull =
+						activePlan.maxAssignedUnits !== undefined &&
+						activePlan.activeUnitCount >= activePlan.maxAssignedUnits;
+					if (!planFull) {
+						isPlanUnit = true;
+						if (activePlan.activeUnitCount !== undefined) {
+							activePlan.activeUnitCount++;
 						}
-						// Zero out target direction so plan dominates; skip combat engagement
-						moveDirLat = 0;
-						moveDirLng = 0;
-					} else if (activePlan.phase === "EXECUTION" && activePlan.target) {
-						const pdLat = activePlan.target.lat - u.lat;
-						let pdLng = activePlan.target.lng - u.lng;
-						if (pdLng > 180) pdLng -= 360;
-						else if (pdLng < -180) pdLng += 360;
-						const pd = Math.sqrt(pdLat * pdLat + pdLng * pdLng);
 
-						if (activePlan.type === "ENCIRCLE") {
-							const role = u.id % 3;
-							if (role === 0) {
-								// Pin: hold position, minimal advance
+						if (
+							activePlan.phase === "PREPARATION" &&
+							activePlan.stagingCells?.length > 0
+						) {
+							// Rally to staging cells at 2× speed
+							const staging = activePlan.stagingCells;
+							const sc =
+								staging[Math.floor(Math.abs(u.id * 1000000) % staging.length)];
+							if (sc) {
+								const pdLat = sc.lat - u.lat;
+								let pdLng = sc.lng - u.lng;
+								if (pdLng > 180) pdLng -= 360;
+								else if (pdLng < -180) pdLng += 360;
+								const pd = Math.sqrt(pdLat * pdLat + pdLng * pdLng);
 								if (pd > 0.01) {
 									planDirLat = pdLat / pd;
 									planDirLng = pdLng / pd;
 								}
-								planSpeedMult = 0.4;
-							} else {
-								// Flank: curve around pocket at breakthrough speed
-								const flankAngle = role === 1 ? -70 : 70;
-								const rad = (flankAngle * Math.PI) / 180;
-								if (pd > 0.01) {
-									const nx = pdLat / pd,
-										ny = pdLng / pd;
-									planDirLat = nx * Math.cos(rad) - ny * Math.sin(rad);
-									planDirLng = nx * Math.sin(rad) + ny * Math.cos(rad);
-								}
 								planSpeedMult = 2.0;
 							}
-						} else {
-							// CAPTURE_CITY / PUSH_FRONT: breakthrough push with spearhead variation
-							if (pd > 0.01) {
-								planDirLat = pdLat / pd;
-								planDirLng = pdLng / pd;
+							// Zero out target direction so plan dominates; skip combat engagement
+							moveDirLat = 0;
+							moveDirLng = 0;
+						} else if (activePlan.phase === "EXECUTION" && activePlan.target) {
+							const pdLat = activePlan.target.lat - u.lat;
+							let pdLng = activePlan.target.lng - u.lng;
+							if (pdLng > 180) pdLng -= 360;
+							else if (pdLng < -180) pdLng += 360;
+							const pd = Math.sqrt(pdLat * pdLat + pdLng * pdLng);
+
+							if (activePlan.type === "ENCIRCLE") {
+								const role = u.id % 3;
+								if (role === 0) {
+									// Pin: hold position, minimal advance
+									if (pd > 0.01) {
+										planDirLat = pdLat / pd;
+										planDirLng = pdLng / pd;
+									}
+									planSpeedMult = 0.4;
+								} else {
+									// Flank: curve around pocket at breakthrough speed
+									const flankAngle = role === 1 ? -70 : 70;
+									const rad = (flankAngle * Math.PI) / 180;
+									if (pd > 0.01) {
+										const nx = pdLat / pd,
+											ny = pdLng / pd;
+										planDirLat = nx * Math.cos(rad) - ny * Math.sin(rad);
+										planDirLng = nx * Math.sin(rad) + ny * Math.cos(rad);
+									}
+									planSpeedMult = 2.0;
+								}
+							} else {
+								// CAPTURE_CITY / PUSH_FRONT: breakthrough push with spearhead variation
+								if (pd > 0.01) {
+									planDirLat = pdLat / pd;
+									planDirLng = pdLng / pd;
+								}
+								const spearhead =
+									0.8 + (Math.sin(u.id * 777) * 0.5 + 0.5) * 0.8;
+								planSpeedMult = 2.0 * spearhead;
 							}
-							const spearhead = 0.8 + (Math.sin(u.id * 777) * 0.5 + 0.5) * 0.8;
-							planSpeedMult = 2.0 * spearhead;
-						}
-						activePlan.progress = Math.min(1.0, Math.max(0, 1.0 - pd / 5.0));
-					} else if (
-						activePlan.phase === "CONSOLIDATION" &&
-						activePlan.target
-					) {
-						// Spread outward from captured objective toward new frontline
-						let bestDist = Infinity;
-						let bestLat = 0,
-							bestLng = 0;
-						for (const fk of Object.keys(_frontlinePolys || {})) {
-							const [fa, fb] = fk.split("_").map(Number);
-							if (fa !== u.sideIndex && fb !== u.sideIndex) continue;
-							const poly = _frontlinePolys[fk];
-							if (!poly) continue;
-							const idx = Math.floor(
-								Math.abs(u.id * 777 + simFrameCount) % poly.length,
-							);
-							const fc = poly[idx];
-							let fLng = fc.lng - u.lng;
-							if (fLng > 180) fLng -= 360;
-							else if (fLng < -180) fLng += 360;
-							const dSq = (fc.lat - u.lat) ** 2 + fLng ** 2;
-							if (dSq < bestDist) {
-								bestDist = dSq;
-								bestLat = fc.lat;
-								bestLng = fc.lng;
+							activePlan.progress = Math.min(1.0, Math.max(0, 1.0 - pd / 5.0));
+						} else if (
+							activePlan.phase === "CONSOLIDATION" &&
+							activePlan.target
+						) {
+							// Spread outward from captured objective toward new frontline
+							let bestDist = Infinity;
+							let bestLat = 0,
+								bestLng = 0;
+							for (const fk of Object.keys(_frontlinePolys || {})) {
+								const [fa, fb] = fk.split("_").map(Number);
+								if (fa !== u.sideIndex && fb !== u.sideIndex) continue;
+								const poly = _frontlinePolys[fk];
+								if (!poly) continue;
+								const idx = Math.floor(
+									Math.abs(u.id * 777 + simFrameCount) % poly.length,
+								);
+								const fc = poly[idx];
+								let fLng = fc.lng - u.lng;
+								if (fLng > 180) fLng -= 360;
+								else if (fLng < -180) fLng += 360;
+								const dSq = (fc.lat - u.lat) ** 2 + fLng ** 2;
+								if (dSq < bestDist) {
+									bestDist = dSq;
+									bestLat = fc.lat;
+									bestLng = fc.lng;
+								}
 							}
+							if (bestDist < Infinity && bestDist > 0.0001) {
+								const d = Math.sqrt(bestDist);
+								planDirLat = (bestLat - u.lat) / d;
+								planDirLng = (bestLng - u.lng) / d;
+								planSpeedMult = 1.5;
+							}
+							// During consolidation, zero out target direction so plan dominates
+							moveDirLat = 0;
+							moveDirLng = 0;
 						}
-						if (bestDist < Infinity && bestDist > 0.0001) {
-							const d = Math.sqrt(bestDist);
-							planDirLat = (bestLat - u.lat) / d;
-							planDirLng = (bestLng - u.lng) / d;
-							planSpeedMult = 1.5;
-						}
-						// During consolidation, zero out target direction so plan dominates
-						moveDirLat = 0;
-						moveDirLng = 0;
 					}
 				}
 

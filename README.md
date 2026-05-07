@@ -1,0 +1,29 @@
+# Modern Wars
+
+A browser-based grand strategy war simulation played on a real-world map. Pick an era, pick your nations, and watch organic frontlines form as AI armies execute war plans, encircle pockets, and capture territory.
+
+## Status
+
+**Active development** -- this is a dev build. Expect bugs, crashes, and incomplete features. Things will break. If you find an issue, report it.
+
+## Running
+
+Open `index.html` in a browser. No build step, no dependencies to install.
+
+## Eras
+
+- 2022 Modern Day
+- 1936 Interwar
+- 1914 Great War
+
+## Controls
+
+- **PLAY** -- choose an era and start a war
+- **SETTINGS** -- engine settings (speed, map options)
+- Click-and-drag to pan, scroll to zoom
+- Click a country to inspect it
+- Toggle **WAR PLANS** in the ingame UI to see AI plan arrows
+
+## Tech
+
+Vanilla JavaScript, Leaflet map, Canvas overlay, Web Workers for frontline computation. No framework, no bundler.

@@ -4,9 +4,9 @@ export const CONFIG = {
 	GRID_RES: 0.15,
 	INFLUENCE_RATE: 0.18,
 	INFLUENCE_RADIUS: 0.4,
-	UNIT_SPAWN_COUNT: 60, // Base count
-	MAX_UNITS_PER_SIDE: 1800,
-	UNIT_DENSITY_FACTOR: 0.022, // Slightly increased density for modestly more units
+	UNIT_SPAWN_COUNT: 180, // Base count (5x finer granularity)
+	MAX_UNITS_PER_SIDE: 2400,
+	UNIT_DENSITY_FACTOR: 0.066, // 3x density for 5x more units at 1/5th size
 	HOI4_COLORS: {
 		Germany: "#6e6e6e",
 		Russia: "#911c1c",
@@ -49,7 +49,7 @@ export const CONFIG = {
 	},
 	UNIT_SPEED: 0.003,
 	UNIT_NAVAL_SPEED: 0.025, // Significantly faster for swift naval invasions
-	UNIT_TO_SOLDIER_RATIO: 5000,
+	UNIT_TO_SOLDIER_RATIO: 1000, // 1K soldiers per unit flag (finer control)
 	UNIT_HEALTH: 100,
 	// Alpenjäger tuning: small, subtle advantages
 	ALPEN_HEALTH_MULT: 1.25, // +25% health
