@@ -52,11 +52,11 @@ Reduce frame time from 65ms to ~40ms with ~10 targeted changes. Estimated 38% im
 
 ### Concrete steps
 
-**1.1 Eliminate 5000 Maps/tick in occupancy smoothing** (`main.js:6808`)
-The occupancy smoothing loop creates `new Map()` per sample (up to 5000 per tick). Replace with a pre-allocated `Uint8Array` counter.
+**1.1 Eliminate 5000 Maps/tick in occupancy smoothing** (`main.js:6964`)
+The occupancy smoothing loop creates `new Map()` per sample (up to 5000 per tick). Replace with a pre-allocated `Object.create(null)` plain object counter.
 - **Impact:** Removes 5000 heap allocations per tick. Reduces GC pauses.
+- **Result:** Avg FPS 10→11 (+10%), Avg frame 100.0→92.9ms (-7.1%)
 - **Risk:** Low — counting neighbors doesn't need a Map
-- **Gain:** ~3-5ms per frame at high unit counts
 
 **1.2 Remove per-unit `activeTargetPos` object allocation** (`main.js:8662`)
 Every unit allocates `u.activeTargetPos = {lat, lng}` every tick. Cache a reusable object or use two number fields (`u.targetLat`, `u.targetLng`).
@@ -328,11 +328,11 @@ Mobile-specific: prevents thermal throttling degradation. Maintains 30+ FPS even
 
 ## Metrics to Track
 
-| Metric | Baseline (V0.20.11-PF) | Phase 1 target | Phase 3 target | Final target |
-|--------|------------------------|---------------|---------------|-------------|
-| Avg FPS | 10 | 25 | 50 | 60 |
-| Frame avg (ms) | 100.0 | 40 | 20 | 16 |
-| Max spike (ms) | 606.2 | 200 | 80 | 32 |
+| Metric | Baseline (V0.20.11) | 1.1 Result (V0.20.12) | Phase 1 target | Final target |
+|--------|---------------------|----------------------|---------------|-------------|
+| Avg FPS | 10 | 11 | 25 | 60 |
+| Frame avg (ms) | 100.0 | 92.9 | 40 | 16 |
+| Max spike (ms) | 606.2 | 698.5 | 200 | 32 |
 | Render % of frame | ~14% | 20% | 30% | 35% |
 | GC pauses/sec | ~5 | ~2 | ~0.5 | ~0.2 |
 | allocations/tick (objects) | ~6000 | ~1000 | ~200 | ~50 |
