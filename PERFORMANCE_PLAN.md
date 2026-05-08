@@ -58,11 +58,11 @@ The occupancy smoothing loop creates `new Map()` per sample (up to 5000 per tick
 - **Result:** Avg FPS 10→11 (+10%), Avg frame 100.0→92.9ms (-7.1%)
 - **Risk:** Low — counting neighbors doesn't need a Map
 
-**1.2 Remove per-unit `activeTargetPos` object allocation** (`main.js:8662`)
-Every unit allocates `u.activeTargetPos = {lat, lng}` every tick. Cache a reusable object or use two number fields (`u.targetLat`, `u.targetLng`).
-- **Impact:** Eliminates 1000+ allocations/tick
-- **Risk:** Low — renderer needs updating to read new fields (1 line in renderer.js)
-- **Gain:** ~2-3ms
+**1.2 Remove per-unit `activeTargetPos` object allocation** (`main.js:7870, 8823`)
+Every unit allocated `u.activeTargetPos = {lat, lng}` every tick. Turns out this was dead code — never read by renderer or any other consumer.
+- **Impact:** Eliminates 1000+ dead object allocations/tick
+- **Result:** Avg frame 92.9→95.6ms (+2.7ms ?? regression margin), Max spike 698.5→438.8ms (-37.2%)
+- **Risk:** None — dead code removal
 
 **1.3 Combine duplicate `units.filter()` calls in garrison block** (`main.js:7534, 7548`)
 Two separate `.filter()` passes over all units per neighbor country. Pre-compute unit counts by sovereign once, reuse.
