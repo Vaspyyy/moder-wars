@@ -215,13 +215,11 @@ function computeFrontlinePolys() {
 		}
 	}
 
-	// Convert sets to arrays and sort into rough polylines (by latitude + longitude)
+	// Convert sets to arrays and sort each connected segment into its own polyline
 	for (const key of Object.keys(frontierSets)) {
 		const cells = Array.from(frontierSets[key]);
-		const poly = [];
 		const visited = new Set();
 
-		// Simple polyline ordering: start from one end, walk nearest-neighbor
 		const getCoord = (idx) => {
 			const y = Math.floor(idx / gridWidth);
 			const x = idx % gridWidth;
@@ -233,7 +231,6 @@ function computeFrontlinePolys() {
 			};
 		};
 
-		// Find a start point (any unvisited cell)
 		const findStart = () => {
 			for (let c = 0; c < cells.length; c++) {
 				if (!visited.has(cells[c])) return cells[c];
@@ -242,6 +239,7 @@ function computeFrontlinePolys() {
 		};
 
 		let start = findStart();
+		let segIdx = 0;
 		while (start !== -1) {
 			const segment = [];
 			let cur = start;
@@ -249,9 +247,7 @@ function computeFrontlinePolys() {
 			const curCoord = getCoord(cur);
 			segment.push(curCoord);
 
-			// Walk forward from start, picking nearest unvisited neighbor at each step
 			let _prev = -1;
-			// eslint-disable-next-line no-constant-condition
 			while (true) {
 				let bestDist = Infinity;
 				let best = -1;
@@ -260,26 +256,23 @@ function computeFrontlinePolys() {
 					if (visited.has(cells[c])) continue;
 					const nc = getCoord(cells[c]);
 					const dSq = (cc.lat - nc.lat) ** 2 + (cc.lng - nc.lng) ** 2;
-					// Prefer cells within 2 grid cells to keep the line contiguous
 					if (dSq < bestDist && dSq < (CONFIG.GRID_RES * 3) ** 2) {
 						bestDist = dSq;
 						best = cells[c];
 					}
 				}
-				if (best === -1) break; // No more connected cells
+				if (best === -1) break;
 				_prev = cur;
 				cur = best;
 				visited.add(cur);
 				segment.push(getCoord(cur));
 			}
 			if (segment.length > 0) {
-				poly.push(...segment);
+				const segKey = `${key}_${segIdx}`;
+				_frontlinePolys[segKey] = segment;
+				segIdx++;
 			}
 			start = findStart();
-		}
-
-		if (poly.length > 0) {
-			_frontlinePolys[key] = poly;
 		}
 	}
 }

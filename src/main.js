@@ -6286,7 +6286,9 @@ export function assignFrontlineSlots() {
 		if (fronts.length > 0) sideUnits[si].push(u);
 	}
 
-	// Distribute units across fronts proportionally by frontline polyline length
+	// Distribute units across fronts proportionally by polyline length,
+	// with stickiness: units stay in their current front segment unless the
+	// segment is over- or under-manned.
 	for (let si = 0; si < sides.length; si++) {
 		const fronts = sideFronts[si] || [];
 		const allUnits = sideUnits[si] || [];
@@ -6309,21 +6311,51 @@ export function assignFrontlineSlots() {
 			continue;
 		}
 
-		allUnits.sort((a, b) => a.lat - b.lat);
-		let cursor = 0;
+		// Desired unit counts per front, proportional to polyline length
+		const desired = {};
+		let desiredSum = 0;
 		for (const key of fronts) {
-			const count = Math.max(
+			desired[key] = Math.max(
 				1,
 				Math.floor((allUnits.length * frontLengths[key]) / totalLen),
 			);
-			const end = Math.min(allUnits.length, cursor + count);
-			if (cursor < allUnits.length) {
-				if (!allBySideFront[si][key]) allBySideFront[si][key] = [];
-				for (let i = cursor; i < end; i++) {
-					allBySideFront[si][key].push(allUnits[i]);
-				}
+			desiredSum += desired[key];
+		}
+		// Distribute remainder to longest fronts
+		const remainder = allUnits.length - desiredSum;
+		const sortedFronts = [...fronts].sort(
+			(a, b) => frontLengths[b] - frontLengths[a],
+		);
+		for (let ri = 0; ri < remainder; ri++) {
+			desired[sortedFronts[ri % sortedFronts.length]]++;
+		}
+
+		// Sticky assignment: prefer keeping units in their current front segment
+		const sticky = {};
+		for (const key of fronts) sticky[key] = [];
+		const leftovers = [];
+
+		for (const u of allUnits) {
+			const prevKey = u.frontSlot?.pairKey;
+			if (
+				prevKey &&
+				sticky[prevKey] &&
+				sticky[prevKey].length < desired[prevKey]
+			) {
+				sticky[prevKey].push(u);
+			} else {
+				leftovers.push(u);
 			}
-			cursor = end;
+		}
+
+		// Fill remaining slots from leftovers
+		for (const key of fronts) {
+			const needed = desired[key] - sticky[key].length;
+			if (!allBySideFront[si][key]) allBySideFront[si][key] = [];
+			for (const u of sticky[key]) allBySideFront[si][key].push(u);
+			for (let i = 0; i < needed && leftovers.length > 0; i++) {
+				allBySideFront[si][key].push(leftovers.shift());
+			}
 		}
 	}
 
