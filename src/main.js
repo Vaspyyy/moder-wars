@@ -1770,6 +1770,9 @@ export let backgroundTickId = null;
 export let simFrameCount = 0;
 let warGraceEndTick = 0;
 export let simSpeed = 3.0;
+let _perfLastTime = 0;
+let _perfFrameTimeSum = 0;
+let _perfFrameCount = 0;
 export let _cachedP1T = 0,
 	_cachedP2T = 0;
 export let _cachedSoldierEls = [];
@@ -2340,6 +2343,8 @@ export const useSystemFontCheckbox = document.getElementById(
 export const disableInvisibleBuffsCheckbox = document.getElementById(
 	"disable-invisible-buffs-checkbox",
 );
+export const benchmarkBtn = document.getElementById("benchmark-btn");
+export const perfOverlay = document.getElementById("perf-overlay");
 
 // Persist core engine settings the moment they change
 if (mapResSelect) {
@@ -6078,6 +6083,43 @@ export function triggerRandomWar() {
 	activeSideIndex = 0;
 	updateSidesUI();
 	startWar();
+}
+
+/**
+ * Benchmark mode: launch Russia vs China at max speed for stress testing.
+ * Finds both countries by name in countryMetadata and starts a 1v1 war.
+ */
+export async function startBenchmark() {
+	const metaRussia = countryMetadata.find((m) => m && m.name === "Russia");
+	const metaChina = countryMetadata.find((m) => m && m.name === "China");
+	if (!metaRussia || !metaChina) {
+		alert("Russia or China not found in country data.");
+		return;
+	}
+
+	const russia = {
+		id: metaRussia.id,
+		name: metaRussia.name,
+		color: metaRussia.color,
+		role: "OFFENSE",
+		strategy: "BALANCED",
+		buffState: "none",
+	};
+	const china = {
+		id: metaChina.id,
+		name: metaChina.name,
+		color: metaChina.color,
+		role: "OFFENSE",
+		strategy: "BALANCED",
+		buffState: "none",
+	};
+
+	sides = [[russia], [china]];
+	activeSideIndex = 0;
+	updateSidesUI();
+	await startWar();
+	// Crank to max speed for stress testing
+	setSpeed(SPEED_STEPS.indexOf(5));
 }
 
 export function activateCountryMidWar(country, sideIdx) {
@@ -9853,6 +9895,23 @@ export function updateLoop(now) {
 	// Avoid running the visual loop while a background tick loop is active
 	if (document.hidden) return;
 
+	// --- Performance measurement ---
+	const realNow = performance.now();
+	if (_perfLastTime > 0) {
+		const dt = realNow - _perfLastTime;
+		_perfFrameTimeSum += dt;
+		_perfFrameCount++;
+		if (_perfFrameCount >= 30) {
+			const avgMs = _perfFrameTimeSum / _perfFrameCount;
+			const fps = 1000 / avgMs;
+			perfOverlay.textContent = `FPS: ${fps.toFixed(0)} | Frame: ${avgMs.toFixed(1)}ms`;
+			_perfFrameTimeSum = 0;
+			_perfFrameCount = 0;
+		}
+	}
+	_perfLastTime = realNow;
+	// --- End performance measurement ---
+
 	if (!isPaused) {
 		// Run sub-ticks based on simSpeed (handles both fast-forward and slow-motion)
 		frameAccumulator += simSpeed;
@@ -10001,6 +10060,11 @@ export function updateLoop(now) {
 		influenceLayer._update();
 	} else {
 		influenceLayer.render();
+	}
+
+	// Show/hide performance overlay based on simulation state
+	if (perfOverlay) {
+		perfOverlay.style.display = gameState === "SIMULATING" ? "block" : "none";
 	}
 
 	animationFrameId = requestAnimationFrame(updateLoop);
@@ -12806,6 +12870,14 @@ mainSettingsBtn.addEventListener("click", () => {
 	settingsOverlay.style.display = "flex";
 	mainMenu.style.display = "none";
 });
+
+if (benchmarkBtn) {
+	benchmarkBtn.addEventListener("click", () => {
+		mainMenu.style.display = "none";
+		settingsOverlay.style.display = "none";
+		startBenchmark();
+	});
+}
 
 ingameSettingsBtn.addEventListener("click", () => {
 	settingsOverlay.style.display = "flex";

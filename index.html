@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>MW-V0.20.8-PF</title>
+    <title>MW-V0.20.9-PF</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
@@ -207,6 +207,8 @@
                     </button>
                     <div class="nav-separator"></div>
                     <button id="main-settings-btn" class="menu-v2-link">SETTINGS</button>
+                    <div class="nav-separator"></div>
+                    <button id="benchmark-btn" class="menu-v2-link">BENCHMARK</button>
                 </div>
 
                 <!-- New Integrated Scenario Scroller -->
@@ -1002,9 +1004,13 @@
                                     <div style="display:flex; gap:6px; margin-left:auto;">
                                         <button id="item-comment-cancel-reply" class="mini-btn" style="background:#444; display:none;">CANCEL</button>
                                         <button id="item-comment-submit" class="start-btn" style="padding:10px 20px; width:auto; font-size:12px;">SEND TRANSMISSION</button>
-                                    </div>
-                                </div>
-                            </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="perf-overlay" style="display:none; position:absolute; bottom:8px; right:8px; background:rgba(0,0,0,0.75); color:#0f0; padding:4px 10px; border-radius:2px; font:10px monospace; z-index:2000; pointer-events:none; border:1px solid rgba(0,255,0,0.3);">
+            FPS: -- | Frame: --ms
+        </div>
                         </div>
                     </div>
                 </div>
