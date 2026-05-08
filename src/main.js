@@ -6086,12 +6086,33 @@ export function triggerRandomWar() {
 }
 
 /**
- * Benchmark mode: launch Russia vs China at max speed for stress testing.
- * Finds both countries by name in countryMetadata and starts a 1v1 war.
+ * Benchmark mode: load Modern Day scenario, launch Russia vs China at max speed.
+ * Auto-fetches the 2022 preset if the main menu is open with no data loaded yet.
  */
 export async function startBenchmark() {
+	// Load the 2022 Modern Day scenario if countryMetadata isn't populated yet
+	if (!countryMetadata || countryMetadata.length === 0) {
+		loadingStatus.innerText = "Loading Modern World Theater...";
+		loadingOverlay.style.display = "flex";
+		mainMenu.style.display = "none";
+		try {
+			const url = "assets/maps/world map 2022.json";
+			const response = await fetch(url);
+			if (!response.ok) throw new Error("Failed to fetch modern map");
+			const blob = await response.blob();
+			await performPresetLoad(blob, "CONQUEST");
+		} catch (e) {
+			console.error(e);
+			alert("Failed to load 2022 Modern Day scenario.");
+			return;
+		}
+	}
+
+	// Match Russia and China by name (China may be "People's Republic of China")
 	const metaRussia = countryMetadata.find((m) => m && m.name === "Russia");
-	const metaChina = countryMetadata.find((m) => m && m.name === "China");
+	const metaChina = countryMetadata.find(
+		(m) => m && typeof m.name === "string" && m.name.includes("China"),
+	);
 	if (!metaRussia || !metaChina) {
 		alert("Russia or China not found in country data.");
 		return;
