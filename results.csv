@@ -2,3 +2,4 @@ Phase,Version,Frames,Speed,Avg FPS,Min FPS,Max FPS,Avg ms,Max ms,Min ms,Change v
 baseline,V0.20.11-PF,600,5x,10,2,38,100.0,606.2,26.4,—,Russia vs China 2022 scenario
 1.1,V0.20.12-PF,646,5x,11,1,65,92.9,698.5,15.3,-7.1% avg frame,Object.create instead of new Map() in occupancy smoothing
 1.2,V0.20.13-PF,628,5x,10,2,44,95.6,438.8,22.6,-4.4% avg frame (spike -27.6%),Removed dead activeTargetPos allocation
+1.3,V0.20.14-PF,633,5x,11,2,38,94.8,419.2,26.1,-5.2% avg frame (spike -30.8%),Precomputed sovereign unit counts replacing 2x units.filter() per country

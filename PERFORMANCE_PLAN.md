@@ -64,11 +64,11 @@ Every unit allocated `u.activeTargetPos = {lat, lng}` every tick. Turns out this
 - **Result:** Avg frame 92.9→95.6ms (+2.7ms ?? regression margin), Max spike 698.5→438.8ms (-37.2%)
 - **Risk:** None — dead code removal
 
-**1.3 Combine duplicate `units.filter()` calls in garrison block** (`main.js:7534, 7548`)
-Two separate `.filter()` passes over all units per neighbor country. Pre-compute unit counts by sovereign once, reuse.
-- **Impact:** Removes O(neighbors × units) filtering
+**1.3 Combine duplicate `units.filter()` calls in garrison block** (`main.js:7685-7713`)
+Two separate `.filter()` passes over all units per neighbor country. Pre-compute `sovereignUnitCounts` Map once per tick, replacing both with O(1) lookups.
+- **Impact:** Removes O(neighbors × units) filtering on `shouldCountLand` frames
+- **Result:** Avg frame 95.6→94.8ms, Max spike 438.8→419.2ms. Cumulative: -5.2% avg frame, -30.8% max spike from baseline.
 - **Risk:** Low
-- **Gain:** ~2-4ms on `shouldCountLand` frames
 
 **1.4 Replace `units.filter().indexOf()` garrison check** (`main.js:8651`)
 Per garrison unit: full filter pass + indexOf scan. Pre-build a `sovereignUnitList` map once per tick.
@@ -328,11 +328,11 @@ Mobile-specific: prevents thermal throttling degradation. Maintains 30+ FPS even
 
 ## Metrics to Track
 
-| Metric | Baseline (V0.20.11) | 1.1 Result (V0.20.12) | Phase 1 target | Final target |
-|--------|---------------------|----------------------|---------------|-------------|
-| Avg FPS | 10 | 11 | 25 | 60 |
-| Frame avg (ms) | 100.0 | 92.9 | 40 | 16 |
-| Max spike (ms) | 606.2 | 698.5 | 200 | 32 |
+| Metric | Baseline (V0.20.11) | 1.1 (V0.20.12) | 1.2 (V0.20.13) | 1.3 (V0.20.14) | Phase 1 target | Final target |
+|--------|---------------------|-----------------|-----------------|-----------------|---------------|-------------|
+| Avg FPS | 10 | 11 | 10 | 11 | 25 | 60 |
+| Frame avg (ms) | 100.0 | 92.9 | 95.6 | 94.8 | 40 | 16 |
+| Max spike (ms) | 606.2 | 698.5 | 438.8 | 419.2 | 200 | 32 |
 | Render % of frame | ~14% | 20% | 30% | 35% |
 | GC pauses/sec | ~5 | ~2 | ~0.5 | ~0.2 |
 | allocations/tick (objects) | ~6000 | ~1000 | ~200 | ~50 |
