@@ -1,8 +1,25 @@
 # Performance Optimization Plan — Modern Wars
 
+## Measured Baseline (V0.20.11-PF)
+
+**Benchmark:** Russia vs China, 2022 Modern Day scenario, speed 5x, 60-second run.
+
+| Metric | Value |
+|--------|-------|
+| Frames sampled | 600 |
+| Average FPS | 10 |
+| Min FPS (worst) | 2 |
+| Max FPS | 38 |
+| Average frame time | 100.0 ms |
+| Max frame time (spike) | 606.2 ms |
+| Min frame time | 26.4 ms |
+| Speed | 5x |
+
+At speed 5, each visual frame runs up to 5 simulation ticks. The average frame of 100ms means ~500ms of simulation work per visual frame — the game is heavily CPU-bound on simulation, not rendering.
+
 ## Target Platform
 
-Mid-range mobile phones (e.g., Pixel 6a, iPhone 13, Galaxy A54). Current frame time: ~65ms (15 FPS). Target: **16ms (60 FPS)** with 3000+ units actively fighting.
+Mid-range mobile phones (e.g., Pixel 6a, iPhone 13, Galaxy A54). Baseline: ~100ms avg frame (10 FPS). Target: **16ms (60 FPS)** with 3000+ units actively fighting.
 
 ## Current Bottleneck Profile
 
@@ -311,11 +328,12 @@ Mobile-specific: prevents thermal throttling degradation. Maintains 30+ FPS even
 
 ## Metrics to Track
 
-| Metric | Current | Phase 1 target | Phase 3 target | Final target |
-|--------|---------|---------------|---------------|-------------|
-| Frame avg (ms) | 65 | 40 | 20 | 16 |
-| FPS | 15 | 25 | 50 | 60 |
-| Render % of frame | 14% | 20% | 30% | 35% |
+| Metric | Baseline (V0.20.11-PF) | Phase 1 target | Phase 3 target | Final target |
+|--------|------------------------|---------------|---------------|-------------|
+| Avg FPS | 10 | 25 | 50 | 60 |
+| Frame avg (ms) | 100.0 | 40 | 20 | 16 |
+| Max spike (ms) | 606.2 | 200 | 80 | 32 |
+| Render % of frame | ~14% | 20% | 30% | 35% |
 | GC pauses/sec | ~5 | ~2 | ~0.5 | ~0.2 |
 | allocations/tick (objects) | ~6000 | ~1000 | ~200 | ~50 |
 | Memory baseline (MB) | ~150 | ~120 | ~90 | ~70 |
