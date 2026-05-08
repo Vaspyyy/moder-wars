@@ -1782,6 +1782,7 @@ export let _cachedSoldierEls = [];
 export let _cachedSideUnitCounts = [];
 export let _cachedSideSoldierEsts = [];
 export let _cachedSideTerritoryCounts = [];
+export let _cachedSideTerritoryPcts = [];
 export let _cachedCityEls = [];
 export let _cachedUnitCountSpans = [];
 export let _cachedTerritoryCtrlEls = [];
@@ -5283,6 +5284,7 @@ export async function _startWarInner() {
 	_cachedP1T = 0;
 	_cachedP2T = 0;
 	_cachedSideTerritoryCounts = [];
+	_cachedSideTerritoryPcts = [];
 	latestCountryStats.clear();
 	aiCountryState.clear();
 	_warPlan = [];
@@ -9695,6 +9697,14 @@ export function performSimulationTick() {
 		}
 		_cachedSideTerritoryCounts = counts;
 		sideTerritoryCounts = counts;
+		const total = counts.reduce((a, b) => a + b, 0);
+		const pcts = new Array(sides.length).fill(50);
+		if (total > 0) {
+			for (let si = 0; si < sides.length; si++) {
+				pcts[si] = Math.round((counts[si] / total) * 100);
+			}
+		}
+		_cachedSideTerritoryPcts = pcts;
 	}
 	const totalTerritory = sideTerritoryCounts.reduce((a, b) => a + b, 0);
 	const side0Pct =

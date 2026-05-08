@@ -1,13 +1,13 @@
 import L from "leaflet";
 import { CONFIG } from "./config.js";
 import {
+	_cachedSideTerritoryPcts,
 	_cachedTerritoryCtrlEls,
 	_cachedTerritorySegEls,
 	_warPlan,
 	activeBattles,
 	activeTheaterCities,
 	allianceViewEnabled,
-	animationFrameId,
 	bases,
 	biomeMask,
 	bombs,
@@ -1613,24 +1613,18 @@ const ControlMapLayer = L.Layer.extend({
 			ctx.restore();
 		});
 
-		// Calculate theater stats
-		if (isWar && animationFrameId % 10 === 0) {
-			const sideTerritory = new Array(sides.length).fill(0);
-			for (let i = 0; i < dominantSideMap.length; i++) {
-				if (landMask[i] === 2) {
-					const ds = dominantSideMap[i];
-					if (ds >= 0 && ds < sides.length) sideTerritory[ds]++;
-				}
-			}
-			const total = sideTerritory.reduce((a, b) => a + b, 0);
-			if (total > 0) {
-				for (let si = 0; si < sides.length; si++) {
-					const pct = Math.round((sideTerritory[si] / total) * 100);
-					const ctrlEl = _cachedTerritoryCtrlEls[si];
-					if (ctrlEl) ctrlEl.textContent = `${pct}%`;
-					const segEl = _cachedTerritorySegEls[si];
-					if (segEl) segEl.style.width = `${pct}%`;
-				}
+		// Read cached territory percentages from sim tick (avoids 2.88M-cell scan)
+		if (
+			isWar &&
+			_cachedSideTerritoryPcts &&
+			_cachedSideTerritoryPcts.length > 0
+		) {
+			for (let si = 0; si < _cachedSideTerritoryPcts.length; si++) {
+				const pct = _cachedSideTerritoryPcts[si];
+				const ctrlEl = _cachedTerritoryCtrlEls[si];
+				if (ctrlEl) ctrlEl.textContent = `${pct}%`;
+				const segEl = _cachedTerritorySegEls[si];
+				if (segEl) segEl.style.width = `${pct}%`;
 			}
 		}
 
