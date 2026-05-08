@@ -7866,6 +7866,10 @@ export function performSimulationTick() {
 		if (m && m.id !== undefined) _metadataById.set(m.id, m);
 	}
 
+	// Pre-allocate garrison slot counters per sovereign for O(1) assignment
+	// instead of O(N²) units.filter().indexOf() per unit.
+	const garrisonCounters = new Map();
+
 	for (let i = units.length - 1; i >= 0; i--) {
 		const u = units[i];
 
@@ -8815,14 +8819,12 @@ export function performSimulationTick() {
 		const reserveRoll = (Math.floor(u.id * 1000000) % 1000) / 1000;
 		const isReserveUnit = reserveRoll < aiProfile.reserveShare;
 		const garrisonReq = _garrisonRequirement.get(u.sovereignId) || 0;
+		const garIdx = garrisonCounters.get(u.sovereignId) || 0;
+		garrisonCounters.set(u.sovereignId, garIdx + 1);
 		const isGarrisonUnit =
 			isReserveUnit ||
 			(garrisonReq > 0 &&
-				units
-					.filter(
-						(uu) => uu.sovereignId === u.sovereignId && uu.deployTicks === 0,
-					)
-					.indexOf(u) < garrisonReq &&
+				garIdx < garrisonReq &&
 				!shouldMopUp &&
 				localEnemyCount < 3);
 		u.isGarrison = isGarrisonUnit;
