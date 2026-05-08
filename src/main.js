@@ -6730,6 +6730,12 @@ export function evaluateAllPlans() {
 }
 
 export function performSimulationTick() {
+	// TODO: Remove per-unit level thinking. Only army groups and war plans should
+	// move units — no per-unit level movement and decision making. War plans are the
+	// bread and butter of AI movement. Individual unit targeting, mop-up search,
+	// independent pathfinding, and proximity combat decisions should all be replaced
+	// by plan-driven directives.
+
 	// If war is over, stop simulation mechanics (but update loop may continue for aftermath recording)
 	if (gameState === "WAR_OVER") return false;
 	// If in God Mode but the war hasn't started yet, don't tick simulation mechanics
