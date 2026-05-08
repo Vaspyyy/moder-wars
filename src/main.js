@@ -6097,11 +6097,17 @@ export function activateCountryMidWar(country, sideIdx) {
 	for (let i = 0; i < worldControlMap.length; i++) {
 		if (worldControlMap[i] === countryId) {
 			landMask[i] = 2;
-			for (let s = 0; s < sideInfluenceMaps.length; s++)
-				sideInfluenceMaps[s][i] = 0;
-			sideInfluenceMaps[sideIdx][i] = 1.0;
-			syncOccupationFromSideInfluence(i);
-			primaryOccupierMap[i] = countryId;
+			// Don't erase enemy occupation if the cell is already under enemy control.
+			// Otherwise the German army that already conquered Czechia would need to
+			// re-propagate influence from scratch — taking hundreds of throttled ticks.
+			const currentDs = dominantSideMap[i];
+			if (currentDs < 0 || currentDs === sideIdx) {
+				for (let s = 0; s < sideInfluenceMaps.length; s++)
+					sideInfluenceMaps[s][i] = 0;
+				sideInfluenceMaps[sideIdx][i] = 1.0;
+				syncOccupationFromSideInfluence(i);
+				primaryOccupierMap[i] = countryId;
+			}
 			theaterIndices.push(i);
 			cellCount++;
 		}
@@ -7170,18 +7176,20 @@ export function performSimulationTick() {
 			}
 		});
 	} else {
-		// Carry over stats from the last "counting" frame
+		// Carry over stats from the last "counting" frame.
+		// For unitless countries, never inflate controlled/owned to initialCells —
+		// a country with no army can't be controlling territory it hasn't
+		// been counted for. Default to 0 so capitulation can fire promptly.
 		sides.flat().forEach((c) => {
 			const stats = countryStats.get(c.id);
 			if (stats) {
+				const fallback = stats.units === 0 ? 0 : c.initialCells || 0;
 				stats.controlled =
 					c.lastControlledCount !== undefined
 						? c.lastControlledCount
-						: c.initialCells || 0;
+						: fallback;
 				stats.owned =
-					c.lastOwnedCount !== undefined
-						? c.lastOwnedCount
-						: c.initialCells || 0;
+					c.lastOwnedCount !== undefined ? c.lastOwnedCount : fallback;
 			}
 		});
 	}
@@ -9488,12 +9496,11 @@ export function performSimulationTick() {
 			if (!stats) continue;
 
 			const initial = country.initialCells || 1;
-			const controlPct = (stats.controlled / initial) * 100;
 
-			// On non-counting frames, owned/controlled may be cached. For near-defeated,
-			// unitless countries, do a direct ownership pass to avoid stale values blocking annexation.
+			// On non-counting frames, owned/controlled may be cached. For unitless
+			// countries, do a direct ownership pass to avoid stale values blocking annexation.
 			let liveOwnedWarTiles = stats.owned || 0;
-			if (!shouldCountLand && stats.units === 0 && controlPct < 35) {
+			if (stats.units === 0) {
 				let exactOwned = 0;
 				for (let idx = 0; idx < worldControlMap.length; idx++) {
 					if (landMask[idx] === 2 && worldControlMap[idx] === country.id)
@@ -9507,8 +9514,24 @@ export function performSimulationTick() {
 			// - Otherwise, fight until almost nothing remains (2% land).
 			// - Hard fail-safe: if a country owns zero active war tiles, annex immediately.
 			//   This prevents "ghost" survivors from dragging wars on after total loss.
-			// Nations can be granted a grace period (e.g. rebellions) where they are immune to capitulation.
+			// - For unitless countries, direct-scan dominantSideMap to bypass stale
+			//   influence/cached values that can keep controlPct artificially high.
 			const isProtected = country.graceTicks > 0;
+			let directControlled = stats.controlled;
+			if (stats.units === 0) {
+				directControlled = 0;
+				const scanSIdx = countryToSideMap.get(country.id);
+				for (let di = 0; di < worldControlMap.length; di++) {
+					if (
+						landMask[di] === 2 &&
+						worldControlMap[di] === country.id &&
+						dominantSideMap[di] === scanSIdx
+					) {
+						directControlled++;
+					}
+				}
+			}
+			const controlPct = (directControlled / (country.initialCells || 1)) * 100;
 			const hasNoOwnedWarTiles = liveOwnedWarTiles <= 0;
 			const nearlyErasedNoUnits =
 				stats.units === 0 &&
