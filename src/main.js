@@ -9223,9 +9223,9 @@ export function performSimulationTick() {
 
 					for (let j = 1; j <= sweepSteps; j++) {
 						const angleOff = (sweepAngle / sweepSteps) * j;
-						const checkAngles = [angleOff, -angleOff];
 
-						for (const a of checkAngles) {
+						for (let sign = -1; sign <= 1; sign += 2) {
+							const a = angleOff * sign;
 							const curCos = Math.cos(a);
 							const curSin = Math.sin(a);
 
@@ -9271,9 +9271,9 @@ export function performSimulationTick() {
 						const farLook = corridorLook * 1.6;
 						for (let j = 1; j <= sweepSteps && !foundFriendly; j++) {
 							const angleOff = (sweepAngle / sweepSteps) * j;
-							const checkAngles = [angleOff, -angleOff];
 
-							for (const a of checkAngles) {
+							for (let sign = -1; sign <= 1; sign += 2) {
+								const a = angleOff * sign;
 								const curCos = Math.cos(a);
 								const curSin = Math.sin(a);
 
