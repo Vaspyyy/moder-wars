@@ -6961,7 +6961,7 @@ export function performSimulationTick() {
 			// Sample 3x3 neighborhood
 			const y = Math.floor(idx / gridWidth);
 			const x = idx % gridWidth;
-			const counts = new Map();
+			const counts = Object.create(null);
 			for (let dy = -1; dy <= 1; dy++) {
 				for (let dx = -1; dx <= 1; dx++) {
 					const nx = x + dx;
@@ -6971,7 +6971,7 @@ export function performSimulationTick() {
 						const nSide = countryToSideMap.get(nId);
 						// Only count allies
 						if (nId > 0 && nSide !== undefined && nSide === mySide) {
-							counts.set(nId, (counts.get(nId) || 0) + 1);
+							counts[nId] = (counts[nId] || 0) + 1;
 						}
 					}
 				}
@@ -6979,12 +6979,13 @@ export function performSimulationTick() {
 
 			let dominantAlly = myId;
 			let maxC = 0;
-			counts.forEach((c, id) => {
+			for (const id of Object.keys(counts)) {
+				const c = counts[id];
 				if (c > maxC) {
 					maxC = c;
-					dominantAlly = id;
+					dominantAlly = Number(id);
 				}
-			});
+			}
 
 			// If the occupier is a tiny island in an allied sea (majority neighbors are a single ally), flip to them.
 			if (maxC >= 5 && dominantAlly !== myId) {
