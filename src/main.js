@@ -7867,7 +7867,6 @@ export function performSimulationTick() {
 
 		u.dirLat = 0;
 		u.dirLng = 0; // Reset movement indicators for the current tick
-		u.activeTargetPos = null; // Reset target pos for the current tick (used for arrows)
 
 		// Handle deployment/mobilization phase
 		if (u.deployTicks > 0) {
@@ -8819,9 +8818,6 @@ export function performSimulationTick() {
 		u.isGarrison = isGarrisonUnit;
 
 		if (target) {
-			// Store target position for the renderer's operational arrows
-			u.activeTargetPos = { lat: target.lat, lng: target.lng };
-
 			// Spatial Jitter: Add a small, unit-specific offset to the target destination
 			// to prevent multiple units from converging on the exact same coordinate.
 			const jitterScale = 0.08;
