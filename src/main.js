@@ -7090,25 +7090,22 @@ export function performSimulationTick() {
 	//       to share the same throttle cadence across all heavy grid scans.
 
 	// Build Spatial Hash for ultra-fast O(1) local combat & target lookup
-	// Shared with renderer to allow high-performance unit culling.
-	// Throttled: rebuilt every 3 ticks — units move ~0.003°/tick vs 2.5° hash cells.
-	if (simFrameCount % 3 === 0) {
-		unitSpatialHash.clear();
-		const unitHash = unitSpatialHash;
-		const HASH_SIZE = UNIT_HASH_CELL_SIZE;
-		for (let i = 0; i < units.length; i++) {
-			const u = units[i];
-			if (Number.isNaN(u.lat) || Number.isNaN(u.lng)) continue;
-			const kx = Math.floor((u.lng + 180) / HASH_SIZE);
-			const ky = Math.floor((u.lat + 90) / HASH_SIZE);
-			const k = `${kx}_${ky}`;
-			let arr = unitHash.get(k);
-			if (!arr) {
-				arr = [];
-				unitHash.set(k, arr);
-			}
-			arr.push(u);
+	// Shared with renderer to allow high-performance unit culling
+	unitSpatialHash.clear();
+	const unitHash = unitSpatialHash;
+	const HASH_SIZE = UNIT_HASH_CELL_SIZE;
+	for (let i = 0; i < units.length; i++) {
+		const u = units[i];
+		if (Number.isNaN(u.lat) || Number.isNaN(u.lng)) continue;
+		const kx = Math.floor((u.lng + 180) / HASH_SIZE);
+		const ky = Math.floor((u.lat + 90) / HASH_SIZE);
+		const k = `${kx}_${ky}`;
+		let arr = unitHash.get(k);
+		if (!arr) {
+			arr = [];
+			unitHash.set(k, arr);
 		}
+		arr.push(u);
 	}
 
 	// OPT-1: Rebuild frontline direction field every N ticks via Web Worker.
