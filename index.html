@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>MW-V0.20.10-PF</title>
+    <title>MW-V0.20.11-PF</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
@@ -1247,5 +1247,14 @@ if ('serviceWorker' in navigator) {
 	navigator.serviceWorker.register('workers/service-worker.js');
 }
 </script>
+
+<div id="benchmark-results" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:9999; align-items:center; justify-content:center;">
+    <div style="background:#111; padding:32px 48px; border-radius:4px; border:1px solid rgba(0,255,0,0.3); text-align:center;">
+        <h2 style="color:#0f0; font:24px monospace; margin:0 0 24px;">BENCHMARK COMPLETE</h2>
+        <div id="benchmark-stats" style="color:#ccc; font:13px monospace; line-height:2.2;"></div>
+        <button id="benchmark-dismiss-btn" style="margin-top:24px; padding:10px 30px; background:#ff4757; border:none; color:#fff; cursor:pointer; font:12px monospace; border-radius:2px;">DISMISS</button>
+    </div>
+</div>
+
 </body>
 </html>

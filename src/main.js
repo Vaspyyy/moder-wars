@@ -1773,6 +1773,9 @@ export let simSpeed = 3.0;
 let _perfLastTime = 0;
 let _perfFrameTimeSum = 0;
 let _perfFrameCount = 0;
+let _isBenchmarking = false;
+let _perfBenchmarkEnd = 0;
+let _perfSamples = [];
 export let _cachedP1T = 0,
 	_cachedP2T = 0;
 export let _cachedSoldierEls = [];
@@ -2345,6 +2348,11 @@ export const disableInvisibleBuffsCheckbox = document.getElementById(
 );
 export const benchmarkBtn = document.getElementById("benchmark-btn");
 export const perfOverlay = document.getElementById("perf-overlay");
+export const benchmarkResults = document.getElementById("benchmark-results");
+export const benchmarkStatsEl = document.getElementById("benchmark-stats");
+export const benchmarkDismissBtn = document.getElementById(
+	"benchmark-dismiss-btn",
+);
 
 // Persist core engine settings the moment they change
 if (mapResSelect) {
@@ -6086,6 +6094,26 @@ export function triggerRandomWar() {
 }
 
 /**
+ * Show benchmark results modal with frame timing statistics.
+ */
+function showBenchmarkResults() {
+	if (_perfSamples.length === 0) return;
+	const avg = _perfSamples.reduce((a, b) => a + b, 0) / _perfSamples.length;
+	const max = Math.max(..._perfSamples);
+	const min = Math.min(..._perfSamples);
+	const avgFps = 1000 / avg;
+	const minFps = 1000 / max;
+	const maxFps = 1000 / min;
+	if (benchmarkStatsEl) {
+		benchmarkStatsEl.innerHTML =
+			`Frames: ${_perfSamples.length} &nbsp;|&nbsp; Speed: ${simSpeed}x<br>` +
+			`Avg FPS: ${avgFps.toFixed(0)} &nbsp;|&nbsp; Min FPS: ${minFps.toFixed(0)} &nbsp;|&nbsp; Max FPS: ${maxFps.toFixed(0)}<br>` +
+			`Avg frame: ${avg.toFixed(1)}ms &nbsp;|&nbsp; Max frame: ${max.toFixed(1)}ms &nbsp;|&nbsp; Min frame: ${min.toFixed(1)}ms`;
+	}
+	if (benchmarkResults) benchmarkResults.style.display = "flex";
+}
+
+/**
  * Benchmark mode: load Modern Day scenario, launch Russia vs China at max speed.
  * Auto-fetches the 2022 preset if the main menu is open with no data loaded yet.
  */
@@ -6141,6 +6169,11 @@ export async function startBenchmark() {
 	await startWar();
 	// Crank to max speed for stress testing
 	setSpeed(SPEED_STEPS.indexOf(5));
+	// Initialize benchmark state
+	isPaused = false;
+	_perfSamples = [];
+	_perfBenchmarkEnd = performance.now() + 60_000;
+	_isBenchmarking = true;
 }
 
 export function activateCountryMidWar(country, sideIdx) {
@@ -9920,17 +9953,34 @@ export function updateLoop(now) {
 	const realNow = performance.now();
 	if (_perfLastTime > 0) {
 		const dt = realNow - _perfLastTime;
+		if (_isBenchmarking) _perfSamples.push(dt);
 		_perfFrameTimeSum += dt;
 		_perfFrameCount++;
 		if (_perfFrameCount >= 30) {
 			const avgMs = _perfFrameTimeSum / _perfFrameCount;
 			const fps = 1000 / avgMs;
-			perfOverlay.textContent = `FPS: ${fps.toFixed(0)} | Frame: ${avgMs.toFixed(1)}ms`;
+			let text = `FPS: ${fps.toFixed(0)} | Frame: ${avgMs.toFixed(1)}ms`;
+			if (_isBenchmarking) {
+				const remaining = Math.max(
+					0,
+					Math.ceil((_perfBenchmarkEnd - realNow) / 1000),
+				);
+				text += ` | Remaining Sim Time: ${remaining}s`;
+			}
+			perfOverlay.textContent = text;
 			_perfFrameTimeSum = 0;
 			_perfFrameCount = 0;
 		}
 	}
 	_perfLastTime = realNow;
+
+	// End-of-benchmark check: auto-pause at 60s mark
+	if (_isBenchmarking && realNow >= _perfBenchmarkEnd) {
+		_isBenchmarking = false;
+		isPaused = true;
+		if (perfOverlay) perfOverlay.style.display = "none";
+		showBenchmarkResults();
+	}
 	// --- End performance measurement ---
 
 	if (!isPaused) {
@@ -10083,9 +10133,9 @@ export function updateLoop(now) {
 		influenceLayer.render();
 	}
 
-	// Show/hide performance overlay based on simulation state
+	// Show/hide performance overlay only during benchmark runs
 	if (perfOverlay) {
-		perfOverlay.style.display = gameState === "SIMULATING" ? "block" : "none";
+		perfOverlay.style.display = _isBenchmarking ? "block" : "none";
 	}
 
 	animationFrameId = requestAnimationFrame(updateLoop);
@@ -12897,6 +12947,13 @@ if (benchmarkBtn) {
 		mainMenu.style.display = "none";
 		settingsOverlay.style.display = "none";
 		startBenchmark();
+	});
+}
+
+if (benchmarkDismissBtn) {
+	benchmarkDismissBtn.addEventListener("click", () => {
+		if (benchmarkResults) benchmarkResults.style.display = "none";
+		isPaused = false;
 	});
 }
 
