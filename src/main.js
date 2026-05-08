@@ -7682,6 +7682,17 @@ export function performSimulationTick() {
 			}
 		}
 
+		// Pre-build sovereign unit counts for O(1) lookup below
+		const sovereignUnitCounts = new Map();
+		for (let ui = 0; ui < units.length; ui++) {
+			const uu = units[ui];
+			if (uu.deployTicks > 0) continue;
+			sovereignUnitCounts.set(
+				uu.sovereignId,
+				(sovereignUnitCounts.get(uu.sovereignId) || 0) + 1,
+			);
+		}
+
 		const neighborThreat = new Map(); // countryId → enemy unit count on border
 		for (const [countryId, neighbors] of adjacencyCache.entries()) {
 			if (!combatantIds.has(countryId)) continue;
@@ -7689,9 +7700,10 @@ export function performSimulationTick() {
 			// Count enemy units near this country's borders
 			for (const nId of neighbors) {
 				if (combatantIds.has(nId)) continue; // skip other combatants
-				// Count units of the neutral neighbor
-				const neighborUnits = units.filter((u) => u.sovereignId === nId).length;
-				borderThreat = Math.max(borderThreat, neighborUnits);
+				borderThreat = Math.max(
+					borderThreat,
+					sovereignUnitCounts.get(nId) || 0,
+				);
 			}
 			if (borderThreat > 0) {
 				neighborThreat.set(countryId, borderThreat);
@@ -7704,9 +7716,7 @@ export function performSimulationTick() {
 			const threatMatch = Math.max(5, Math.ceil(threat * 0.3));
 			let requirement = Math.ceil(threatMatch * (1 - reserveShare));
 			// Cap garrison at 25% of own unit count so majority fights the real war
-			const ownUnits = units.filter(
-				(u) => u.sovereignId === countryId && u.deployTicks === 0,
-			).length;
+			const ownUnits = sovereignUnitCounts.get(countryId) || 0;
 			const maxGarrison = Math.floor(ownUnits * 0.25);
 			requirement = Math.min(requirement, maxGarrison);
 			_garrisonRequirement.set(countryId, requirement);
