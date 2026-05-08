@@ -7092,10 +7092,10 @@ export function performSimulationTick() {
 	// Build Spatial Hash for ultra-fast O(1) local combat & target lookup
 	// Shared with renderer to allow high-performance unit culling.
 	// Throttled: rebuilt every 3 ticks — units move ~0.003°/tick vs 2.5° hash cells.
-	const HASH_SIZE = UNIT_HASH_CELL_SIZE;
-	const unitHash = unitSpatialHash;
 	if (simFrameCount % 3 === 0) {
 		unitSpatialHash.clear();
+		const unitHash = unitSpatialHash;
+		const HASH_SIZE = UNIT_HASH_CELL_SIZE;
 		for (let i = 0; i < units.length; i++) {
 			const u = units[i];
 			if (Number.isNaN(u.lat) || Number.isNaN(u.lng)) continue;
