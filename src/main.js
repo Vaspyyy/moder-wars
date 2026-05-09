@@ -9790,7 +9790,7 @@ export function performSimulationTick() {
 						}
 						planSpeedMult = 2.0;
 					} else if (navalPlan.phase === "TRANSIT") {
-						// Sail toward target coast with land avoidance
+						// Sail toward target coast with mild land avoidance
 						const tdLat = navalPlan.target.lat - u.lat;
 						let tdLng = navalPlan.target.lng - u.lng;
 						if (tdLng > 180) tdLng -= 360;
@@ -9799,17 +9799,15 @@ export function performSimulationTick() {
 						if (td > 0.01) {
 							planDirLat = tdLat / td;
 							planDirLng = tdLng / td;
-							// Check ahead for land — deflect if needed
-							const lookDist = CONFIG.UNIT_NAVAL_SPEED * 5;
+							const lookDist = CONFIG.UNIT_NAVAL_SPEED * 2;
 							const checkLat = u.lat + planDirLat * lookDist;
 							const checkLng = u.lng + planDirLng * lookDist;
 							const checkIdx = getGridIndex(checkLat, checkLng);
 							if (checkIdx !== -1 && landMask[checkIdx] > 0) {
-								// Land ahead — try perpendicular deflections, pick best water path
 								let bestDLat = planDirLat;
 								let bestDLng = planDirLng;
-								let bestWater = 0;
-								for (const ang of [-90, 90, -45, 45]) {
+								let bestScore = -Infinity;
+								for (const ang of [-30, 30, -60, 60]) {
 									const rad = (ang * Math.PI) / 180;
 									const nx =
 										planDirLat * Math.cos(rad) - planDirLng * Math.sin(rad);
@@ -9823,8 +9821,10 @@ export function performSimulationTick() {
 										);
 										if (si === -1 || landMask[si] === 0) wc++;
 									}
-									if (wc > bestWater) {
-										bestWater = wc;
+									const dotProduct = nx * planDirLat + ny * planDirLng;
+									const score = wc * 2 + dotProduct * 3;
+									if (wc > 0 && score > bestScore) {
+										bestScore = score;
 										bestDLat = nx;
 										bestDLng = ny;
 									}
@@ -9949,15 +9949,15 @@ export function performSimulationTick() {
 							if (td > 0.01) {
 								planDirLat = tdLat / td;
 								planDirLng = tdLng / td;
-								const lookDist = CONFIG.UNIT_NAVAL_SPEED * 5;
+								const lookDist = CONFIG.UNIT_NAVAL_SPEED * 2;
 								const checkLat = u.lat + planDirLat * lookDist;
 								const checkLng = u.lng + planDirLng * lookDist;
 								const checkIdx = getGridIndex(checkLat, checkLng);
 								if (checkIdx !== -1 && landMask[checkIdx] > 0) {
 									let bestDLat = planDirLat;
 									let bestDLng = planDirLng;
-									let bestWater = 0;
-									for (const ang of [-90, 90, -45, 45]) {
+									let bestScore = -Infinity;
+									for (const ang of [-30, 30, -60, 60]) {
 										const rad = (ang * Math.PI) / 180;
 										const nx =
 											planDirLat * Math.cos(rad) - planDirLng * Math.sin(rad);
@@ -9971,8 +9971,10 @@ export function performSimulationTick() {
 											);
 											if (si === -1 || landMask[si] === 0) wc++;
 										}
-										if (wc > bestWater) {
-											bestWater = wc;
+										const dotProduct = nx * planDirLat + ny * planDirLng;
+										const score = wc * 2 + dotProduct * 3;
+										if (wc > 0 && score > bestScore) {
+											bestScore = score;
 											bestDLat = nx;
 											bestDLng = ny;
 										}
