@@ -1838,6 +1838,9 @@ export const _defenderReactionPlan = []; // per-side emergency DEFEND at enemy n
 const _proposalReassessTick = []; // per-side last reassessment tick
 const _proposalsCache = []; // per-side cached scored proposals
 const _planReassessNeeded = []; // per-side flag: force immediate reassessment
+const _sidePrevControlled = []; // per-side total controlled cells on last territory check
+const _sidePrevStrengthRatio = []; // per-side force ratio vs enemies
+const _sidePrevPosture = []; // per-side posture string from previous tick
 export const WAR_PLAN_TYPES = [
 	"DEFEND",
 	"PUSH_FRONT",
@@ -7456,17 +7459,69 @@ export function selectPlans(sideIdx, scoredProposals) {
 	return result;
 }
 
-export function evaluateAllPlans() {
-	// ── Reassessment: run the proposal pipeline periodically ──
+function shouldReassess(si) {
 	const REASSESS_INTERVAL = 300;
+	const lastReassess = _proposalReassessTick[si] || 0;
+	let result = false;
+
+	if (_planReassessNeeded[si]) result = true;
+	if (simFrameCount - lastReassess >= REASSESS_INTERVAL) result = true;
+	if (!_warPlan[si]) result = true;
+
+	// Territory change >2%
+	const sideCountries = sides[si];
+	if (sideCountries) {
+		let cur = 0;
+		for (const c of sideCountries) {
+			const stats = latestCountryStats.get(c.id);
+			if (stats) cur += stats.controlled || 0;
+		}
+		const prev = _sidePrevControlled[si] || 0;
+		if (!result && prev > 0 && Math.abs(cur - prev) / Math.max(1, cur) > 0.02) {
+			result = true;
+		}
+		_sidePrevControlled[si] = cur;
+	}
+
+	// Posture change
+	const curPosture = _sidePosture[si] || "BALANCED";
+	const prevPosture = _sidePrevPosture[si];
+	if (!result && prevPosture !== undefined && prevPosture !== curPosture) {
+		result = true;
+	}
+	_sidePrevPosture[si] = curPosture;
+
+	// Force ratio change >20%
+	const ourUnits = _tickUnitsBySide[si] ? _tickUnitsBySide[si].length : 0;
+	let totalEnemyUnits = 0;
+	for (let ei = 0; ei < sides.length; ei++) {
+		if (ei === si) continue;
+		if (!sides[ei] || sides[ei].length === 0) continue;
+		totalEnemyUnits += _tickUnitsBySide[ei] ? _tickUnitsBySide[ei].length : 0;
+	}
+	const curRatio = totalEnemyUnits > 0 ? ourUnits / totalEnemyUnits : Infinity;
+	const prevRatio = _sidePrevStrengthRatio[si];
+	if (
+		!result &&
+		prevRatio !== undefined &&
+		prevRatio > 0 &&
+		Number.isFinite(curRatio)
+	) {
+		if (Math.abs(curRatio - prevRatio) / Math.max(0.01, prevRatio) > 0.2) {
+			result = true;
+		}
+	}
+	_sidePrevStrengthRatio[si] = curRatio;
+
+	return result;
+}
+
+export function evaluateAllPlans() {
+	// ── Reassessment: run the proposal pipeline when triggers fire ──
 	for (let si = 0; si < sides.length; si++) {
 		if (!sides[si] || sides[si].length === 0) continue;
 
-		const lastReassess = _proposalReassessTick[si] || 0;
-		if (
-			simFrameCount - lastReassess >= REASSESS_INTERVAL ||
-			_planReassessNeeded[si]
-		) {
+		if (shouldReassess(si)) {
 			const forceReplace = !!_planReassessNeeded[si];
 			_planReassessNeeded[si] = false;
 			const proposals = generateAllProposals(si);
@@ -7499,7 +7554,6 @@ export function evaluateAllPlans() {
 			if (selected.naval && (!_navalPlan[si] || forceReplace)) {
 				_navalPlan[si] = selected.naval;
 			}
-			// Don't overwrite supply — supply is managed within the naval lifecycle
 			if (selected.supply && !_navalSupplyPlan[si]) {
 				_navalSupplyPlan[si] = selected.supply;
 			}
@@ -7507,7 +7561,7 @@ export function evaluateAllPlans() {
 			// Apply coastal defense plans
 			if (selected.coastal.length > 0) {
 				for (let ci = 0; ci < selected.coastal.length; ci++) {
-					const slot = si * 10 + ci; // per-side coastal slots
+					const slot = si * 10 + ci;
 					_coastalDefensePlan[slot] = selected.coastal[ci];
 				}
 			}
@@ -7520,19 +7574,9 @@ export function evaluateAllPlans() {
 				}
 			}
 
-			// Default to a simple plan if nothing was selected
+			// If nothing was selected, flag for forced reassess next tick
 			if (!_warPlan[si]) {
-				_warPlan[si] = {
-					type: "DEFEND",
-					phase: "PREPARATION",
-					target: null,
-					frontlinePoints: [],
-					startedTick: simFrameCount,
-					lastProgressTick: simFrameCount,
-					progress: 0,
-					maxAssignedUnits: 5,
-					activeUnitCount: 0,
-				};
+				_planReassessNeeded[si] = true;
 			}
 
 			_proposalReassessTick[si] = simFrameCount;
@@ -7618,25 +7662,6 @@ export function evaluateAllPlans() {
 					plan._territoryAtStart = stats.controlled || 0;
 				}
 			}
-
-			// Check if posture changed
-			const posture = _sidePosture[si] || "BALANCED";
-			if (posture === "DEFENSIVE" && plan.phase !== "CONSOLIDATION") {
-				_planReassessNeeded[si] = true; // Posture override
-				continue;
-			}
-		}
-
-		if (plan.type === "DEFEND" || plan.type === "PUSH_FRONT") {
-			const posture = _sidePosture[si] || "BALANCED";
-			if (posture === "OFFENSIVE" && plan.type === "DEFEND") {
-				_planReassessNeeded[si] = true; // Switch to offensive plan
-				continue;
-			}
-			if (posture === "DEFENSIVE" && plan.type !== "DEFEND") {
-				_planReassessNeeded[si] = true; // Switch to defensive plan
-				continue;
-			}
 		}
 
 		// Refresh plan progress tracking
@@ -7679,6 +7704,7 @@ export function evaluateAllPlans() {
 				}
 			}
 			_navalPlan[si] = null;
+			_planReassessNeeded[si] = true;
 			continue;
 		}
 
@@ -7736,8 +7762,8 @@ export function evaluateAllPlans() {
 			// After enough time in landing, the plan completes
 			if (ticksSinceProgress > 900) {
 				// Count enemies within 5 degrees of the landing zone
-				let nearEnemies = 0;
-				let nearFriendlies = 0;
+				let _nearEnemies = 0;
+				let _nearFriendlies = 0;
 				for (const u of units) {
 					if (u.deployTicks > 0) continue;
 					const dLat = np.target.lat - u.lat;
@@ -7746,8 +7772,8 @@ export function evaluateAllPlans() {
 					else if (dLng < -180) dLng += 360;
 					const dSq = dLat * dLat + dLng * dLng;
 					if (dSq < 25.0) {
-						if (u.sideIndex === si) nearFriendlies++;
-						else nearEnemies++;
+						if (u.sideIndex === si) _nearFriendlies++;
+						else _nearEnemies++;
 					}
 				}
 
@@ -7760,111 +7786,7 @@ export function evaluateAllPlans() {
 				}
 				_navalPlan[si] = null;
 
-				const forceRatio = nearFriendlies / Math.max(1, nearEnemies);
-				const landingUnits = [];
-				for (const u of units) {
-					if (u.sideIndex !== si || u.deployTicks > 0) continue;
-					const dLat = np.target.lat - u.lat;
-					let dLng = np.target.lng - u.lng;
-					if (dLng > 180) dLng -= 360;
-					else if (dLng < -180) dLng += 360;
-					if (dLat * dLat + dLng * dLng < 4.0) landingUnits.push(u);
-				}
-				let sLat = np.target.lat;
-				let sLng = np.target.lng;
-				if (landingUnits.length > 0) {
-					sLat = 0;
-					sLng = 0;
-					for (const u of landingUnits) {
-						sLat += u.lat;
-						sLng += u.lng;
-					}
-					sLat /= landingUnits.length;
-					sLng /= landingUnits.length;
-				}
-
-				// Build frontline points for this side (for DEFEND rendering)
-				const flPts = [];
-				if (_frontlinePolys) {
-					for (const key of Object.keys(_frontlinePolys)) {
-						const [a, b] = key.split("_").map(Number);
-						if (a !== si && b !== si) continue;
-						const poly = _frontlinePolys[key];
-						if (!poly) continue;
-						const stride = Math.max(1, Math.floor(poly.length / 60));
-						for (let p = 0; p < poly.length; p += stride) {
-							flPts.push({ lat: poly[p].lat, lng: poly[p].lng });
-						}
-					}
-				}
-
-				if (forceRatio >= 1.5) {
-					// Clear superiority — advance toward nearest enemy city
-					let nearestCity = null;
-					let nearestCityDist = Infinity;
-					for (let ci = 0; ci < activeTheaterCities.length; ci++) {
-						const city = activeTheaterCities[ci];
-						const citySide = _tickCountryToSideMap.get(city.ownerId || 0);
-						if (citySide === si) continue;
-						const dLat = np.target.lat - city.lat;
-						let dLng = np.target.lng - city.lng;
-						if (dLng > 180) dLng -= 360;
-						else if (dLng < -180) dLng += 360;
-						const dSq = dLat * dLat + dLng * dLng;
-						if (dSq < nearestCityDist) {
-							nearestCityDist = dSq;
-							nearestCity = city;
-						}
-					}
-					if (nearestCity) {
-						const sideUnits = _tickUnitsBySide[si] || [];
-						const deployedCount = sideUnits.filter(
-							(u) => u.deployTicks === 0,
-						).length;
-						_warPlan[si] = {
-							type: "CAPTURE_CITY",
-							phase: "PREPARATION",
-							target: {
-								lat: nearestCity.lat,
-								lng: nearestCity.lng,
-								name: nearestCity.name || "Beachhead Advance",
-							},
-							stagingCells: landingUnits.map((u) => ({
-								lat: u.lat,
-								lng: u.lng,
-							})),
-							arrowPoints: [
-								{ lat: sLat, lng: sLng },
-								{
-									lat: nearestCity.lat,
-									lng: nearestCity.lng,
-								},
-							],
-							startedTick: simFrameCount,
-							lastProgressTick: simFrameCount,
-							progress: 0,
-							maxAssignedUnits: deployedCount,
-							activeUnitCount: 0,
-						};
-					}
-				} else {
-					// Outnumbered or parity — dig in at the beachhead
-					_warPlan[si] = {
-						type: "DEFEND",
-						phase: "PREPARATION",
-						target: null,
-						frontlinePoints: flPts,
-						stagingCells: landingUnits.map((u) => ({
-							lat: u.lat,
-							lng: u.lng,
-						})),
-						startedTick: simFrameCount,
-						lastProgressTick: simFrameCount,
-						progress: 0,
-						maxAssignedUnits: nearFriendlies + 50,
-						activeUnitCount: 0,
-					};
-				}
+				_planReassessNeeded[si] = true;
 			}
 		}
 	}
@@ -7895,6 +7817,7 @@ export function evaluateAllPlans() {
 				}
 			}
 			_navalSupplyPlan[si] = null;
+			_planReassessNeeded[si] = true;
 			continue;
 		}
 
@@ -7956,6 +7879,24 @@ export function evaluateAllPlans() {
 		}
 
 		if (sp) sp.lastProgressTick = simFrameCount;
+	}
+
+	// ── Enemy Offensive Detection ──
+	for (let si = 0; si < sides.length; si++) {
+		if (!sides[si] || sides[si].length === 0) continue;
+		for (let ei = 0; ei < sides.length; ei++) {
+			if (ei === si) continue;
+			if (!sides[ei] || sides[ei].length === 0) continue;
+			const enemyPlan = _warPlan[ei];
+			if (!enemyPlan?.target) continue;
+			if (enemyPlan.type !== "CAPTURE_CITY" && enemyPlan.type !== "ENCIRCLE")
+				continue;
+			const tIdx = getGridIndex(enemyPlan.target.lat, enemyPlan.target.lng);
+			if (tIdx !== -1 && dominantSideMap[tIdx] === si) {
+				_planReassessNeeded[si] = true;
+				break;
+			}
+		}
 	}
 
 	// ── Coastal Defense Plan Evaluation ──
@@ -13623,7 +13564,7 @@ export function unilateralExitConflict(country, sideIdx) {
 	}
 }
 
-export function signSelectivePeace(exiter, target) {
+export function _signSelectivePeace(exiter, target) {
 	let exiterSideIdx = -1;
 	let targetSideIdx = -1;
 
@@ -14961,7 +14902,7 @@ document.getElementById("back-to-nav-btn").addEventListener("click", () => {
 /**
  * DYNAMIC MENU BACKGROUND SYSTEM
  */
-export const SCENARIO_MENU_BGS = {
+export const _SCENARIO_MENU_BGS = {
 	"scroller-choice-modern": "assets/images/2022.webp",
 	"scroller-choice-1974": "assets/images/1974.webp",
 
@@ -15307,7 +15248,7 @@ window.releaseNation = async (nationId, releaserId, sideIdx) => {
 	statusText.innerText = `${meta.name} has been released!`;
 };
 
-export function setAsReleasable(releasableId, releaserId) {
+export function _setAsReleasable(releasableId, releaserId) {
 	const rMeta = countryMetadata.find((m) => m && m.id === releasableId);
 	const hostMeta = countryMetadata.find((m) => m && m.id === releaserId);
 	if (!rMeta || !hostMeta) return;
@@ -15343,7 +15284,7 @@ export function setAsReleasable(releasableId, releaserId) {
 	influenceLayer.render();
 }
 
-export function setVassalage(vassalId, overlordId) {
+export function _setVassalage(vassalId, overlordId) {
 	const vassalMeta = countryMetadata.find((m) => m && m.id === vassalId);
 	if (!vassalMeta) return;
 
@@ -15622,7 +15563,7 @@ export function openInspector(id) {
 	influenceLayer.render();
 }
 
-export function placeDivisionAt(latlng, sovereignId) {
+export function _placeDivisionAt(latlng, sovereignId) {
 	let sideIdx = sides.findIndex((s) => s.some((c) => c.id === sovereignId));
 
 	if (sideIdx === -1) {
@@ -15661,7 +15602,7 @@ export function placeDivisionAt(latlng, sovereignId) {
 	influenceLayer.render();
 }
 
-export async function placeNewCountry(latlng) {
+export async function _placeNewCountry(latlng) {
 	// Do not place new countries outside the world-size box
 	if (!isInsideWorldBoxLatLng(latlng.lat, latlng.lng)) return;
 	const idx = getGridIndex(latlng.lat, latlng.lng);
@@ -15708,7 +15649,7 @@ export async function placeNewCountry(latlng) {
 	influenceLayer.render();
 }
 
-export function fillAt(latlng) {
+export function _fillAt(latlng) {
 	const isUnclaiming = gameState === "EDITOR_UNCLAIMING";
 	if (!isUnclaiming && editingCountryId <= 0) return;
 	// Do not start fill outside the world-size box
@@ -16897,7 +16838,7 @@ editorSaveBtn.addEventListener("click", () => {
 	URL.revokeObjectURL(url);
 });
 
-export function resetConflictSetupState() {
+export function _resetConflictSetupState() {
 	sides = [[], []];
 	_attackers = sides[0];
 	_defenders = sides[1];
@@ -17305,20 +17246,20 @@ document
 
 // -------- Procedural Nation Generation (For empty presets) --------
 
-export const noNationsModal = document.getElementById("no-nations-modal");
-export const randomNationsCountInput = document.getElementById(
+export const _noNationsModal = document.getElementById("no-nations-modal");
+export const _randomNationsCountInput = document.getElementById(
 	"random-nations-count",
 );
-export const confirmRandomGenBtn = document.getElementById(
+export const _confirmRandomGenBtn = document.getElementById(
 	"confirm-random-gen-btn",
 );
-export const skipRandomGenBtn = document.getElementById("skip-random-gen-btn");
+export const _skipRandomGenBtn = document.getElementById("skip-random-gen-btn");
 
 /**
  * Procedurally populates all land cells on the map with a specified number of random nations.
  * Uses an interleaved BFS expansion to ensure organic, relatively balanced territory sizes.
  */
-export async function spawnRandomNationsAcrossMap(count) {
+export async function _spawnRandomNationsAcrossMap(count) {
 	if (!worldControlMap || !landMask) return;
 
 	loadingStatus.innerText = "Generating Civilizations...";
@@ -17534,7 +17475,7 @@ export async function spawnRandomNationsAcrossMap(count) {
 
 // -------- Import Country From Scenario (editor / godmode) --------
 
-export function populateImportCountrySelect() {
+export function _populateImportCountrySelect() {
 	if (!importScenarioBuffer || !importCountryCardList || !importCountrySearch)
 		return;
 	const metaList = importScenarioBuffer.metadata || [];
@@ -18196,7 +18137,7 @@ export function renderGlobalChatList(messages) {
 	globalChatList.scrollTop = globalChatList.scrollHeight;
 }
 
-export async function openGlobalChat() {
+export async function _openGlobalChat() {
 	if (!globalChatModal) return;
 	if (!room) {
 		try {
