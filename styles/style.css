@@ -533,7 +533,7 @@ body.use-system-font .scroller-card-name {
 }
 
 .setup-slot {
-	flex: 1;
+	flex: none;
 	padding: 10px;
 	border-radius: 6px;
 	background: #141418;
