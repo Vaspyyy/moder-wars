@@ -1828,6 +1828,7 @@ const _tickCityGridIndexSet = new Set();
 const _tickSideAllyIdSets = [];
 const _tickSideSupportIdSets = [];
 const _tickUnitsBySide = [];
+let _lastEncircleScanTick = -999;
 
 // Temporary diagnostics for cross-war state/capitulation bugs.
 export const aiCountryState = new Map();
@@ -6575,6 +6576,16 @@ export function generateWarPlan(sideIdx) {
 
 	// ENCIRCLE plan: detect pockets where we have 3×+ local superiority
 	if (posture === "OFFENSIVE" && unitCount > 10) {
+		if (simFrameCount - _lastEncircleScanTick < 30) {
+			// Reuse existing encirclement plan if present
+			const existing = _warPlan[sideIdx];
+			if (existing && existing.type === "ENCIRCLE") {
+				existing.maxAssignedUnits = Math.ceil(unitCount * 0.6);
+				existing.activeUnitCount = 0;
+				return;
+			}
+		}
+		_lastEncircleScanTick = simFrameCount;
 		const frontlineKeys = Object.keys(_frontlinePolys || {});
 		let bestEncirclement = null,
 			bestScore = 0;
@@ -6587,29 +6598,21 @@ export function generateWarPlan(sideIdx) {
 
 			const stride = Math.max(1, Math.floor(poly.length / 20));
 			const radSq = 1.0;
-			const HASH_SIZE = UNIT_HASH_CELL_SIZE;
-			for (let ci = 0; ci < Math.min(500, poly.length); ci += stride) {
+			for (let ci = 0; ci < Math.min(200, poly.length); ci += stride) {
 				const cell = poly[ci];
 				let friendlyCount = 0,
 					enemyCount = 0;
-				const cx = Math.floor((cell.lng + 180) / HASH_SIZE);
-				const cy = Math.floor((cell.lat + 90) / HASH_SIZE);
-				for (let dx = -1; dx <= 1; dx++) {
-					for (let dy = -1; dy <= 1; dy++) {
-						const bucket = unitSpatialHash.get(`${cx + dx}_${cy + dy}`);
-						if (!bucket) continue;
-						for (let bi = 0; bi < bucket.length; bi++) {
-							const other = bucket[bi];
-							if (other.deployTicks > 0) continue;
-							const dLat = other.lat - cell.lat;
-							let dLng = other.lng - cell.lng;
-							if (dLng > 180) dLng -= 360;
-							else if (dLng < -180) dLng += 360;
-							if (dLat * dLat + dLng * dLng > radSq) continue;
-							if (other.sideIndex === sideIdx) friendlyCount++;
-							else enemyCount++;
-						}
-					}
+
+				for (let ui = 0; ui < units.length; ui++) {
+					const other = units[ui];
+					if (other.deployTicks > 0) continue;
+					const dLat = other.lat - cell.lat;
+					let dLng = other.lng - cell.lng;
+					if (dLng > 180) dLng -= 360;
+					else if (dLng < -180) dLng += 360;
+					if (dLat * dLat + dLng * dLng > radSq) continue;
+					if (other.sideIndex === sideIdx) friendlyCount++;
+					else enemyCount++;
 				}
 
 				if (enemyCount >= 2 && friendlyCount >= enemyCount * 3) {
