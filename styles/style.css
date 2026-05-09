@@ -408,7 +408,8 @@ body.use-system-font .scroller-card-name {
 	padding: 20px;
 	color: #f5f5f5;
 	box-shadow: 0 24px 56px rgba(0, 0, 0, 0.6);
-	max-width: 360px;
+	max-width: 800px;
+	min-width: 280px;
 	margin: 0;
 	width: auto;
 	transition: all 0.18s ease;
@@ -430,6 +431,32 @@ body.use-system-font .scroller-card-name {
 .setup-panel::-webkit-scrollbar-thumb {
 	background: rgba(255, 255, 255, 0.1);
 	border-radius: 3px;
+}
+
+.setup-resize-grip {
+	position: absolute;
+	bottom: 0;
+	right: 0;
+	width: 18px;
+	height: 18px;
+	cursor: nwse-resize;
+	opacity: 0.15;
+	transition: opacity 0.15s ease;
+}
+
+.setup-resize-grip:hover {
+	opacity: 0.5;
+}
+
+.setup-resize-grip::after {
+	content: "";
+	position: absolute;
+	bottom: 4px;
+	right: 4px;
+	width: 8px;
+	height: 8px;
+	border-right: 2px solid rgba(255, 255, 255, 0.7);
+	border-bottom: 2px solid rgba(255, 255, 255, 0.7);
 }
 
 .setup-title {

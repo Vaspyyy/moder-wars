@@ -2755,8 +2755,66 @@ export const setupOptions = document.getElementById("setup-options");
 export const startBtn = document.getElementById("start-btn");
 export const rebellionBtn = document.getElementById("rebellion-btn");
 if (rebellionBtn) {
-	// Rebellions are disabled; hide the button and prevent use.
 	rebellionBtn.style.display = "none";
+}
+
+// Setup panel resize grip
+{
+	const savedWidth = getCookie("mw_setup_width");
+	if (savedWidth) setupPanel.style.width = `${savedWidth}px`;
+	const grip = setupPanel.querySelector(".setup-resize-grip");
+	if (grip) {
+		let dragging = false;
+		let startX = 0;
+		let startWidth = 0;
+		grip.addEventListener("mousedown", (e) => {
+			e.preventDefault();
+			dragging = true;
+			startX = e.clientX;
+			startWidth = setupPanel.offsetWidth;
+		});
+		window.addEventListener("mousemove", (e) => {
+			if (!dragging) return;
+			const newWidth = Math.max(
+				280,
+				Math.min(800, startWidth + (e.clientX - startX)),
+			);
+			setupPanel.style.width = `${newWidth}px`;
+		});
+		window.addEventListener("mouseup", () => {
+			if (!dragging) return;
+			dragging = false;
+			setCookie("mw_setup_width", setupPanel.offsetWidth);
+		});
+		grip.addEventListener(
+			"touchstart",
+			(e) => {
+				const t = e.touches[0];
+				dragging = true;
+				startX = t.clientX;
+				startWidth = setupPanel.offsetWidth;
+			},
+			{ passive: true },
+		);
+		window.addEventListener(
+			"touchmove",
+			(e) => {
+				if (!dragging) return;
+				const t = e.touches[0];
+				const newWidth = Math.max(
+					280,
+					Math.min(800, startWidth + (t.clientX - startX)),
+				);
+				setupPanel.style.width = `${newWidth}px`;
+			},
+			{ passive: true },
+		);
+		window.addEventListener("touchend", () => {
+			if (!dragging) return;
+			dragging = false;
+			setCookie("mw_setup_width", setupPanel.offsetWidth);
+		});
+	}
 }
 export const densitySlider = document.getElementById("density-slider");
 export const noPeaceCheckbox = document.getElementById("no-peace-checkbox");
