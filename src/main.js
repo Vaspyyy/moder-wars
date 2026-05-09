@@ -6810,36 +6810,56 @@ export function generateWarPlan(sideIdx) {
 			// Generate arrow points: from staging center to target city
 			let sLat = 0,
 				sLng = 0;
-			for (const sc of staging) {
-				sLat += sc.lat;
-				sLng += sc.lng;
-			}
 			if (staging.length > 0) {
+				for (const sc of staging) {
+					sLat += sc.lat;
+					sLng += sc.lng;
+				}
 				sLat /= staging.length;
 				sLng /= staging.length;
+			} else {
+				// No frontline polys yet — fall back to centroid of friendly deployed units
+				let uCount = 0;
+				for (let ui = 0; ui < sideUnits.length; ui++) {
+					const u = sideUnits[ui];
+					if (u.deployTicks > 0) continue;
+					sLat += u.lat;
+					sLng += u.lng;
+					uCount++;
+				}
+				if (uCount === 0) {
+					// No units, no frontline — skip CAPTURE_CITY, fall to PUSH_FRONT
+					bestCity = null;
+				} else {
+					sLat /= uCount;
+					sLng /= uCount;
+				}
 			}
-			const arrowPoints = [
-				{ lat: sLat, lng: sLng },
-				{ lat: bestCity.lat, lng: bestCity.lng },
-			];
 
-			_warPlan[sideIdx] = {
-				type: "CAPTURE_CITY",
-				phase: "PREPARATION",
-				target: {
-					lat: bestCity.lat,
-					lng: bestCity.lng,
-					name: bestCity.name || "Enemy City",
-				},
-				stagingCells: staging,
-				arrowPoints,
-				startedTick: simFrameCount,
-				lastProgressTick: simFrameCount,
-				progress: 0,
-				maxAssignedUnits: Math.ceil(unitCount * 0.5),
-				activeUnitCount: 0,
-			};
-			return;
+			if (bestCity) {
+				const arrowPoints = [
+					{ lat: sLat, lng: sLng },
+					{ lat: bestCity.lat, lng: bestCity.lng },
+				];
+
+				_warPlan[sideIdx] = {
+					type: "CAPTURE_CITY",
+					phase: "PREPARATION",
+					target: {
+						lat: bestCity.lat,
+						lng: bestCity.lng,
+						name: bestCity.name || "Enemy City",
+					},
+					stagingCells: staging,
+					arrowPoints,
+					startedTick: simFrameCount,
+					lastProgressTick: simFrameCount,
+					progress: 0,
+					maxAssignedUnits: Math.ceil(unitCount * 0.5),
+					activeUnitCount: 0,
+				};
+				return;
+			}
 		}
 	}
 
@@ -6970,8 +6990,8 @@ export function generateNavalInvasionPlan(sideIdx) {
 			}
 		}
 		if (minSeaDist > 400) continue;
-		if (minLandDist < minSeaDist * 0.7) continue;
 		if (minSeaDist < 4.0) continue;
+		if (minLandDist < 0.5) continue;
 		let score = 0;
 		score += Math.sqrt(minLandDist) * 30;
 		const seaDist = Math.sqrt(minSeaDist);
