@@ -1839,6 +1839,7 @@ export const _coastalDefensePlan = []; // per-side coastal defense passive overl
 export const _neutralGarrisonPlan = []; // per-side neutral border garrison plans
 const _proposalReassessTick = []; // per-side last reassessment tick
 const _proposalsCache = []; // per-side cached scored proposals
+const _planReassessNeeded = []; // per-side flag: force immediate reassessment
 export const WAR_PLAN_TYPES = [
 	"DEFEND",
 	"PUSH_FRONT",
@@ -6626,577 +6627,6 @@ export function assignGarrisonSlots() {
 }
 
 /**
- * Generate a war plan for a side based on posture and available objectives.
- * Called on shouldCountLand frames after posture is determined.
- */
-export function generateWarPlan(sideIdx) {
-	const posture = _sidePosture[sideIdx] || "BALANCED";
-	const sideCountries = sides[sideIdx] || [];
-
-	// Default to DEFEND if no units or defensive posture
-	const sideUnits = _tickUnitsBySide[sideIdx] || [];
-	const unitCount = sideUnits.filter((u) => u.deployTicks === 0).length;
-	if (unitCount === 0 || posture === "DEFENSIVE") {
-		// Collect frontline polyline points for this side (for rendering)
-		const frontlinePoints = [];
-		for (const key of Object.keys(_frontlinePolys || {})) {
-			const [a, b] = key.split("_").map(Number);
-			if (a !== sideIdx && b !== sideIdx) continue;
-			const poly = _frontlinePolys[key];
-			if (!poly) continue;
-			const stride = Math.max(1, Math.floor(poly.length / 60));
-			for (let p = 0; p < poly.length; p += stride) {
-				frontlinePoints.push({ lat: poly[p].lat, lng: poly[p].lng });
-			}
-		}
-
-		_warPlan[sideIdx] = {
-			type: "DEFEND",
-			phase: "PREPARATION",
-			target: null,
-			frontlinePoints,
-			startedTick: simFrameCount,
-			lastProgressTick: simFrameCount,
-			progress: 0,
-			maxAssignedUnits: unitCount,
-			activeUnitCount: 0,
-		};
-		return;
-	}
-
-	// ENCIRCLE plan: detect pockets where we have 3×+ local superiority
-	if (posture === "OFFENSIVE" && unitCount > 10) {
-		const frontlineKeys = Object.keys(_frontlinePolys || {});
-		let bestEncirclement = null,
-			bestScore = 0;
-
-		for (const key of frontlineKeys) {
-			const [a, b] = key.split("_").map(Number);
-			if (a !== sideIdx && b !== sideIdx) continue;
-			const poly = _frontlinePolys[key];
-			if (!poly || poly.length < 5) continue;
-
-			const stride = Math.max(1, Math.floor(poly.length / 20));
-			for (let ci = 0; ci < Math.min(500, poly.length); ci += stride) {
-				const cell = poly[ci];
-				let friendlyCount = 0,
-					enemyCount = 0;
-				const radSq = 1.0;
-
-				for (let ui = 0; ui < units.length; ui++) {
-					const other = units[ui];
-					if (other.deployTicks > 0) continue;
-					const dLat = other.lat - cell.lat;
-					let dLng = other.lng - cell.lng;
-					if (dLng > 180) dLng -= 360;
-					else if (dLng < -180) dLng += 360;
-					if (dLat * dLat + dLng * dLng > radSq) continue;
-					if (other.sideIndex === sideIdx) friendlyCount++;
-					else enemyCount++;
-				}
-
-				if (enemyCount >= 2 && friendlyCount >= enemyCount * 3) {
-					const score = enemyCount * 10 + friendlyCount;
-					if (score > bestScore) {
-						bestScore = score;
-						bestEncirclement = { lat: cell.lat, lng: cell.lng, poly };
-					}
-				}
-			}
-		}
-
-		if (bestEncirclement) {
-			const { lat: tLat, lng: tLng, poly } = bestEncirclement;
-			const staging = [];
-			for (let p = 0; p < poly.length; p++) {
-				let dLng = tLng - poly[p].lng;
-				if (dLng > 180) dLng -= 360;
-				else if (dLng < -180) dLng += 360;
-				const dSq = (tLat - poly[p].lat) ** 2 + dLng ** 2;
-				staging.push({ lat: poly[p].lat, lng: poly[p].lng, dSq });
-			}
-			staging.sort((a, b) => a.dSq - b.dSq);
-			const stagingCells = staging.slice(
-				0,
-				Math.max(5, Math.floor(staging.length / 3)),
-			);
-
-			let sLat = 0,
-				sLng = 0;
-			for (const sc of stagingCells) {
-				sLat += sc.lat;
-				sLng += sc.lng;
-			}
-			if (stagingCells.length > 0) {
-				sLat /= stagingCells.length;
-				sLng /= stagingCells.length;
-			}
-			const arrowPoints = [
-				{ lat: sLat, lng: sLng },
-				{ lat: tLat, lng: tLng },
-			];
-
-			_warPlan[sideIdx] = {
-				type: "ENCIRCLE",
-				phase: "PREPARATION",
-				target: { lat: tLat, lng: tLng, name: "Encirclement Pocket" },
-				stagingCells,
-				arrowPoints,
-				startedTick: simFrameCount,
-				lastProgressTick: simFrameCount,
-				progress: 0,
-				maxAssignedUnits: unitCount,
-				activeUnitCount: 0,
-			};
-			return;
-		}
-	}
-
-	// Find nearest enemy-controlled city (via dominantSideMap)
-	const enemyCities = [];
-	const myAllyIds = new Set(sideCountries.map((c) => c.id));
-	for (let ci = 0; ci < activeTheaterCities.length; ci++) {
-		const city = activeTheaterCities[ci];
-		const cIdx = getGridIndex(city.lat, city.lng);
-		if (cIdx === -1) continue;
-		const ownerId = city.ownerId || 0;
-		if (myAllyIds.has(ownerId)) continue; // skip friendly cities
-		const ds = dominantSideMap[cIdx];
-		if (ds !== sideIdx) {
-			enemyCities.push({ city, dist: 0, isCapital: city.isCapital || false });
-		}
-	}
-
-	// Score: prefer capitals, then proximity to frontline
-	if (enemyCities.length > 0) {
-		// Find center of friendly frontline for distance reference
-		let fLat = 0,
-			fLng = 0,
-			fCount = 0;
-		for (const key of Object.keys(_frontlinePolys || {})) {
-			const [a, b] = key.split("_").map(Number);
-			if (a !== sideIdx && b !== sideIdx) continue;
-			const poly = _frontlinePolys[key];
-			if (!poly) continue;
-			for (
-				let p = 0;
-				p < poly.length;
-				p += Math.max(1, Math.floor(poly.length / 20))
-			) {
-				fLat += poly[p].lat;
-				fLng += poly[p].lng;
-				fCount++;
-			}
-		}
-		if (fCount > 0) {
-			fLat /= fCount;
-			fLng /= fCount;
-		}
-
-		let bestScore = -Infinity,
-			bestCity = null;
-		for (const ec of enemyCities) {
-			let deLng = ec.city.lng - fLng;
-			if (deLng > 180) deLng -= 360;
-			else if (deLng < -180) deLng += 360;
-			const dSq = (ec.city.lat - fLat) ** 2 + deLng ** 2;
-			let score = -(dSq * 0.5);
-			if (ec.isCapital) score += 200;
-			if (score > bestScore) {
-				bestScore = score;
-				bestCity = ec.city;
-			}
-		}
-
-		if (bestCity) {
-			// Find frontline segment nearest to the target city
-			const stagingCells = [];
-			for (const key of Object.keys(_frontlinePolys || {})) {
-				const [a, b] = key.split("_").map(Number);
-				if (a !== sideIdx && b !== sideIdx) continue;
-				const poly = _frontlinePolys[key];
-				if (!poly) continue;
-				for (let p = 0; p < poly.length; p++) {
-					let dLng = bestCity.lng - poly[p].lng;
-					if (dLng > 180) dLng -= 360;
-					else if (dLng < -180) dLng += 360;
-					const dSq = (bestCity.lat - poly[p].lat) ** 2 + dLng ** 2;
-					stagingCells.push({ ...poly[p], dSq });
-				}
-			}
-			stagingCells.sort((a, b) => a.dSq - b.dSq);
-			const staging = stagingCells.slice(
-				0,
-				Math.max(3, Math.floor(stagingCells.length / 4)),
-			);
-
-			// Generate arrow points: from staging center to target city
-			let sLat = 0,
-				sLng = 0;
-			if (staging.length > 0) {
-				for (const sc of staging) {
-					sLat += sc.lat;
-					sLng += sc.lng;
-				}
-				sLat /= staging.length;
-				sLng /= staging.length;
-			} else {
-				// No frontline polys yet — fall back to centroid of friendly deployed units
-				let uCount = 0;
-				for (let ui = 0; ui < sideUnits.length; ui++) {
-					const u = sideUnits[ui];
-					if (u.deployTicks > 0) continue;
-					sLat += u.lat;
-					sLng += u.lng;
-					uCount++;
-				}
-				if (uCount === 0) {
-					// No units, no frontline — skip CAPTURE_CITY, fall to PUSH_FRONT
-					bestCity = null;
-				} else {
-					sLat /= uCount;
-					sLng /= uCount;
-				}
-			}
-
-			if (bestCity) {
-				// Check if the line from staging to target crosses water (no land connection)
-				let crossesWater = false;
-				const dLat = bestCity.lat - sLat;
-				let dLng = bestCity.lng - sLng;
-				if (dLng > 180) dLng -= 360;
-				else if (dLng < -180) dLng += 360;
-				const lineLen = Math.sqrt(dLat * dLat + dLng * dLng);
-				if (lineLen > 0.5) {
-					const steps = Math.min(20, Math.ceil(lineLen / 0.3));
-					let waterSamples = 0;
-					for (let s = 1; s < steps; s++) {
-						const t = s / steps;
-						const sampleLat = sLat + dLat * t;
-						const sampleLng = sLng + dLng * t;
-						const sIdx = getGridIndex(sampleLat, sampleLng);
-						if (sIdx !== -1 && landMask[sIdx] === 0) waterSamples++;
-					}
-					// If >40% of samples are water, there's no viable land route
-					if (waterSamples > steps * 0.4) crossesWater = true;
-				}
-
-				if (!crossesWater) {
-					const arrowPoints = [
-						{ lat: sLat, lng: sLng },
-						{ lat: bestCity.lat, lng: bestCity.lng },
-					];
-
-					_warPlan[sideIdx] = {
-						type: "CAPTURE_CITY",
-						phase: "PREPARATION",
-						target: {
-							lat: bestCity.lat,
-							lng: bestCity.lng,
-							name: bestCity.name || "Enemy City",
-						},
-						stagingCells: staging,
-						arrowPoints,
-						startedTick: simFrameCount,
-						lastProgressTick: simFrameCount,
-						progress: 0,
-						maxAssignedUnits: unitCount,
-						activeUnitCount: 0,
-					};
-					return;
-				}
-				// Target unreachable by land — generate DEFEND plan and trigger naval plan
-				const flPts = [];
-				for (const key of Object.keys(_frontlinePolys || {})) {
-					const [a, b] = key.split("_").map(Number);
-					if (a !== sideIdx && b !== sideIdx) continue;
-					const poly = _frontlinePolys[key];
-					if (!poly) continue;
-					const stride = Math.max(1, Math.floor(poly.length / 60));
-					for (let p = 0; p < poly.length; p += stride) {
-						flPts.push({ lat: poly[p].lat, lng: poly[p].lng });
-					}
-				}
-				_warPlan[sideIdx] = {
-					type: "DEFEND",
-					phase: "PREPARATION",
-					target: null,
-					frontlinePoints: flPts,
-					startedTick: simFrameCount,
-					lastProgressTick: simFrameCount,
-					progress: 0,
-					maxAssignedUnits: unitCount,
-					activeUnitCount: 0,
-				};
-				// Trigger naval plan only if none exists yet
-				if (!_navalPlan[sideIdx]) generateNavalInvasionPlan(sideIdx);
-				return;
-			}
-		}
-	}
-
-	// No enemy city found → PUSH_FRONT (uniform advance)
-	// Compute arrow from unit centroid toward enemy territory centroid
-	let uLat = 0,
-		uLng = 0,
-		uCount = 0;
-	for (let ui = 0; ui < units.length; ui++) {
-		const u = units[ui];
-		if (u.sideIndex !== sideIdx || u.deployTicks > 0) continue;
-		uLat += u.lat;
-		uLng += u.lng;
-		uCount++;
-	}
-	let eLat = 0,
-		eLng = 0,
-		eCount = 0;
-	for (let i = 0; i < dominantSideMap.length; i += 20) {
-		if (landMask[i] === 0) continue;
-		if (dominantSideMap[i] !== sideIdx && dominantSideMap[i] >= 0) {
-			const row = Math.floor(i / gridWidth);
-			const col = i % gridWidth;
-			eLat += row * CONFIG.GRID_RES - 90;
-			eLng += col * CONFIG.GRID_RES - 180;
-			eCount++;
-		}
-	}
-	let arrowPoints = null;
-	if (uCount > 0 && eCount > 0) {
-		uLat /= uCount;
-		uLng /= uCount;
-		eLat /= eCount;
-		eLng /= eCount;
-		arrowPoints = [
-			{ lat: uLat, lng: uLng },
-			{ lat: eLat, lng: eLng },
-		];
-	}
-
-	_warPlan[sideIdx] = {
-		type: "PUSH_FRONT",
-		phase: "EXECUTION",
-		target: null,
-		arrowPoints,
-		startedTick: simFrameCount,
-		lastProgressTick: simFrameCount,
-		progress: 0,
-		maxAssignedUnits: unitCount,
-		activeUnitCount: 0,
-	};
-}
-
-/**
- * Generate a naval invasion plan for a side.
- * Targets enemy coastal tiles (not cities) — the plan handles only the sea crossing.
- * After landing, evaluateAllPlans() generates a new CAPTURE_CITY land plan.
- * @param {number} sideIdx
- */
-export function generateNavalInvasionPlan(sideIdx) {
-	const sideCountries = sides[sideIdx] || [];
-	if (sideCountries.length === 0) return;
-
-	const sideUnits = _tickUnitsBySide[sideIdx] || [];
-	const unitCount = sideUnits.filter((u) => u.deployTicks === 0).length;
-	if (unitCount < 5) return;
-
-	const myAllyIds = new Set(sideCountries.map((c) => c.id));
-
-	// Find friendly coastal staging points: friendly land cells adjacent to water
-	const friendlyCoastCells = [];
-	const sampledFriendly = new Set();
-	for (let gi = 0; gi < landMask.length; gi += 3) {
-		if (landMask[gi] === 0) continue;
-		if (dominantSideMap[gi] !== sideIdx) continue;
-		const row = Math.floor(gi / gridWidth);
-		const col = gi % gridWidth;
-		let isCoastal = false;
-		for (let dr = -1; dr <= 1 && !isCoastal; dr++) {
-			for (let dc = -1; dc <= 1 && !isCoastal; dc++) {
-				if (dr === 0 && dc === 0) continue;
-				const nr = row + dr;
-				const nc = col + dc;
-				if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
-				if (landMask[nr * gridWidth + nc] === 0) isCoastal = true;
-			}
-		}
-		if (!isCoastal) continue;
-		const lat = row * CONFIG.GRID_RES - 90;
-		const lng = col * CONFIG.GRID_RES - 180;
-		const key = `${Math.floor(lat)}_${Math.floor(lng)}`;
-		if (sampledFriendly.has(key)) continue;
-		sampledFriendly.add(key);
-		friendlyCoastCells.push({ lat, lng, idx: gi });
-	}
-
-	if (friendlyCoastCells.length === 0) return;
-
-	// Find enemy coastal tiles: enemy-controlled land cells adjacent to water
-	// Score by proximity to enemy cities, strategic depth, sea distance
-	const enemyCoastalTiles = [];
-	const sampledEnemy = new Set();
-	for (let gi = 0; gi < landMask.length; gi += 2) {
-		if (landMask[gi] === 0) continue;
-		if (dominantSideMap[gi] === sideIdx) continue;
-
-		// Check if enemy-controlled
-		const cellOwnerId = worldControlMap[gi];
-		const ownerSide = _tickCountryToSideMap.get(cellOwnerId);
-		if (ownerSide === sideIdx || ownerSide === undefined) continue;
-		if (myAllyIds.has(cellOwnerId)) continue;
-
-		const row = Math.floor(gi / gridWidth);
-		const col = gi % gridWidth;
-		let isCoastal = false;
-		for (let dr = -1; dr <= 1 && !isCoastal; dr++) {
-			for (let dc = -1; dc <= 1 && !isCoastal; dc++) {
-				if (dr === 0 && dc === 0) continue;
-				const nr = row + dr;
-				const nc = col + dc;
-				if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
-				if (landMask[nr * gridWidth + nc] === 0) isCoastal = true;
-			}
-		}
-		if (!isCoastal) continue;
-
-		const lat = row * CONFIG.GRID_RES - 90;
-		const lng = col * CONFIG.GRID_RES - 180;
-		const key = `${Math.floor(lat)}_${Math.floor(lng)}`;
-		if (sampledEnemy.has(key)) continue;
-		sampledEnemy.add(key);
-		enemyCoastalTiles.push({ lat, lng, idx: gi });
-	}
-
-	if (enemyCoastalTiles.length === 0) return;
-
-	// Score enemy coastal tiles
-	let bestTarget = null;
-	let bestScore = -Infinity;
-	for (const et of enemyCoastalTiles) {
-		let minSeaDist = Infinity;
-		let minLandDist = Infinity;
-		for (const fc of friendlyCoastCells) {
-			const dLat = et.lat - fc.lat;
-			let dLng = et.lng - fc.lng;
-			if (dLng > 180) dLng -= 360;
-			else if (dLng < -180) dLng += 360;
-			const dSq = dLat * dLat + dLng * dLng;
-			if (dSq < minSeaDist) minSeaDist = dSq;
-		}
-		if (_frontlinePolys) {
-			for (const key of Object.keys(_frontlinePolys)) {
-				const [a, b] = key.split("_").map(Number);
-				if (a !== sideIdx && b !== sideIdx) continue;
-				const poly = _frontlinePolys[key];
-				if (!poly) continue;
-				for (
-					let p = 0;
-					p < poly.length;
-					p += Math.max(1, Math.floor(poly.length / 10))
-				) {
-					const dLat = et.lat - poly[p].lat;
-					let dLng = et.lng - poly[p].lng;
-					if (dLng > 180) dLng -= 360;
-					else if (dLng < -180) dLng += 360;
-					const dSq = dLat * dLat + dLng * dLng;
-					if (dSq < minLandDist) minLandDist = dSq;
-				}
-			}
-		}
-		if (minSeaDist > 400) continue;
-		if (minSeaDist < 4.0) continue;
-		if (minLandDist < 0.1) continue;
-
-		let score = 0;
-		// Strategic depth: prefer targets far behind enemy lines
-		score += Math.sqrt(Math.max(0, minLandDist)) * 30;
-		// Prefer moderate sea distances (not too close, not too far)
-		const seaDist = Math.sqrt(minSeaDist);
-		if (seaDist > 3 && seaDist < 20) score += 50;
-
-		// Proximity to enemy cities (prefer landing near cities for follow-up)
-		let minCityDist = Infinity;
-		for (let ci = 0; ci < activeTheaterCities.length; ci++) {
-			const city = activeTheaterCities[ci];
-			const citySide = _tickCountryToSideMap.get(city.ownerId || 0);
-			if (citySide === sideIdx) continue;
-			const dLat = et.lat - city.lat;
-			let dLng = et.lng - city.lng;
-			if (dLng > 180) dLng -= 360;
-			else if (dLng < -180) dLng += 360;
-			const dSq = dLat * dLat + dLng * dLng;
-			if (dSq < minCityDist) minCityDist = dSq;
-			// Extra bonus for landing near capitals
-			if (city.isCapital && dSq < 4.0) score += 100;
-		}
-		// Prefer tiles near enemy cities
-		if (minCityDist < 1.0) score += 150;
-		else if (minCityDist < 4.0) score += 80;
-		else if (minCityDist < 16.0) score += 30;
-
-		// Enemy territory density around target
-		let enemyNeighborCells = 0;
-		const row = Math.floor(et.idx / gridWidth);
-		const col = et.idx % gridWidth;
-		for (let dr = -3; dr <= 3; dr++) {
-			for (let dc = -3; dc <= 3; dc++) {
-				const nr = row + dr;
-				const nc = col + dc;
-				if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
-				if (dominantSideMap[nr * gridWidth + nc] !== sideIdx)
-					enemyNeighborCells++;
-			}
-		}
-		score += enemyNeighborCells * 2;
-
-		if (score > bestScore) {
-			bestScore = score;
-			bestTarget = et;
-		}
-	}
-
-	if (!bestTarget) return;
-
-	// Find closest friendly coast cell to the target (staging point)
-	let bestStaging = null;
-	let bestStagingDist = Infinity;
-	for (const fc of friendlyCoastCells) {
-		const dLat = bestTarget.lat - fc.lat;
-		let dLng = bestTarget.lng - fc.lng;
-		if (dLng > 180) dLng -= 360;
-		else if (dLng < -180) dLng += 360;
-		const dSq = dLat * dLat + dLng * dLng;
-		if (dSq < bestStagingDist) {
-			bestStagingDist = dSq;
-			bestStaging = fc;
-		}
-	}
-
-	if (!bestStaging) return;
-
-	const maxNavalUnits = unitCount;
-
-	_navalPlan[sideIdx] = {
-		type: "NAVAL_INVASION",
-		phase: "GATHERING",
-		target: {
-			lat: bestTarget.lat,
-			lng: bestTarget.lng,
-			name: "Enemy Coast",
-		},
-		stagingPoint: { lat: bestStaging.lat, lng: bestStaging.lng },
-		arrowPoints: [
-			{ lat: bestStaging.lat, lng: bestStaging.lng },
-			{ lat: bestTarget.lat, lng: bestTarget.lng },
-		],
-		startedTick: simFrameCount,
-		lastProgressTick: simFrameCount,
-		progress: 0,
-		maxAssignedUnits: maxNavalUnits,
-		activeUnitCount: 0,
-	};
-}
-
-/**
  * Generate a naval supply run plan: reinforces an active naval invasion
  * by sending additional transport units to the landing zone.
  * Only created when an active naval invasion is in LANDING phase.
@@ -8145,7 +7575,11 @@ export function evaluateAllPlans() {
 		if (!sides[si] || sides[si].length === 0) continue;
 
 		const lastReassess = _proposalReassessTick[si] || 0;
-		if (simFrameCount - lastReassess >= REASSESS_INTERVAL) {
+		if (
+			simFrameCount - lastReassess >= REASSESS_INTERVAL ||
+			_planReassessNeeded[si]
+		) {
+			_planReassessNeeded[si] = false;
 			const proposals = generateAllProposals(si);
 
 			// Score each proposal
@@ -8218,7 +7652,7 @@ export function evaluateAllPlans() {
 		if (!sides[si] || sides[si].length === 0) continue;
 		const plan = _warPlan[si];
 		if (!plan) {
-			generateWarPlan(si);
+			_planReassessNeeded[si] = true;
 			continue;
 		}
 
@@ -8241,7 +7675,7 @@ export function evaluateAllPlans() {
 				plan.progress = 1.0;
 				// After consolidation period, generate next plan
 				if (ticksSinceProgress > 1800) {
-					generateWarPlan(si);
+					_planReassessNeeded[si] = true;
 				}
 				continue;
 			}
@@ -8270,7 +7704,7 @@ export function evaluateAllPlans() {
 
 			// Check for stall
 			if (ticksSinceProgress > 1800 && ticksSinceStart > 600) {
-				generateWarPlan(si); // Failed — reassess
+				_planReassessNeeded[si] = true; // Failed — reassess
 				continue;
 			}
 
@@ -8283,7 +7717,7 @@ export function evaluateAllPlans() {
 					const territoryLoss =
 						plan._territoryAtStart - (stats.controlled || 0);
 					if (territoryLoss > 50) {
-						generateWarPlan(si); // Enemy counter-offensive → reassess
+						_planReassessNeeded[si] = true; // Enemy counter-offensive → reassess
 						continue;
 					}
 				}
@@ -8296,7 +7730,7 @@ export function evaluateAllPlans() {
 			// Check if posture changed
 			const posture = _sidePosture[si] || "BALANCED";
 			if (posture === "DEFENSIVE" && plan.phase !== "CONSOLIDATION") {
-				generateWarPlan(si); // Posture override
+				_planReassessNeeded[si] = true; // Posture override
 				continue;
 			}
 		}
@@ -8304,11 +7738,11 @@ export function evaluateAllPlans() {
 		if (plan.type === "DEFEND" || plan.type === "PUSH_FRONT") {
 			const posture = _sidePosture[si] || "BALANCED";
 			if (posture === "OFFENSIVE" && plan.type === "DEFEND") {
-				generateWarPlan(si); // Switch to offensive plan
+				_planReassessNeeded[si] = true; // Switch to offensive plan
 				continue;
 			}
 			if (posture === "DEFENSIVE" && plan.type !== "DEFEND") {
-				generateWarPlan(si); // Switch to defensive plan
+				_planReassessNeeded[si] = true; // Switch to defensive plan
 				continue;
 			}
 		}
@@ -8322,7 +7756,7 @@ export function evaluateAllPlans() {
 		if (!sides[si] || sides[si].length === 0) continue;
 		const np = _navalPlan[si];
 		if (!np) {
-			generateNavalInvasionPlan(si);
+			_planReassessNeeded[si] = true;
 			continue;
 		}
 
