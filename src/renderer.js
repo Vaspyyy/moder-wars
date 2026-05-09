@@ -2166,8 +2166,70 @@ const ControlMapLayer = L.Layer.extend({
 		if (isWar && showWarPlans && _warPlan && _warPlan.length > 0) {
 			for (let si = 0; si < _warPlan.length; si++) {
 				const plan = _warPlan[si];
-				if (!plan?.arrowPoints || plan.arrowPoints.length < 2) continue;
+				if (!plan) continue;
 				const color = sideColors[si] || "rgba(255,255,0,0.6)";
+
+				// DEFEND plan: draw dotted frontline line
+				if (plan.type === "DEFEND" && plan.frontlinePoints?.length > 1) {
+					ctx.save();
+					ctx.strokeStyle = color.replace(rgbaRe, "0.5)");
+					ctx.lineWidth = 2;
+					ctx.setLineDash([6, 4]);
+					ctx.beginPath();
+					const fp0 = map.latLngToContainerPoint([
+						plan.frontlinePoints[0].lat,
+						plan.frontlinePoints[0].lng,
+					]);
+					ctx.moveTo(fp0.x, fp0.y);
+					for (let fi = 1; fi < plan.frontlinePoints.length; fi++) {
+						const fp = map.latLngToContainerPoint([
+							plan.frontlinePoints[fi].lat,
+							plan.frontlinePoints[fi].lng,
+						]);
+						ctx.lineTo(fp.x, fp.y);
+					}
+					ctx.stroke();
+					ctx.setLineDash([]);
+
+					// Label at midpoint
+					const mid =
+						plan.frontlinePoints[Math.floor(plan.frontlinePoints.length / 2)];
+					const midP = map.latLngToContainerPoint([mid.lat, mid.lng]);
+					ctx.font = "bold 9px monospace";
+					ctx.fillStyle = color.replace(rgbaRe, "0.8)");
+					ctx.fillText("DEFEND", midP.x + 8, midP.y - 6);
+					ctx.restore();
+					continue;
+				}
+
+				// PUSH_FRONT: draw arrow from unit centroid to enemy territory centroid
+				if (
+					plan.type === "PUSH_FRONT" &&
+					plan.arrowPoints &&
+					plan.arrowPoints.length >= 2
+				) {
+					const pts = plan.arrowPoints;
+					const p0 = map.latLngToContainerPoint([pts[0].lat, pts[0].lng]);
+					const p1 = map.latLngToContainerPoint([pts[1].lat, pts[1].lng]);
+					const midX = (p0.x + p1.x) / 2;
+					const midY = (p0.y + p1.y) / 2 - 40;
+
+					ctx.strokeStyle = color.replace(rgbaRe, "0.4)");
+					ctx.lineWidth = 2;
+					ctx.setLineDash([4, 6]);
+					ctx.beginPath();
+					ctx.moveTo(p0.x, p0.y);
+					ctx.quadraticCurveTo(midX, midY, p1.x, p1.y);
+					ctx.stroke();
+					ctx.setLineDash([]);
+
+					ctx.font = "bold 9px monospace";
+					ctx.fillStyle = color.replace(rgbaRe, "0.6)");
+					ctx.fillText("PUSH", midX + 8, midY);
+					continue;
+				}
+
+				if (!plan?.arrowPoints || plan.arrowPoints.length < 2) continue;
 				const isDashed = plan.phase === "PREPARATION";
 				ctx.strokeStyle = color.replace(rgbaRe, isDashed ? "0.4)" : "0.7)");
 				ctx.lineWidth = Math.max(

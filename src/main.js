@@ -6629,10 +6629,24 @@ export function generateWarPlan(sideIdx) {
 	const sideUnits = _tickUnitsBySide[sideIdx] || [];
 	const unitCount = sideUnits.filter((u) => u.deployTicks === 0).length;
 	if (unitCount === 0 || posture === "DEFENSIVE") {
+		// Collect frontline polyline points for this side (for rendering)
+		const frontlinePoints = [];
+		for (const key of Object.keys(_frontlinePolys || {})) {
+			const [a, b] = key.split("_").map(Number);
+			if (a !== sideIdx && b !== sideIdx) continue;
+			const poly = _frontlinePolys[key];
+			if (!poly) continue;
+			const stride = Math.max(1, Math.floor(poly.length / 60));
+			for (let p = 0; p < poly.length; p += stride) {
+				frontlinePoints.push({ lat: poly[p].lat, lng: poly[p].lng });
+			}
+		}
+
 		_warPlan[sideIdx] = {
 			type: "DEFEND",
 			phase: "PREPARATION",
 			target: null,
+			frontlinePoints,
 			startedTick: simFrameCount,
 			lastProgressTick: simFrameCount,
 			progress: 0,
@@ -6883,16 +6897,78 @@ export function generateWarPlan(sideIdx) {
 					};
 					return;
 				}
-				// Target unreachable by land — skip, let naval plan handle it
+				// Target unreachable by land — generate DEFEND plan and trigger naval plan
+				const flPts = [];
+				for (const key of Object.keys(_frontlinePolys || {})) {
+					const [a, b] = key.split("_").map(Number);
+					if (a !== sideIdx && b !== sideIdx) continue;
+					const poly = _frontlinePolys[key];
+					if (!poly) continue;
+					const stride = Math.max(1, Math.floor(poly.length / 60));
+					for (let p = 0; p < poly.length; p += stride) {
+						flPts.push({ lat: poly[p].lat, lng: poly[p].lng });
+					}
+				}
+				_warPlan[sideIdx] = {
+					type: "DEFEND",
+					phase: "PREPARATION",
+					target: null,
+					frontlinePoints: flPts,
+					startedTick: simFrameCount,
+					lastProgressTick: simFrameCount,
+					progress: 0,
+					maxAssignedUnits: unitCount,
+					activeUnitCount: 0,
+				};
+				// Immediately trigger naval plan for this side
+				generateNavalInvasionPlan(sideIdx);
+				return;
 			}
 		}
 	}
 
 	// No enemy city found → PUSH_FRONT (uniform advance)
+	// Compute arrow from unit centroid toward enemy territory centroid
+	let uLat = 0,
+		uLng = 0,
+		uCount = 0;
+	for (let ui = 0; ui < sideUnits.length; ui++) {
+		const u = sideUnits[ui];
+		if (u.deployTicks > 0) continue;
+		uLat += u.lat;
+		uLng += u.lng;
+		uCount++;
+	}
+	let eLat = 0,
+		eLng = 0,
+		eCount = 0;
+	for (let i = 0; i < dominantSideMap.length; i += 20) {
+		if (landMask[i] === 0) continue;
+		if (dominantSideMap[i] !== sideIdx && dominantSideMap[i] >= 0) {
+			const row = Math.floor(i / gridWidth);
+			const col = i % gridWidth;
+			eLat += row * CONFIG.GRID_RES - 90;
+			eLng += col * CONFIG.GRID_RES - 180;
+			eCount++;
+		}
+	}
+	let arrowPoints = null;
+	if (uCount > 0 && eCount > 0) {
+		uLat /= uCount;
+		uLng /= uCount;
+		eLat /= eCount;
+		eLng /= eCount;
+		arrowPoints = [
+			{ lat: uLat, lng: uLng },
+			{ lat: eLat, lng: eLng },
+		];
+	}
+
 	_warPlan[sideIdx] = {
 		type: "PUSH_FRONT",
 		phase: "EXECUTION",
 		target: null,
+		arrowPoints,
 		startedTick: simFrameCount,
 		lastProgressTick: simFrameCount,
 		progress: 0,
@@ -10037,6 +10113,69 @@ export function performSimulationTick() {
 				} else {
 					u.navalAssigned = false;
 					u.isTransport = false;
+
+					// DEFEND plan: hold the frontline, do not advance
+					if (
+						activePlan &&
+						activePlan.type === "DEFEND" &&
+						!isEngaged &&
+						!shouldMopUp &&
+						!retreatVector
+					) {
+						isPlanUnit = true;
+						activePlan.activeUnitCount = (activePlan.activeUnitCount || 0) + 1;
+						// Check if unit is behind or at the frontline (on our side)
+						const unitIdx = getGridIndex(u.lat, u.lng);
+						const onOurSide =
+							unitIdx !== -1 && dominantSideMap[unitIdx] === u.sideIndex;
+						const nearFrontline =
+							borderDir &&
+							Math.sqrt(
+								borderDir.lat * borderDir.lat + borderDir.lng * borderDir.lng,
+							) > 0;
+						if (onOurSide && nearFrontline) {
+							// Hold position near the frontline, don't advance
+							moveDirLat = 0;
+							moveDirLng = 0;
+						} else if (!onOurSide) {
+							// Unit drifted past the frontline — pull it back
+							// Move toward nearest friendly territory
+							let bestFRDist = Infinity;
+							let bestFRLat = 0;
+							let bestFRLng = 0;
+							const r = Math.floor((u.lat + 90) / CONFIG.GRID_RES);
+							const c = Math.floor((u.lng + 180) / CONFIG.GRID_RES);
+							for (let dr = -5; dr <= 5; dr++) {
+								for (let dc = -5; dc <= 5; dc++) {
+									const nr = r + dr;
+									const nc = c + dc;
+									if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth)
+										continue;
+									const ni = nr * gridWidth + nc;
+									if (dominantSideMap[ni] !== u.sideIndex) continue;
+									const flat = nr * CONFIG.GRID_RES - 90;
+									const flng = nc * CONFIG.GRID_RES - 180;
+									let fdLng = flng - u.lng;
+									if (fdLng > 180) fdLng -= 360;
+									else if (fdLng < -180) fdLng += 360;
+									const fd = (u.lat - flat) ** 2 + fdLng ** 2;
+									if (fd < bestFRDist) {
+										bestFRDist = fd;
+										bestFRLat = flat;
+										bestFRLng = flng;
+									}
+								}
+							}
+							if (bestFRDist < Infinity) {
+								const d = Math.sqrt(bestFRDist);
+								moveDirLat = (bestFRLat - u.lat) / d;
+								let fdLng = bestFRLng - u.lng;
+								if (fdLng > 180) fdLng -= 360;
+								else if (fdLng < -180) fdLng += 360;
+								moveDirLng = fdLng / d;
+							}
+						}
+					}
 
 					// Defender reaction: move toward enemy landing if assigned
 					if (
