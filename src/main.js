@@ -6737,7 +6737,7 @@ export function generateWarPlan(sideIdx) {
 				startedTick: simFrameCount,
 				lastProgressTick: simFrameCount,
 				progress: 0,
-				maxAssignedUnits: Math.ceil(unitCount * 0.6),
+				maxAssignedUnits: unitCount,
 				activeUnitCount: 0,
 			};
 			return;
@@ -6892,7 +6892,7 @@ export function generateWarPlan(sideIdx) {
 						startedTick: simFrameCount,
 						lastProgressTick: simFrameCount,
 						progress: 0,
-						maxAssignedUnits: Math.ceil(unitCount * 0.5),
+						maxAssignedUnits: unitCount,
 						activeUnitCount: 0,
 					};
 					return;
@@ -6920,8 +6920,8 @@ export function generateWarPlan(sideIdx) {
 					maxAssignedUnits: unitCount,
 					activeUnitCount: 0,
 				};
-				// Immediately trigger naval plan for this side
-				generateNavalInvasionPlan(sideIdx);
+				// Trigger naval plan only if none exists yet
+				if (!_navalPlan[sideIdx]) generateNavalInvasionPlan(sideIdx);
 				return;
 			}
 		}
@@ -6972,7 +6972,7 @@ export function generateWarPlan(sideIdx) {
 		startedTick: simFrameCount,
 		lastProgressTick: simFrameCount,
 		progress: 0,
-		maxAssignedUnits: Math.ceil(unitCount * 0.8),
+		maxAssignedUnits: unitCount,
 		activeUnitCount: 0,
 	};
 }
@@ -7165,10 +7165,7 @@ export function generateNavalInvasionPlan(sideIdx) {
 
 	if (!bestStaging) return;
 
-	const maxNavalUnits = Math.max(
-		5,
-		Math.ceil(unitCount * CONFIG.NAVAL_INVASION_FORCE_FRAC),
-	);
+	const maxNavalUnits = unitCount;
 
 	_navalPlan[sideIdx] = {
 		type: "NAVAL_INVASION",
@@ -7253,10 +7250,7 @@ export function generateNavalSupplyPlan(sideIdx) {
 	// Don't send supply if staging is too far from target
 	if (bestDist > 400) return;
 
-	const maxSupplyUnits = Math.max(
-		3,
-		Math.ceil(unitCount * CONFIG.NAVAL_SUPPLY_FORCE_FRAC),
-	);
+	const maxSupplyUnits = unitCount;
 
 	_navalSupplyPlan[sideIdx] = {
 		type: "NAVAL_SUPPLY",
@@ -7451,6 +7445,8 @@ export function evaluateAllPlans() {
 			if (landed >= 3) {
 				np.phase = "LANDING";
 				np.lastProgressTick = simFrameCount;
+				// Immediately generate supply plan for the landing
+				if (!_navalSupplyPlan[si]) generateNavalSupplyPlan(si);
 			}
 		} else if (np.phase === "LANDING") {
 			// After enough time in landing, the plan completes
@@ -7531,14 +7527,12 @@ export function evaluateAllPlans() {
 						startedTick: simFrameCount,
 						lastProgressTick: simFrameCount,
 						progress: 0,
-						maxAssignedUnits: Math.ceil(deployedCount * 0.6),
+						maxAssignedUnits: deployedCount,
 						activeUnitCount: 0,
 					};
 				}
 			}
 		}
-
-		np.lastProgressTick = simFrameCount;
 	}
 
 	// ── Naval Supply Plan Evaluation ──
@@ -7547,8 +7541,8 @@ export function evaluateAllPlans() {
 		const sp = _navalSupplyPlan[si];
 
 		if (!sp) {
-			// Generate supply plan if we have an active naval invasion in LANDING
-			if (simFrameCount % 300 === 0) {
+			// Generate supply plan whenever there's an active naval invasion in LANDING
+			if (_navalPlan[si]?.phase === "LANDING") {
 				generateNavalSupplyPlan(si);
 			}
 			continue;
@@ -10210,9 +10204,7 @@ export function performSimulationTick() {
 						activePlan &&
 						activePlan.type !== "DEFEND"
 					) {
-						const planFull =
-							activePlan.maxAssignedUnits !== undefined &&
-							activePlan.activeUnitCount >= activePlan.maxAssignedUnits;
+						const planFull = false;
 						if (!planFull) {
 							isPlanUnit = true;
 							if (activePlan.activeUnitCount !== undefined) {
