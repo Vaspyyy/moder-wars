@@ -6935,23 +6935,64 @@ export function generateNavalInvasionPlan(sideIdx) {
 
 	if (friendlyCoastCells.length === 0) return;
 
-	// Score enemy coastal cities: prefer capitals, prefer closer to friendly coast
+	// Score enemy coastal cities: prefer strategic depth, capitals, reject land-reachable
 	let bestTarget = null;
 	let bestScore = -Infinity;
 	for (const ec of enemyCoastalCities) {
-		let minDist = Infinity;
+		let minSeaDist = Infinity;
+		let minLandDist = Infinity;
 		for (const fc of friendlyCoastCells) {
 			const dLat = ec.city.lat - fc.lat;
 			let dLng = ec.city.lng - fc.lng;
 			if (dLng > 180) dLng -= 360;
 			else if (dLng < -180) dLng += 360;
 			const dSq = dLat * dLat + dLng * dLng;
-			if (dSq < minDist) minDist = dSq;
+			if (dSq < minSeaDist) minSeaDist = dSq;
 		}
-		// Must have sea path (crude check: distance not insane)
-		if (minDist > 400) continue;
-		let score = -minDist;
-		if (ec.isCapital) score += 100;
+		if (_frontlinePolys) {
+			for (const key of Object.keys(_frontlinePolys)) {
+				const [a, b] = key.split("_").map(Number);
+				if (a !== sideIdx && b !== sideIdx) continue;
+				const poly = _frontlinePolys[key];
+				if (!poly) continue;
+				for (
+					let p = 0;
+					p < poly.length;
+					p += Math.max(1, Math.floor(poly.length / 10))
+				) {
+					const dLat = ec.city.lat - poly[p].lat;
+					let dLng = ec.city.lng - poly[p].lng;
+					if (dLng > 180) dLng -= 360;
+					else if (dLng < -180) dLng += 360;
+					const dSq = dLat * dLat + dLng * dLng;
+					if (dSq < minLandDist) minLandDist = dSq;
+				}
+			}
+		}
+		if (minSeaDist > 400) continue;
+		if (minLandDist < minSeaDist * 0.7) continue;
+		if (minSeaDist < 4.0) continue;
+		let score = 0;
+		score += Math.sqrt(minLandDist) * 30;
+		const seaDist = Math.sqrt(minSeaDist);
+		if (seaDist > 3 && seaDist < 20) score += 50;
+		if (ec.isCapital) score += 200;
+		const cIdx = ec.coastIdx;
+		if (cIdx >= 0 && cIdx < dominantSideMap.length) {
+			let enemyNeighborCells = 0;
+			const row = Math.floor(cIdx / gridWidth);
+			const col = cIdx % gridWidth;
+			for (let dr = -3; dr <= 3; dr++) {
+				for (let dc = -3; dc <= 3; dc++) {
+					const nr = row + dr;
+					const nc = col + dc;
+					if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
+					if (dominantSideMap[nr * gridWidth + nc] !== sideIdx)
+						enemyNeighborCells++;
+				}
+			}
+			score += enemyNeighborCells * 2;
+		}
 		if (score > bestScore) {
 			bestScore = score;
 			bestTarget = ec;
