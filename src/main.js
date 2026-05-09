@@ -1827,6 +1827,7 @@ const _tickGarrisonCounters = new Map();
 const _tickCityGridIndexSet = new Set();
 const _tickSideAllyIdSets = [];
 const _tickSideSupportIdSets = [];
+const _tickUnitsBySide = [];
 
 // Temporary diagnostics for cross-war state/capitulation bugs.
 export const aiCountryState = new Map();
@@ -6556,9 +6557,8 @@ export function generateWarPlan(sideIdx) {
 	const sideCountries = sides[sideIdx] || [];
 
 	// Default to DEFEND if no units or defensive posture
-	const unitCount = units.filter(
-		(u) => u.sideIndex === sideIdx && u.deployTicks === 0,
-	).length;
+	const sideUnits = _tickUnitsBySide[sideIdx] || [];
+	const unitCount = sideUnits.filter((u) => u.deployTicks === 0).length;
 	if (unitCount === 0 || posture === "DEFENSIVE") {
 		_warPlan[sideIdx] = {
 			type: "DEFEND",
@@ -7320,9 +7320,14 @@ export function performSimulationTick() {
 		}
 	});
 
-	const unitsBySide = sides.map((_, idx) =>
-		units.filter((u) => u.sideIndex === idx),
-	);
+	while (_tickUnitsBySide.length < sides.length) _tickUnitsBySide.push([]);
+	for (let si = 0; si < sides.length; si++) _tickUnitsBySide[si].length = 0;
+	for (let ui = 0; ui < units.length; ui++) {
+		const sIdx = units[ui].sideIndex;
+		if (sIdx >= 0 && sIdx < sides.length)
+			_tickUnitsBySide[sIdx].push(units[ui]);
+	}
+	const unitsBySide = _tickUnitsBySide;
 	// City target list used for CITY FOCUS and URBAN strategies; prefer the active theater,
 	// and fall back to all known cities if no theater is defined.
 	const cityTargets = activeTheaterCities?.length
@@ -9938,7 +9943,7 @@ export function performSimulationTick() {
 						enemyEntries[Math.floor(Math.random() * enemyEntries.length)];
 					const targetSideIdx = targetEntry.idx;
 					const myBases = bases.filter((b) => b.sideIndex === launcherSideIdx);
-					const enemyUnits = units.filter((u) => u.sideIndex === targetSideIdx);
+					const enemyUnits = _tickUnitsBySide[targetSideIdx] || [];
 					if (myBases.length > 0 && enemyUnits.length > 0) {
 						const launcher =
 							myBases[Math.floor(Math.random() * myBases.length)];
