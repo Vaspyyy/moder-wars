@@ -1814,6 +1814,20 @@ export let disableFullscreen = getCookie("mw_disable_fullscreen") === "true";
 export const unitSpatialHash = new Map();
 export const UNIT_HASH_CELL_SIZE = 2.5; // Degrees per spatial bucket
 
+// Phase 2.1: Persistent tick caches (reused via .clear() to reduce GC pressure)
+const _tickCombatantIds = new Set();
+const _tickCountryToSideMap = new Map();
+const _tickCountryToCityCount = new Map();
+const _tickCountryCapitalLost = new Map();
+const _tickSovereignUnitCounts = new Map();
+const _tickNeighborThreat = new Map();
+const _tickCitiesBySovereign = new Map();
+const _tickMetadataById = new Map();
+const _tickGarrisonCounters = new Map();
+const _tickCityGridIndexSet = new Set();
+const _tickSideAllyIdSets = [];
+const _tickSideSupportIdSets = [];
+
 // Temporary diagnostics for cross-war state/capitulation bugs.
 export const aiCountryState = new Map();
 export let _sidePosture = []; // per-side auto posture (OFFENSIVE/BALANCED/DEFENSIVE)
@@ -3843,7 +3857,8 @@ export function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
 	// OPT: Pre-compute city grid indices as a Set once per tick, not per-cell inside the loop.
 	// Previously: activeTheaterCities.some(c => getGridIndex(c.lat, c.lng) === idx) ran inside
 	// a triple-nested loop (units × cells × cities), causing millions of getGridIndex calls/tick.
-	const cityGridIndexSet = new Set();
+	_tickCityGridIndexSet.clear();
+	const cityGridIndexSet = _tickCityGridIndexSet;
 	const citySource = activeTheaterCities?.length ? activeTheaterCities : [];
 	for (let ci = 0; ci < citySource.length; ci++) {
 		const gi = getGridIndex(citySource[ci].lat, citySource[ci].lng);
@@ -3851,21 +3866,22 @@ export function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
 	}
 
 	// OPT: Pre-compute per-side ally id Sets so isOwnerAlly is an O(1) Set lookup, not .some()
-	const sideAllyIdSets = sides.map((side) => {
-		const s = new Set();
-		side.forEach((c) => {
-			s.add(c.id);
+	while (_tickSideAllyIdSets.length < sides.length)
+		_tickSideAllyIdSets.push(new Set());
+	while (_tickSideSupportIdSets.length < sides.length)
+		_tickSideSupportIdSets.push(new Set());
+	for (let si = 0; si < sides.length; si++) {
+		_tickSideAllyIdSets[si].clear();
+		sides[si].forEach((c) => {
+			_tickSideAllyIdSets[si].add(c.id);
 		});
-		return s;
-	});
-	// Pre-compute per-side support-role id Sets for the SUPPORT-nation invasion check
-	const sideSupportIdSets = sides.map((side) => {
-		const s = new Set();
-		side.forEach((c) => {
-			if (c.role === "SUPPORT") s.add(c.id);
+		_tickSideSupportIdSets[si].clear();
+		sides[si].forEach((c) => {
+			if (c.role === "SUPPORT") _tickSideSupportIdSets[si].add(c.id);
 		});
-		return s;
-	});
+	}
+	const sideAllyIdSets = _tickSideAllyIdSets;
+	const sideSupportIdSets = _tickSideSupportIdSets;
 
 	for (let i = 0; i < units.length; i++) {
 		const idx = (startIndex + i) % units.length;
@@ -6920,8 +6936,10 @@ export function performSimulationTick() {
 	activeBattles = [];
 	latestCountryStats.clear();
 	const countryStats = latestCountryStats;
-	const combatantIds = new Set();
-	const countryToSideMap = new Map();
+	_tickCombatantIds.clear();
+	const combatantIds = _tickCombatantIds;
+	_tickCountryToSideMap.clear();
+	const countryToSideMap = _tickCountryToSideMap;
 
 	sides.forEach((side, idx) => {
 		side.forEach((c) => {
@@ -7408,8 +7426,10 @@ export function performSimulationTick() {
 		return enemies;
 	});
 
-	const countryToCityCount = new Map();
-	const countryCapitalLost = new Map();
+	_tickCountryToCityCount.clear();
+	const countryToCityCount = _tickCountryToCityCount;
+	_tickCountryCapitalLost.clear();
+	const countryCapitalLost = _tickCountryCapitalLost;
 
 	activeTheaterCities.forEach((city) => {
 		const idx = getGridIndex(city.lat, city.lng);
@@ -7685,7 +7705,8 @@ export function performSimulationTick() {
 		}
 
 		// Pre-build sovereign unit counts for O(1) lookup below
-		const sovereignUnitCounts = new Map();
+		_tickSovereignUnitCounts.clear();
+		const sovereignUnitCounts = _tickSovereignUnitCounts;
 		for (let ui = 0; ui < units.length; ui++) {
 			const uu = units[ui];
 			if (uu.deployTicks > 0) continue;
@@ -7695,7 +7716,8 @@ export function performSimulationTick() {
 			);
 		}
 
-		const neighborThreat = new Map(); // countryId → enemy unit count on border
+		_tickNeighborThreat.clear();
+		const neighborThreat = _tickNeighborThreat;
 		for (const [countryId, neighbors] of adjacencyCache.entries()) {
 			if (!combatantIds.has(countryId)) continue;
 			let borderThreat = 0;
@@ -7845,7 +7867,8 @@ export function performSimulationTick() {
 		: cities;
 
 	// PERF: Pre-group cities by sovereignId once, instead of cities.filter() per-unit (was 4.3% self-time).
-	const _citiesBySovereign = new Map();
+	_tickCitiesBySovereign.clear();
+	const _citiesBySovereign = _tickCitiesBySovereign;
 	if (cities?.length) {
 		for (let ci = 0; ci < cities.length; ci++) {
 			const c = cities[ci];
@@ -7862,7 +7885,8 @@ export function performSimulationTick() {
 	}
 
 	// PERF: Pre-build Map<id, metadata> for O(1) lookup instead of countryMetadata.find() per-unit (was 1.5% self-time).
-	const _metadataById = new Map();
+	_tickMetadataById.clear();
+	const _metadataById = _tickMetadataById;
 	for (let mi = 0; mi < countryMetadata.length; mi++) {
 		const m = countryMetadata[mi];
 		if (m && m.id !== undefined) _metadataById.set(m.id, m);
@@ -7870,7 +7894,8 @@ export function performSimulationTick() {
 
 	// Pre-allocate garrison slot counters per sovereign for O(1) assignment
 	// instead of O(N²) units.filter().indexOf() per unit.
-	const garrisonCounters = new Map();
+	_tickGarrisonCounters.clear();
+	const garrisonCounters = _tickGarrisonCounters;
 
 	for (let i = units.length - 1; i >= 0; i--) {
 		const u = units[i];
