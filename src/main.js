@@ -1834,6 +1834,7 @@ export const _navalPlan = []; // per-side naval invasion plan (1 per side max)
 export const _navalSupplyPlan = []; // per-side naval supply run plan (1 per side max)
 export const _coastalDefensePlan = []; // per-side coastal defense passive overlay
 export const _neutralGarrisonPlan = []; // per-side neutral border garrison plans
+export const _defenderReactionPlan = []; // per-side emergency DEFEND at enemy naval beachhead
 const _proposalReassessTick = []; // per-side last reassessment tick
 const _proposalsCache = []; // per-side cached scored proposals
 const _planReassessNeeded = []; // per-side flag: force immediate reassessment
@@ -7972,7 +7973,15 @@ export function evaluateAllPlans() {
 							u.coastalAssigned = false;
 					}
 					_coastalDefensePlan[slot] = null;
+					continue;
 				}
+			}
+			// Decay threat flags after 900 ticks (~15s)
+			if (cp.threatenedTick && simFrameCount - cp.threatenedTick > 900) {
+				cp.threatenedByTransit = false;
+				cp.threatenedByGathering = false;
+				delete cp.threatContact;
+				delete cp.threatenedTick;
 			}
 		}
 	}
@@ -7998,78 +8007,267 @@ export function evaluateAllPlans() {
 		}
 	}
 
-	// ── Defender Reaction to Enemy Naval Landings ──
+	// ── Proactive Detection: Enemy TRANSIT & GATHERING near our coast ──
 	for (let si = 0; si < sides.length; si++) {
 		if (!sides[si] || sides[si].length === 0) continue;
-
-		// Check each enemy side for active naval landings on our territory
 		for (let ei = 0; ei < sides.length; ei++) {
 			if (ei === si) continue;
 			if (!sides[ei] || sides[ei].length === 0) continue;
-
 			const enemyNP = _navalPlan[ei];
-			if (!enemyNP || enemyNP.phase !== "LANDING") continue;
-			if (!enemyNP.target) continue;
+			if (!enemyNP?.target) continue;
 
-			// Check if the landing is on our territory
+			if (enemyNP.phase === "TRANSIT") {
+				for (const u of units) {
+					if (u.sideIndex !== ei || !u.navalAssigned) continue;
+					for (let csi = si * 10; csi < si * 10 + 10; csi++) {
+						const cp = _coastalDefensePlan[csi];
+						if (!cp?.target) continue;
+						const dLat = u.lat - cp.target.lat;
+						let dLng = u.lng - cp.target.lng;
+						if (dLng > 180) dLng -= 360;
+						else if (dLng < -180) dLng += 360;
+						if (dLat * dLat + dLng * dLng < 25.0) {
+							cp.threatenedByTransit = true;
+							cp.threatContact = {
+								lat: u.lat,
+								lng: u.lng,
+							};
+							cp.threatenedTick = simFrameCount;
+						}
+					}
+				}
+			} else if (enemyNP.phase === "GATHERING" && enemyNP.stagingPoint) {
+				for (let csi = si * 10; csi < si * 10 + 10; csi++) {
+					const cp = _coastalDefensePlan[csi];
+					if (!cp?.target) continue;
+					const dLat = enemyNP.stagingPoint.lat - cp.target.lat;
+					let dLng = enemyNP.stagingPoint.lng - cp.target.lng;
+					if (dLng > 180) dLng -= 360;
+					else if (dLng < -180) dLng += 360;
+					if (dLat * dLat + dLng * dLng < 100.0) {
+						cp.threatenedByGathering = true;
+						cp.threatContact = {
+							lat: enemyNP.stagingPoint.lat,
+							lng: enemyNP.stagingPoint.lng,
+						};
+						cp.threatenedTick = simFrameCount;
+					}
+				}
+			}
+		}
+	}
+
+	// ── Defender Reaction (Structured) ──
+	for (let si = 0; si < sides.length; si++) {
+		if (!sides[si] || sides[si].length === 0) continue;
+		const rp = _defenderReactionPlan[si];
+
+		// ---- Cancel stale / obsolete reaction plans ----
+		if (rp) {
+			const enemyNP =
+				rp.enemySideIdx != null ? _navalPlan[rp.enemySideIdx] : null;
+			const enemySideDead =
+				rp.enemySideIdx != null &&
+				(!sides[rp.enemySideIdx] || sides[rp.enemySideIdx].length === 0);
+
+			let shouldCancel = false;
+			if (enemySideDead || !enemyNP) {
+				shouldCancel = true;
+			} else if (rp._landingDefeatedTick) {
+				if (simFrameCount - rp._landingDefeatedTick > 600) shouldCancel = true;
+			}
+
+			if (!shouldCancel && simFrameCount - rp.lastProgressTick > 1800) {
+				shouldCancel = true;
+			}
+
+			if (shouldCancel) {
+				for (const u of units) {
+					if (u.sideIndex === si) u._defenderReactTarget = null;
+				}
+				_defenderReactionPlan[si] = null;
+			}
+		}
+
+		// Track arrivals: units within 1° of target clear their flag
+		if (_defenderReactionPlan[si]) {
+			_defenderReactionPlan[si].activeUnitCount = 0;
+			let anyArrived = false;
+			for (const u of units) {
+				if (u.sideIndex !== si || !u._defenderReactTarget) continue;
+				_defenderReactionPlan[si].activeUnitCount++;
+				const rdLat = u._defenderReactTarget.lat - u.lat;
+				let rdLng = u._defenderReactTarget.lng - u.lng;
+				if (rdLng > 180) rdLng -= 360;
+				else if (rdLng < -180) rdLng += 360;
+				if (rdLat * rdLat + rdLng * rdLng < 1.0) {
+					u._defenderReactTarget = null;
+					anyArrived = true;
+				}
+			}
+			if (anyArrived) {
+				_defenderReactionPlan[si].lastProgressTick = simFrameCount;
+			}
+		}
+
+		// ---- Detect threats & manage reaction plan ----
+		for (let ei = 0; ei < sides.length; ei++) {
+			if (ei === si) continue;
+			if (!sides[ei] || sides[ei].length === 0) continue;
+			const enemyNP = _navalPlan[ei];
+			if (!enemyNP?.target) continue;
+
 			const tIdx = getGridIndex(enemyNP.target.lat, enemyNP.target.lng);
-			if (tIdx === -1 || dominantSideMap[tIdx] !== si) continue;
+			const onOurTerritory = tIdx !== -1 && dominantSideMap[tIdx] === si;
 
-			// Count enemy units near the landing zone
-			let enemyLandingForce = 0;
-			for (const u of units) {
-				if (u.sideIndex !== ei) continue;
-				const dLat = enemyNP.target.lat - u.lat;
-				let dLng = enemyNP.target.lng - u.lng;
-				if (dLng > 180) dLng -= 360;
-				else if (dLng < -180) dLng += 360;
-				if (dLat * dLat + dLng * dLng < 4.0) enemyLandingForce++;
-			}
+			const rpCur = _defenderReactionPlan[si];
+			if (rpCur && rpCur.enemySideIdx !== ei) continue;
 
-			if (enemyLandingForce < 3) continue;
+			// TRANSIT: pre-emptive reaction if heading to our territory
+			if (enemyNP.phase === "TRANSIT" && onOurTerritory) {
+				let rpCur2 = _defenderReactionPlan[si];
+				if (!rpCur2) {
+					const preActive = Math.min(
+						10,
+						Math.floor(_tickUnitsBySide[si] * 0.15),
+					);
+					if (preActive >= 3) {
+						_defenderReactionPlan[si] = {
+							type: "DEFEND",
+							target: {
+								lat: enemyNP.target.lat,
+								lng: enemyNP.target.lng,
+							},
+							enemySideIdx: ei,
+							phase: "EXECUTION",
+							maxUnits: preActive,
+							activeUnitCount: 0,
+							startedTick: simFrameCount,
+							lastProgressTick: simFrameCount,
+						};
+						rpCur2 = _defenderReactionPlan[si];
+					}
+				}
+				if (!rpCur2 || rpCur2.activeUnitCount >= rpCur2.maxUnits) continue;
 
-			// Count our defenders near the landing zone
-			let localDefenders = 0;
-			for (const u of units) {
-				if (u.sideIndex !== si) continue;
-				if (u.deployTicks > 0) continue;
-				const dLat = enemyNP.target.lat - u.lat;
-				let dLng = enemyNP.target.lng - u.lng;
-				if (dLng > 180) dLng -= 360;
-				else if (dLng < -180) dLng += 360;
-				if (dLat * dLat + dLng * dLng < 9.0) localDefenders++;
-			}
-
-			// Decision: pull frontline units if defenders are outnumbered
-			const ratio = localDefenders / Math.max(1, enemyLandingForce);
-			if (ratio < 1.5) {
-				// Need reinforcements — pull nearby frontline units toward landing
-				let pulled = 0;
-				const maxPull = Math.ceil(enemyLandingForce * 1.5 - localDefenders);
+				const slotsOpen = rpCur2.maxUnits - rpCur2.activeUnitCount;
+				let recruited = 0;
 				for (const u of units) {
 					if (u.sideIndex !== si) continue;
 					if (u.deployTicks > 0) continue;
 					if (u.navalAssigned || u.supplyAssigned) continue;
+					if (u.coastalAssigned || u.garrisonAssigned) continue;
 					if (u._defenderReactTarget) continue;
 
-					// Only pull units within reasonable distance of the landing
-					const dLat = enemyNP.target.lat - u.lat;
-					let dLng = enemyNP.target.lng - u.lng;
+					const dLat = rpCur2.target.lat - u.lat;
+					let dLng = rpCur2.target.lng - u.lng;
 					if (dLng > 180) dLng -= 360;
 					else if (dLng < -180) dLng += 360;
 					const dSq = dLat * dLat + dLng * dLng;
 
-					// Pull from medium range (3-10 degrees), not the far rear
 					if (dSq < 9.0 || dSq > 100.0) continue;
 
 					u._defenderReactTarget = {
-						lat: enemyNP.target.lat,
-						lng: enemyNP.target.lng,
+						lat: rpCur2.target.lat,
+						lng: rpCur2.target.lng,
 					};
-					pulled++;
-					if (pulled >= maxPull) break;
+					recruited++;
+					if (recruited >= slotsOpen) break;
 				}
+				rpCur2.activeUnitCount += recruited;
 			}
+
+			// LANDING: full reactive response
+			if (enemyNP.phase === "LANDING" && onOurTerritory) {
+				let enemyLandingForce = 0;
+				for (const u of units) {
+					if (u.sideIndex !== ei) continue;
+					const dLat = enemyNP.target.lat - u.lat;
+					let dLng = enemyNP.target.lng - u.lng;
+					if (dLng > 180) dLng -= 360;
+					else if (dLng < -180) dLng += 360;
+					if (dLat * dLat + dLng * dLng < 4.0) enemyLandingForce++;
+				}
+
+				let rpCur2 = _defenderReactionPlan[si];
+				if (!rpCur2 && enemyLandingForce >= 3) {
+					_defenderReactionPlan[si] = {
+						type: "DEFEND",
+						target: {
+							lat: enemyNP.target.lat,
+							lng: enemyNP.target.lng,
+						},
+						enemySideIdx: ei,
+						phase: "EXECUTION",
+						maxUnits: 0,
+						activeUnitCount: 0,
+						startedTick: simFrameCount,
+						lastProgressTick: simFrameCount,
+					};
+					rpCur2 = _defenderReactionPlan[si];
+				}
+
+				if (!rpCur2) continue;
+
+				if (enemyLandingForce < 3) {
+					if (!rpCur2._landingDefeatedTick)
+						rpCur2._landingDefeatedTick = simFrameCount;
+					continue;
+				}
+				rpCur2._landingDefeatedTick = 0;
+
+				let localDefenders = 0;
+				for (const u of units) {
+					if (u.sideIndex !== si) continue;
+					if (u.deployTicks > 0) continue;
+					const dLat = enemyNP.target.lat - u.lat;
+					let dLng = enemyNP.target.lng - u.lng;
+					if (dLng > 180) dLng -= 360;
+					else if (dLng < -180) dLng += 360;
+					if (dLat * dLat + dLng * dLng < 9.0) localDefenders++;
+				}
+
+				const ratio = localDefenders / Math.max(1, enemyLandingForce);
+				if (ratio < 1.5) {
+					const needed = Math.ceil(enemyLandingForce * 1.5 - localDefenders);
+					rpCur2.maxUnits = Math.max(rpCur2.maxUnits, needed);
+				}
+
+				if (rpCur2.activeUnitCount >= rpCur2.maxUnits) continue;
+
+				const slotsOpen = rpCur2.maxUnits - rpCur2.activeUnitCount;
+				let recruited = 0;
+				for (const u of units) {
+					if (u.sideIndex !== si) continue;
+					if (u.deployTicks > 0) continue;
+					if (u.navalAssigned || u.supplyAssigned) continue;
+					if (u.coastalAssigned || u.garrisonAssigned) continue;
+					if (u._defenderReactTarget) continue;
+
+					const dLat = rpCur2.target.lat - u.lat;
+					let dLng = rpCur2.target.lng - u.lng;
+					if (dLng > 180) dLng -= 360;
+					else if (dLng < -180) dLng += 360;
+					const dSq = dLat * dLat + dLng * dLng;
+
+					if (dSq < 9.0 || dSq > 100.0) continue;
+
+					u._defenderReactTarget = {
+						lat: rpCur2.target.lat,
+						lng: rpCur2.target.lng,
+					};
+					recruited++;
+					if (recruited >= slotsOpen) break;
+				}
+				rpCur2.activeUnitCount += recruited;
+			}
+		}
+	}
+
+	// ── Orphan _defenderReactTarget Cleanup ──
+	for (const u of units) {
+		if (u._defenderReactTarget && !_defenderReactionPlan[u.sideIndex]) {
+			u._defenderReactTarget = null;
 		}
 	}
 
@@ -8107,6 +8305,12 @@ export function evaluateAllPlans() {
 			if (u.garrisonAssigned) u.garrisonAssigned = false;
 		}
 		_neutralGarrisonPlan[si] = null;
+	}
+	for (let si = sides.length; si < _defenderReactionPlan.length; si++) {
+		for (const u of units) {
+			if (u.sideIndex === si) u._defenderReactTarget = null;
+		}
+		_defenderReactionPlan[si] = null;
 	}
 }
 
@@ -9652,22 +9856,38 @@ export function performSimulationTick() {
 										foundCD = true;
 										isPlanUnit = true;
 										cp.activeUnitCount = (cp.activeUnitCount || 0) + 1;
-										const slot =
-											cp.zonePolyline[
-												Math.floor(
-													Math.abs(u.id * 777) % cp.zonePolyline.length,
-												)
-											];
-										const sLat = slot.lat - u.lat;
-										let sLng = slot.lng - u.lng;
-										if (sLng > 180) sLng -= 360;
-										else if (sLng < -180) sLng += 360;
-										const sDist = Math.sqrt(sLat * sLat + sLng * sLng);
-										if (sDist > 0.01) {
-											planDirLat = sLat / sDist;
-											planDirLng = sLng / sDist;
+										const threatActive =
+											cp.threatContact &&
+											simFrameCount - (cp.threatenedTick || 0) < 900;
+										if (threatActive) {
+											const tLat = cp.threatContact.lat - u.lat;
+											let tLng = cp.threatContact.lng - u.lng;
+											if (tLng > 180) tLng -= 360;
+											else if (tLng < -180) tLng += 360;
+											const tDist = Math.sqrt(tLat * tLat + tLng * tLng);
+											if (tDist > 0.01) {
+												planDirLat = tLat / tDist;
+												planDirLng = tLng / tDist;
+											}
+											planSpeedMult = 1.5;
+										} else {
+											const slot =
+												cp.zonePolyline[
+													Math.floor(
+														Math.abs(u.id * 777) % cp.zonePolyline.length,
+													)
+												];
+											const sLat = slot.lat - u.lat;
+											let sLng = slot.lng - u.lng;
+											if (sLng > 180) sLng -= 360;
+											else if (sLng < -180) sLng += 360;
+											const sDist = Math.sqrt(sLat * sLat + sLng * sLng);
+											if (sDist > 0.01) {
+												planDirLat = sLat / sDist;
+												planDirLng = sLng / sDist;
+											}
+											planSpeedMult = 0.5;
 										}
-										planSpeedMult = 0.5;
 										moveDirLat = 0;
 										moveDirLng = 0;
 										break;
