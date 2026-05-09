@@ -6838,28 +6838,52 @@ export function generateWarPlan(sideIdx) {
 			}
 
 			if (bestCity) {
-				const arrowPoints = [
-					{ lat: sLat, lng: sLng },
-					{ lat: bestCity.lat, lng: bestCity.lng },
-				];
+				// Check if the line from staging to target crosses water (no land connection)
+				let crossesWater = false;
+				const dLat = bestCity.lat - sLat;
+				let dLng = bestCity.lng - sLng;
+				if (dLng > 180) dLng -= 360;
+				else if (dLng < -180) dLng += 360;
+				const lineLen = Math.sqrt(dLat * dLat + dLng * dLng);
+				if (lineLen > 0.5) {
+					const steps = Math.min(20, Math.ceil(lineLen / 0.3));
+					let waterSamples = 0;
+					for (let s = 1; s < steps; s++) {
+						const t = s / steps;
+						const sampleLat = sLat + dLat * t;
+						const sampleLng = sLng + dLng * t;
+						const sIdx = getGridIndex(sampleLat, sampleLng);
+						if (sIdx !== -1 && landMask[sIdx] === 0) waterSamples++;
+					}
+					// If >40% of samples are water, there's no viable land route
+					if (waterSamples > steps * 0.4) crossesWater = true;
+				}
 
-				_warPlan[sideIdx] = {
-					type: "CAPTURE_CITY",
-					phase: "PREPARATION",
-					target: {
-						lat: bestCity.lat,
-						lng: bestCity.lng,
-						name: bestCity.name || "Enemy City",
-					},
-					stagingCells: staging,
-					arrowPoints,
-					startedTick: simFrameCount,
-					lastProgressTick: simFrameCount,
-					progress: 0,
-					maxAssignedUnits: Math.ceil(unitCount * 0.5),
-					activeUnitCount: 0,
-				};
-				return;
+				if (!crossesWater) {
+					const arrowPoints = [
+						{ lat: sLat, lng: sLng },
+						{ lat: bestCity.lat, lng: bestCity.lng },
+					];
+
+					_warPlan[sideIdx] = {
+						type: "CAPTURE_CITY",
+						phase: "PREPARATION",
+						target: {
+							lat: bestCity.lat,
+							lng: bestCity.lng,
+							name: bestCity.name || "Enemy City",
+						},
+						stagingCells: staging,
+						arrowPoints,
+						startedTick: simFrameCount,
+						lastProgressTick: simFrameCount,
+						progress: 0,
+						maxAssignedUnits: Math.ceil(unitCount * 0.5),
+						activeUnitCount: 0,
+					};
+					return;
+				}
+				// Target unreachable by land — skip, let naval plan handle it
 			}
 		}
 	}
@@ -6879,7 +6903,8 @@ export function generateWarPlan(sideIdx) {
 
 /**
  * Generate a naval invasion plan for a side.
- * Finds enemy coastal cities reachable by sea from friendly coastline.
+ * Targets enemy coastal tiles (not cities) — the plan handles only the sea crossing.
+ * After landing, evaluateAllPlans() generates a new CAPTURE_CITY land plan.
  * @param {number} sideIdx
  */
 export function generateNavalInvasionPlan(sideIdx) {
@@ -6892,44 +6917,9 @@ export function generateNavalInvasionPlan(sideIdx) {
 
 	const myAllyIds = new Set(sideCountries.map((c) => c.id));
 
-	// Find enemy coastal cities: cities on land where adjacent cell is water (landMask=0)
-	const enemyCoastalCities = [];
-	for (let ci = 0; ci < activeTheaterCities.length; ci++) {
-		const city = activeTheaterCities[ci];
-		const cIdx = getGridIndex(city.lat, city.lng);
-		if (cIdx === -1 || landMask[cIdx] === 0) continue;
-		const ownerId = city.ownerId || 0;
-		if (myAllyIds.has(ownerId)) continue;
-		if (dominantSideMap[cIdx] === sideIdx) continue;
-
-		// Check if city is coastal (has water neighbor)
-		const col = cIdx % gridWidth;
-		const row = Math.floor(cIdx / gridWidth);
-		let isCoastal = false;
-		for (let dr = -1; dr <= 1 && !isCoastal; dr++) {
-			for (let dc = -1; dc <= 1 && !isCoastal; dc++) {
-				if (dr === 0 && dc === 0) continue;
-				const nr = row + dr;
-				const nc = col + dc;
-				if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
-				if (landMask[nr * gridWidth + nc] === 0) isCoastal = true;
-			}
-		}
-		if (!isCoastal) continue;
-
-		// Must be reachable by sea from our territory (not landlocked enemy)
-		enemyCoastalCities.push({
-			city,
-			isCapital: city.isCapital || false,
-			coastIdx: cIdx,
-		});
-	}
-
-	if (enemyCoastalCities.length === 0) return;
-
 	// Find friendly coastal staging points: friendly land cells adjacent to water
 	const friendlyCoastCells = [];
-	const sampled = new Set();
+	const sampledFriendly = new Set();
 	for (let gi = 0; gi < landMask.length; gi += 3) {
 		if (landMask[gi] === 0) continue;
 		if (dominantSideMap[gi] !== sideIdx) continue;
@@ -6949,22 +6939,60 @@ export function generateNavalInvasionPlan(sideIdx) {
 		const lat = row * CONFIG.GRID_RES - 90;
 		const lng = col * CONFIG.GRID_RES - 180;
 		const key = `${Math.floor(lat)}_${Math.floor(lng)}`;
-		if (sampled.has(key)) continue;
-		sampled.add(key);
+		if (sampledFriendly.has(key)) continue;
+		sampledFriendly.add(key);
 		friendlyCoastCells.push({ lat, lng, idx: gi });
 	}
 
 	if (friendlyCoastCells.length === 0) return;
 
-	// Score enemy coastal cities: prefer strategic depth, capitals, reject land-reachable
+	// Find enemy coastal tiles: enemy-controlled land cells adjacent to water
+	// Score by proximity to enemy cities, strategic depth, sea distance
+	const enemyCoastalTiles = [];
+	const sampledEnemy = new Set();
+	for (let gi = 0; gi < landMask.length; gi += 2) {
+		if (landMask[gi] === 0) continue;
+		if (dominantSideMap[gi] === sideIdx) continue;
+
+		// Check if enemy-controlled
+		const cellOwnerId = worldControlMap[gi];
+		const ownerSide = _tickCountryToSideMap.get(cellOwnerId);
+		if (ownerSide === sideIdx || ownerSide === undefined) continue;
+		if (myAllyIds.has(cellOwnerId)) continue;
+
+		const row = Math.floor(gi / gridWidth);
+		const col = gi % gridWidth;
+		let isCoastal = false;
+		for (let dr = -1; dr <= 1 && !isCoastal; dr++) {
+			for (let dc = -1; dc <= 1 && !isCoastal; dc++) {
+				if (dr === 0 && dc === 0) continue;
+				const nr = row + dr;
+				const nc = col + dc;
+				if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
+				if (landMask[nr * gridWidth + nc] === 0) isCoastal = true;
+			}
+		}
+		if (!isCoastal) continue;
+
+		const lat = row * CONFIG.GRID_RES - 90;
+		const lng = col * CONFIG.GRID_RES - 180;
+		const key = `${Math.floor(lat)}_${Math.floor(lng)}`;
+		if (sampledEnemy.has(key)) continue;
+		sampledEnemy.add(key);
+		enemyCoastalTiles.push({ lat, lng, idx: gi });
+	}
+
+	if (enemyCoastalTiles.length === 0) return;
+
+	// Score enemy coastal tiles
 	let bestTarget = null;
 	let bestScore = -Infinity;
-	for (const ec of enemyCoastalCities) {
+	for (const et of enemyCoastalTiles) {
 		let minSeaDist = Infinity;
 		let minLandDist = Infinity;
 		for (const fc of friendlyCoastCells) {
-			const dLat = ec.city.lat - fc.lat;
-			let dLng = ec.city.lng - fc.lng;
+			const dLat = et.lat - fc.lat;
+			let dLng = et.lng - fc.lng;
 			if (dLng > 180) dLng -= 360;
 			else if (dLng < -180) dLng += 360;
 			const dSq = dLat * dLat + dLng * dLng;
@@ -6981,8 +7009,8 @@ export function generateNavalInvasionPlan(sideIdx) {
 					p < poly.length;
 					p += Math.max(1, Math.floor(poly.length / 10))
 				) {
-					const dLat = ec.city.lat - poly[p].lat;
-					let dLng = ec.city.lng - poly[p].lng;
+					const dLat = et.lat - poly[p].lat;
+					let dLng = et.lng - poly[p].lng;
 					if (dLng > 180) dLng -= 360;
 					else if (dLng < -180) dLng += 360;
 					const dSq = dLat * dLat + dLng * dLng;
@@ -6993,30 +7021,52 @@ export function generateNavalInvasionPlan(sideIdx) {
 		if (minSeaDist > 400) continue;
 		if (minSeaDist < 4.0) continue;
 		if (minLandDist < 0.5) continue;
+
 		let score = 0;
-		score += Math.sqrt(minLandDist) * 30;
+		// Strategic depth: prefer targets far behind enemy lines
+		score += Math.sqrt(Math.max(0, minLandDist)) * 30;
+		// Prefer moderate sea distances (not too close, not too far)
 		const seaDist = Math.sqrt(minSeaDist);
 		if (seaDist > 3 && seaDist < 20) score += 50;
-		if (ec.isCapital) score += 200;
-		const cIdx = ec.coastIdx;
-		if (cIdx >= 0 && cIdx < dominantSideMap.length) {
-			let enemyNeighborCells = 0;
-			const row = Math.floor(cIdx / gridWidth);
-			const col = cIdx % gridWidth;
-			for (let dr = -3; dr <= 3; dr++) {
-				for (let dc = -3; dc <= 3; dc++) {
-					const nr = row + dr;
-					const nc = col + dc;
-					if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
-					if (dominantSideMap[nr * gridWidth + nc] !== sideIdx)
-						enemyNeighborCells++;
-				}
-			}
-			score += enemyNeighborCells * 2;
+
+		// Proximity to enemy cities (prefer landing near cities for follow-up)
+		let minCityDist = Infinity;
+		for (let ci = 0; ci < activeTheaterCities.length; ci++) {
+			const city = activeTheaterCities[ci];
+			const citySide = _tickCountryToSideMap.get(city.ownerId || 0);
+			if (citySide === sideIdx) continue;
+			const dLat = et.lat - city.lat;
+			let dLng = et.lng - city.lng;
+			if (dLng > 180) dLng -= 360;
+			else if (dLng < -180) dLng += 360;
+			const dSq = dLat * dLat + dLng * dLng;
+			if (dSq < minCityDist) minCityDist = dSq;
+			// Extra bonus for landing near capitals
+			if (city.isCapital && dSq < 4.0) score += 100;
 		}
+		// Prefer tiles near enemy cities
+		if (minCityDist < 1.0) score += 150;
+		else if (minCityDist < 4.0) score += 80;
+		else if (minCityDist < 16.0) score += 30;
+
+		// Enemy territory density around target
+		let enemyNeighborCells = 0;
+		const row = Math.floor(et.idx / gridWidth);
+		const col = et.idx % gridWidth;
+		for (let dr = -3; dr <= 3; dr++) {
+			for (let dc = -3; dc <= 3; dc++) {
+				const nr = row + dr;
+				const nc = col + dc;
+				if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
+				if (dominantSideMap[nr * gridWidth + nc] !== sideIdx)
+					enemyNeighborCells++;
+			}
+		}
+		score += enemyNeighborCells * 2;
+
 		if (score > bestScore) {
 			bestScore = score;
-			bestTarget = ec;
+			bestTarget = et;
 		}
 	}
 
@@ -7026,8 +7076,8 @@ export function generateNavalInvasionPlan(sideIdx) {
 	let bestStaging = null;
 	let bestStagingDist = Infinity;
 	for (const fc of friendlyCoastCells) {
-		const dLat = bestTarget.city.lat - fc.lat;
-		let dLng = bestTarget.city.lng - fc.lng;
+		const dLat = bestTarget.lat - fc.lat;
+		let dLng = bestTarget.lng - fc.lng;
 		if (dLng > 180) dLng -= 360;
 		else if (dLng < -180) dLng += 360;
 		const dSq = dLat * dLat + dLng * dLng;
@@ -7048,14 +7098,14 @@ export function generateNavalInvasionPlan(sideIdx) {
 		type: "NAVAL_INVASION",
 		phase: "GATHERING",
 		target: {
-			lat: bestTarget.city.lat,
-			lng: bestTarget.city.lng,
-			name: bestTarget.city.name || "Coastal Target",
+			lat: bestTarget.lat,
+			lng: bestTarget.lng,
+			name: "Enemy Coast",
 		},
 		stagingPoint: { lat: bestStaging.lat, lng: bestStaging.lng },
 		arrowPoints: [
 			{ lat: bestStaging.lat, lng: bestStaging.lng },
-			{ lat: bestTarget.city.lat, lng: bestTarget.city.lng },
+			{ lat: bestTarget.lat, lng: bestTarget.lng },
 		],
 		startedTick: simFrameCount,
 		lastProgressTick: simFrameCount,
@@ -7241,8 +7291,8 @@ export function evaluateAllPlans() {
 		if (!sides[si] || sides[si].length === 0) continue;
 		const np = _navalPlan[si];
 		if (!np) {
-			// Try to generate a naval plan periodically (every ~10 counting frames)
-			if (_sidePosture[si] === "OFFENSIVE" && simFrameCount % 150 === 0) {
+			// Try to generate a naval plan periodically
+			if (_sidePosture[si] !== "DEFENSIVE" && simFrameCount % 150 === 0) {
 				generateNavalInvasionPlan(si);
 			}
 			continue;
@@ -7329,6 +7379,25 @@ export function evaluateAllPlans() {
 		} else if (np.phase === "LANDING") {
 			// After enough time in landing, the plan completes
 			if (ticksSinceProgress > 900) {
+				// Generate a new CAPTURE_CITY land plan targeting the nearest enemy city from the beachhead
+				let nearestCity = null;
+				let nearestCityDist = Infinity;
+				for (let ci = 0; ci < activeTheaterCities.length; ci++) {
+					const city = activeTheaterCities[ci];
+					const citySide = _tickCountryToSideMap.get(city.ownerId || 0);
+					if (citySide === si) continue;
+					const dLat = np.target.lat - city.lat;
+					let dLng = np.target.lng - city.lng;
+					if (dLng > 180) dLng -= 360;
+					else if (dLng < -180) dLng += 360;
+					const dSq = dLat * dLat + dLng * dLng;
+					if (dSq < nearestCityDist) {
+						nearestCityDist = dSq;
+						nearestCity = city;
+					}
+				}
+
+				// Release naval-assigned units so they join the new land plan
 				for (const u of units) {
 					if (u.sideIndex === si && u.navalAssigned) {
 						u.navalAssigned = false;
@@ -7336,6 +7405,60 @@ export function evaluateAllPlans() {
 					}
 				}
 				_navalPlan[si] = null;
+
+				// Create CAPTURE_CITY plan from the beachhead
+				if (nearestCity) {
+					const landingUnits = [];
+					for (const u of units) {
+						if (u.sideIndex !== si || u.deployTicks > 0) continue;
+						const dLat = np.target.lat - u.lat;
+						let dLng = np.target.lng - u.lng;
+						if (dLng > 180) dLng -= 360;
+						else if (dLng < -180) dLng += 360;
+						if (dLat * dLat + dLng * dLng < 4.0) landingUnits.push(u);
+					}
+					let sLat = np.target.lat;
+					let sLng = np.target.lng;
+					if (landingUnits.length > 0) {
+						sLat = 0;
+						sLng = 0;
+						for (const u of landingUnits) {
+							sLat += u.lat;
+							sLng += u.lng;
+						}
+						sLat /= landingUnits.length;
+						sLng /= landingUnits.length;
+					}
+					const sideUnits = _tickUnitsBySide[si] || [];
+					const deployedCount = sideUnits.filter(
+						(u) => u.deployTicks === 0,
+					).length;
+					_warPlan[si] = {
+						type: "CAPTURE_CITY",
+						phase: "EXECUTION",
+						target: {
+							lat: nearestCity.lat,
+							lng: nearestCity.lng,
+							name: nearestCity.name || "Beachhead Target",
+						},
+						stagingCells: landingUnits.map((u) => ({
+							lat: u.lat,
+							lng: u.lng,
+						})),
+						arrowPoints: [
+							{ lat: sLat, lng: sLng },
+							{
+								lat: nearestCity.lat,
+								lng: nearestCity.lng,
+							},
+						],
+						startedTick: simFrameCount,
+						lastProgressTick: simFrameCount,
+						progress: 0,
+						maxAssignedUnits: Math.ceil(deployedCount * 0.6),
+						activeUnitCount: 0,
+					};
+				}
 			}
 		}
 
@@ -9597,8 +9720,8 @@ export function performSimulationTick() {
 						if (sdLng > 180) sdLng -= 360;
 						else if (sdLng < -180) sdLng += 360;
 						const sdSq = sdLat * sdLat + sdLng * sdLng;
-						if (sdSq < 4.0) {
-							// Within ~2 degrees of staging coast
+						if (sdSq < 64.0) {
+							// Within ~8 degrees of staging coast
 							u.navalAssigned = true;
 							isNavalUnit = true;
 						}
@@ -9759,7 +9882,7 @@ export function performSimulationTick() {
 						if (sdLng > 180) sdLng -= 360;
 						else if (sdLng < -180) sdLng += 360;
 						const sdSq = sdLat * sdLat + sdLng * sdLng;
-						if (sdSq < 4.0) {
+						if (sdSq < 64.0) {
 							u.supplyAssigned = true;
 							isSupplyUnit = true;
 						}
@@ -10531,12 +10654,41 @@ export function performSimulationTick() {
 						const newLng = u.lng + moveDirLng * moveDist;
 						const destIdx = getGridIndex(newLat, newLng);
 						if (destIdx !== -1 && landMask[destIdx] === 0) {
-							// Already at sea with no transport — allow drift back to land
 							if (!isAtSea) {
-								// Blocked: would enter water. Stop movement.
-								moveDirLat = 0;
-								moveDirLng = 0;
-								moveDist = 0;
+								// Would enter water — try coast deflection before stopping
+								let deflected = false;
+								const lookDist = moveDist * 3;
+								for (const ang of [-90, 90, -45, 45, -135, 135, -30, 30]) {
+									const rad = (ang * Math.PI) / 180;
+									const candLat =
+										moveDirLat * Math.cos(rad) - moveDirLng * Math.sin(rad);
+									const candLng =
+										moveDirLat * Math.sin(rad) + moveDirLng * Math.cos(rad);
+									let landCount = 0;
+									for (let s = 1; s <= 3; s++) {
+										const ci = getGridIndex(
+											u.lat + candLat * lookDist * s,
+											u.lng + candLng * lookDist * s,
+										);
+										if (ci !== -1 && landMask[ci] > 0) landCount++;
+									}
+									if (landCount >= 2) {
+										const mag = Math.sqrt(
+											candLat * candLat + candLng * candLng,
+										);
+										if (mag > 0) {
+											moveDirLat = candLat / mag;
+											moveDirLng = candLng / mag;
+										}
+										deflected = true;
+										break;
+									}
+								}
+								if (!deflected) {
+									moveDirLat = 0;
+									moveDirLng = 0;
+									moveDist = 0;
+								}
 							}
 						}
 					}
