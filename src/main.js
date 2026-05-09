@@ -6932,9 +6932,9 @@ export function generateWarPlan(sideIdx) {
 	let uLat = 0,
 		uLng = 0,
 		uCount = 0;
-	for (let ui = 0; ui < sideUnits.length; ui++) {
-		const u = sideUnits[ui];
-		if (u.deployTicks > 0) continue;
+	for (let ui = 0; ui < units.length; ui++) {
+		const u = units[ui];
+		if (u.sideIndex !== sideIdx || u.deployTicks > 0) continue;
 		uLat += u.lat;
 		uLng += u.lng;
 		uCount++;
@@ -6989,7 +6989,7 @@ export function generateNavalInvasionPlan(sideIdx) {
 
 	const sideUnits = _tickUnitsBySide[sideIdx] || [];
 	const unitCount = sideUnits.filter((u) => u.deployTicks === 0).length;
-	if (unitCount < 20) return;
+	if (unitCount < 5) return;
 
 	const myAllyIds = new Set(sideCountries.map((c) => c.id));
 
@@ -7096,7 +7096,7 @@ export function generateNavalInvasionPlan(sideIdx) {
 		}
 		if (minSeaDist > 400) continue;
 		if (minSeaDist < 4.0) continue;
-		if (minLandDist < 0.5) continue;
+		if (minLandDist < 0.1) continue;
 
 		let score = 0;
 		// Strategic depth: prefer targets far behind enemy lines
@@ -7361,10 +7361,7 @@ export function evaluateAllPlans() {
 		if (!sides[si] || sides[si].length === 0) continue;
 		const np = _navalPlan[si];
 		if (!np) {
-			// Try to generate a naval plan periodically
-			if (_sidePosture[si] !== "DEFENSIVE" && simFrameCount % 150 === 0) {
-				generateNavalInvasionPlan(si);
-			}
+			generateNavalInvasionPlan(si);
 			continue;
 		}
 
@@ -7550,18 +7547,7 @@ export function evaluateAllPlans() {
 
 		sp.activeUnitCount = 0;
 
-		// If the parent naval plan is gone, cancel supply
-		const parentNP = _navalPlan[si];
-		if (!parentNP) {
-			for (const u of units) {
-				if (u.sideIndex === si && u.supplyAssigned) {
-					u.supplyAssigned = false;
-					u.isTransport = false;
-				}
-			}
-			_navalSupplyPlan[si] = null;
-			continue;
-		}
+		// If the parent naval plan is gone, let supply finish independently
 
 		const ticksSinceProgress =
 			simFrameCount - (sp.lastProgressTick || simFrameCount);
@@ -10340,7 +10326,7 @@ export function performSimulationTick() {
 				}
 
 				// Front-slot positioning: pull toward assigned frontline slot
-				// Disabled during staging phases so units rally/spread freely
+				// Disabled during staging phases and for DEFEND plans (they hold the line)
 				if (
 					u.frontSlot &&
 					!shouldMopUp &&
@@ -10348,7 +10334,8 @@ export function performSimulationTick() {
 					!isEngaged &&
 					(!activePlan ||
 						(activePlan.phase !== "PREPARATION" &&
-							activePlan.phase !== "CONSOLIDATION"))
+							activePlan.phase !== "CONSOLIDATION")) &&
+					activePlan?.type !== "DEFEND"
 				) {
 					const sdLat = u.frontSlot.targetLat - u.lat;
 					let sdLng = u.frontSlot.targetLng - u.lng;
@@ -10371,10 +10358,11 @@ export function performSimulationTick() {
 					}
 				}
 
-				// Pull towards nearby frontline — disabled during plan staging phases
+				// Pull towards nearby frontline — disabled when plan is driving the unit
 				if (
 					borderDir &&
 					!isAtSea &&
+					!isPlanUnit &&
 					(!activePlan ||
 						(activePlan.phase !== "PREPARATION" &&
 							activePlan.phase !== "CONSOLIDATION"))
@@ -10725,42 +10713,32 @@ export function performSimulationTick() {
 				if (isEncircled) retreatBoost *= 0.05;
 
 				// --- FORCED PUSH COORDINATION (Victory-Driven) ---
-				// Units now wait at the frontline until a significant portion of their army
-				// has won local skirmishes, triggering a massive, coordinated "Big Push".
+				// Disabled when a war/naval plan is driving the unit
 				let pushReadiness = 1.0;
 				const isAtFrontline =
 					!isAtSea && !isEffectivelyMyLand && !isTooNearBorder;
+				const warWeariness = Math.min(0.85, simFrameCount / 15000);
 
-				// War Attrition Logic: As wars last longer (simFrameCount increases),
-				// AI becomes more cautious, favoring "War of Attrition" over costly frontal assaults.
-				const warWeariness = Math.min(0.85, simFrameCount / 15000); // Ramps up over ~4 minutes
-
-				if (isAtFrontline && !isMega && !isSuper && !activeRetreat) {
+				if (
+					!isPlanUnit &&
+					isAtFrontline &&
+					!isMega &&
+					!isSuper &&
+					!activeRetreat
+				) {
 					const victoryRatio = sideVictoryRatios[sideIndex] || 0;
 
-					// UNITED PUSH COORDINATION: Units now creep forward even when not surging to prevent static fronts.
 					if (countryObj?.isSurging) {
-						// Spearhead Effect: Units move at varying speeds to create breakthroughs rather than straight lines
 						const spearheadAggression =
-							0.5 + (Math.sin(u.id * 777) * 0.5 + 0.5); // 0.5x to 1.5x variation
+							0.5 + (Math.sin(u.id * 777) * 0.5 + 0.5);
 						const momentumScale = Math.min(1.8, victoryRatio * 2.5);
 						pushReadiness = 4.2 * momentumScale * spearheadAggression;
-
-						// Attrition Adjustment: Long wars suppress aggressive surges unless victory is certain
 						pushReadiness *= 1.0 - warWeariness * 0.5;
-
-						// Local Breakthrough: Units with high local victory momentum push even harder
 						if (u.victoryBoostTicks > 0) pushReadiness *= 1.4;
 					} else {
-						// Creeping Advance: Units advance at a moderate speed while holding the line to maintain pressure.
-						// In old wars, this advance slows to a crawl (War of Attrition).
 						pushReadiness = 0.7 * (1.0 - warWeariness);
 					}
 
-					// Strategic Lock: allow pushes with smaller groups so they don't sit idle
-					if (localAllyCount < 3) pushReadiness = 0.0;
-
-					// Force halt if saturation is lost, but still allow some forward pressure
 					if (countryObj && !countryObj.isSaturated) {
 						pushReadiness = 0.3;
 					}
