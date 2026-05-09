@@ -4,6 +4,7 @@ import {
 	_cachedSideTerritoryPcts,
 	_cachedTerritoryCtrlEls,
 	_cachedTerritorySegEls,
+	_navalPlan,
 	_warPlan,
 	activeBattles,
 	activeTheaterCities,
@@ -2176,7 +2177,6 @@ const ControlMapLayer = L.Layer.extend({
 				else ctx.setLineDash([]);
 
 				ctx.beginPath();
-				// Draw curved arrow from staging to target
 				const pts = plan.arrowPoints;
 				if (
 					Number.isNaN(pts[0].lat) ||
@@ -2189,13 +2189,12 @@ const ControlMapLayer = L.Layer.extend({
 				const p0 = map.latLngToContainerPoint([pts[0].lat, pts[0].lng]);
 				const p1 = map.latLngToContainerPoint([pts[1].lat, pts[1].lng]);
 				const midX = (p0.x + p1.x) / 2;
-				const midY = (p0.y + p1.y) / 2 - 40; // arc upward
+				const midY = (p0.y + p1.y) / 2 - 40;
 				ctx.moveTo(p0.x, p0.y);
 				ctx.quadraticCurveTo(midX, midY, p1.x, p1.y);
 				ctx.stroke();
 				ctx.setLineDash([]);
 
-				// Draw arrowhead at target
 				const angle = Math.atan2(p1.y - midY, p1.x - midX);
 				const headLen = 12;
 				ctx.beginPath();
@@ -2212,10 +2211,61 @@ const ControlMapLayer = L.Layer.extend({
 				ctx.fillStyle = ctx.strokeStyle;
 				ctx.fill();
 
-				// Phase label near arrow midpoint
 				ctx.font = "bold 10px monospace";
 				ctx.fillStyle = color;
 				ctx.fillText(plan.phase, midX + 10, midY - 2);
+			}
+
+			// Draw naval invasion arrows (dashed, blue-tinted)
+			if (typeof _navalPlan !== "undefined" && _navalPlan) {
+				for (let si = 0; si < _navalPlan.length; si++) {
+					const np = _navalPlan[si];
+					if (!np?.arrowPoints || np.arrowPoints.length < 2) continue;
+					const pts = np.arrowPoints;
+					if (
+						Number.isNaN(pts[0].lat) ||
+						Number.isNaN(pts[0].lng) ||
+						Number.isNaN(pts[1].lat) ||
+						Number.isNaN(pts[1].lng)
+					)
+						continue;
+					const p0 = map.latLngToContainerPoint([pts[0].lat, pts[0].lng]);
+					const p1 = map.latLngToContainerPoint([pts[1].lat, pts[1].lng]);
+					const midX = (p0.x + p1.x) / 2;
+					const midY = (p0.y + p1.y) / 2 - 50;
+
+					ctx.setLineDash([4, 4]);
+					ctx.strokeStyle = "rgba(100,180,255,0.7)";
+					ctx.lineWidth = Math.max(
+						2,
+						Math.min(5, 2 + Math.floor((np.activeUnitCount || 0) / 3)),
+					);
+					ctx.beginPath();
+					ctx.moveTo(p0.x, p0.y);
+					ctx.quadraticCurveTo(midX, midY, p1.x, p1.y);
+					ctx.stroke();
+					ctx.setLineDash([]);
+
+					const angle = Math.atan2(p1.y - midY, p1.x - midX);
+					const headLen = 10;
+					ctx.beginPath();
+					ctx.moveTo(p1.x, p1.y);
+					ctx.lineTo(
+						p1.x - headLen * Math.cos(angle - 0.5),
+						p1.y - headLen * Math.sin(angle - 0.5),
+					);
+					ctx.lineTo(
+						p1.x - headLen * Math.cos(angle + 0.5),
+						p1.y - headLen * Math.sin(angle + 0.5),
+					);
+					ctx.closePath();
+					ctx.fillStyle = "rgba(100,180,255,0.8)";
+					ctx.fill();
+
+					ctx.font = "bold 9px monospace";
+					ctx.fillStyle = "rgba(100,180,255,0.9)";
+					ctx.fillText(`NAVAL: ${np.phase}`, midX + 10, midY - 2);
+				}
 			}
 		}
 

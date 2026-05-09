@@ -1833,13 +1833,23 @@ const _tickUnitsBySide = [];
 export const aiCountryState = new Map();
 export let _sidePosture = []; // per-side auto posture (OFFENSIVE/BALANCED/DEFENSIVE)
 export let _warPlan = []; // per-side war plan: { type, phase, target, ... }
+export const _navalPlan = []; // per-side naval invasion plan (1 per side max)
 export const WAR_PLAN_TYPES = [
 	"DEFEND",
 	"PUSH_FRONT",
 	"CAPTURE_CITY",
 	"ENCIRCLE",
+	"NAVAL_INVASION",
 ];
-export const WAR_PLAN_PHASES = ["PREPARATION", "EXECUTION", "CONSOLIDATION"];
+export const WAR_PLAN_PHASES = [
+	"PREPARATION",
+	"EXECUTION",
+	"CONSOLIDATION",
+	"GATHERING",
+	"EMBARKATION",
+	"TRANSIT",
+	"LANDING",
+];
 export const _garrisonRequirement = new Map(); // countryId → required garrison count
 export const AI_DESPERATION = {
 	OFFENSE_MIN_WAR_TICKS: 1200, // ~20s at 60fps
@@ -6847,9 +6857,151 @@ export function generateWarPlan(sideIdx) {
 }
 
 /**
- * Evaluate all war plans: mark complete/failed, regenerate as needed.
- * Called on shouldCountLand frames.
+ * Generate a naval invasion plan for a side.
+ * Finds enemy coastal cities reachable by sea from friendly coastline.
+ * @param {number} sideIdx
  */
+export function generateNavalInvasionPlan(sideIdx) {
+	const sideCountries = sides[sideIdx] || [];
+	if (sideCountries.length === 0) return;
+
+	const sideUnits = _tickUnitsBySide[sideIdx] || [];
+	const unitCount = sideUnits.filter((u) => u.deployTicks === 0).length;
+	if (unitCount < 20) return;
+
+	const myAllyIds = new Set(sideCountries.map((c) => c.id));
+
+	// Find enemy coastal cities: cities on land where adjacent cell is water (landMask=0)
+	const enemyCoastalCities = [];
+	for (let ci = 0; ci < activeTheaterCities.length; ci++) {
+		const city = activeTheaterCities[ci];
+		const cIdx = getGridIndex(city.lat, city.lng);
+		if (cIdx === -1 || landMask[cIdx] === 0) continue;
+		const ownerId = city.ownerId || 0;
+		if (myAllyIds.has(ownerId)) continue;
+		if (dominantSideMap[cIdx] === sideIdx) continue;
+
+		// Check if city is coastal (has water neighbor)
+		const col = cIdx % gridWidth;
+		const row = Math.floor(cIdx / gridWidth);
+		let isCoastal = false;
+		for (let dr = -1; dr <= 1 && !isCoastal; dr++) {
+			for (let dc = -1; dc <= 1 && !isCoastal; dc++) {
+				if (dr === 0 && dc === 0) continue;
+				const nr = row + dr;
+				const nc = col + dc;
+				if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
+				if (landMask[nr * gridWidth + nc] === 0) isCoastal = true;
+			}
+		}
+		if (!isCoastal) continue;
+
+		// Must be reachable by sea from our territory (not landlocked enemy)
+		enemyCoastalCities.push({
+			city,
+			isCapital: city.isCapital || false,
+			coastIdx: cIdx,
+		});
+	}
+
+	if (enemyCoastalCities.length === 0) return;
+
+	// Find friendly coastal staging points: friendly land cells adjacent to water
+	const friendlyCoastCells = [];
+	const sampled = new Set();
+	for (let gi = 0; gi < landMask.length; gi += 3) {
+		if (landMask[gi] === 0) continue;
+		if (dominantSideMap[gi] !== sideIdx) continue;
+		const row = Math.floor(gi / gridWidth);
+		const col = gi % gridWidth;
+		let isCoastal = false;
+		for (let dr = -1; dr <= 1 && !isCoastal; dr++) {
+			for (let dc = -1; dc <= 1 && !isCoastal; dc++) {
+				if (dr === 0 && dc === 0) continue;
+				const nr = row + dr;
+				const nc = col + dc;
+				if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
+				if (landMask[nr * gridWidth + nc] === 0) isCoastal = true;
+			}
+		}
+		if (!isCoastal) continue;
+		const lat = row * CONFIG.GRID_RES - 90;
+		const lng = col * CONFIG.GRID_RES - 180;
+		const key = `${Math.floor(lat)}_${Math.floor(lng)}`;
+		if (sampled.has(key)) continue;
+		sampled.add(key);
+		friendlyCoastCells.push({ lat, lng, idx: gi });
+	}
+
+	if (friendlyCoastCells.length === 0) return;
+
+	// Score enemy coastal cities: prefer capitals, prefer closer to friendly coast
+	let bestTarget = null;
+	let bestScore = -Infinity;
+	for (const ec of enemyCoastalCities) {
+		let minDist = Infinity;
+		for (const fc of friendlyCoastCells) {
+			const dLat = ec.city.lat - fc.lat;
+			let dLng = ec.city.lng - fc.lng;
+			if (dLng > 180) dLng -= 360;
+			else if (dLng < -180) dLng += 360;
+			const dSq = dLat * dLat + dLng * dLng;
+			if (dSq < minDist) minDist = dSq;
+		}
+		// Must have sea path (crude check: distance not insane)
+		if (minDist > 400) continue;
+		let score = -minDist;
+		if (ec.isCapital) score += 100;
+		if (score > bestScore) {
+			bestScore = score;
+			bestTarget = ec;
+		}
+	}
+
+	if (!bestTarget) return;
+
+	// Find closest friendly coast cell to the target (staging point)
+	let bestStaging = null;
+	let bestStagingDist = Infinity;
+	for (const fc of friendlyCoastCells) {
+		const dLat = bestTarget.city.lat - fc.lat;
+		let dLng = bestTarget.city.lng - fc.lng;
+		if (dLng > 180) dLng -= 360;
+		else if (dLng < -180) dLng += 360;
+		const dSq = dLat * dLat + dLng * dLng;
+		if (dSq < bestStagingDist) {
+			bestStagingDist = dSq;
+			bestStaging = fc;
+		}
+	}
+
+	if (!bestStaging) return;
+
+	const maxNavalUnits = Math.max(
+		5,
+		Math.ceil(unitCount * CONFIG.NAVAL_INVASION_FORCE_FRAC),
+	);
+
+	_navalPlan[sideIdx] = {
+		type: "NAVAL_INVASION",
+		phase: "GATHERING",
+		target: {
+			lat: bestTarget.city.lat,
+			lng: bestTarget.city.lng,
+			name: bestTarget.city.name || "Coastal Target",
+		},
+		stagingPoint: { lat: bestStaging.lat, lng: bestStaging.lng },
+		arrowPoints: [
+			{ lat: bestStaging.lat, lng: bestStaging.lng },
+			{ lat: bestTarget.city.lat, lng: bestTarget.city.lng },
+		],
+		startedTick: simFrameCount,
+		lastProgressTick: simFrameCount,
+		progress: 0,
+		maxAssignedUnits: maxNavalUnits,
+		activeUnitCount: 0,
+	};
+}
 export function evaluateAllPlans() {
 	for (let si = 0; si < sides.length; si++) {
 		if (!sides[si] || sides[si].length === 0) continue;
@@ -6933,9 +7085,125 @@ export function evaluateAllPlans() {
 		plan.lastProgressTick = simFrameCount;
 	}
 
+	// ── Naval Plan Evaluation ──
+	for (let si = 0; si < sides.length; si++) {
+		if (!sides[si] || sides[si].length === 0) continue;
+		const np = _navalPlan[si];
+		if (!np) {
+			// Try to generate a naval plan periodically (every ~10 counting frames)
+			if (_sidePosture[si] === "OFFENSIVE" && simFrameCount % 150 === 0) {
+				generateNavalInvasionPlan(si);
+			}
+			continue;
+		}
+
+		// Reset per-tick counter
+		np.activeUnitCount = 0;
+
+		const ticksSinceStart = simFrameCount - (np.startedTick || simFrameCount);
+		const ticksSinceProgress =
+			simFrameCount - (np.lastProgressTick || simFrameCount);
+
+		// Check if target is captured
+		if (np.target) {
+			const tIdx = getGridIndex(np.target.lat, np.target.lng);
+			if (tIdx !== -1 && dominantSideMap[tIdx] === si) {
+				// Target captured — clear naval plan
+				_navalPlan[si] = null;
+				continue;
+			}
+		}
+
+		// Stall detection: if stalled for 30s, cancel naval plan
+		if (ticksSinceProgress > 1800 && ticksSinceStart > 600) {
+			// Release all assigned units
+			for (const u of units) {
+				if (u.sideIndex === si && u.navalAssigned) {
+					u.navalAssigned = false;
+					u.isTransport = false;
+				}
+			}
+			_navalPlan[si] = null;
+			continue;
+		}
+
+		// Phase transitions
+		if (np.phase === "GATHERING") {
+			// Count how many naval units are near staging point
+			let gathered = 0;
+			for (const u of units) {
+				if (u.sideIndex !== si || !u.navalAssigned) continue;
+				const sdLat = np.stagingPoint.lat - u.lat;
+				let sdLng = np.stagingPoint.lng - u.lng;
+				if (sdLng > 180) sdLng -= 360;
+				else if (sdLng < -180) sdLng += 360;
+				if (sdLat * sdLat + sdLng * sdLng < 0.5) gathered++;
+			}
+			if (gathered >= Math.min(np.maxAssignedUnits, 5)) {
+				np.phase = "EMBARKATION";
+				np.lastProgressTick = simFrameCount;
+			}
+		} else if (np.phase === "EMBARKATION") {
+			// Check if most naval units are at sea
+			let atSea = 0;
+			let total = 0;
+			for (const u of units) {
+				if (u.sideIndex !== si || !u.navalAssigned) continue;
+				total++;
+				const gi = getGridIndex(u.lat, u.lng);
+				if (gi === -1 || landMask[gi] === 0) atSea++;
+			}
+			if (total > 0 && atSea >= Math.ceil(total * 0.6)) {
+				np.phase = "TRANSIT";
+				np.lastProgressTick = simFrameCount;
+			}
+		} else if (np.phase === "TRANSIT") {
+			// Check if naval units are reaching the target coast
+			let landed = 0;
+			for (const u of units) {
+				if (u.sideIndex !== si || !u.navalAssigned) continue;
+				const gi = getGridIndex(u.lat, u.lng);
+				if (gi !== -1 && landMask[gi] > 0) {
+					const tdLat = np.target.lat - u.lat;
+					let tdLng = np.target.lng - u.lng;
+					if (tdLng > 180) tdLng -= 360;
+					else if (tdLng < -180) tdLng += 360;
+					if (tdLat * tdLat + tdLng * tdLng < 2.0) landed++;
+				}
+			}
+			if (landed >= 3) {
+				np.phase = "LANDING";
+				np.lastProgressTick = simFrameCount;
+			}
+		} else if (np.phase === "LANDING") {
+			// After enough time in landing, the plan completes
+			if (ticksSinceProgress > 900) {
+				for (const u of units) {
+					if (u.sideIndex === si && u.navalAssigned) {
+						u.navalAssigned = false;
+						u.isTransport = false;
+					}
+				}
+				_navalPlan[si] = null;
+			}
+		}
+
+		np.lastProgressTick = simFrameCount;
+	}
+
 	// Clean up plans for inactive sides
 	for (let si = sides.length; si < _warPlan.length; si++) {
 		_warPlan[si] = null;
+	}
+	for (let si = sides.length; si < _navalPlan.length; si++) {
+		// Release any assigned units
+		for (const u of units) {
+			if (u.navalAssigned) {
+				u.navalAssigned = false;
+				u.isTransport = false;
+			}
+		}
+		_navalPlan[si] = null;
 	}
 }
 
@@ -8205,10 +8473,13 @@ export function performSimulationTick() {
 			const stats = countryStats.get(u.sovereignId);
 			if (stats && stats.controlled === 0) {
 				if (Math.random() < 0.02) {
-					// Gradual disappearance of exiled navies
 					units.splice(i, 1);
 					continue;
 				}
+			}
+			// Non-transport units at sea take attrition until they reach land
+			if (!u.isTransport) {
+				recordDamage(u, CONFIG.ATTRITION_DAMAGE * 3.0);
 			}
 		}
 
@@ -8458,6 +8729,12 @@ export function performSimulationTick() {
 										damageDealtMult *
 										(1.0 - Math.sqrt(dSq) / 0.2);
 									if (isAtSea && eAtSea) proximityDamage *= 2.2;
+									// Transports take extra damage at sea from non-transport enemies
+									if (e.isTransport && !u.isTransport) proximityDamage *= 1.5;
+									if (u.isTransport && !e.isTransport) {
+										recordDamage(u, proximityDamage * 1.2 * damageTakenMult, e);
+										proximityDamage *= 0.7;
+									}
 
 									recordDamage(e, proximityDamage, u);
 									recordDamage(u, proximityDamage * 0.8 * damageTakenMult, e);
@@ -8959,129 +9236,265 @@ export function performSimulationTick() {
 					planDirLng = 0,
 					isPlanUnit = false;
 				const activePlan = _warPlan[u.sideIndex];
+				const navalPlan = _navalPlan[u.sideIndex];
 
-				// Only apply plan when safe: no nearby enemies, not engaged, not retreating
+				// Naval plan assignment: if this unit is close to staging coast and
+				// the naval plan needs units, recruit it
+				let isNavalUnit = false;
 				if (
+					navalPlan &&
+					navalPlan.type === "NAVAL_INVASION" &&
 					!shouldMopUp &&
 					!retreatVector &&
 					!isEngaged &&
-					(localEnemyCount < 2 || pocketContained) &&
-					activePlan &&
-					activePlan.type !== "DEFEND"
+					!isGarrisonUnit &&
+					(navalPlan.activeUnitCount || 0) < (navalPlan.maxAssignedUnits || 0)
 				) {
-					const planFull =
-						activePlan.maxAssignedUnits !== undefined &&
-						activePlan.activeUnitCount >= activePlan.maxAssignedUnits;
-					if (!planFull) {
-						isPlanUnit = true;
-						if (activePlan.activeUnitCount !== undefined) {
-							activePlan.activeUnitCount++;
+					if (u.navalAssigned) {
+						isNavalUnit = true;
+					} else {
+						const sdLat = navalPlan.stagingPoint.lat - u.lat;
+						let sdLng = navalPlan.stagingPoint.lng - u.lng;
+						if (sdLng > 180) sdLng -= 360;
+						else if (sdLng < -180) sdLng += 360;
+						const sdSq = sdLat * sdLat + sdLng * sdLng;
+						if (sdSq < 4.0) {
+							// Within ~2 degrees of staging coast
+							u.navalAssigned = true;
+							isNavalUnit = true;
 						}
+					}
+				}
 
-						if (
-							activePlan.phase === "PREPARATION" &&
-							activePlan.stagingCells?.length > 0
-						) {
-							// Rally to staging cells at 2× speed
-							const staging = activePlan.stagingCells;
-							const sc =
-								staging[Math.floor(Math.abs(u.id * 1000000) % staging.length)];
-							if (sc) {
-								const pdLat = sc.lat - u.lat;
-								let pdLng = sc.lng - u.lng;
-								if (pdLng > 180) pdLng -= 360;
-								else if (pdLng < -180) pdLng += 360;
-								const pd = Math.sqrt(pdLat * pdLat + pdLng * pdLng);
-								if (pd > 0.01) {
-									planDirLat = pdLat / pd;
-									planDirLng = pdLng / pd;
+				if (
+					isNavalUnit &&
+					navalPlan &&
+					(navalPlan.activeUnitCount || 0) < (navalPlan.maxAssignedUnits || 0)
+				) {
+					isPlanUnit = true;
+					navalPlan.activeUnitCount = (navalPlan.activeUnitCount || 0) + 1;
+					u.isTransport = true;
+
+					if (navalPlan.phase === "GATHERING") {
+						// Move toward staging point on friendly coast
+						const sdLat = navalPlan.stagingPoint.lat - u.lat;
+						let sdLng = navalPlan.stagingPoint.lng - u.lng;
+						if (sdLng > 180) sdLng -= 360;
+						else if (sdLng < -180) sdLng += 360;
+						const sd = Math.sqrt(sdLat * sdLat + sdLng * sdLng);
+						if (sd > 0.01) {
+							planDirLat = sdLat / sd;
+							planDirLng = sdLng / sd;
+						}
+						planSpeedMult = 2.0;
+					} else if (navalPlan.phase === "EMBARKATION") {
+						// Move toward nearest water tile
+						if (!isAtSea) {
+							// Find nearest water cell
+							let bestWDist = Infinity;
+							let bestWLat = 0;
+							let bestWLng = 0;
+							const r = Math.floor((u.lat + 90) / CONFIG.GRID_RES);
+							const c = Math.floor((u.lng + 180) / CONFIG.GRID_RES);
+							for (let dr = -3; dr <= 3; dr++) {
+								for (let dc = -3; dc <= 3; dc++) {
+									const nr = r + dr;
+									const nc = c + dc;
+									if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth)
+										continue;
+									const ni = nr * gridWidth + nc;
+									if (landMask[ni] !== 0) continue;
+									const wlat = nr * CONFIG.GRID_RES - 90;
+									const wlng = nc * CONFIG.GRID_RES - 180;
+									let ddLng = wlng - u.lng;
+									if (ddLng > 180) ddLng -= 360;
+									else if (ddLng < -180) ddLng += 360;
+									const dd = (u.lat - wlat) ** 2 + ddLng ** 2;
+									if (dd < bestWDist) {
+										bestWDist = dd;
+										bestWLat = wlat;
+										bestWLng = wlng;
+									}
 								}
-								planSpeedMult = 2.0;
 							}
-							// Zero out target direction so plan dominates; skip combat engagement
-							moveDirLat = 0;
-							moveDirLng = 0;
-						} else if (activePlan.phase === "EXECUTION" && activePlan.target) {
-							const pdLat = activePlan.target.lat - u.lat;
-							let pdLng = activePlan.target.lng - u.lng;
-							if (pdLng > 180) pdLng -= 360;
-							else if (pdLng < -180) pdLng += 360;
-							const pd = Math.sqrt(pdLat * pdLat + pdLng * pdLng);
+							if (bestWDist < Infinity) {
+								const dd = Math.sqrt(bestWDist);
+								planDirLat = (bestWLat - u.lat) / dd;
+								let ddLng = bestWLng - u.lng;
+								if (ddLng > 180) ddLng -= 360;
+								else if (ddLng < -180) ddLng += 360;
+								planDirLng = ddLng / dd;
+							}
+						}
+						planSpeedMult = 2.0;
+					} else if (navalPlan.phase === "TRANSIT") {
+						// Sail toward target coast
+						const tdLat = navalPlan.target.lat - u.lat;
+						let tdLng = navalPlan.target.lng - u.lng;
+						if (tdLng > 180) tdLng -= 360;
+						else if (tdLng < -180) tdLng += 360;
+						const td = Math.sqrt(tdLat * tdLat + tdLng * tdLng);
+						if (td > 0.01) {
+							planDirLat = tdLat / td;
+							planDirLng = tdLng / td;
+						}
+						planSpeedMult = 2.5;
+					} else if (navalPlan.phase === "LANDING") {
+						// Push inland from landing point
+						u.isTransport = false;
+						const tdLat = navalPlan.target.lat - u.lat;
+						let tdLng = navalPlan.target.lng - u.lng;
+						if (tdLng > 180) tdLng -= 360;
+						else if (tdLng < -180) tdLng += 360;
+						const td = Math.sqrt(tdLat * tdLat + tdLng * tdLng);
+						if (td > 0.01) {
+							planDirLat = tdLat / td;
+							planDirLng = tdLng / td;
+						}
+						planSpeedMult = 1.5;
+					}
+					navalPlan.progress = isAtSea
+						? 0.5
+						: navalPlan.phase === "LANDING"
+							? 0.8
+							: 0.3;
+					moveDirLat = 0;
+					moveDirLng = 0;
+				} else {
+					u.navalAssigned = false;
+					u.isTransport = false;
 
-							if (activePlan.type === "ENCIRCLE") {
-								const role = u.id % 3;
-								if (role === 0) {
-									// Pin: hold position, minimal advance
+					// Only apply plan when safe: no nearby enemies, not engaged, not retreating
+					if (
+						!shouldMopUp &&
+						!retreatVector &&
+						!isEngaged &&
+						(localEnemyCount < 2 || pocketContained) &&
+						activePlan &&
+						activePlan.type !== "DEFEND"
+					) {
+						const planFull =
+							activePlan.maxAssignedUnits !== undefined &&
+							activePlan.activeUnitCount >= activePlan.maxAssignedUnits;
+						if (!planFull) {
+							isPlanUnit = true;
+							if (activePlan.activeUnitCount !== undefined) {
+								activePlan.activeUnitCount++;
+							}
+
+							if (
+								activePlan.phase === "PREPARATION" &&
+								activePlan.stagingCells?.length > 0
+							) {
+								// Rally to staging cells at 2× speed
+								const staging = activePlan.stagingCells;
+								const sc =
+									staging[
+										Math.floor(Math.abs(u.id * 1000000) % staging.length)
+									];
+								if (sc) {
+									const pdLat = sc.lat - u.lat;
+									let pdLng = sc.lng - u.lng;
+									if (pdLng > 180) pdLng -= 360;
+									else if (pdLng < -180) pdLng += 360;
+									const pd = Math.sqrt(pdLat * pdLat + pdLng * pdLng);
 									if (pd > 0.01) {
 										planDirLat = pdLat / pd;
 										planDirLng = pdLng / pd;
 									}
-									planSpeedMult = 0.4;
-								} else {
-									// Flank: curve around pocket at breakthrough speed
-									const flankAngle = role === 1 ? -70 : 70;
-									const rad = (flankAngle * Math.PI) / 180;
-									if (pd > 0.01) {
-										const nx = pdLat / pd,
-											ny = pdLng / pd;
-										planDirLat = nx * Math.cos(rad) - ny * Math.sin(rad);
-										planDirLng = nx * Math.sin(rad) + ny * Math.cos(rad);
-									}
 									planSpeedMult = 2.0;
 								}
-							} else {
-								// CAPTURE_CITY / PUSH_FRONT: breakthrough push with spearhead variation
-								if (pd > 0.01) {
-									planDirLat = pdLat / pd;
-									planDirLng = pdLng / pd;
+								// Zero out target direction so plan dominates; skip combat engagement
+								moveDirLat = 0;
+								moveDirLng = 0;
+							} else if (
+								activePlan.phase === "EXECUTION" &&
+								activePlan.target
+							) {
+								const pdLat = activePlan.target.lat - u.lat;
+								let pdLng = activePlan.target.lng - u.lng;
+								if (pdLng > 180) pdLng -= 360;
+								else if (pdLng < -180) pdLng += 360;
+								const pd = Math.sqrt(pdLat * pdLat + pdLng * pdLng);
+
+								if (activePlan.type === "ENCIRCLE") {
+									const role = u.id % 3;
+									if (role === 0) {
+										// Pin: hold position, minimal advance
+										if (pd > 0.01) {
+											planDirLat = pdLat / pd;
+											planDirLng = pdLng / pd;
+										}
+										planSpeedMult = 0.4;
+									} else {
+										// Flank: curve around pocket at breakthrough speed
+										const flankAngle = role === 1 ? -70 : 70;
+										const rad = (flankAngle * Math.PI) / 180;
+										if (pd > 0.01) {
+											const nx = pdLat / pd,
+												ny = pdLng / pd;
+											planDirLat = nx * Math.cos(rad) - ny * Math.sin(rad);
+											planDirLng = nx * Math.sin(rad) + ny * Math.cos(rad);
+										}
+										planSpeedMult = 2.0;
+									}
+								} else {
+									// CAPTURE_CITY / PUSH_FRONT: breakthrough push with spearhead variation
+									if (pd > 0.01) {
+										planDirLat = pdLat / pd;
+										planDirLng = pdLng / pd;
+									}
+									const spearhead =
+										0.8 + (Math.sin(u.id * 777) * 0.5 + 0.5) * 0.8;
+									planSpeedMult = 2.0 * spearhead;
 								}
-								const spearhead =
-									0.8 + (Math.sin(u.id * 777) * 0.5 + 0.5) * 0.8;
-								planSpeedMult = 2.0 * spearhead;
-							}
-							activePlan.progress = Math.min(1.0, Math.max(0, 1.0 - pd / 5.0));
-							// Zero out target direction so plan dominates; units follow the plan
-							moveDirLat = 0;
-							moveDirLng = 0;
-						} else if (
-							activePlan.phase === "CONSOLIDATION" &&
-							activePlan.target
-						) {
-							// Spread outward from captured objective toward new frontline
-							let bestDist = Infinity;
-							let bestLat = 0,
-								bestLng = 0;
-							for (const fk of Object.keys(_frontlinePolys || {})) {
-								const [fa, fb] = fk.split("_").map(Number);
-								if (fa !== u.sideIndex && fb !== u.sideIndex) continue;
-								const poly = _frontlinePolys[fk];
-								if (!poly) continue;
-								const idx = Math.floor(
-									Math.abs(u.id * 777 + simFrameCount) % poly.length,
+								activePlan.progress = Math.min(
+									1.0,
+									Math.max(0, 1.0 - pd / 5.0),
 								);
-								const fc = poly[idx];
-								let fLng = fc.lng - u.lng;
-								if (fLng > 180) fLng -= 360;
-								else if (fLng < -180) fLng += 360;
-								const dSq = (fc.lat - u.lat) ** 2 + fLng ** 2;
-								if (dSq < bestDist) {
-									bestDist = dSq;
-									bestLat = fc.lat;
-									bestLng = fc.lng;
+								// Zero out target direction so plan dominates; units follow the plan
+								moveDirLat = 0;
+								moveDirLng = 0;
+							} else if (
+								activePlan.phase === "CONSOLIDATION" &&
+								activePlan.target
+							) {
+								// Spread outward from captured objective toward new frontline
+								let bestDist = Infinity;
+								let bestLat = 0,
+									bestLng = 0;
+								for (const fk of Object.keys(_frontlinePolys || {})) {
+									const [fa, fb] = fk.split("_").map(Number);
+									if (fa !== u.sideIndex && fb !== u.sideIndex) continue;
+									const poly = _frontlinePolys[fk];
+									if (!poly) continue;
+									const idx = Math.floor(
+										Math.abs(u.id * 777 + simFrameCount) % poly.length,
+									);
+									const fc = poly[idx];
+									let fLng = fc.lng - u.lng;
+									if (fLng > 180) fLng -= 360;
+									else if (fLng < -180) fLng += 360;
+									const dSq = (fc.lat - u.lat) ** 2 + fLng ** 2;
+									if (dSq < bestDist) {
+										bestDist = dSq;
+										bestLat = fc.lat;
+										bestLng = fc.lng;
+									}
 								}
+								if (bestDist < Infinity && bestDist > 0.0001) {
+									const d = Math.sqrt(bestDist);
+									planDirLat = (bestLat - u.lat) / d;
+									planDirLng = (bestLng - u.lng) / d;
+									planSpeedMult = 1.5;
+								}
+								// During consolidation, zero out target direction so plan dominates
+								moveDirLat = 0;
+								moveDirLng = 0;
 							}
-							if (bestDist < Infinity && bestDist > 0.0001) {
-								const d = Math.sqrt(bestDist);
-								planDirLat = (bestLat - u.lat) / d;
-								planDirLng = (bestLng - u.lng) / d;
-								planSpeedMult = 1.5;
-							}
-							// During consolidation, zero out target direction so plan dominates
-							moveDirLat = 0;
-							moveDirLng = 0;
 						}
 					}
-				}
+				} // end else (non-naval land plan)
 
 				// Blend plan direction into movement
 				if (isPlanUnit && (planDirLat !== 0 || planDirLng !== 0)) {
@@ -9524,7 +9937,7 @@ export function performSimulationTick() {
 					}
 				}
 
-				const moveDist =
+				let moveDist =
 					baseSpeed *
 					speedMult *
 					planSpeedMult *
@@ -9539,6 +9952,22 @@ export function performSimulationTick() {
 					!Number.isNaN(moveDirLng) &&
 					!Number.isNaN(moveDist)
 				) {
+					// Naval block: non-transport units cannot enter water tiles
+					if (!u.isTransport) {
+						const newLat = u.lat + moveDirLat * moveDist;
+						const newLng = u.lng + moveDirLng * moveDist;
+						const destIdx = getGridIndex(newLat, newLng);
+						if (destIdx !== -1 && landMask[destIdx] === 0) {
+							// Already at sea with no transport — allow drift back to land
+							if (!isAtSea) {
+								// Blocked: would enter water. Stop movement.
+								moveDirLat = 0;
+								moveDirLng = 0;
+								moveDist = 0;
+							}
+						}
+					}
+
 					u.lat += moveDirLat * moveDist;
 					u.lng += moveDirLng * moveDist;
 					u.dirLat = moveDirLat; // Store trajectory for renderer

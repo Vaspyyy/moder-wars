@@ -61,6 +61,9 @@ export const CONFIG = {
 	ENCIRCLEMENT_DAMAGE_MULT: 5.0,
 	ENCIRCLEMENT_RADIUS: 0.7,
 	WAR_GRACE_TICKS: 600, // ~10s ceasefire after war declaration for mobilization
+	NAVAL_INVASION_FORCE_FRAC: 0.1, // 10% of side force per naval invasion
+	NAVAL_LANDING_DEBUFF: 0.5, // 50% damage reduction for first 300 ticks after landing
+	NAVAL_LANDING_DEBUFF_TICKS: 300,
 	TEAM_A_COLOR: "rgba(255, 50, 50, 0.5)",
 	TEAM_B_COLOR: "rgba(50, 100, 255, 0.5)",
 	FRONTLINE_COLOR: "rgba(0, 0, 0, 1.0)",
