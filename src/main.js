@@ -1835,12 +1835,19 @@ export let _sidePosture = []; // per-side auto posture (OFFENSIVE/BALANCED/DEFEN
 export let _warPlan = []; // per-side war plan: { type, phase, target, ... }
 export const _navalPlan = []; // per-side naval invasion plan (1 per side max)
 export const _navalSupplyPlan = []; // per-side naval supply run plan (1 per side max)
+export const _coastalDefensePlan = []; // per-side coastal defense passive overlay
+export const _neutralGarrisonPlan = []; // per-side neutral border garrison plans
+const _proposalReassessTick = []; // per-side last reassessment tick
+const _proposalsCache = []; // per-side cached scored proposals
 export const WAR_PLAN_TYPES = [
 	"DEFEND",
 	"PUSH_FRONT",
 	"CAPTURE_CITY",
 	"ENCIRCLE",
 	"NAVAL_INVASION",
+	"NAVAL_SUPPLY",
+	"COASTAL_DEFENSE",
+	"NEUTRAL_GARRISON",
 ];
 export const WAR_PLAN_PHASES = [
 	"PREPARATION",
@@ -1850,6 +1857,7 @@ export const WAR_PLAN_PHASES = [
 	"EMBARKATION",
 	"TRANSIT",
 	"LANDING",
+	"DELIVERED",
 ];
 export const _garrisonRequirement = new Map(); // countryId → required garrison count
 export const AI_DESPERATION = {
@@ -7272,8 +7280,940 @@ export function generateNavalSupplyPlan(sideIdx) {
 		activeUnitCount: 0,
 	};
 }
+/**
+ * Proposal Engine: generate every possible plan candidate for a side.
+ * Returns an array of lightweight proposal objects — no plan objects created yet.
+ * @param {number} sideIdx
+ * @returns {Array<Object>}
+ */
+export function generateAllProposals(sideIdx) {
+	const proposals = [];
+	const sideCountries = sides[sideIdx] || [];
+	if (sideCountries.length === 0) return proposals;
+
+	const sideUnits = _tickUnitsBySide[sideIdx] || [];
+	const unitCount = sideUnits.filter((u) => u.deployTicks === 0).length;
+	if (unitCount < 3) return proposals;
+
+	const myAllyIds = new Set(sideCountries.map((c) => c.id));
+
+	// ── Pre-compute shared data ──
+
+	// Friendly unit centroid
+	let uLat = 0,
+		uLng = 0,
+		uCount = 0;
+	for (let ui = 0; ui < units.length; ui++) {
+		const u = units[ui];
+		if (u.sideIndex !== sideIdx || u.deployTicks > 0) continue;
+		uLat += u.lat;
+		uLng += u.lng;
+		uCount++;
+	}
+	if (uCount > 0) {
+		uLat /= uCount;
+		uLng /= uCount;
+	}
+
+	// Enemy territory centroid
+	let eLat = 0,
+		eLng = 0,
+		eCount = 0;
+	for (let i = 0; i < dominantSideMap.length; i += 20) {
+		if (landMask[i] === 0) continue;
+		if (dominantSideMap[i] !== sideIdx && dominantSideMap[i] >= 0) {
+			const row = Math.floor(i / gridWidth);
+			const col = i % gridWidth;
+			eLat += row * CONFIG.GRID_RES - 90;
+			eLng += col * CONFIG.GRID_RES - 180;
+			eCount++;
+		}
+	}
+	if (eCount > 0) {
+		eLat /= eCount;
+		eLng /= eCount;
+	}
+
+	// Friendly coastal staging cells (for naval proposals)
+	const friendlyCoastCells = [];
+	const sampledFriendly = new Set();
+	for (let gi = 0; gi < landMask.length; gi += 3) {
+		if (landMask[gi] === 0) continue;
+		if (dominantSideMap[gi] !== sideIdx) continue;
+		const row = Math.floor(gi / gridWidth);
+		const col = gi % gridWidth;
+		let isCoastal = false;
+		for (let dr = -1; dr <= 1 && !isCoastal; dr++) {
+			for (let dc = -1; dc <= 1 && !isCoastal; dc++) {
+				if (dr === 0 && dc === 0) continue;
+				const nr = row + dr;
+				const nc = col + dc;
+				if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
+				if (landMask[nr * gridWidth + nc] === 0) isCoastal = true;
+			}
+		}
+		if (!isCoastal) continue;
+		const lat = row * CONFIG.GRID_RES - 90;
+		const lng = col * CONFIG.GRID_RES - 180;
+		const key = `${Math.floor(lat)}_${Math.floor(lng)}`;
+		if (sampledFriendly.has(key)) continue;
+		sampledFriendly.add(key);
+		friendlyCoastCells.push({ lat, lng, idx: gi });
+	}
+
+	// Enemy coastal tiles (for naval and coastal defense)
+	const enemyCoastalTiles = [];
+	const sampledEnemy = new Set();
+	for (let gi = 0; gi < landMask.length; gi += 2) {
+		if (landMask[gi] === 0) continue;
+		if (dominantSideMap[gi] === sideIdx) continue;
+		const cellOwnerId = worldControlMap[gi];
+		const ownerSide = _tickCountryToSideMap.get(cellOwnerId);
+		if (ownerSide === sideIdx || ownerSide === undefined) continue;
+		if (myAllyIds.has(cellOwnerId)) continue;
+		const row = Math.floor(gi / gridWidth);
+		const col = gi % gridWidth;
+		let isCoastal = false;
+		for (let dr = -1; dr <= 1 && !isCoastal; dr++) {
+			for (let dc = -1; dc <= 1 && !isCoastal; dc++) {
+				if (dr === 0 && dc === 0) continue;
+				const nr = row + dr;
+				const nc = col + dc;
+				if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
+				if (landMask[nr * gridWidth + nc] === 0) isCoastal = true;
+			}
+		}
+		if (!isCoastal) continue;
+		const lat = row * CONFIG.GRID_RES - 90;
+		const lng = col * CONFIG.GRID_RES - 180;
+		const key = `${Math.floor(lat)}_${Math.floor(lng)}`;
+		if (sampledEnemy.has(key)) continue;
+		sampledEnemy.add(key);
+		enemyCoastalTiles.push({ lat, lng, idx: gi });
+	}
+
+	// Check if this side has any land connection to enemies
+	let hasLandConnection = false;
+	if (_frontlinePolys) {
+		for (const key of Object.keys(_frontlinePolys)) {
+			const [a, b] = key.split("_").map(Number);
+			if (a === sideIdx || b === sideIdx) {
+				if (_frontlinePolys[key]?.length > 0) {
+					hasLandConnection = true;
+					break;
+				}
+			}
+		}
+	}
+
+	// ── 1. CAPTURE_CITY proposals ──
+	const enemyCities = [];
+	for (let ci = 0; ci < activeTheaterCities.length; ci++) {
+		const city = activeTheaterCities[ci];
+		const cIdx = getGridIndex(city.lat, city.lng);
+		if (cIdx === -1) continue;
+		const ownerId = city.ownerId || 0;
+		if (myAllyIds.has(ownerId)) continue;
+		if (dominantSideMap[cIdx] === sideIdx) continue;
+		enemyCities.push({
+			city,
+			isCapital: city.isCapital || false,
+			idx: cIdx,
+		});
+	}
+
+	// Find frontline centroid for distance reference
+	let fLat = 0,
+		fLng = 0,
+		fCount = 0;
+	if (_frontlinePolys) {
+		for (const key of Object.keys(_frontlinePolys)) {
+			const [a, b] = key.split("_").map(Number);
+			if (a !== sideIdx && b !== sideIdx) continue;
+			const poly = _frontlinePolys[key];
+			if (!poly) continue;
+			const stride = Math.max(1, Math.floor(poly.length / 20));
+			for (let p = 0; p < poly.length; p += stride) {
+				fLat += poly[p].lat;
+				fLng += poly[p].lng;
+				fCount++;
+			}
+		}
+	}
+	if (fCount > 0) {
+		fLat /= fCount;
+		fLng /= fCount;
+	}
+
+	for (const ec of enemyCities) {
+		// Score proximity to frontline
+		let deLng = ec.city.lng - fLng;
+		if (deLng > 180) deLng -= 360;
+		else if (deLng < -180) deLng += 360;
+		const dSq = (ec.city.lat - fLat) ** 2 + deLng ** 2;
+
+		// Water-crossing check: sample line from unit centroid to city
+		let crossesWater = false;
+		if (uCount > 0 && !hasLandConnection) {
+			const ddLat = ec.city.lat - uLat;
+			let ddLng = ec.city.lng - uLng;
+			if (ddLng > 180) ddLng -= 360;
+			else if (ddLng < -180) ddLng += 360;
+			const lineLen = Math.sqrt(ddLat * ddLat + ddLng * ddLng);
+			if (lineLen > 0.5) {
+				const steps = Math.min(20, Math.ceil(lineLen / 0.3));
+				let waterSamples = 0;
+				for (let s = 1; s < steps; s++) {
+					const t = s / steps;
+					const slat = uLat + ddLat * t;
+					const slng = uLng + ddLng * t;
+					const sIdx = getGridIndex(slat, slng);
+					if (sIdx !== -1 && landMask[sIdx] === 0) waterSamples++;
+				}
+				if (waterSamples > steps * 0.4) crossesWater = true;
+			}
+		}
+
+		proposals.push({
+			type: "CAPTURE_CITY",
+			target: {
+				lat: ec.city.lat,
+				lng: ec.city.lng,
+				name: ec.city.name || "Enemy City",
+				isCapital: ec.isCapital,
+			},
+			stagingCells: [],
+			arrowPoints:
+				uCount > 0 && eCount > 0
+					? [
+							{ lat: uLat, lng: uLng },
+							{ lat: ec.city.lat, lng: ec.city.lng },
+						]
+					: null,
+			estimatedForceNeeded: Math.ceil(unitCount * 0.15),
+			geographicData: {
+				frontlineDistSq: dSq,
+				reachesTarget: !crossesWater,
+				minSeaDist: Infinity,
+				minLandDist: Math.sqrt(dSq || 1),
+			},
+		});
+	}
+
+	// ── 2. ENCIRCLE proposals ──
+	const frontlineKeys = Object.keys(_frontlinePolys || {});
+	for (const key of frontlineKeys) {
+		const [a, b] = key.split("_").map(Number);
+		if (a !== sideIdx && b !== sideIdx) continue;
+		const poly = _frontlinePolys[key];
+		if (!poly || poly.length < 5) continue;
+
+		const stride = Math.max(1, Math.floor(poly.length / 20));
+		for (let ci = 0; ci < Math.min(500, poly.length); ci += stride) {
+			const cell = poly[ci];
+			let friendlyCount = 0,
+				enemyCount = 0;
+			const radSq = 1.0;
+
+			for (let ui = 0; ui < units.length; ui++) {
+				const other = units[ui];
+				if (other.deployTicks > 0) continue;
+				const dLat2 = other.lat - cell.lat;
+				let dLng2 = other.lng - cell.lng;
+				if (dLng2 > 180) dLng2 -= 360;
+				else if (dLng2 < -180) dLng2 += 360;
+				if (dLat2 * dLat2 + dLng2 * dLng2 > radSq) continue;
+				if (other.sideIndex === sideIdx) friendlyCount++;
+				else enemyCount++;
+			}
+
+			if (enemyCount >= 2 && friendlyCount >= enemyCount * 3) {
+				proposals.push({
+					type: "ENCIRCLE",
+					target: {
+						lat: cell.lat,
+						lng: cell.lng,
+						name: "Encirclement Pocket",
+						isCapital: false,
+					},
+					stagingCells: [],
+					arrowPoints: [
+						{ lat: cell.lat, lng: cell.lng },
+						{ lat: cell.lat, lng: cell.lng },
+					],
+					estimatedForceNeeded: Math.ceil(unitCount * 0.3),
+					geographicData: {
+						frontlineDistSq: 1,
+						reachesTarget: true,
+						minSeaDist: Infinity,
+						minLandDist: 1,
+					},
+				});
+				break;
+			}
+		}
+	}
+
+	// ── 3. PUSH_FRONT proposal ──
+	if (uCount > 0 && eCount > 0) {
+		proposals.push({
+			type: "PUSH_FRONT",
+			target: null,
+			stagingCells: [],
+			arrowPoints: [
+				{ lat: uLat, lng: uLng },
+				{ lat: eLat, lng: eLng },
+			],
+			estimatedForceNeeded: Math.ceil(unitCount * 0.5),
+			geographicData: {
+				frontlineDistSq: 0,
+				reachesTarget: hasLandConnection,
+				minSeaDist: Infinity,
+				minLandDist: 0,
+			},
+		});
+	}
+
+	// ── 4. DEFEND proposal ──
+	const flPts = [];
+	if (_frontlinePolys) {
+		for (const key of frontlineKeys) {
+			const [a, b] = key.split("_").map(Number);
+			if (a !== sideIdx && b !== sideIdx) continue;
+			const poly = _frontlinePolys[key];
+			if (!poly) continue;
+			const pStride = Math.max(1, Math.floor(poly.length / 60));
+			for (let p = 0; p < poly.length; p += pStride) {
+				flPts.push({ lat: poly[p].lat, lng: poly[p].lng });
+			}
+		}
+	}
+	proposals.push({
+		type: "DEFEND",
+		target: null,
+		stagingCells: [],
+		arrowPoints: null,
+		frontlinePoints: flPts,
+		estimatedForceNeeded: Math.ceil(unitCount * 0.3),
+		geographicData: {
+			frontlineDistSq: 0,
+			reachesTarget: true,
+			minSeaDist: Infinity,
+			minLandDist: 0,
+		},
+	});
+
+	// ── 5. NAVAL_INVASION proposals ──
+	if (friendlyCoastCells.length > 0 && enemyCoastalTiles.length > 0) {
+		for (const et of enemyCoastalTiles) {
+			let minSeaDist = Infinity;
+			let minLandDist = Infinity;
+			for (const fc of friendlyCoastCells) {
+				const dLat2 = et.lat - fc.lat;
+				let dLng2 = et.lng - fc.lng;
+				if (dLng2 > 180) dLng2 -= 360;
+				else if (dLng2 < -180) dLng2 += 360;
+				const dSq2 = dLat2 * dLat2 + dLng2 * dLng2;
+				if (dSq2 < minSeaDist) minSeaDist = dSq2;
+			}
+			if (_frontlinePolys) {
+				for (const key of frontlineKeys) {
+					const [a, b] = key.split("_").map(Number);
+					if (a !== sideIdx && b !== sideIdx) continue;
+					const poly = _frontlinePolys[key];
+					if (!poly) continue;
+					for (
+						let p = 0;
+						p < poly.length;
+						p += Math.max(1, Math.floor(poly.length / 10))
+					) {
+						const dLat2 = et.lat - poly[p].lat;
+						let dLng2 = et.lng - poly[p].lng;
+						if (dLng2 > 180) dLng2 -= 360;
+						else if (dLng2 < -180) dLng2 += 360;
+						const dSq2 = dLat2 * dLat2 + dLng2 * dLng2;
+						if (dSq2 < minLandDist) minLandDist = dSq2;
+					}
+				}
+			}
+			if (minSeaDist > 400 || minSeaDist < 4.0) continue;
+			if (minLandDist < 0.1) continue;
+
+			// Find closest friendly coast as staging point
+			let bestStaging = null;
+			let bestStagingDist = Infinity;
+			for (const fc of friendlyCoastCells) {
+				const dLat2 = et.lat - fc.lat;
+				let dLng2 = et.lng - fc.lng;
+				if (dLng2 > 180) dLng2 -= 360;
+				else if (dLng2 < -180) dLng2 += 360;
+				const dSq2 = dLat2 * dLat2 + dLng2 * dLng2;
+				if (dSq2 < bestStagingDist) {
+					bestStagingDist = dSq2;
+					bestStaging = fc;
+				}
+			}
+			if (!bestStaging) continue;
+
+			proposals.push({
+				type: "NAVAL_INVASION",
+				target: {
+					lat: et.lat,
+					lng: et.lng,
+					name: "Enemy Coast",
+					isCapital: false,
+				},
+				stagingPoint: { lat: bestStaging.lat, lng: bestStaging.lng },
+				arrowPoints: [
+					{ lat: bestStaging.lat, lng: bestStaging.lng },
+					{ lat: et.lat, lng: et.lng },
+				],
+				estimatedForceNeeded: Math.ceil(unitCount * 0.15),
+				geographicData: {
+					frontlineDistSq: 0,
+					reachesTarget: true,
+					minSeaDist,
+					minLandDist,
+				},
+			});
+		}
+	}
+
+	// ── 6. NAVAL_SUPPLY proposal ──
+	if (_navalPlan[sideIdx]?.phase === "LANDING") {
+		const np = _navalPlan[sideIdx];
+		let bestStaging = null;
+		let bestStagingDist = Infinity;
+		for (const fc of friendlyCoastCells) {
+			const dLat2 = np.target.lat - fc.lat;
+			let dLng2 = np.target.lng - fc.lng;
+			if (dLng2 > 180) dLng2 -= 360;
+			else if (dLng2 < -180) dLng2 += 360;
+			const dSq2 = dLat2 * dLat2 + dLng2 * dLng2;
+			if (dSq2 < bestStagingDist) {
+				bestStagingDist = dSq2;
+				bestStaging = fc;
+			}
+		}
+		if (bestStaging && bestStagingDist <= 400) {
+			proposals.push({
+				type: "NAVAL_SUPPLY",
+				target: {
+					lat: np.target.lat,
+					lng: np.target.lng,
+					name: np.target.name || "Supply Target",
+					isCapital: false,
+				},
+				stagingPoint: { lat: bestStaging.lat, lng: bestStaging.lng },
+				arrowPoints: [
+					{ lat: bestStaging.lat, lng: bestStaging.lng },
+					{ lat: np.target.lat, lng: np.target.lng },
+				],
+				estimatedForceNeeded: Math.ceil(unitCount * 0.1),
+				geographicData: {
+					frontlineDistSq: 0,
+					reachesTarget: true,
+					minSeaDist: bestStagingDist,
+					minLandDist: 0,
+				},
+			});
+		}
+	}
+
+	// ── 7. COASTAL_DEFENSE proposals ──
+	if (friendlyCoastCells.length > 0 && enemyCoastalTiles.length > 0) {
+		// Cluster friendly coast cells into contiguous zones
+		for (const fc of friendlyCoastCells) {
+			fc._visited = false;
+		}
+		const coastalZones = [];
+		for (const seed of friendlyCoastCells) {
+			if (seed._visited) continue;
+			const zone = [seed];
+			seed._visited = true;
+			for (let zi = 0; zi < zone.length; zi++) {
+				for (const other of friendlyCoastCells) {
+					if (other._visited) continue;
+					const dLat2 = zone[zi].lat - other.lat;
+					let dLng2 = zone[zi].lng - other.lng;
+					if (dLng2 > 180) dLng2 -= 360;
+					else if (dLng2 < -180) dLng2 += 360;
+					if (dLat2 * dLat2 + dLng2 * dLng2 < 4.0) {
+						other._visited = true;
+						zone.push(other);
+					}
+				}
+			}
+			coastalZones.push(zone);
+		}
+		for (const fc of friendlyCoastCells) {
+			delete fc._visited;
+		}
+
+		for (const zone of coastalZones) {
+			let zLat = 0,
+				zLng = 0;
+			for (const cell of zone) {
+				zLat += cell.lat;
+				zLng += cell.lng;
+			}
+			zLat /= zone.length;
+			zLng /= zone.length;
+
+			let threatScore = 0;
+			for (const et of enemyCoastalTiles) {
+				const dLat2 = zLat - et.lat;
+				let dLng2 = zLng - et.lng;
+				if (dLng2 > 180) dLng2 -= 360;
+				else if (dLng2 < -180) dLng2 += 360;
+				const dSq2 = dLat2 * dLat2 + dLng2 * dLng2;
+				if (dSq2 < 400) threatScore++;
+			}
+			threatScore = Math.min(1, threatScore / 50);
+
+			let enemyNavalThreat = 0;
+			for (let ei = 0; ei < sides.length; ei++) {
+				if (ei === sideIdx) continue;
+				const enp = _navalPlan[ei];
+				if (enp?.phase && enp.target) {
+					const dLat2 = zLat - enp.target.lat;
+					let dLng2 = zLng - enp.target.lng;
+					if (dLng2 > 180) dLng2 -= 360;
+					else if (dLng2 < -180) dLng2 += 360;
+					if (dLat2 * dLat2 + dLng2 * dLng2 < 100) {
+						enemyNavalThreat += 0.3;
+					}
+				}
+			}
+
+			const zonePolyline = zone.map((c) => ({ lat: c.lat, lng: c.lng }));
+			proposals.push({
+				type: "COASTAL_DEFENSE",
+				target: { lat: zLat, lng: zLng, name: "Coastal Zone" },
+				stagingCells: [],
+				arrowPoints: null,
+				zonePolyline,
+				estimatedForceNeeded: Math.ceil(
+					zone.length * 0.8 * (threatScore + 0.2),
+				),
+				threatScore: Math.min(1, threatScore + enemyNavalThreat),
+				geographicData: {
+					frontlineDistSq: 0,
+					reachesTarget: true,
+					minSeaDist: 0,
+					minLandDist: 0,
+				},
+			});
+		}
+	}
+
+	// ── 8. NEUTRAL_GARRISON proposals ──
+	if (adjacencyCache) {
+		for (const [countryId, neighbors] of adjacencyCache.entries()) {
+			if (!myAllyIds.has(countryId)) continue;
+			for (const nId of neighbors) {
+				const nSide = _tickCountryToSideMap.get(nId);
+				if (nSide !== undefined) continue;
+				if (myAllyIds.has(nId)) continue;
+
+				const alreadyProposed = proposals.some(
+					(p) => p.type === "NEUTRAL_GARRISON" && p.neutralCountryId === nId,
+				);
+				if (alreadyProposed) continue;
+
+				const neutralMeta = countryMetadata.find((m) => m.id === nId);
+				const borderLength = _neutralBorderPolys[countryId]?.length || 0;
+				const estimatedThreat = Math.max(
+					5,
+					Math.ceil(
+						(borderLength || 10) * 0.3 + (neutralMeta?.bounds ? 10 : 5),
+					),
+				);
+
+				proposals.push({
+					type: "NEUTRAL_GARRISON",
+					target: {
+						lat: 0,
+						lng: 0,
+						name: `Neutral Border #${nId}`,
+					},
+					stagingCells: [],
+					arrowPoints: null,
+					neutralCountryId: nId,
+					borderLength,
+					estimatedForceNeeded: Math.min(
+						Math.ceil(unitCount * 0.15),
+						estimatedThreat,
+					),
+					geographicData: {
+						frontlineDistSq: 0,
+						reachesTarget: true,
+						minSeaDist: Infinity,
+						minLandDist: 0,
+					},
+				});
+			}
+		}
+	}
+
+	return proposals;
+}
+/**
+ * Score a proposal based on strategic value, feasibility, risk, urgency,
+ * and posture/strategy alignment. Returns a numeric priority score.
+ * @param {Object} proposal - proposal from generateAllProposals
+ * @param {number} sideIdx
+ * @returns {number} priority score
+ */
+export function scoreProposal(proposal, sideIdx) {
+	const sideCountries = sides[sideIdx] || [];
+	const strategy = (sideCountries[0]?.strategy || "BALANCED").toUpperCase();
+	const sideUnits = _tickUnitsBySide[sideIdx] || [];
+	const unitCount = sideUnits.filter((u) => u.deployTicks === 0).length;
+	const enemyUnitCount = units.filter(
+		(u) => u.sideIndex !== sideIdx && u.deployTicks === 0 && u.health > 0,
+	).length;
+	const globalForceRatio = unitCount / Math.max(1, enemyUnitCount);
+	const geo = proposal.geographicData || {};
+	let score = 0;
+
+	// ── Strategic Value (0–40) ──
+	if (proposal.type === "CAPTURE_CITY") {
+		if (proposal.target?.isCapital) score += 30;
+		else score += 10;
+		score += Math.sqrt(Math.max(0, geo.minLandDist || 0)) * 3;
+	}
+	if (proposal.type === "NAVAL_INVASION") {
+		score += Math.sqrt(Math.max(0, geo.minLandDist || 0)) * 3;
+		const seaDist = Math.sqrt(geo.minSeaDist || 1);
+		if (seaDist > 3 && seaDist < 20) score += 15;
+	}
+	if (proposal.type === "COASTAL_DEFENSE") {
+		score += (proposal.threatScore || 0) * 25;
+	}
+	if (proposal.type === "NEUTRAL_GARRISON") {
+		score += Math.min(20, (proposal.borderLength || 0) * 0.3);
+	}
+	if (proposal.type === "DEFEND") {
+		score += 10;
+		if (globalForceRatio < 1.0) score += 15;
+	}
+	if (proposal.type === "ENCIRCLE") {
+		score += 25;
+	}
+	if (proposal.type === "PUSH_FRONT") {
+		score += 5;
+	}
+	if (proposal.type === "NAVAL_SUPPLY") {
+		score += 20;
+	}
+
+	// ── Feasibility (0–30) ──
+	if (globalForceRatio >= 2.0) score += 20;
+	else if (globalForceRatio >= 1.0) score += 10;
+	else score -= 15;
+
+	if (geo.reachesTarget) score += 10;
+	else score -= 30;
+
+	// ── Risk (0–20, inverted) ──
+	if (globalForceRatio >= 3.0) score += 20;
+	else if (globalForceRatio >= 1.5) score += 10;
+	else score -= 20;
+
+	// ── Urgency (0–10) ──
+	// Enemy naval landing on our territory boosts COASTAL_DEFENSE
+	let enemyLandedOnUs = false;
+	for (let ei = 0; ei < sides.length; ei++) {
+		if (ei === sideIdx) continue;
+		const enp = _navalPlan[ei];
+		if (enp?.phase === "LANDING" && enp.target) {
+			const tIdx = getGridIndex(enp.target.lat, enp.target.lng);
+			if (tIdx !== -1 && dominantSideMap[tIdx] === sideIdx) {
+				enemyLandedOnUs = true;
+				break;
+			}
+		}
+	}
+	if (enemyLandedOnUs && proposal.type === "COASTAL_DEFENSE") {
+		score += 20;
+	}
+
+	// ── Posture / Strategy alignment multiplier ──
+	const isOffensive = [
+		"CAPTURE_CITY",
+		"ENCIRCLE",
+		"PUSH_FRONT",
+		"NAVAL_INVASION",
+	].includes(proposal.type);
+	const isDefensive = [
+		"DEFEND",
+		"COASTAL_DEFENSE",
+		"NEUTRAL_GARRISON",
+	].includes(proposal.type);
+
+	const multipliers = {
+		AGGRESSIVE: { offensive: 1.3, defensive: 0.5 },
+		BLITZ: { offensive: 1.4, defensive: 0.4 },
+		BALANCED: { offensive: 1.0, defensive: 1.0 },
+		DEFENSIVE: { offensive: 0.4, defensive: 1.4 },
+		URBAN: { offensive: 1.1, defensive: 0.9 },
+	};
+	const mult = multipliers[strategy] || multipliers.BALANCED;
+	if (isOffensive) score *= mult.offensive;
+	else if (isDefensive) score *= mult.defensive;
+
+	// ── Special modifiers ──
+	if (proposal.type === "CAPTURE_CITY" && !geo.reachesTarget) {
+		score *= 0.1;
+	}
+	// Boost naval proposals when no land connection exists
+	if (!_frontlinePolys || Object.keys(_frontlinePolys).length === 0) {
+		if (
+			isOffensive &&
+			proposal.type !== "CAPTURE_CITY" &&
+			proposal.type !== "ENCIRCLE"
+		) {
+			score *= 1.3;
+		}
+	}
+
+	return Math.round(score * 100) / 100;
+}
+/**
+ * Select the best plans from scored proposals, allocate forces, and
+ * create actual war plan objects. Returns array of created plan entries.
+ * @param {number} sideIdx
+ * @param {Array<Object>} scoredProposals - proposals with priority scores
+ * @returns {Object} { land1, land2, naval, supply, defend, coastal, garrisons }
+ */
+export function selectPlans(sideIdx, scoredProposals) {
+	if (!scoredProposals || scoredProposals.length === 0) return {};
+
+	const sideCountries = sides[sideIdx] || [];
+	const strategy = (sideCountries[0]?.strategy || "BALANCED").toUpperCase();
+	const sideUnits = _tickUnitsBySide[sideIdx] || [];
+	const unitCount = sideUnits.filter((u) => u.deployTicks === 0).length;
+
+	// Force allocation by strategy
+	const alloc = {
+		AGGRESSIVE: { offense: 0.75, defense: 0.2, reserve: 0.05 },
+		BLITZ: { offense: 0.85, defense: 0.1, reserve: 0.05 },
+		BALANCED: { offense: 0.5, defense: 0.4, reserve: 0.1 },
+		DEFENSIVE: { offense: 0.25, defense: 0.65, reserve: 0.1 },
+		URBAN: { offense: 0.55, defense: 0.35, reserve: 0.1 },
+	}[strategy] || { offense: 0.5, defense: 0.4, reserve: 0.1 };
+
+	const totalForce = Math.max(1, unitCount);
+	const offensiveForce = Math.floor(totalForce * alloc.offense);
+	const defensiveForce = Math.floor(totalForce * alloc.defense);
+
+	// Sort by priority descending
+	const sorted = [...scoredProposals].sort(
+		(a, b) => (b.priority || 0) - (a.priority || 0),
+	);
+
+	// Group proposals by type
+	const offensives = sorted.filter(
+		(p) =>
+			["CAPTURE_CITY", "ENCIRCLE", "PUSH_FRONT"].includes(p.type) &&
+			(p.priority || 0) > 0,
+	);
+	const navals = sorted.filter(
+		(p) => p.type === "NAVAL_INVASION" && (p.priority || 0) > 0,
+	);
+	const supplies = sorted.filter(
+		(p) => p.type === "NAVAL_SUPPLY" && (p.priority || 0) > 0,
+	);
+	const defs = sorted.filter(
+		(p) => p.type === "DEFEND" && (p.priority || 0) > 0,
+	);
+	const coastals = sorted.filter(
+		(p) => p.type === "COASTAL_DEFENSE" && (p.priority || 0) > 0,
+	);
+	const garrisons = sorted.filter(
+		(p) => p.type === "NEUTRAL_GARRISON" && (p.priority || 0) > 0,
+	);
+
+	const result = {};
+
+	// ── Land offensive slot 1 ──
+	const land1 = offensives[0];
+	// ── Land offensive slot 2 ──
+	let land2 = null;
+	if (offensives.length > 1) {
+		const second = offensives[1];
+		if (land1 && (second.priority || 0) >= (land1.priority || 1) * 0.6) {
+			// Check direction conflict
+			if (
+				land1.target &&
+				second.target &&
+				land1.arrowPoints &&
+				second.arrowPoints
+			) {
+				const d1Lat = land1.target.lat - land1.arrowPoints[0].lat;
+				let d1Lng = land1.target.lng - land1.arrowPoints[0].lng;
+				const d2Lat = second.target.lat - second.arrowPoints[0].lat;
+				let d2Lng = second.target.lng - second.arrowPoints[0].lng;
+				if (d1Lng > 180) d1Lng -= 360;
+				else if (d1Lng < -180) d1Lng += 360;
+				if (d2Lng > 180) d2Lng -= 360;
+				else if (d2Lng < -180) d2Lng += 360;
+				const m1 = Math.sqrt(d1Lat * d1Lat + d1Lng * d1Lng);
+				const m2 = Math.sqrt(d2Lat * d2Lat + d2Lng * d2Lng);
+				const dot =
+					m1 > 0 && m2 > 0 ? (d1Lat * d2Lat + d1Lng * d2Lng) / (m1 * m2) : 0;
+				if (dot <= 0.7) land2 = second;
+			} else {
+				land2 = second;
+			}
+		}
+	}
+
+	// ── Naval invasion slot ──
+	const naval1 = navals[0];
+
+	// ── Supply slot ──
+	const supply1 = supplies[0];
+
+	// ── Defensive slot ──
+	const defend1 = defs[0];
+
+	// ── Coastal defense zones ──
+	const selectedCoastal = coastals.filter((p) => (p.threatScore || 0) >= 0.1);
+
+	// ── Neutral garrisons ──
+	const selectedGarr = garrisons;
+
+	// ── Force allocation ──
+	const selectedOff = [land1, land2, naval1, supply1].filter(Boolean);
+	const offSum = selectedOff.reduce((s, p) => s + (p.priority || 0), 0);
+	for (const p of selectedOff) {
+		p.allocatedForce =
+			offSum > 0 ? Math.ceil(offensiveForce * ((p.priority || 0) / offSum)) : 0;
+	}
+
+	const selectedDef = [defend1, ...selectedCoastal, ...selectedGarr].filter(
+		Boolean,
+	);
+	const defSum = selectedDef.reduce((s, p) => s + (p.priority || 0), 0);
+	for (const p of selectedDef) {
+		p.allocatedForce =
+			defSum > 0 ? Math.ceil(defensiveForce * ((p.priority || 0) / defSum)) : 0;
+	}
+	// Ensure minimum force
+	for (const p of selectedOff) {
+		if (p.allocatedForce < 3) p.allocatedForce = Math.min(3, offensiveForce);
+	}
+	for (const p of selectedDef) {
+		if (p.allocatedForce < 3) p.allocatedForce = Math.min(3, defensiveForce);
+	}
+
+	// ── Convert to plan objects ──
+	const makePlan = (p, phase) => ({
+		type: p.type,
+		phase,
+		target: p.target || null,
+		stagingCells: p.stagingCells || [],
+		arrowPoints: p.arrowPoints || null,
+		frontlinePoints: p.frontlinePoints || null,
+		stagingPoint: p.stagingPoint || null,
+		zonePolyline: p.zonePolyline || null,
+		neutralCountryId: p.neutralCountryId || null,
+		startedTick: simFrameCount,
+		lastProgressTick: simFrameCount,
+		progress: 0,
+		maxAssignedUnits: p.allocatedForce || 5,
+		activeUnitCount: 0,
+	});
+
+	if (land1) result.land1 = makePlan(land1, "PREPARATION");
+	if (land2) result.land2 = makePlan(land2, "PREPARATION");
+	if (naval1) result.naval = makePlan(naval1, "GATHERING");
+	if (supply1) result.supply = makePlan(supply1, "GATHERING");
+	if (defend1) result.defend = makePlan(defend1, "PREPARATION");
+	result.coastal = selectedCoastal.map((p) => makePlan(p, "EXECUTION"));
+	result.garrisons = selectedGarr.map((p) => makePlan(p, "EXECUTION"));
+
+	return result;
+}
 
 export function evaluateAllPlans() {
+	// ── Reassessment: run the proposal pipeline periodically ──
+	const REASSESS_INTERVAL = 300;
+	for (let si = 0; si < sides.length; si++) {
+		if (!sides[si] || sides[si].length === 0) continue;
+
+		const lastReassess = _proposalReassessTick[si] || 0;
+		if (simFrameCount - lastReassess >= REASSESS_INTERVAL) {
+			const proposals = generateAllProposals(si);
+
+			// Score each proposal
+			for (const p of proposals) {
+				p.priority = scoreProposal(p, si);
+			}
+
+			// Select and apply plans
+			const selected = selectPlans(si, proposals);
+
+			// Apply land plans to _warPlan slots
+			// Slot 0 = land1, Slot 1 = land2 (expand _warPlan if needed)
+			if (selected.land1) {
+				_warPlan[si] = selected.land1;
+			}
+			if (selected.land2) {
+				if (_warPlan.length <= si + sides.length) {
+					// Use a second slot: index = si + sides.length
+					const slot2 = si + sides.length;
+					_warPlan[slot2] = selected.land2;
+				} else {
+					_warPlan[si + sides.length] = selected.land2;
+				}
+			}
+
+			// Apply naval / supply plans
+			if (selected.naval) _navalPlan[si] = selected.naval;
+			// Don't overwrite supply — supply is managed within the naval lifecycle
+			if (selected.supply && !_navalSupplyPlan[si]) {
+				_navalSupplyPlan[si] = selected.supply;
+			}
+
+			// Apply coastal defense plans
+			if (selected.coastal.length > 0) {
+				for (let ci = 0; ci < selected.coastal.length; ci++) {
+					const slot = si * 10 + ci; // per-side coastal slots
+					_coastalDefensePlan[slot] = selected.coastal[ci];
+				}
+			}
+
+			// Apply neutral garrison plans
+			if (selected.garrisons.length > 0) {
+				for (let gi = 0; gi < selected.garrisons.length; gi++) {
+					const slot = si * 10 + gi;
+					_neutralGarrisonPlan[slot] = selected.garrisons[gi];
+				}
+			}
+
+			// Default to a simple plan if nothing was selected
+			if (!_warPlan[si]) {
+				_warPlan[si] = {
+					type: "DEFEND",
+					phase: "PREPARATION",
+					target: null,
+					frontlinePoints: [],
+					startedTick: simFrameCount,
+					lastProgressTick: simFrameCount,
+					progress: 0,
+					maxAssignedUnits: 5,
+					activeUnitCount: 0,
+				};
+			}
+
+			_proposalReassessTick[si] = simFrameCount;
+			_proposalsCache[si] = proposals;
+		}
+	}
+
 	for (let si = 0; si < sides.length; si++) {
 		if (!sides[si] || sides[si].length === 0) continue;
 		const plan = _warPlan[si];
@@ -7792,6 +8732,12 @@ export function evaluateAllPlans() {
 			}
 		}
 		_navalSupplyPlan[si] = null;
+	}
+	for (let si = sides.length * 10; si < _coastalDefensePlan.length; si++) {
+		_coastalDefensePlan[si] = null;
+	}
+	for (let si = sides.length * 10; si < _neutralGarrisonPlan.length; si++) {
+		_neutralGarrisonPlan[si] = null;
 	}
 }
 
