@@ -9369,7 +9369,7 @@ export function performSimulationTick() {
 						}
 						planSpeedMult = 2.0;
 					} else if (navalPlan.phase === "TRANSIT") {
-						// Sail toward target coast
+						// Sail toward target coast with land avoidance
 						const tdLat = navalPlan.target.lat - u.lat;
 						let tdLng = navalPlan.target.lng - u.lng;
 						if (tdLng > 180) tdLng -= 360;
@@ -9378,6 +9378,46 @@ export function performSimulationTick() {
 						if (td > 0.01) {
 							planDirLat = tdLat / td;
 							planDirLng = tdLng / td;
+							// Check ahead for land — deflect if needed
+							const lookDist = CONFIG.UNIT_NAVAL_SPEED * 5;
+							const checkLat = u.lat + planDirLat * lookDist;
+							const checkLng = u.lng + planDirLng * lookDist;
+							const checkIdx = getGridIndex(checkLat, checkLng);
+							if (checkIdx !== -1 && landMask[checkIdx] > 0) {
+								// Land ahead — try perpendicular deflections, pick best water path
+								let bestDLat = planDirLat;
+								let bestDLng = planDirLng;
+								let bestWater = 0;
+								for (const ang of [-90, 90, -45, 45]) {
+									const rad = (ang * Math.PI) / 180;
+									const nx =
+										planDirLat * Math.cos(rad) - planDirLng * Math.sin(rad);
+									const ny =
+										planDirLat * Math.sin(rad) + planDirLng * Math.cos(rad);
+									let wc = 0;
+									for (let s = 1; s <= 3; s++) {
+										const si = getGridIndex(
+											u.lat + nx * lookDist * s,
+											u.lng + ny * lookDist * s,
+										);
+										if (si === -1 || landMask[si] === 0) wc++;
+									}
+									if (wc > bestWater) {
+										bestWater = wc;
+										bestDLat = nx;
+										bestDLng = ny;
+									}
+								}
+								planDirLat = bestDLat;
+								planDirLng = bestDLng;
+								const mag = Math.sqrt(
+									planDirLat * planDirLat + planDirLng * planDirLng,
+								);
+								if (mag > 0) {
+									planDirLat /= mag;
+									planDirLng /= mag;
+								}
+							}
 						}
 						planSpeedMult = 2.5;
 					} else if (navalPlan.phase === "LANDING") {
