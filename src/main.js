@@ -6627,90 +6627,6 @@ export function assignGarrisonSlots() {
 }
 
 /**
- * Generate a naval supply run plan: reinforces an active naval invasion
- * by sending additional transport units to the landing zone.
- * Only created when an active naval invasion is in LANDING phase.
- */
-export function generateNavalSupplyPlan(sideIdx) {
-	const np = _navalPlan[sideIdx];
-	if (!np || np.phase !== "LANDING") return;
-
-	const sideCountries = sides[sideIdx] || [];
-	if (sideCountries.length === 0) return;
-
-	const sideUnits = _tickUnitsBySide[sideIdx] || [];
-	const unitCount = sideUnits.filter((u) => u.deployTicks === 0).length;
-	if (unitCount < 10) return;
-
-	// Find friendly coastal staging point closest to the landing target
-	const friendlyCoastCells = [];
-	const sampled = new Set();
-	for (let gi = 0; gi < landMask.length; gi += 3) {
-		if (landMask[gi] === 0) continue;
-		if (dominantSideMap[gi] !== sideIdx) continue;
-		const row = Math.floor(gi / gridWidth);
-		const col = gi % gridWidth;
-		let isCoastal = false;
-		for (let dr = -1; dr <= 1 && !isCoastal; dr++) {
-			for (let dc = -1; dc <= 1 && !isCoastal; dc++) {
-				if (dr === 0 && dc === 0) continue;
-				const nr = row + dr;
-				const nc = col + dc;
-				if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
-				if (landMask[nr * gridWidth + nc] === 0) isCoastal = true;
-			}
-		}
-		if (!isCoastal) continue;
-		const lat = row * CONFIG.GRID_RES - 90;
-		const lng = col * CONFIG.GRID_RES - 180;
-		const key = `${Math.floor(lat)}_${Math.floor(lng)}`;
-		if (sampled.has(key)) continue;
-		sampled.add(key);
-		friendlyCoastCells.push({ lat, lng, idx: gi });
-	}
-	if (friendlyCoastCells.length === 0) return;
-
-	let bestStaging = null;
-	let bestDist = Infinity;
-	for (const fc of friendlyCoastCells) {
-		const dLat = np.target.lat - fc.lat;
-		let dLng = np.target.lng - fc.lng;
-		if (dLng > 180) dLng -= 360;
-		else if (dLng < -180) dLng += 360;
-		const dSq = dLat * dLat + dLng * dLng;
-		if (dSq < bestDist) {
-			bestDist = dSq;
-			bestStaging = fc;
-		}
-	}
-	if (!bestStaging) return;
-
-	// Don't send supply if staging is too far from target
-	if (bestDist > 400) return;
-
-	const maxSupplyUnits = unitCount;
-
-	_navalSupplyPlan[sideIdx] = {
-		type: "NAVAL_SUPPLY",
-		phase: "GATHERING",
-		target: {
-			lat: np.target.lat,
-			lng: np.target.lng,
-			name: np.target.name || "Supply Target",
-		},
-		stagingPoint: { lat: bestStaging.lat, lng: bestStaging.lng },
-		arrowPoints: [
-			{ lat: bestStaging.lat, lng: bestStaging.lng },
-			{ lat: np.target.lat, lng: np.target.lng },
-		],
-		startedTick: simFrameCount,
-		lastProgressTick: simFrameCount,
-		progress: 0,
-		maxAssignedUnits: maxSupplyUnits,
-		activeUnitCount: 0,
-	};
-}
-/**
  * Proposal Engine: generate every possible plan candidate for a side.
  * Returns an array of lightweight proposal objects — no plan objects created yet.
  * @param {number} sideIdx
@@ -7579,6 +7495,7 @@ export function evaluateAllPlans() {
 			simFrameCount - lastReassess >= REASSESS_INTERVAL ||
 			_planReassessNeeded[si]
 		) {
+			const forceReplace = !!_planReassessNeeded[si];
 			_planReassessNeeded[si] = false;
 			const proposals = generateAllProposals(si);
 
@@ -7591,22 +7508,25 @@ export function evaluateAllPlans() {
 			const selected = selectPlans(si, proposals);
 
 			// Apply land plans to _warPlan slots
-			// Slot 0 = land1, Slot 1 = land2 (expand _warPlan if needed)
-			if (selected.land1) {
+			// Only overwrite on forced reassessment; otherwise fill gaps
+			if (selected.land1 && (!_warPlan[si] || forceReplace)) {
 				_warPlan[si] = selected.land1;
 			}
 			if (selected.land2) {
-				if (_warPlan.length <= si + sides.length) {
-					// Use a second slot: index = si + sides.length
-					const slot2 = si + sides.length;
-					_warPlan[slot2] = selected.land2;
-				} else {
-					_warPlan[si + sides.length] = selected.land2;
+				const lSlot2 = si + sides.length;
+				if (!_warPlan[lSlot2] || forceReplace) {
+					if (_warPlan.length <= lSlot2) {
+						_warPlan[lSlot2] = selected.land2;
+					} else {
+						_warPlan[lSlot2] = selected.land2;
+					}
 				}
 			}
 
 			// Apply naval / supply plans
-			if (selected.naval) _navalPlan[si] = selected.naval;
+			if (selected.naval && (!_navalPlan[si] || forceReplace)) {
+				_navalPlan[si] = selected.naval;
+			}
 			// Don't overwrite supply — supply is managed within the naval lifecycle
 			if (selected.supply && !_navalSupplyPlan[si]) {
 				_navalSupplyPlan[si] = selected.supply;
@@ -7838,7 +7758,7 @@ export function evaluateAllPlans() {
 				np.phase = "LANDING";
 				np.lastProgressTick = simFrameCount;
 				// Immediately generate supply plan for the landing
-				if (!_navalSupplyPlan[si]) generateNavalSupplyPlan(si);
+				if (!_navalSupplyPlan[si]) _planReassessNeeded[si] = true;
 			}
 		} else if (np.phase === "LANDING") {
 			// After enough time in landing, the plan completes
@@ -7983,10 +7903,7 @@ export function evaluateAllPlans() {
 		const sp = _navalSupplyPlan[si];
 
 		if (!sp) {
-			// Generate supply plan whenever there's an active naval invasion in LANDING
-			if (_navalPlan[si]?.phase === "LANDING") {
-				generateNavalSupplyPlan(si);
-			}
+			_planReassessNeeded[si] = true;
 			continue;
 		}
 
