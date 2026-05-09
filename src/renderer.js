@@ -5,6 +5,7 @@ import {
 	_cachedTerritoryCtrlEls,
 	_cachedTerritorySegEls,
 	_navalPlan,
+	_navalSupplyPlan,
 	_warPlan,
 	activeBattles,
 	activeTheaterCities,
@@ -2265,6 +2266,58 @@ const ControlMapLayer = L.Layer.extend({
 					ctx.font = "bold 9px monospace";
 					ctx.fillStyle = "rgba(100,180,255,0.9)";
 					ctx.fillText(`NAVAL: ${np.phase}`, midX + 10, midY - 2);
+				}
+			}
+
+			// Draw naval supply arrows (dashed, green-tinted)
+			if (typeof _navalSupplyPlan !== "undefined" && _navalSupplyPlan) {
+				for (let si = 0; si < _navalSupplyPlan.length; si++) {
+					const sp = _navalSupplyPlan[si];
+					if (!sp?.arrowPoints || sp.arrowPoints.length < 2) continue;
+					const pts = sp.arrowPoints;
+					if (
+						Number.isNaN(pts[0].lat) ||
+						Number.isNaN(pts[0].lng) ||
+						Number.isNaN(pts[1].lat) ||
+						Number.isNaN(pts[1].lng)
+					)
+						continue;
+					const p0 = map.latLngToContainerPoint([pts[0].lat, pts[0].lng]);
+					const p1 = map.latLngToContainerPoint([pts[1].lat, pts[1].lng]);
+					const midX = (p0.x + p1.x) / 2;
+					const midY = (p0.y + p1.y) / 2 - 50;
+
+					ctx.setLineDash([3, 5]);
+					ctx.strokeStyle = "rgba(80,220,100,0.6)";
+					ctx.lineWidth = Math.max(
+						2,
+						Math.min(4, 2 + Math.floor((sp.activeUnitCount || 0) / 3)),
+					);
+					ctx.beginPath();
+					ctx.moveTo(p0.x, p0.y);
+					ctx.quadraticCurveTo(midX, midY, p1.x, p1.y);
+					ctx.stroke();
+					ctx.setLineDash([]);
+
+					const angle = Math.atan2(p1.y - midY, p1.x - midX);
+					const headLen = 8;
+					ctx.beginPath();
+					ctx.moveTo(p1.x, p1.y);
+					ctx.lineTo(
+						p1.x - headLen * Math.cos(angle - 0.5),
+						p1.y - headLen * Math.sin(angle - 0.5),
+					);
+					ctx.lineTo(
+						p1.x - headLen * Math.cos(angle + 0.5),
+						p1.y - headLen * Math.sin(angle + 0.5),
+					);
+					ctx.closePath();
+					ctx.fillStyle = "rgba(80,220,100,0.7)";
+					ctx.fill();
+
+					ctx.font = "bold 8px monospace";
+					ctx.fillStyle = "rgba(80,220,100,0.8)";
+					ctx.fillText(`SUPPLY: ${sp.phase}`, midX + 10, midY + 10);
 				}
 			}
 		}

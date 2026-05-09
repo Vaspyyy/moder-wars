@@ -1834,6 +1834,7 @@ export const aiCountryState = new Map();
 export let _sidePosture = []; // per-side auto posture (OFFENSIVE/BALANCED/DEFENSIVE)
 export let _warPlan = []; // per-side war plan: { type, phase, target, ... }
 export const _navalPlan = []; // per-side naval invasion plan (1 per side max)
+export const _navalSupplyPlan = []; // per-side naval supply run plan (1 per side max)
 export const WAR_PLAN_TYPES = [
 	"DEFEND",
 	"PUSH_FRONT",
@@ -7063,6 +7064,95 @@ export function generateNavalInvasionPlan(sideIdx) {
 		activeUnitCount: 0,
 	};
 }
+
+/**
+ * Generate a naval supply run plan: reinforces an active naval invasion
+ * by sending additional transport units to the landing zone.
+ * Only created when an active naval invasion is in LANDING phase.
+ */
+export function generateNavalSupplyPlan(sideIdx) {
+	const np = _navalPlan[sideIdx];
+	if (!np || np.phase !== "LANDING") return;
+
+	const sideCountries = sides[sideIdx] || [];
+	if (sideCountries.length === 0) return;
+
+	const sideUnits = _tickUnitsBySide[sideIdx] || [];
+	const unitCount = sideUnits.filter((u) => u.deployTicks === 0).length;
+	if (unitCount < 10) return;
+
+	// Find friendly coastal staging point closest to the landing target
+	const friendlyCoastCells = [];
+	const sampled = new Set();
+	for (let gi = 0; gi < landMask.length; gi += 3) {
+		if (landMask[gi] === 0) continue;
+		if (dominantSideMap[gi] !== sideIdx) continue;
+		const row = Math.floor(gi / gridWidth);
+		const col = gi % gridWidth;
+		let isCoastal = false;
+		for (let dr = -1; dr <= 1 && !isCoastal; dr++) {
+			for (let dc = -1; dc <= 1 && !isCoastal; dc++) {
+				if (dr === 0 && dc === 0) continue;
+				const nr = row + dr;
+				const nc = col + dc;
+				if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
+				if (landMask[nr * gridWidth + nc] === 0) isCoastal = true;
+			}
+		}
+		if (!isCoastal) continue;
+		const lat = row * CONFIG.GRID_RES - 90;
+		const lng = col * CONFIG.GRID_RES - 180;
+		const key = `${Math.floor(lat)}_${Math.floor(lng)}`;
+		if (sampled.has(key)) continue;
+		sampled.add(key);
+		friendlyCoastCells.push({ lat, lng, idx: gi });
+	}
+	if (friendlyCoastCells.length === 0) return;
+
+	let bestStaging = null;
+	let bestDist = Infinity;
+	for (const fc of friendlyCoastCells) {
+		const dLat = np.target.lat - fc.lat;
+		let dLng = np.target.lng - fc.lng;
+		if (dLng > 180) dLng -= 360;
+		else if (dLng < -180) dLng += 360;
+		const dSq = dLat * dLat + dLng * dLng;
+		if (dSq < bestDist) {
+			bestDist = dSq;
+			bestStaging = fc;
+		}
+	}
+	if (!bestStaging) return;
+
+	// Don't send supply if staging is too far from target
+	if (bestDist > 400) return;
+
+	const maxSupplyUnits = Math.max(
+		3,
+		Math.ceil(unitCount * CONFIG.NAVAL_SUPPLY_FORCE_FRAC),
+	);
+
+	_navalSupplyPlan[sideIdx] = {
+		type: "NAVAL_SUPPLY",
+		phase: "GATHERING",
+		target: {
+			lat: np.target.lat,
+			lng: np.target.lng,
+			name: np.target.name || "Supply Target",
+		},
+		stagingPoint: { lat: bestStaging.lat, lng: bestStaging.lng },
+		arrowPoints: [
+			{ lat: bestStaging.lat, lng: bestStaging.lng },
+			{ lat: np.target.lat, lng: np.target.lng },
+		],
+		startedTick: simFrameCount,
+		lastProgressTick: simFrameCount,
+		progress: 0,
+		maxAssignedUnits: maxSupplyUnits,
+		activeUnitCount: 0,
+	};
+}
+
 export function evaluateAllPlans() {
 	for (let si = 0; si < sides.length; si++) {
 		if (!sides[si] || sides[si].length === 0) continue;
@@ -7252,6 +7342,184 @@ export function evaluateAllPlans() {
 		np.lastProgressTick = simFrameCount;
 	}
 
+	// ── Naval Supply Plan Evaluation ──
+	for (let si = 0; si < sides.length; si++) {
+		if (!sides[si] || sides[si].length === 0) continue;
+		const sp = _navalSupplyPlan[si];
+
+		if (!sp) {
+			// Generate supply plan if we have an active naval invasion in LANDING
+			if (simFrameCount % 300 === 0) {
+				generateNavalSupplyPlan(si);
+			}
+			continue;
+		}
+
+		sp.activeUnitCount = 0;
+
+		// If the parent naval plan is gone, cancel supply
+		const parentNP = _navalPlan[si];
+		if (!parentNP) {
+			for (const u of units) {
+				if (u.sideIndex === si && u.supplyAssigned) {
+					u.supplyAssigned = false;
+					u.isTransport = false;
+				}
+			}
+			_navalSupplyPlan[si] = null;
+			continue;
+		}
+
+		const ticksSinceProgress =
+			simFrameCount - (sp.lastProgressTick || simFrameCount);
+
+		// Stall detection
+		if (ticksSinceProgress > 1800) {
+			for (const u of units) {
+				if (u.sideIndex === si && u.supplyAssigned) {
+					u.supplyAssigned = false;
+					u.isTransport = false;
+				}
+			}
+			_navalSupplyPlan[si] = null;
+			continue;
+		}
+
+		// Phase transitions (mirrors naval invasion: GATHERING -> EMBARKATION -> TRANSIT -> DELIVERED)
+		if (sp.phase === "GATHERING") {
+			let gathered = 0;
+			for (const u of units) {
+				if (u.sideIndex !== si || !u.supplyAssigned) continue;
+				const sdLat = sp.stagingPoint.lat - u.lat;
+				let sdLng = sp.stagingPoint.lng - u.lng;
+				if (sdLng > 180) sdLng -= 360;
+				else if (sdLng < -180) sdLng += 360;
+				if (sdLat * sdLat + sdLng * sdLng < 0.5) gathered++;
+			}
+			if (gathered >= Math.min(sp.maxAssignedUnits, 3)) {
+				sp.phase = "EMBARKATION";
+				sp.lastProgressTick = simFrameCount;
+			}
+		} else if (sp.phase === "EMBARKATION") {
+			let atSea = 0;
+			let total = 0;
+			for (const u of units) {
+				if (u.sideIndex !== si || !u.supplyAssigned) continue;
+				total++;
+				const gi = getGridIndex(u.lat, u.lng);
+				if (gi === -1 || landMask[gi] === 0) atSea++;
+			}
+			if (total > 0 && atSea >= Math.ceil(total * 0.6)) {
+				sp.phase = "TRANSIT";
+				sp.lastProgressTick = simFrameCount;
+			}
+		} else if (sp.phase === "TRANSIT") {
+			let landed = 0;
+			for (const u of units) {
+				if (u.sideIndex !== si || !u.supplyAssigned) continue;
+				const gi = getGridIndex(u.lat, u.lng);
+				if (gi !== -1 && landMask[gi] > 0) {
+					const tdLat = sp.target.lat - u.lat;
+					let tdLng = sp.target.lng - u.lng;
+					if (tdLng > 180) tdLng -= 360;
+					else if (tdLng < -180) tdLng += 360;
+					if (tdLat * tdLat + tdLng * tdLng < 2.0) landed++;
+				}
+			}
+			if (landed >= 2) {
+				sp.phase = "DELIVERED";
+				sp.lastProgressTick = simFrameCount;
+			}
+		} else if (sp.phase === "DELIVERED") {
+			if (ticksSinceProgress > 600) {
+				for (const u of units) {
+					if (u.sideIndex === si && u.supplyAssigned) {
+						u.supplyAssigned = false;
+						u.isTransport = false;
+					}
+				}
+				_navalSupplyPlan[si] = null;
+			}
+		}
+
+		if (sp) sp.lastProgressTick = simFrameCount;
+	}
+
+	// ── Defender Reaction to Enemy Naval Landings ──
+	for (let si = 0; si < sides.length; si++) {
+		if (!sides[si] || sides[si].length === 0) continue;
+
+		// Check each enemy side for active naval landings on our territory
+		for (let ei = 0; ei < sides.length; ei++) {
+			if (ei === si) continue;
+			if (!sides[ei] || sides[ei].length === 0) continue;
+
+			const enemyNP = _navalPlan[ei];
+			if (!enemyNP || enemyNP.phase !== "LANDING") continue;
+			if (!enemyNP.target) continue;
+
+			// Check if the landing is on our territory
+			const tIdx = getGridIndex(enemyNP.target.lat, enemyNP.target.lng);
+			if (tIdx === -1 || dominantSideMap[tIdx] !== si) continue;
+
+			// Count enemy units near the landing zone
+			let enemyLandingForce = 0;
+			for (const u of units) {
+				if (u.sideIndex !== ei) continue;
+				const dLat = enemyNP.target.lat - u.lat;
+				let dLng = enemyNP.target.lng - u.lng;
+				if (dLng > 180) dLng -= 360;
+				else if (dLng < -180) dLng += 360;
+				if (dLat * dLat + dLng * dLng < 4.0) enemyLandingForce++;
+			}
+
+			if (enemyLandingForce < 3) continue;
+
+			// Count our defenders near the landing zone
+			let localDefenders = 0;
+			for (const u of units) {
+				if (u.sideIndex !== si) continue;
+				if (u.deployTicks > 0) continue;
+				const dLat = enemyNP.target.lat - u.lat;
+				let dLng = enemyNP.target.lng - u.lng;
+				if (dLng > 180) dLng -= 360;
+				else if (dLng < -180) dLng += 360;
+				if (dLat * dLat + dLng * dLng < 9.0) localDefenders++;
+			}
+
+			// Decision: pull frontline units if defenders are outnumbered
+			const ratio = localDefenders / Math.max(1, enemyLandingForce);
+			if (ratio < 1.5) {
+				// Need reinforcements — pull nearby frontline units toward landing
+				let pulled = 0;
+				const maxPull = Math.ceil(enemyLandingForce * 1.5 - localDefenders);
+				for (const u of units) {
+					if (u.sideIndex !== si) continue;
+					if (u.deployTicks > 0) continue;
+					if (u.navalAssigned || u.supplyAssigned) continue;
+					if (u._defenderReactTarget) continue;
+
+					// Only pull units within reasonable distance of the landing
+					const dLat = enemyNP.target.lat - u.lat;
+					let dLng = enemyNP.target.lng - u.lng;
+					if (dLng > 180) dLng -= 360;
+					else if (dLng < -180) dLng += 360;
+					const dSq = dLat * dLat + dLng * dLng;
+
+					// Pull from medium range (3-10 degrees), not the far rear
+					if (dSq < 9.0 || dSq > 100.0) continue;
+
+					u._defenderReactTarget = {
+						lat: enemyNP.target.lat,
+						lng: enemyNP.target.lng,
+					};
+					pulled++;
+					if (pulled >= maxPull) break;
+				}
+			}
+		}
+	}
+
 	// Clean up plans for inactive sides
 	for (let si = sides.length; si < _warPlan.length; si++) {
 		_warPlan[si] = null;
@@ -7265,6 +7533,15 @@ export function evaluateAllPlans() {
 			}
 		}
 		_navalPlan[si] = null;
+	}
+	for (let si = sides.length; si < _navalSupplyPlan.length; si++) {
+		for (const u of units) {
+			if (u.supplyAssigned) {
+				u.supplyAssigned = false;
+				u.isTransport = false;
+			}
+		}
+		_navalSupplyPlan[si] = null;
 	}
 }
 
@@ -9298,6 +9575,7 @@ export function performSimulationTick() {
 					isPlanUnit = false;
 				const activePlan = _warPlan[u.sideIndex];
 				const navalPlan = _navalPlan[u.sideIndex];
+				const supplyPlan = _navalSupplyPlan[u.sideIndex];
 
 				// Naval plan assignment: if this unit is close to staging coast and
 				// the naval plan needs units, recruit it
@@ -9461,9 +9739,203 @@ export function performSimulationTick() {
 							: 0.3;
 					moveDirLat = 0;
 					moveDirLng = 0;
+				} else if (
+					supplyPlan &&
+					supplyPlan.type === "NAVAL_SUPPLY" &&
+					!shouldMopUp &&
+					!retreatVector &&
+					!isEngaged &&
+					!isGarrisonUnit &&
+					!u.navalAssigned &&
+					(supplyPlan.activeUnitCount || 0) < (supplyPlan.maxAssignedUnits || 0)
+				) {
+					// Supply plan assignment
+					let isSupplyUnit = false;
+					if (u.supplyAssigned) {
+						isSupplyUnit = true;
+					} else {
+						const sdLat = supplyPlan.stagingPoint.lat - u.lat;
+						let sdLng = supplyPlan.stagingPoint.lng - u.lng;
+						if (sdLng > 180) sdLng -= 360;
+						else if (sdLng < -180) sdLng += 360;
+						const sdSq = sdLat * sdLat + sdLng * sdLng;
+						if (sdSq < 4.0) {
+							u.supplyAssigned = true;
+							isSupplyUnit = true;
+						}
+					}
+
+					if (isSupplyUnit) {
+						isPlanUnit = true;
+						supplyPlan.activeUnitCount = (supplyPlan.activeUnitCount || 0) + 1;
+						u.isTransport = true;
+
+						if (supplyPlan.phase === "GATHERING") {
+							const sdLat = supplyPlan.stagingPoint.lat - u.lat;
+							let sdLng = supplyPlan.stagingPoint.lng - u.lng;
+							if (sdLng > 180) sdLng -= 360;
+							else if (sdLng < -180) sdLng += 360;
+							const sd = Math.sqrt(sdLat * sdLat + sdLng * sdLng);
+							if (sd > 0.01) {
+								planDirLat = sdLat / sd;
+								planDirLng = sdLng / sd;
+							}
+							planSpeedMult = 2.0;
+						} else if (supplyPlan.phase === "EMBARKATION" && !isAtSea) {
+							let bestWDist = Infinity;
+							let bestWLat = 0;
+							let bestWLng = 0;
+							const r = Math.floor((u.lat + 90) / CONFIG.GRID_RES);
+							const c = Math.floor((u.lng + 180) / CONFIG.GRID_RES);
+							for (let dr = -3; dr <= 3; dr++) {
+								for (let dc = -3; dc <= 3; dc++) {
+									const nr = r + dr;
+									const nc = c + dc;
+									if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth)
+										continue;
+									const ni = nr * gridWidth + nc;
+									if (landMask[ni] !== 0) continue;
+									const wlat = nr * CONFIG.GRID_RES - 90;
+									const wlng = nc * CONFIG.GRID_RES - 180;
+									let ddLng = wlng - u.lng;
+									if (ddLng > 180) ddLng -= 360;
+									else if (ddLng < -180) ddLng += 360;
+									const dd = (u.lat - wlat) ** 2 + ddLng ** 2;
+									if (dd < bestWDist) {
+										bestWDist = dd;
+										bestWLat = wlat;
+										bestWLng = wlng;
+									}
+								}
+							}
+							if (bestWDist < Infinity) {
+								const dd = Math.sqrt(bestWDist);
+								planDirLat = (bestWLat - u.lat) / dd;
+								let ddLng = bestWLng - u.lng;
+								if (ddLng > 180) ddLng -= 360;
+								else if (ddLng < -180) ddLng += 360;
+								planDirLng = ddLng / dd;
+							}
+							planSpeedMult = 2.0;
+						} else if (supplyPlan.phase === "TRANSIT") {
+							const tdLat = supplyPlan.target.lat - u.lat;
+							let tdLng = supplyPlan.target.lng - u.lng;
+							if (tdLng > 180) tdLng -= 360;
+							else if (tdLng < -180) tdLng += 360;
+							const td = Math.sqrt(tdLat * tdLat + tdLng * tdLng);
+							if (td > 0.01) {
+								planDirLat = tdLat / td;
+								planDirLng = tdLng / td;
+								const lookDist = CONFIG.UNIT_NAVAL_SPEED * 5;
+								const checkLat = u.lat + planDirLat * lookDist;
+								const checkLng = u.lng + planDirLng * lookDist;
+								const checkIdx = getGridIndex(checkLat, checkLng);
+								if (checkIdx !== -1 && landMask[checkIdx] > 0) {
+									let bestDLat = planDirLat;
+									let bestDLng = planDirLng;
+									let bestWater = 0;
+									for (const ang of [-90, 90, -45, 45]) {
+										const rad = (ang * Math.PI) / 180;
+										const nx =
+											planDirLat * Math.cos(rad) - planDirLng * Math.sin(rad);
+										const ny =
+											planDirLat * Math.sin(rad) + planDirLng * Math.cos(rad);
+										let wc = 0;
+										for (let s = 1; s <= 3; s++) {
+											const si = getGridIndex(
+												u.lat + nx * lookDist * s,
+												u.lng + ny * lookDist * s,
+											);
+											if (si === -1 || landMask[si] === 0) wc++;
+										}
+										if (wc > bestWater) {
+											bestWater = wc;
+											bestDLat = nx;
+											bestDLng = ny;
+										}
+									}
+									planDirLat = bestDLat;
+									planDirLng = bestDLng;
+									const mag = Math.sqrt(
+										planDirLat * planDirLat + planDirLng * planDirLng,
+									);
+									if (mag > 0) {
+										planDirLat /= mag;
+										planDirLng /= mag;
+									}
+								}
+							}
+							planSpeedMult = 2.5;
+						} else if (supplyPlan.phase === "DELIVERED") {
+							u.isTransport = false;
+							const tdLat = supplyPlan.target.lat - u.lat;
+							let tdLng = supplyPlan.target.lng - u.lng;
+							if (tdLng > 180) tdLng -= 360;
+							else if (tdLng < -180) tdLng += 360;
+							const td = Math.sqrt(tdLat * tdLat + tdLng * tdLng);
+							if (td > 0.01) {
+								planDirLat = tdLat / td;
+								planDirLng = tdLng / td;
+							}
+							planSpeedMult = 1.5;
+						}
+						moveDirLat = 0;
+						moveDirLng = 0;
+					} else {
+						// Not a supply unit — clear supply flag
+						u.supplyAssigned = false;
+					}
+					// Defender reaction: move toward enemy landing if assigned (independent of supply)
+					if (
+						!isPlanUnit &&
+						u._defenderReactTarget &&
+						!shouldMopUp &&
+						!retreatVector &&
+						!isEngaged
+					) {
+						isPlanUnit = true;
+						const rdLat = u._defenderReactTarget.lat - u.lat;
+						let rdLng = u._defenderReactTarget.lng - u.lng;
+						if (rdLng > 180) rdLng -= 360;
+						else if (rdLng < -180) rdLng += 360;
+						const rd = Math.sqrt(rdLat * rdLat + rdLng * rdLng);
+						if (rd < 1.0) {
+							u._defenderReactTarget = null;
+						} else {
+							planDirLat = rdLat / rd;
+							planDirLng = rdLng / rd;
+							planSpeedMult = 2.0;
+						}
+						moveDirLat = 0;
+						moveDirLng = 0;
+					}
 				} else {
 					u.navalAssigned = false;
 					u.isTransport = false;
+
+					// Defender reaction: move toward enemy landing if assigned
+					if (
+						u._defenderReactTarget &&
+						!shouldMopUp &&
+						!retreatVector &&
+						!isEngaged
+					) {
+						isPlanUnit = true;
+						const rdLat = u._defenderReactTarget.lat - u.lat;
+						let rdLng = u._defenderReactTarget.lng - u.lng;
+						if (rdLng > 180) rdLng -= 360;
+						else if (rdLng < -180) rdLng += 360;
+						const rd = Math.sqrt(rdLat * rdLat + rdLng * rdLng);
+						if (rd < 1.0) {
+							u._defenderReactTarget = null;
+						} else {
+							planDirLat = rdLat / rd;
+							planDirLng = rdLng / rd;
+							planSpeedMult = 2.0;
+						}
+						moveDirLat = 0;
+						moveDirLng = 0;
+					}
 
 					// Only apply plan when safe: no nearby enemies, not engaged, not retreating
 					if (

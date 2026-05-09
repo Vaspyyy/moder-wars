@@ -64,6 +64,8 @@ export const CONFIG = {
 	NAVAL_INVASION_FORCE_FRAC: 0.1, // 10% of side force per naval invasion
 	NAVAL_LANDING_DEBUFF: 0.5, // 50% damage reduction for first 300 ticks after landing
 	NAVAL_LANDING_DEBUFF_TICKS: 300,
+	NAVAL_SUPPLY_FORCE_FRAC: 0.05, // 5% of side force for supply runs
+	NAVAL_SUPPLY_INTERVAL: 3600, // ~60s between supply run re-evaluations
 	TEAM_A_COLOR: "rgba(255, 50, 50, 0.5)",
 	TEAM_B_COLOR: "rgba(50, 100, 255, 0.5)",
 	FRONTLINE_COLOR: "rgba(0, 0, 0, 1.0)",
