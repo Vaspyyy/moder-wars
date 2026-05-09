@@ -4,6 +4,7 @@ import {
 	_cachedSideTerritoryPcts,
 	_cachedTerritoryCtrlEls,
 	_cachedTerritorySegEls,
+	_coastalDefensePlan,
 	_navalPlan,
 	_navalSupplyPlan,
 	_warPlan,
@@ -2163,7 +2164,7 @@ const ControlMapLayer = L.Layer.extend({
 		}
 
 		// Draw war plan arrows between warring sides
-		if (isWar && showWarPlans && _warPlan && _warPlan.length > 0) {
+		if (isWar && showWarPlans) {
 			for (let si = 0; si < _warPlan.length; si++) {
 				const plan = _warPlan[si];
 				if (!plan) continue;
@@ -2380,6 +2381,45 @@ const ControlMapLayer = L.Layer.extend({
 					ctx.font = "bold 8px monospace";
 					ctx.fillStyle = "rgba(80,220,100,0.8)";
 					ctx.fillText(`SUPPLY: ${sp.phase}`, midX + 10, midY + 10);
+				}
+			}
+
+			// Draw coastal defense zones (passive overlay, subtle)
+			if (typeof _coastalDefensePlan !== "undefined" && _coastalDefensePlan) {
+				for (let si = 0; si < sides.length; si++) {
+					const color = sideColors[si] || "rgba(255,255,0,0.6)";
+					for (let ci = 0; ci < 10; ci++) {
+						const cp = _coastalDefensePlan[si * 10 + ci];
+						if (!cp?.zonePolyline || cp.zonePolyline.length < 2) continue;
+						const pts = cp.zonePolyline;
+
+						ctx.strokeStyle = color.replace(rgbaRe, "0.25)");
+						ctx.lineWidth = 1.5;
+						ctx.setLineDash([2, 6]);
+						ctx.beginPath();
+						const p0 = map.latLngToContainerPoint([pts[0].lat, pts[0].lng]);
+						ctx.moveTo(p0.x, p0.y);
+						for (let pi = 1; pi < pts.length; pi++) {
+							const pp = map.latLngToContainerPoint([pts[pi].lat, pts[pi].lng]);
+							ctx.lineTo(pp.x, pp.y);
+						}
+						ctx.stroke();
+						ctx.setLineDash([]);
+
+						if (cp.target) {
+							const tp = map.latLngToContainerPoint([
+								cp.target.lat,
+								cp.target.lng,
+							]);
+							ctx.font = "bold 7px monospace";
+							ctx.fillStyle = color.replace(rgbaRe, "0.35)");
+							ctx.fillText(
+								`COASTAL (${cp.activeUnitCount || 0})`,
+								tp.x + 6,
+								tp.y - 4,
+							);
+						}
+					}
 				}
 			}
 		}

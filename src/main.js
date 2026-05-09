@@ -7986,6 +7986,26 @@ export function evaluateAllPlans() {
 		if (sp) sp.lastProgressTick = simFrameCount;
 	}
 
+	// ── Coastal Defense Plan Evaluation ──
+	for (let si = 0; si < sides.length; si++) {
+		for (let ci = 0; ci < 10; ci++) {
+			const slot = si * 10 + ci;
+			const cp = _coastalDefensePlan[slot];
+			if (!cp) continue;
+			cp.activeUnitCount = 0;
+			if (cp.target) {
+				const tIdx = getGridIndex(cp.target.lat, cp.target.lng);
+				if (tIdx !== -1 && dominantSideMap[tIdx] !== si) {
+					for (const u of units) {
+						if (u.sideIndex === si && u.coastalAssigned)
+							u.coastalAssigned = false;
+					}
+					_coastalDefensePlan[slot] = null;
+				}
+			}
+		}
+	}
+
 	// ── Defender Reaction to Enemy Naval Landings ──
 	for (let si = 0; si < sides.length; si++) {
 		if (!sides[si] || sides[si].length === 0) continue;
@@ -8085,6 +8105,9 @@ export function evaluateAllPlans() {
 		_navalSupplyPlan[si] = null;
 	}
 	for (let si = sides.length * 10; si < _coastalDefensePlan.length; si++) {
+		for (const u of units) {
+			if (u.coastalAssigned) u.coastalAssigned = false;
+		}
 		_coastalDefensePlan[si] = null;
 	}
 	for (let si = sides.length * 10; si < _neutralGarrisonPlan.length; si++) {
@@ -9649,6 +9672,76 @@ export function performSimulationTick() {
 										});
 									}
 								}
+							}
+						} else if (!u.navalAssigned && !u.supplyAssigned) {
+							// Coastal defense: station units along vulnerable coastlines
+							let bestCDPlan = null;
+							let bestCDSlot = -1;
+							let bestCDDist = Infinity;
+							for (let csi = sideIdx * 10; csi < sideIdx * 10 + 10; csi++) {
+								const cp = _coastalDefensePlan[csi];
+								if (!cp || cp.type !== "COASTAL_DEFENSE") continue;
+								if ((cp.activeUnitCount || 0) >= (cp.maxAssignedUnits || 0))
+									continue;
+								if (!cp.target) continue;
+								const dLat = cp.target.lat - u.lat;
+								let dLng = cp.target.lng - u.lng;
+								if (dLng > 180) dLng -= 360;
+								else if (dLng < -180) dLng += 360;
+								const dSq = dLat * dLat + dLng * dLng;
+								if (dSq < 64.0 && dSq < bestCDDist) {
+									bestCDDist = dSq;
+									bestCDPlan = cp;
+									bestCDSlot = csi;
+								}
+							}
+
+							if (u.coastalAssigned) {
+								let foundCD = false;
+								for (let csi = sideIdx * 10; csi < sideIdx * 10 + 10; csi++) {
+									const cp = _coastalDefensePlan[csi];
+									if (
+										!cp ||
+										cp.type !== "COASTAL_DEFENSE" ||
+										!cp.zonePolyline ||
+										cp.zonePolyline.length === 0
+									)
+										continue;
+									const sdLat = cp.target.lat - u.lat;
+									let sdLng = cp.target.lng - u.lng;
+									if (sdLng > 180) sdLng -= 360;
+									else if (sdLng < -180) sdLng += 360;
+									if (sdLat * sdLat + sdLng * sdLng < 64.0) {
+										foundCD = true;
+										isPlanUnit = true;
+										cp.activeUnitCount = (cp.activeUnitCount || 0) + 1;
+										const slot =
+											cp.zonePolyline[
+												Math.floor(
+													Math.abs(u.id * 777) % cp.zonePolyline.length,
+												)
+											];
+										const sLat = slot.lat - u.lat;
+										let sLng = slot.lng - u.lng;
+										if (sLng > 180) sLng -= 360;
+										else if (sLng < -180) sLng += 360;
+										const sDist = Math.sqrt(sLat * sLat + sLng * sLng);
+										if (sDist > 0.01) {
+											planDirLat = sLat / sDist;
+											planDirLng = sLng / sDist;
+										}
+										planSpeedMult = 0.5;
+										moveDirLat = 0;
+										moveDirLng = 0;
+										break;
+									}
+								}
+								if (!foundCD) {
+									u.coastalAssigned = false;
+								}
+							} else if (bestCDPlan) {
+								u.coastalAssigned = true;
+								_coastalDefensePlan[bestCDSlot]._slotIdx = bestCDSlot;
 							}
 						} else {
 							// Allies logic
