@@ -6586,30 +6586,22 @@ export function generateWarPlan(sideIdx) {
 			if (!poly || poly.length < 5) continue;
 
 			const stride = Math.max(1, Math.floor(poly.length / 20));
-			const radSq = 1.0;
-			const HASH_SIZE = UNIT_HASH_CELL_SIZE;
 			for (let ci = 0; ci < Math.min(500, poly.length); ci += stride) {
 				const cell = poly[ci];
 				let friendlyCount = 0,
 					enemyCount = 0;
-				const cx = Math.floor((cell.lng + 180) / HASH_SIZE);
-				const cy = Math.floor((cell.lat + 90) / HASH_SIZE);
-				for (let dx = -1; dx <= 1; dx++) {
-					for (let dy = -1; dy <= 1; dy++) {
-						const bucket = unitSpatialHash.get(`${cx + dx}_${cy + dy}`);
-						if (!bucket) continue;
-						for (let bi = 0; bi < bucket.length; bi++) {
-							const other = bucket[bi];
-							if (other.deployTicks > 0) continue;
-							const dLat = other.lat - cell.lat;
-							let dLng = other.lng - cell.lng;
-							if (dLng > 180) dLng -= 360;
-							else if (dLng < -180) dLng += 360;
-							if (dLat * dLat + dLng * dLng > radSq) continue;
-							if (other.sideIndex === sideIdx) friendlyCount++;
-							else enemyCount++;
-						}
-					}
+				const radSq = 1.0;
+
+				for (let ui = 0; ui < units.length; ui++) {
+					const other = units[ui];
+					if (other.deployTicks > 0) continue;
+					const dLat = other.lat - cell.lat;
+					let dLng = other.lng - cell.lng;
+					if (dLng > 180) dLng -= 360;
+					else if (dLng < -180) dLng += 360;
+					if (dLat * dLat + dLng * dLng > radSq) continue;
+					if (other.sideIndex === sideIdx) friendlyCount++;
+					else enemyCount++;
 				}
 
 				if (enemyCount >= 2 && friendlyCount >= enemyCount * 3) {
