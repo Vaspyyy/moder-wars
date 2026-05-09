@@ -7301,10 +7301,31 @@ export function evaluateAllPlans() {
 				plan.progress = 1.0;
 				// After consolidation period, generate next plan
 				if (ticksSinceProgress > 1800) {
-					// ~30 seconds at 60fps
 					generateWarPlan(si);
 				}
 				continue;
+			}
+
+			// PREPARATION → EXECUTION: advance when enough units rally at staging cells
+			if (plan.phase === "PREPARATION" && plan.stagingCells?.length > 0) {
+				let gathered = 0;
+				for (const u of units) {
+					if (u.sideIndex !== si || u.deployTicks > 0) continue;
+					const sc =
+						plan.stagingCells[
+							Math.floor(Math.abs(u.id * 1000000) % plan.stagingCells.length)
+						];
+					if (!sc) continue;
+					const sdLat = sc.lat - u.lat;
+					let sdLng = sc.lng - u.lng;
+					if (sdLng > 180) sdLng -= 360;
+					else if (sdLng < -180) sdLng += 360;
+					if (sdLat * sdLat + sdLng * sdLng < 2.0) gathered++;
+				}
+				if (gathered >= Math.min(plan.maxAssignedUnits || 5, 5)) {
+					plan.phase = "EXECUTION";
+					plan.lastProgressTick = simFrameCount;
+				}
 			}
 
 			// Check for stall
@@ -7448,21 +7469,19 @@ export function evaluateAllPlans() {
 		} else if (np.phase === "LANDING") {
 			// After enough time in landing, the plan completes
 			if (ticksSinceProgress > 900) {
-				// Generate a new CAPTURE_CITY land plan targeting the nearest enemy city from the beachhead
-				let nearestCity = null;
-				let nearestCityDist = Infinity;
-				for (let ci = 0; ci < activeTheaterCities.length; ci++) {
-					const city = activeTheaterCities[ci];
-					const citySide = _tickCountryToSideMap.get(city.ownerId || 0);
-					if (citySide === si) continue;
-					const dLat = np.target.lat - city.lat;
-					let dLng = np.target.lng - city.lng;
+				// Count enemies within 5 degrees of the landing zone
+				let nearEnemies = 0;
+				let nearFriendlies = 0;
+				for (const u of units) {
+					if (u.deployTicks > 0) continue;
+					const dLat = np.target.lat - u.lat;
+					let dLng = np.target.lng - u.lng;
 					if (dLng > 180) dLng -= 360;
 					else if (dLng < -180) dLng += 360;
 					const dSq = dLat * dLat + dLng * dLng;
-					if (dSq < nearestCityDist) {
-						nearestCityDist = dSq;
-						nearestCity = city;
+					if (dSq < 25.0) {
+						if (u.sideIndex === si) nearFriendlies++;
+						else nearEnemies++;
 					}
 				}
 
@@ -7475,56 +7494,108 @@ export function evaluateAllPlans() {
 				}
 				_navalPlan[si] = null;
 
-				// Create CAPTURE_CITY plan from the beachhead
-				if (nearestCity) {
-					const landingUnits = [];
-					for (const u of units) {
-						if (u.sideIndex !== si || u.deployTicks > 0) continue;
-						const dLat = np.target.lat - u.lat;
-						let dLng = np.target.lng - u.lng;
+				const forceRatio = nearFriendlies / Math.max(1, nearEnemies);
+				const landingUnits = [];
+				for (const u of units) {
+					if (u.sideIndex !== si || u.deployTicks > 0) continue;
+					const dLat = np.target.lat - u.lat;
+					let dLng = np.target.lng - u.lng;
+					if (dLng > 180) dLng -= 360;
+					else if (dLng < -180) dLng += 360;
+					if (dLat * dLat + dLng * dLng < 4.0) landingUnits.push(u);
+				}
+				let sLat = np.target.lat;
+				let sLng = np.target.lng;
+				if (landingUnits.length > 0) {
+					sLat = 0;
+					sLng = 0;
+					for (const u of landingUnits) {
+						sLat += u.lat;
+						sLng += u.lng;
+					}
+					sLat /= landingUnits.length;
+					sLng /= landingUnits.length;
+				}
+
+				// Build frontline points for this side (for DEFEND rendering)
+				const flPts = [];
+				if (_frontlinePolys) {
+					for (const key of Object.keys(_frontlinePolys)) {
+						const [a, b] = key.split("_").map(Number);
+						if (a !== si && b !== si) continue;
+						const poly = _frontlinePolys[key];
+						if (!poly) continue;
+						const stride = Math.max(1, Math.floor(poly.length / 60));
+						for (let p = 0; p < poly.length; p += stride) {
+							flPts.push({ lat: poly[p].lat, lng: poly[p].lng });
+						}
+					}
+				}
+
+				if (forceRatio >= 1.5) {
+					// Clear superiority — advance toward nearest enemy city
+					let nearestCity = null;
+					let nearestCityDist = Infinity;
+					for (let ci = 0; ci < activeTheaterCities.length; ci++) {
+						const city = activeTheaterCities[ci];
+						const citySide = _tickCountryToSideMap.get(city.ownerId || 0);
+						if (citySide === si) continue;
+						const dLat = np.target.lat - city.lat;
+						let dLng = np.target.lng - city.lng;
 						if (dLng > 180) dLng -= 360;
 						else if (dLng < -180) dLng += 360;
-						if (dLat * dLat + dLng * dLng < 4.0) landingUnits.push(u);
-					}
-					let sLat = np.target.lat;
-					let sLng = np.target.lng;
-					if (landingUnits.length > 0) {
-						sLat = 0;
-						sLng = 0;
-						for (const u of landingUnits) {
-							sLat += u.lat;
-							sLng += u.lng;
+						const dSq = dLat * dLat + dLng * dLng;
+						if (dSq < nearestCityDist) {
+							nearestCityDist = dSq;
+							nearestCity = city;
 						}
-						sLat /= landingUnits.length;
-						sLng /= landingUnits.length;
 					}
-					const sideUnits = _tickUnitsBySide[si] || [];
-					const deployedCount = sideUnits.filter(
-						(u) => u.deployTicks === 0,
-					).length;
+					if (nearestCity) {
+						const sideUnits = _tickUnitsBySide[si] || [];
+						const deployedCount = sideUnits.filter(
+							(u) => u.deployTicks === 0,
+						).length;
+						_warPlan[si] = {
+							type: "CAPTURE_CITY",
+							phase: "PREPARATION",
+							target: {
+								lat: nearestCity.lat,
+								lng: nearestCity.lng,
+								name: nearestCity.name || "Beachhead Advance",
+							},
+							stagingCells: landingUnits.map((u) => ({
+								lat: u.lat,
+								lng: u.lng,
+							})),
+							arrowPoints: [
+								{ lat: sLat, lng: sLng },
+								{
+									lat: nearestCity.lat,
+									lng: nearestCity.lng,
+								},
+							],
+							startedTick: simFrameCount,
+							lastProgressTick: simFrameCount,
+							progress: 0,
+							maxAssignedUnits: deployedCount,
+							activeUnitCount: 0,
+						};
+					}
+				} else {
+					// Outnumbered or parity — dig in at the beachhead
 					_warPlan[si] = {
-						type: "CAPTURE_CITY",
-						phase: "EXECUTION",
-						target: {
-							lat: nearestCity.lat,
-							lng: nearestCity.lng,
-							name: nearestCity.name || "Beachhead Target",
-						},
+						type: "DEFEND",
+						phase: "PREPARATION",
+						target: null,
+						frontlinePoints: flPts,
 						stagingCells: landingUnits.map((u) => ({
 							lat: u.lat,
 							lng: u.lng,
 						})),
-						arrowPoints: [
-							{ lat: sLat, lng: sLng },
-							{
-								lat: nearestCity.lat,
-								lng: nearestCity.lng,
-							},
-						],
 						startedTick: simFrameCount,
 						lastProgressTick: simFrameCount,
 						progress: 0,
-						maxAssignedUnits: deployedCount,
+						maxAssignedUnits: nearFriendlies + 50,
 						activeUnitCount: 0,
 					};
 				}
