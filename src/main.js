@@ -1819,11 +1819,8 @@ const _tickCombatantIds = new Set();
 const _tickCountryToSideMap = new Map();
 const _tickCountryToCityCount = new Map();
 const _tickCountryCapitalLost = new Map();
-const _tickSovereignUnitCounts = new Map();
-const _tickNeighborThreat = new Map();
 const _tickCitiesBySovereign = new Map();
 const _tickMetadataById = new Map();
-const _tickGarrisonCounters = new Map();
 const _tickCityGridIndexSet = new Set();
 const _tickSideAllyIdSets = [];
 const _tickSideSupportIdSets = [];
@@ -1860,7 +1857,6 @@ export const WAR_PLAN_PHASES = [
 	"LANDING",
 	"DELIVERED",
 ];
-export const _garrisonRequirement = new Map(); // countryId → required garrison count
 export const AI_DESPERATION = {
 	OFFENSE_MIN_WAR_TICKS: 1200, // ~20s at 60fps
 	OFFENSE_STALL_TICKS: 900, // sustained stall before "push harder"
@@ -6593,39 +6589,6 @@ export function assignFrontlineSlots() {
  * Assign proportional slots to garrison units along neutral border polylines
  * so they spread evenly instead of clustering at cities.
  */
-export function assignGarrisonSlots() {
-	const countryGarrisons = {};
-	for (let ui = 0; ui < units.length; ui++) {
-		const u = units[ui];
-		if (!u.isGarrison || u.deployTicks > 0) continue;
-		if (!countryGarrisons[u.sovereignId]) countryGarrisons[u.sovereignId] = [];
-		countryGarrisons[u.sovereignId].push(u);
-	}
-
-	for (const cId of Object.keys(countryGarrisons)) {
-		const garrisonList = countryGarrisons[cId];
-		const poly = _neutralBorderPolys[cId];
-		if (!poly || poly.length === 0) {
-			for (let gi = 0; gi < garrisonList.length; gi++) {
-				garrisonList[gi].neutralBorderSlot = null;
-			}
-			continue;
-		}
-
-		garrisonList.sort((a, b) => a.lat - b.lat);
-		const n = garrisonList.length;
-		const step = Math.max(1, Math.floor(poly.length / n));
-
-		for (let i = 0; i < n; i++) {
-			const idx = Math.min(poly.length - 1, Math.floor(i * step));
-			garrisonList[i].neutralBorderSlot = {
-				targetLat: poly[idx].lat,
-				targetLng: poly[idx].lng,
-			};
-		}
-	}
-}
-
 /**
  * Proposal Engine: generate every possible plan candidate for a side.
  * Returns an array of lightweight proposal objects — no plan objects created yet.
@@ -7155,6 +7118,15 @@ export function generateAllProposals(sideIdx) {
 
 	// ── 8. NEUTRAL_GARRISON proposals ──
 	if (adjacencyCache) {
+		// Build sovereign unit count map for threat estimation
+		const sovUnitCounts = new Map();
+		for (const uu of units) {
+			if (uu.deployTicks > 0) continue;
+			sovUnitCounts.set(
+				uu.sovereignId,
+				(sovUnitCounts.get(uu.sovereignId) || 0) + 1,
+			);
+		}
 		for (const [countryId, neighbors] of adjacencyCache.entries()) {
 			if (!myAllyIds.has(countryId)) continue;
 			for (const nId of neighbors) {
@@ -7167,14 +7139,8 @@ export function generateAllProposals(sideIdx) {
 				);
 				if (alreadyProposed) continue;
 
-				const neutralMeta = countryMetadata.find((m) => m.id === nId);
-				const borderLength = _neutralBorderPolys[countryId]?.length || 0;
-				const estimatedThreat = Math.max(
-					5,
-					Math.ceil(
-						(borderLength || 10) * 0.3 + (neutralMeta?.bounds ? 10 : 5),
-					),
-				);
+				const neutralUnitCount = sovUnitCounts.get(nId) || 0;
+				const estimatedThreat = Math.max(5, Math.ceil(neutralUnitCount * 0.3));
 
 				proposals.push({
 					type: "NEUTRAL_GARRISON",
@@ -7186,9 +7152,10 @@ export function generateAllProposals(sideIdx) {
 					stagingCells: [],
 					arrowPoints: null,
 					neutralCountryId: nId,
-					borderLength,
+					combatantCountryId: countryId,
+					borderLength: _neutralBorderPolys[countryId]?.length || 0,
 					estimatedForceNeeded: Math.min(
-						Math.ceil(unitCount * 0.15),
+						Math.ceil(unitCount * 0.25),
 						estimatedThreat,
 					),
 					geographicData: {
@@ -7465,6 +7432,10 @@ export function selectPlans(sideIdx, scoredProposals) {
 		frontlinePoints: p.frontlinePoints || null,
 		stagingPoint: p.stagingPoint || null,
 		zonePolyline: p.zonePolyline || null,
+		borderPolyline:
+			p.combatantCountryId != null
+				? _neutralBorderPolys[p.combatantCountryId] || null
+				: null,
 		neutralCountryId: p.neutralCountryId || null,
 		startedTick: simFrameCount,
 		lastProgressTick: simFrameCount,
@@ -8006,6 +7977,27 @@ export function evaluateAllPlans() {
 		}
 	}
 
+	// ── Neutral Garrison Plan Evaluation ──
+	for (let si = 0; si < sides.length; si++) {
+		for (let gi = 0; gi < 10; gi++) {
+			const slot = si * 10 + gi;
+			const gp = _neutralGarrisonPlan[slot];
+			if (!gp) continue;
+			gp.activeUnitCount = 0;
+			// Cancel if the neutral country has joined a side (became combatant)
+			if (
+				gp.neutralCountryId != null &&
+				_tickCountryToSideMap.get(gp.neutralCountryId) !== undefined
+			) {
+				for (const u of units) {
+					if (u.sideIndex === si && u.garrisonAssigned)
+						u.garrisonAssigned = false;
+				}
+				_neutralGarrisonPlan[slot] = null;
+			}
+		}
+	}
+
 	// ── Defender Reaction to Enemy Naval Landings ──
 	for (let si = 0; si < sides.length; si++) {
 		if (!sides[si] || sides[si].length === 0) continue;
@@ -8111,6 +8103,9 @@ export function evaluateAllPlans() {
 		_coastalDefensePlan[si] = null;
 	}
 	for (let si = sides.length * 10; si < _neutralGarrisonPlan.length; si++) {
+		for (const u of units) {
+			if (u.garrisonAssigned) u.garrisonAssigned = false;
+		}
 		_neutralGarrisonPlan[si] = null;
 	}
 }
@@ -8886,9 +8881,8 @@ export function performSimulationTick() {
 	// Evaluate war plans — check completion/failure, regenerate if needed
 	evaluateAllPlans();
 
-	// ── Garrison System: compute border reserves + neutral border polylines ──
+	// ── Compute neutral border polylines ──
 	if (adjacencyCache) {
-		_garrisonRequirement.clear();
 		_neutralBorderPolys = {};
 
 		// Identify combatant countries with neutral neighbors
@@ -8941,48 +8935,6 @@ export function performSimulationTick() {
 				}
 				_neutralBorderPolys[countryId] = poly;
 			}
-		}
-
-		// Pre-build sovereign unit counts for O(1) lookup below
-		_tickSovereignUnitCounts.clear();
-		const sovereignUnitCounts = _tickSovereignUnitCounts;
-		for (let ui = 0; ui < units.length; ui++) {
-			const uu = units[ui];
-			if (uu.deployTicks > 0) continue;
-			sovereignUnitCounts.set(
-				uu.sovereignId,
-				(sovereignUnitCounts.get(uu.sovereignId) || 0) + 1,
-			);
-		}
-
-		_tickNeighborThreat.clear();
-		const neighborThreat = _tickNeighborThreat;
-		for (const [countryId, neighbors] of adjacencyCache.entries()) {
-			if (!combatantIds.has(countryId)) continue;
-			let borderThreat = 0;
-			// Count enemy units near this country's borders
-			for (const nId of neighbors) {
-				if (combatantIds.has(nId)) continue; // skip other combatants
-				borderThreat = Math.max(
-					borderThreat,
-					sovereignUnitCounts.get(nId) || 0,
-				);
-			}
-			if (borderThreat > 0) {
-				neighborThreat.set(countryId, borderThreat);
-			}
-		}
-		for (const [countryId, threat] of neighborThreat.entries()) {
-			const prof = aiCountryState.get(countryId);
-			const reserveShare = prof?.reserveShare || 0.02;
-			// Match 30% of neutral army (not 120%), with floor of 5
-			const threatMatch = Math.max(5, Math.ceil(threat * 0.3));
-			let requirement = Math.ceil(threatMatch * (1 - reserveShare));
-			// Cap garrison at 25% of own unit count so majority fights the real war
-			const ownUnits = sovereignUnitCounts.get(countryId) || 0;
-			const maxGarrison = Math.floor(ownUnits * 0.25);
-			requirement = Math.min(requirement, maxGarrison);
-			_garrisonRequirement.set(countryId, requirement);
 		}
 	}
 
@@ -9131,11 +9083,6 @@ export function performSimulationTick() {
 		if (m && m.id !== undefined) _metadataById.set(m.id, m);
 	}
 
-	// Pre-allocate garrison slot counters per sovereign for O(1) assignment
-	// instead of O(N²) units.filter().indexOf() per unit.
-	_tickGarrisonCounters.clear();
-	const garrisonCounters = _tickGarrisonCounters;
-
 	for (let i = units.length - 1; i >= 0; i--) {
 		const u = units[i];
 
@@ -9235,88 +9182,6 @@ export function performSimulationTick() {
 			}
 			if (bestCity) {
 				cityFocusTarget = { lat: bestCity.lat, lng: bestCity.lng };
-			}
-		}
-
-		// CITY GARRISON LOGIC: some units stay to defend nearby friendly cities
-		let garrisonCity = null;
-		let enemyNearGarrison = false;
-		if (cities?.length) {
-			const friendlyCities = _citiesBySovereign.get(u.sovereignId) || [];
-			if (friendlyCities.length) {
-				let closest = null;
-				let closestDistSq = Infinity;
-				for (let iCity = 0; iCity < friendlyCities.length; iCity++) {
-					const c = friendlyCities[iCity];
-					const dSq = (u.lat - c.lat) ** 2 + (u.lng - c.lng) ** 2;
-					if (dSq < closestDistSq) {
-						closestDistSq = dSq;
-						closest = c;
-					}
-				}
-				// Within ~0.35 degrees (~40km) of a friendly city -> candidate for garrison
-				if (closest && closestDistSq < 0.35 * 0.35) {
-					garrisonCity = closest;
-					// Count friendly units near this city using spatial hash (O(1) bucket lookup)
-					const cityRadiusSq = 0.25 * 0.25;
-					let friendlyNear = 0;
-					const gCkx = Math.floor((closest.lng + 180) / HASH_SIZE);
-					const gCky = Math.floor((closest.lat + 90) / HASH_SIZE);
-					for (let gdy = -1; gdy <= 1; gdy++) {
-						for (let gdx = -1; gdx <= 1; gdx++) {
-							const gCArr = unitHash.get(`${gCkx + gdx}_${gCky + gdy}`);
-							if (!gCArr) continue;
-							for (let gj = 0; gj < gCArr.length; gj++) {
-								const uu = gCArr[gj];
-								if (
-									uu.sideIndex !== u.sideIndex ||
-									uu.sovereignId !== u.sovereignId
-								)
-									continue;
-								const dSq =
-									(uu.lat - closest.lat) ** 2 + (uu.lng - closest.lng) ** 2;
-								if (dSq < cityRadiusSq) friendlyNear++;
-							}
-						}
-					}
-					// Look for enemies near this city using spatial hash
-					const enemyRadiusSq = 0.55 * 0.55;
-					const gEkx = Math.floor((closest.lng + 180) / HASH_SIZE);
-					const gEky = Math.floor((closest.lat + 90) / HASH_SIZE);
-					outerEnemy: for (let gdy = -1; gdy <= 1; gdy++) {
-						for (let gdx = -1; gdx <= 1; gdx++) {
-							const gEArr = unitHash.get(`${gEkx + gdx}_${gEky + gdy}`);
-							if (!gEArr) continue;
-							for (let gj = 0; gj < gEArr.length; gj++) {
-								const eu = gEArr[gj];
-								if (eu.sideIndex === u.sideIndex) continue;
-								const dSq =
-									(eu.lat - closest.lat) ** 2 + (eu.lng - closest.lng) ** 2;
-								if (dSq < enemyRadiusSq) {
-									enemyNearGarrison = true;
-									break outerEnemy;
-								}
-							}
-						}
-					}
-					// Mark / unmark garrison status
-					if (friendlyNear <= 5 || enemyNearGarrison) {
-						u.isGarrison = true;
-						u.garrisonCityId = closest.id || null;
-					} else {
-						// Too many defenders already, free this unit
-						if (u.isGarrison && u.garrisonCityId === (closest.id || null)) {
-							u.isGarrison = false;
-							u.garrisonCityId = null;
-						}
-					}
-				} else {
-					// Far from any friendly city: clear garrison flag
-					if (u.isGarrison) {
-						u.isGarrison = false;
-						u.garrisonCityId = null;
-					}
-				}
 			}
 		}
 
@@ -9672,6 +9537,78 @@ export function performSimulationTick() {
 										});
 									}
 								}
+							}
+						} else if (
+							!u.navalAssigned &&
+							!u.supplyAssigned &&
+							!u.coastalAssigned
+						) {
+							// Neutral garrison: station along borders with neutrals
+							let bestGP = null;
+							let bestGPDist = Infinity;
+							for (let gsi = sideIdx * 10; gsi < sideIdx * 10 + 10; gsi++) {
+								const gp = _neutralGarrisonPlan[gsi];
+								if (!gp || gp.type !== "NEUTRAL_GARRISON") continue;
+								if ((gp.activeUnitCount || 0) >= (gp.maxAssignedUnits || 0))
+									continue;
+								if (!gp.borderPolyline || gp.borderPolyline.length === 0)
+									continue;
+								const dLat = gp.target.lat - u.lat;
+								let dLng = gp.target.lng - u.lng;
+								if (dLng > 180) dLng -= 360;
+								else if (dLng < -180) dLng += 360;
+								const dSq = dLat * dLat + dLng * dLng;
+								if (dSq < 256.0 && dSq < bestGPDist) {
+									bestGPDist = dSq;
+									bestGP = gp;
+								}
+							}
+
+							if (u.garrisonAssigned) {
+								let foundGP = false;
+								for (let gsi = sideIdx * 10; gsi < sideIdx * 10 + 10; gsi++) {
+									const gp = _neutralGarrisonPlan[gsi];
+									if (
+										!gp ||
+										gp.type !== "NEUTRAL_GARRISON" ||
+										!gp.borderPolyline ||
+										gp.borderPolyline.length === 0
+									)
+										continue;
+									const dLat = gp.target.lat - u.lat;
+									let dLng = gp.target.lng - u.lng;
+									if (dLng > 180) dLng -= 360;
+									else if (dLng < -180) dLng += 360;
+									if (dLat * dLat + dLng * dLng < 256.0) {
+										foundGP = true;
+										isPlanUnit = true;
+										gp.activeUnitCount = (gp.activeUnitCount || 0) + 1;
+										const slot =
+											gp.borderPolyline[
+												Math.floor(
+													Math.abs(u.id * 777) % gp.borderPolyline.length,
+												)
+											];
+										const sLat = slot.lat - u.lat;
+										let sLng = slot.lng - u.lng;
+										if (sLng > 180) sLng -= 360;
+										else if (sLng < -180) sLng += 360;
+										const sDist = Math.sqrt(sLat * sLat + sLng * sLng);
+										if (sDist > 0.01) {
+											planDirLat = sLat / sDist;
+											planDirLng = sLng / sDist;
+										}
+										planSpeedMult = 0.5;
+										moveDirLat = 0;
+										moveDirLng = 0;
+										break;
+									}
+								}
+								if (!foundGP) {
+									u.garrisonAssigned = false;
+								}
+							} else if (bestGP) {
+								u.garrisonAssigned = true;
 							}
 						} else if (!u.navalAssigned && !u.supplyAssigned) {
 							// Coastal defense: station units along vulnerable coastlines
@@ -10144,36 +10081,6 @@ export function performSimulationTick() {
 			target = cityFocusTarget;
 		}
 
-		// If this unit is a border garrison, station along the neutral border polyline
-		if (u.isGarrison) {
-			if (u.neutralBorderSlot) {
-				target = {
-					lat: u.neutralBorderSlot.targetLat,
-					lng: u.neutralBorderSlot.targetLng,
-				};
-			} else if (garrisonCity) {
-				// Fallback: station at friendly city if no neutral border polyline
-				target = { lat: garrisonCity.lat, lng: garrisonCity.lng };
-			} else if (groupCentroid) {
-				target = { lat: groupCentroid.lat, lng: groupCentroid.lng };
-			}
-		}
-
-		// Reserve doctrine: a slice of units stay one layer behind and guard cities/cores
-		// unless local contact is high. This makes fronts feel less all-in and more human.
-		const reserveRoll = (Math.floor(u.id * 1000000) % 1000) / 1000;
-		const isReserveUnit = reserveRoll < aiProfile.reserveShare;
-		const garrisonReq = _garrisonRequirement.get(u.sovereignId) || 0;
-		const garIdx = garrisonCounters.get(u.sovereignId) || 0;
-		garrisonCounters.set(u.sovereignId, garIdx + 1);
-		const isGarrisonUnit =
-			isReserveUnit ||
-			(garrisonReq > 0 &&
-				garIdx < garrisonReq &&
-				!shouldMopUp &&
-				localEnemyCount < 3);
-		u.isGarrison = isGarrisonUnit;
-
 		if (target) {
 			// Spatial Jitter: Add a small, unit-specific offset to the target destination
 			// to prevent multiple units from converging on the exact same coordinate.
@@ -10226,7 +10133,7 @@ export function performSimulationTick() {
 					!shouldMopUp &&
 					!retreatVector &&
 					!isEngaged &&
-					!isGarrisonUnit &&
+					!u.garrisonAssigned &&
 					(navalPlan.activeUnitCount || 0) < (navalPlan.maxAssignedUnits || 0)
 				) {
 					if (u.navalAssigned) {
@@ -10385,7 +10292,7 @@ export function performSimulationTick() {
 					!shouldMopUp &&
 					!retreatVector &&
 					!isEngaged &&
-					!isGarrisonUnit &&
+					!u.garrisonAssigned &&
 					!u.navalAssigned &&
 					(supplyPlan.activeUnitCount || 0) < (supplyPlan.maxAssignedUnits || 0)
 				) {
@@ -11385,9 +11292,6 @@ export function performSimulationTick() {
 			units.splice(i, 1);
 		}
 	}
-
-	// Assign garrison slots after all units have been flagged
-	assignGarrisonSlots();
 
 	// NOTE: even if sideSoldiers reach 0, sides remain on the field and can still recruit.
 	// This keeps wars from hard-locking when a side's manpower bar is exhausted.

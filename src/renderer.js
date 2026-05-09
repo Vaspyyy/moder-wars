@@ -7,6 +7,7 @@ import {
 	_coastalDefensePlan,
 	_navalPlan,
 	_navalSupplyPlan,
+	_neutralGarrisonPlan,
 	_warPlan,
 	activeBattles,
 	activeTheaterCities,
@@ -2415,6 +2416,45 @@ const ControlMapLayer = L.Layer.extend({
 							ctx.fillStyle = color.replace(rgbaRe, "0.35)");
 							ctx.fillText(
 								`COASTAL (${cp.activeUnitCount || 0})`,
+								tp.x + 6,
+								tp.y - 4,
+							);
+						}
+					}
+				}
+			}
+
+			// Draw neutral garrison zones (passive overlay, subtle)
+			if (typeof _neutralGarrisonPlan !== "undefined" && _neutralGarrisonPlan) {
+				for (let si = 0; si < sides.length; si++) {
+					const color = sideColors[si] || "rgba(255,255,0,0.6)";
+					for (let gi = 0; gi < 10; gi++) {
+						const gp = _neutralGarrisonPlan[si * 10 + gi];
+						if (!gp?.borderPolyline || gp.borderPolyline.length < 2) continue;
+						const pts = gp.borderPolyline;
+
+						ctx.strokeStyle = color.replace(rgbaRe, "0.2)");
+						ctx.lineWidth = 1.0;
+						ctx.setLineDash([3, 9]);
+						ctx.beginPath();
+						const p0 = map.latLngToContainerPoint([pts[0].lat, pts[0].lng]);
+						ctx.moveTo(p0.x, p0.y);
+						for (let pi = 1; pi < pts.length; pi++) {
+							const pp = map.latLngToContainerPoint([pts[pi].lat, pts[pi].lng]);
+							ctx.lineTo(pp.x, pp.y);
+						}
+						ctx.stroke();
+						ctx.setLineDash([]);
+
+						if (gp.target) {
+							const tp = map.latLngToContainerPoint([
+								gp.target.lat,
+								gp.target.lng,
+							]);
+							ctx.font = "bold 7px monospace";
+							ctx.fillStyle = color.replace(rgbaRe, "0.3)");
+							ctx.fillText(
+								`GARRISON (${gp.activeUnitCount || 0})`,
 								tp.x + 6,
 								tp.y - 4,
 							);
