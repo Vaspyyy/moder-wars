@@ -8337,8 +8337,6 @@ export function evaluateAllPlans() {
 
 export function performSimulationTick() {
 	// TODO: Remove per-unit level thinking. Only army groups and war plans should
-	const _pt0 = performance.now();
-
 	// move units — no per-unit level movement and decision making. War plans are the
 	// bread and butter of AI movement. Individual unit targeting, mop-up search,
 	// independent pathfinding, and proximity combat decisions should all be replaced
@@ -9108,7 +9106,6 @@ export function performSimulationTick() {
 	// Evaluate war plans — check completion/failure, regenerate if needed
 	evaluateAllPlans();
 
-	const _ptA = performance.now();
 	// ── Compute neutral border polylines (throttled to every 60 ticks) ──
 	const NEUTRAL_BORDER_INTERVAL = 60;
 	if (adjacencyCache && (simFrameCount % NEUTRAL_BORDER_INTERVAL === 0 || Object.keys(_neutralBorderPolys).length === 0)) {
@@ -9170,7 +9167,6 @@ export function performSimulationTick() {
 	// Mid-War Recruitment (Steady, Land-Capped, and Underdog-Aware)
 	sides.forEach((side, sIdx) => {
 		side.forEach((country) => {
-	const _ptB = performance.now();
 			const stats = countryStats.get(country.id);
 			if (!stats) return;
 			const aiProfile = aiCountryState.get(country.id) || null;
@@ -9316,7 +9312,6 @@ export function performSimulationTick() {
 	for (let i = units.length - 1; i >= 0; i--) {
 		const u = units[i];
 
-	const _ptC = performance.now();
 		// Scrub NaN units immediately to prevent rendering crashes
 		if (Number.isNaN(u.lat) || Number.isNaN(u.lng)) {
 			units.splice(i, 1);
@@ -11581,7 +11576,6 @@ export function performSimulationTick() {
 	// 4. Individual Capitulation & Treaty Logic
 	const timeSinceTreaty = Date.now() - lastTreatyTime;
 
-	const _ptD = performance.now();
 	for (let sIdx = 0; sIdx < MAX_SIDES; sIdx++) {
 		if (initialSideSoldiers[sIdx] > 0) {
 			sideCasualties[sIdx] = Math.max(
@@ -11955,14 +11949,6 @@ export function performSimulationTick() {
 	_cachedSideUnitCounts = unitCounts;
 	_cachedSideSoldierEsts = soldierEsts;
 
-		if (simFrameCount % 60 === 0) {
-			const _ptPlans = performance.now() - _ptA;
-			const _ptRecruit = performance.now() - _ptB;
-			const _ptUnitLoop = performance.now() - _ptC;
-			const _ptPost = performance.now() - _ptD;
-			const _ptTotal = performance.now() - _pt0;
-			console.log(`[PERF] total=${_ptTotal.toFixed(1)}ms plans=${_ptPlans.toFixed(1)}ms recruit=${_ptRecruit.toFixed(1)}ms unitLoop=${_ptUnitLoop.toFixed(1)}ms post=${_ptPost.toFixed(1)}ms`);
-		}
 	return false;
 }
 
