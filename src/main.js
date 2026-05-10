@@ -6916,6 +6916,21 @@ export function generateAllProposals(sideIdx) {
 	});
 
 	// ── 5. NAVAL_INVASION proposals ──
+		// Only propose naval invasions if enough units are near the coast
+		let _coastalUnitCount = 0;
+		for (let _cui = 0; _cui < (unitsBySide[sideIdx] || []).length; _cui++) {
+			const _cu = unitsBySide[sideIdx][_cui];
+			if (_cu.deployTicks > 0) continue;
+			for (let _fci = 0; _fci < friendlyCoastCells.length; _fci++) {
+				const _dLat = _cu.lat - friendlyCoastCells[_fci].lat;
+				let _dLng = _cu.lng - friendlyCoastCells[_fci].lng;
+				if (_dLng > 180) _dLng -= 360;
+				else if (_dLng < -180) _dLng += 360;
+				if (_dLat * _dLat + _dLng * _dLng < 9.0) { _coastalUnitCount++; break; }
+			}
+		}
+		if (_coastalUnitCount < 5) continue;
+
 	if (friendlyCoastCells.length > 0 && enemyCoastalTiles.length > 0) {
 		for (const et of enemyCoastalTiles) {
 			let minSeaDist = Infinity;
@@ -10464,8 +10479,10 @@ export function performSimulationTick() {
 						if (sdLng > 180) sdLng -= 360;
 						else if (sdLng < -180) sdLng += 360;
 						const sdSq = sdLat * sdLat + sdLng * sdLng;
-						if (sdSq < 64.0) {
-							// Within ~8 degrees of staging coast
+						if (sdSq < 4.0) {
+							// Within ~2 degrees of staging coast AND on friendly territory
+							const uGI = _unitGridIdx.get(u);
+							if (uGI === -1 || dominantSideMap[uGI] !== u.sideIndex) continue;
 							u.navalAssigned = true;
 							isNavalUnit = true;
 						}
