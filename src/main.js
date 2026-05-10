@@ -16938,7 +16938,7 @@ editorSaveBtn.addEventListener("click", () => {
 	URL.revokeObjectURL(url);
 });
 
-export function _resetConflictSetupState() {
+export function resetConflictSetupState() {
 	sides = [[], []];
 	_attackers = sides[0];
 	_defenders = sides[1];
@@ -17345,21 +17345,21 @@ document
 	});
 
 // -------- Procedural Nation Generation (For empty presets) --------
+export const noNationsModal = document.getElementById("no-nations-modal");
 
-export const _noNationsModal = document.getElementById("no-nations-modal");
-export const _randomNationsCountInput = document.getElementById(
+export const randomNationsCountInput = document.getElementById(
 	"random-nations-count",
 );
-export const _confirmRandomGenBtn = document.getElementById(
+export const confirmRandomGenBtn = document.getElementById(
 	"confirm-random-gen-btn",
 );
-export const _skipRandomGenBtn = document.getElementById("skip-random-gen-btn");
+export const skipRandomGenBtn = document.getElementById("skip-random-gen-btn");
 
 /**
  * Procedurally populates all land cells on the map with a specified number of random nations.
  * Uses an interleaved BFS expansion to ensure organic, relatively balanced territory sizes.
  */
-export async function _spawnRandomNationsAcrossMap(count) {
+export async function spawnRandomNationsAcrossMap(count) {
 	if (!worldControlMap || !landMask) return;
 
 	loadingStatus.innerText = "Generating Civilizations...";
@@ -17575,7 +17575,7 @@ export async function _spawnRandomNationsAcrossMap(count) {
 
 // -------- Import Country From Scenario (editor / godmode) --------
 
-export function _populateImportCountrySelect() {
+export function populateImportCountrySelect() {
 	if (!importScenarioBuffer || !importCountryCardList || !importCountrySearch)
 		return;
 	const metaList = importScenarioBuffer.metadata || [];
