@@ -8336,6 +8336,7 @@ export function evaluateAllPlans() {
 }
 
 export function performSimulationTick() {
+	console.time("simTick");
 	// TODO: Remove per-unit level thinking. Only army groups and war plans should
 	// move units — no per-unit level movement and decision making. War plans are the
 	// bread and butter of AI movement. Individual unit targeting, mop-up search,
@@ -11949,6 +11950,7 @@ export function performSimulationTick() {
 	_cachedSideUnitCounts = unitCounts;
 	_cachedSideSoldierEsts = soldierEsts;
 
+	console.timeEnd("simTick");
 	return false;
 }
 
