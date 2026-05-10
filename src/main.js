@@ -6918,7 +6918,7 @@ export function generateAllProposals(sideIdx) {
 	// ── 5. NAVAL_INVASION proposals ──
 		// Only propose naval invasions if enough units are near the coast
 		let _coastalUnitCount = 0;
-		for (let _cui = 0; _cui < (unitsBySide[sideIdx] || []).length; _cui++) {
+		for (let _cui = 0; _cui < (_tickUnitsBySide[sideIdx] || []).length; _cui++) {
 			const _cu = unitsBySide[sideIdx][_cui];
 			if (_cu.deployTicks > 0) continue;
 			for (let _fci = 0; _fci < friendlyCoastCells.length; _fci++) {
