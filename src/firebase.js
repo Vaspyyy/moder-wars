@@ -17,7 +17,6 @@ import {
 	renderCountryLibrary,
 	renderFlagLibrary,
 	room,
-	SCENARIO_MENU_BGS,
 	scenarioHubModal,
 	setGameState,
 	setHubReturnState,
@@ -27,7 +26,8 @@ import {
 	tabCountriesBtn,
 	tabFlagsBtn,
 	tabScenariosBtn,
-} from "./constants.js";
+} from "./main.js";
+import { SCENARIO_MENU_BGS } from "./constants.js";
 
 function openHub(initialTab = "scenarios") {
 	const fade = document.getElementById("fade-transition-overlay");
