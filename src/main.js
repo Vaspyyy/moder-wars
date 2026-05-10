@@ -7583,6 +7583,24 @@ export function evaluateAllPlans() {
 		}
 	}
 
+	// Reset plan activeUnitCount every tick (cheap, no unit iteration)
+	for (let _ri = 0; _ri < sides.length; _ri++) {
+		if (!sides[_ri] || sides[_ri].length === 0) continue;
+		if (_warPlan[_ri]) _warPlan[_ri].activeUnitCount = 0;
+		const _l2 = _ri + sides.length;
+		if (_warPlan[_l2]) _warPlan[_l2].activeUnitCount = 0;
+		if (_navalPlan[_ri]) _navalPlan[_ri].activeUnitCount = 0;
+		if (_navalSupplyPlan[_ri]) _navalSupplyPlan[_ri].activeUnitCount = 0;
+		if (_defenderReactionPlan[_ri]) _defenderReactionPlan[_ri].activeUnitCount = 0;
+		for (let _ci = 0; _ci < 10; _ci++) {
+			const _cp = _coastalDefensePlan[_ri * 10 + _ci];
+			if (_cp) _cp.activeUnitCount = 0;
+			const _gp = _neutralGarrisonPlan[_ri * 10 + _ci];
+			if (_gp) _gp.activeUnitCount = 0;
+		}
+	}
+
+	if (simFrameCount % 30 === 0) {
 	for (let si = 0; si < sides.length; si++) {
 		if (!sides[si] || sides[si].length === 0) continue;
 		const plan = _warPlan[si];
@@ -8330,6 +8348,7 @@ export function evaluateAllPlans() {
 			u._defenderReactTarget = null;
 		}
 		_defenderReactionPlan[si] = null;
+	}
 	}
 }
 
