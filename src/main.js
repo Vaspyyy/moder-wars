@@ -4275,7 +4275,7 @@ export function applyEarthDeserts() {
 export async function loadFlagCodes() {
 	if (flagCodes) return;
 	try {
-		const url = "https://flagcdn.com/en/codes.json";
+		const url = "assets/geodata/flagcodes.json";
 		flagCodes = await fetchJSONWithCache(url);
 	} catch (e) {
 		console.error("Failed to load flag codes", e);
@@ -4639,7 +4639,7 @@ export async function loadCities() {
 	try {
 		// Upgrade to 50m resolution for a significantly higher city count (thousands vs hundreds)
 		const url =
-			"https://raw.githubusercontent.com/martynafford/natural-earth-geojson/master/50m/cultural/ne_50m_populated_places_simple.json";
+			"assets/geodata/50m/cultural/ne_50m_populated_places_simple.json";
 		const data = await fetchJSONWithCache(url);
 		cities = data.features.map((f, idx) => ({
 			id: idx + 1,
@@ -15002,8 +15002,9 @@ document.getElementById("back-to-nav-btn").addEventListener("click", () => {
 /**
  * DYNAMIC MENU BACKGROUND SYSTEM
  */
-	"scroller-choice-1984-alt": "assets/images/1974.webp",
-};
+("scroller-choice-1984-alt");
+: "assets/images/1974.webp",
+}
 
 export let queuedScenarioAction = null;
 export const enterScenarioBtn = document.getElementById("enter-scenario-btn");

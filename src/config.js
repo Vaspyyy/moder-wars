@@ -1,6 +1,5 @@
 export const CONFIG = {
-	GEOJSON_BASE:
-		"https://raw.githubusercontent.com/martynafford/natural-earth-geojson/master/",
+	GEOJSON_BASE: "assets/geodata/",
 	GRID_RES: 0.15,
 	INFLUENCE_RATE: 0.18,
 	INFLUENCE_RADIUS: 0.4,
