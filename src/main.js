@@ -6929,9 +6929,8 @@ export function generateAllProposals(sideIdx) {
 				if (_dLat * _dLat + _dLng * _dLng < 9.0) { _coastalUnitCount++; break; }
 			}
 		}
-		if (_coastalUnitCount < 5) continue;
 
-	if (friendlyCoastCells.length > 0 && enemyCoastalTiles.length > 0) {
+		if (friendlyCoastCells.length > 0 && enemyCoastalTiles.length > 0 && _coastalUnitCount >= 5) {
 		for (const et of enemyCoastalTiles) {
 			let minSeaDist = Infinity;
 			let minLandDist = Infinity;
