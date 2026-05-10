@@ -15002,7 +15002,7 @@ document.getElementById("back-to-nav-btn").addEventListener("click", () => {
 /**
  * DYNAMIC MENU BACKGROUND SYSTEM
  */
-export const _SCENARIO_MENU_BGS = {
+export const SCENARIO_MENU_BGS = {
 	"scroller-choice-modern": "assets/images/2022.webp",
 	"scroller-choice-1974": "assets/images/1974.webp",
 
