@@ -11669,6 +11669,7 @@ export function performSimulationTick() {
 					if (landMask[idx] === 2 && worldControlMap[idx] === country.id)
 						exactOwned++;
 					}
+				}
 				liveOwnedWarTiles = exactOwned;
 			}
 
