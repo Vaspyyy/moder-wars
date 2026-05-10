@@ -1769,6 +1769,7 @@ export let cityEditMode = null; // 'CREATE' | 'MOVE' | null
 export let animationFrameId = null;
 export let backgroundTickId = null;
 export let simFrameCount = 0;
+let _simTickCount = 0; // per-simulation-tick counter (unlike simFrameCount which is per-visual-frame)
 let warGraceEndTick = 0;
 export let simSpeed = 3.0;
 let _perfLastTime = 0;
@@ -8186,7 +8187,7 @@ export function evaluateAllPlans() {
 				if (!rpCur2) {
 					const preActive = Math.min(
 						10,
-						Math.floor(_tickUnitsBySide[si] * 0.15),
+						Math.floor((_tickUnitsBySide[si]?.length || 0) * 0.15),
 					);
 					if (preActive >= 3) {
 						_defenderReactionPlan[si] = {
@@ -8378,7 +8379,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.24.13",
+		_version: "V0.24.14",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0,
 		tickTotal: 0, maxTick: 0, ticks: 0,
@@ -8387,6 +8388,7 @@ export function performSimulationTick() {
 		reassess_territory: 0, reassess_posture: 0, reassess_ratio: 0,
 	};
 	window.__perf.ticks++;
+	_simTickCount++;
 	const _t0 = performance.now();
 	// TODO: Remove per-unit level thinking. Only army groups and war plans should
 	// move units — no per-unit level movement and decision making. War plans are the
@@ -8530,8 +8532,9 @@ export function performSimulationTick() {
 	// PERF: Throttled — only runs on "counting" frames (same cadence as shouldCountLand)
 	//       to avoid 5000-sample random scans on every single tick (was 13% self-time).
 	const optimizationFactor = getOptimizationFactor();
+	// Use _simTickCount (per-tick) so interval matches simulation progress, not visual frames
 	const countInterval = Math.max(15, Math.floor(15 * simSpeed));
-	const shouldCountLand = simFrameCount % countInterval === 0;
+	const shouldCountLand = _simTickCount % countInterval === 0;
 	if (shouldCountLand) {
 		const integBase = 5000;
 		const integSamples = Math.max(
@@ -8634,8 +8637,8 @@ export function performSimulationTick() {
 
 	// OPT-1: Rebuild frontline direction field every N ticks via Web Worker.
 	// getBorderDirection() now does an O(1) array lookup instead of a 12-radius grid scan.
-	if (simFrameCount - frontlineFieldTick >= FRONTLINE_FIELD_UPDATE_INTERVAL) {
-		frontlineFieldTick = simFrameCount;
+	if (_simTickCount - frontlineFieldTick >= FRONTLINE_FIELD_UPDATE_INTERVAL) {
+		frontlineFieldTick = _simTickCount;
 		if (_simWorker && !_workerBusy) {
 			_workerBusy = true;
 			const lmCopy = new Uint8Array(landMask);
@@ -9717,6 +9720,7 @@ export function performSimulationTick() {
 		const isTacticallyIdle =
 			simSpeed >= 3 &&
 			idleTicks > 60 &&
+			idleTicks < 600 && // force re-scan after 600 idle frames to break perpetual idle loop
 			u.mopUpTargetId === 0 &&
 			!u.cityFocusTarget;
 
@@ -10442,8 +10446,8 @@ export function performSimulationTick() {
 						: 1.2;
 				const speedMult = landSpeedBuff * speedBuffMult * aiProfile.speedMult;
 
-				let moveDirLat = dLat / dist;
-				let moveDirLng = dLng / dist;
+				moveDirLat = dLat / dist;
+				moveDirLng = dLng / dist;
 
 				// ── War Plan Movement: override direction based on active plan ──
 				let planSpeedMult = 1.0;
@@ -11034,7 +11038,7 @@ export function performSimulationTick() {
 
 				// Blend plan direction into movement
 				if (isPlanUnit && (planDirLat !== 0 || planDirLng !== 0)) {
-					const planBlend = 1.0;
+					const planBlend = aiProfile.frontlineBlend > 0 ? 0.65 : 0.85;
 					moveDirLat = moveDirLat * (1 - planBlend) + planDirLat * planBlend;
 					moveDirLng = moveDirLng * (1 - planBlend) + planDirLng * planBlend;
 					const magP = Math.sqrt(
