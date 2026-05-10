@@ -7477,9 +7477,9 @@ function shouldReassess(si) {
 	const lastReassess = _proposalReassessTick[si] || 0;
 	let result = false;
 
-	if (_planReassessNeeded[si]) result = true;
-	if (simFrameCount - lastReassess >= REASSESS_INTERVAL) result = true;
-	if (!_warPlan[si]) result = true;
+	if (_planReassessNeeded[si]) { result = true; if (window.__perf) window.__perf.reassess_forced++; }
+	if (simFrameCount - lastReassess >= REASSESS_INTERVAL) { result = true; if (window.__perf) window.__perf.reassess_interval++; }
+	if (!_warPlan[si]) { result = true; if (window.__perf) window.__perf.reassess_noPlan++; }
 
 	// Territory change >2%
 	const sideCountries = sides[si];
@@ -7491,7 +7491,7 @@ function shouldReassess(si) {
 		}
 		const prev = _sidePrevControlled[si] || 0;
 		if (!result && prev > 0 && Math.abs(cur - prev) / Math.max(1, cur) > 0.02) {
-			result = true;
+			result = true; if (window.__perf) window.__perf.reassess_territory++;
 		}
 		_sidePrevControlled[si] = cur;
 	}
@@ -7500,7 +7500,7 @@ function shouldReassess(si) {
 	const curPosture = _sidePosture[si] || "BALANCED";
 	const prevPosture = _sidePrevPosture[si];
 	if (!result && prevPosture !== undefined && prevPosture !== curPosture) {
-		result = true;
+		result = true; if (window.__perf) window.__perf.reassess_posture++;
 	}
 	_sidePrevPosture[si] = curPosture;
 
@@ -7521,7 +7521,7 @@ function shouldReassess(si) {
 		Number.isFinite(curRatio)
 	) {
 		if (Math.abs(curRatio - prevRatio) / Math.max(0.01, prevRatio) > 0.2) {
-			result = true;
+			result = true; if (window.__perf) window.__perf.reassess_ratio++;
 		}
 	}
 	_sidePrevStrengthRatio[si] = curRatio;
@@ -7537,6 +7537,7 @@ export function evaluateAllPlans() {
 		if (!sides[si] || sides[si].length === 0) continue;
 
 		if (shouldReassess(si)) {
+			window.__perf.proposalRuns++;
 			const forceReplace = !!_planReassessNeeded[si];
 			_planReassessNeeded[si] = false;
 			const proposals = generateAllProposals(si);
@@ -7592,6 +7593,7 @@ export function evaluateAllPlans() {
 			// If nothing was selected, flag for forced reassess next tick
 			if (!_warPlan[si]) {
 				_planReassessNeeded[si] = true;
+				window.__perf.proposalFailed++;
 			}
 
 			_proposalReassessTick[si] = simFrameCount;
@@ -8373,7 +8375,14 @@ export function evaluateAllPlans() {
 
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
-	if (!window.__perf) window.__perf = { plans: 0, proposals: 0, eval: 0, neutralBorder: 0, recruit: 0, unitLoop: 0, post: 0, ticks: 0 };
+	if (!window.__perf) window.__perf = {
+		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
+		recruit: 0, unitLoop: 0, post: 0,
+		tickTotal: 0, maxTick: 0, ticks: 0,
+		proposalRuns: 0, proposalFailed: 0,
+		reassess_noPlan: 0, reassess_interval: 0, reassess_forced: 0,
+		reassess_territory: 0, reassess_posture: 0, reassess_ratio: 0,
+	};
 	window.__perf.ticks++;
 	const _t0 = performance.now();
 	// TODO: Remove per-unit level thinking. Only army groups and war plans should
@@ -12021,6 +12030,9 @@ export function performSimulationTick() {
 	_cachedSideSoldierEsts = soldierEsts;
 
 	window.__perf.post += performance.now() - _t4;
+	const _tickMs = performance.now() - _t0;
+	window.__perf.tickTotal += _tickMs;
+	if (_tickMs > window.__perf.maxTick) window.__perf.maxTick = _tickMs;
 	return false;
 }
 
