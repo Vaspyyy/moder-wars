@@ -8803,6 +8803,19 @@ export function performSimulationTick() {
 			_tickUnitsBySide[sIdx].push(units[ui]);
 	}
 	const unitsBySide = _tickUnitsBySide;
+
+	// Pre-compute grid index for every unit (O(n) once, avoids O(n) getGridIndex per enemy)	const _unitGridIdx = new Map();
+	for (let _ugi = 0; _ugi < units.length; _ugi++) {
+		const _ug = units[_ugi];
+		_unitGridIdx.set(_ug, getGridIndex(_ug.lat, _ug.lng));
+	}
+
+	// Pre-build country lookup Map (avoids .find() per enemy per unit)	const _countryById = new Map();
+	for (let _csi = 0; _csi < sides.length; _csi++) {
+		for (let _cc = 0; _cc < sides[_csi].length; _cc++) {
+			_countryById.set(sides[_csi][_cc].id, sides[_csi][_cc]);
+		}
+	}
 	// City target list used for CITY FOCUS and URBAN strategies; prefer the active theater,
 	// and fall back to all known cities if no theater is defined.
 	const cityTargets = activeTheaterCities?.length
@@ -9706,7 +9719,7 @@ export function performSimulationTick() {
 						const dSq = (u.lat - e.lat) ** 2 + deLng ** 2;
 
 						if (isEnemy) {
-							const eIdx = getGridIndex(e.lat, e.lng);
+							const eIdx = _unitGridIdx.get(e) ?? -1;
 							const eAtSea = eIdx === -1 || landMask[eIdx] === 0;
 
 							if ((effectiveDefensive || isRebelUnit) && !isAtSea) {
@@ -9736,7 +9749,7 @@ export function performSimulationTick() {
 								const eSideIdx = countryToSideMap.get(e.sovereignId);
 								const eCountry =
 									eSideIdx !== undefined
-										? sides[eSideIdx].find((c) => c.id === e.sovereignId)
+										? _countryById.get(e.sovereignId)
 										: null;
 
 								if (eCountry?.buffState === "super") eWeight *= 200;
@@ -9964,7 +9977,7 @@ export function performSimulationTick() {
 								const aSideIdx = countryToSideMap.get(e.sovereignId);
 								const aCountry =
 									aSideIdx !== undefined
-										? sides[aSideIdx].find((c) => c.id === e.sovereignId)
+										? _countryById.get(e.sovereignId)
 										: null;
 								if (aCountry?.buffState === "super") aWeight *= 200;
 								else if (aCountry?.buffState === "buff") aWeight *= 50;
