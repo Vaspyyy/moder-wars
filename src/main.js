@@ -8210,7 +8210,8 @@ export function evaluateAllPlans() {
 					if (u.sideIndex !== si) continue;
 					if (u.deployTicks > 0) continue;
 					if (u.navalAssigned || u.supplyAssigned) continue;
-					if (u.coastalAssigned || u.garrisonAssigned) continue;
+					if (u.coastalAssigned || u.garrisonAssigned || u._planId !== null)
+						continue;
 					if (u._defenderReactTarget) continue;
 
 					const dLat = rpCur2.target.lat - u.lat;
@@ -8297,7 +8298,8 @@ export function evaluateAllPlans() {
 					if (u.sideIndex !== si) continue;
 					if (u.deployTicks > 0) continue;
 					if (u.navalAssigned || u.supplyAssigned) continue;
-					if (u.coastalAssigned || u.garrisonAssigned) continue;
+					if (u.coastalAssigned || u.garrisonAssigned || u._planId !== null)
+						continue;
 					if (u._defenderReactTarget) continue;
 
 					const dLat = rpCur2.target.lat - u.lat;
@@ -9998,7 +10000,8 @@ export function performSimulationTick() {
 						} else if (
 							!u.navalAssigned &&
 							!u.supplyAssigned &&
-							!u.coastalAssigned
+							!u.coastalAssigned &&
+							u._planId === null
 						) {
 							// Neutral garrison: station along borders with neutrals
 							let bestGP = null;
@@ -10657,6 +10660,7 @@ export function performSimulationTick() {
 					!retreatVector &&
 					!isEngaged &&
 					!u.garrisonAssigned &&
+					u._planId === null &&
 					(navalPlan.activeUnitCount || 0) < (navalPlan.maxAssignedUnits || 0)
 				) {
 					if (u.navalAssigned) {
@@ -10817,6 +10821,7 @@ export function performSimulationTick() {
 					!isEngaged &&
 					!u.garrisonAssigned &&
 					!u.navalAssigned &&
+					u._planId === null &&
 					(supplyPlan.activeUnitCount || 0) < (supplyPlan.maxAssignedUnits || 0)
 				) {
 					// Supply plan assignment
