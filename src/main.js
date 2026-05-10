@@ -7624,10 +7624,12 @@ export function evaluateAllPlans() {
 	for (let si = 0; si < sides.length; si++) {
 		if (!sides[si] || sides[si].length === 0) continue;
 		const plan = _warPlan[si];
-		if (!plan) {
+		const plan2 = _warPlan[si + sides.length];
+		if (!plan && !plan2) {
 			_planReassessNeeded[si] = true;
 			continue;
 		}
+		if (!plan) continue;
 
 		// Reset per-tick unit count
 		plan.activeUnitCount = 0;
