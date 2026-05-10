@@ -8804,13 +8804,15 @@ export function performSimulationTick() {
 	}
 	const unitsBySide = _tickUnitsBySide;
 
-	// Pre-compute grid index for every unit (O(n) once, avoids O(n) getGridIndex per enemy)	const _unitGridIdx = new Map();
+	// Pre-compute grid index for every unit (O(n) once, avoids O(n) getGridIndex per enemy)
+	const _unitGridIdx = new Map();
 	for (let _ugi = 0; _ugi < units.length; _ugi++) {
 		const _ug = units[_ugi];
 		_unitGridIdx.set(_ug, getGridIndex(_ug.lat, _ug.lng));
 	}
 
-	// Pre-build country lookup Map (avoids .find() per enemy per unit)	const _countryById = new Map();
+	// Pre-build country lookup Map (avoids .find() per enemy per unit)
+	const _countryById = new Map();
 	for (let _csi = 0; _csi < sides.length; _csi++) {
 		for (let _cc = 0; _cc < sides[_csi].length; _cc++) {
 			_countryById.set(sides[_csi][_cc].id, sides[_csi][_cc]);
