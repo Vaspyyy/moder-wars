@@ -9350,6 +9350,12 @@ export function performSimulationTick() {
 
 	window.__perf.recruit += performance.now() - _t2;
 	const _t3 = performance.now();
+	// Pre-build city grid index Set once per tick (not per unit)
+	const _cityIdxSetTick = new Set();
+	for (let _cci = 0; _cci < activeTheaterCities.length; _cci++) {
+		const _cIdx = getGridIndex(activeTheaterCities[_cci].lat, activeTheaterCities[_cci].lng);
+		if (_cIdx !== -1) _cityIdxSetTick.add(_cIdx);
+	}
 	for (let i = units.length - 1; i >= 0; i--) {
 		const u = units[i];
 
@@ -9419,6 +9425,7 @@ export function performSimulationTick() {
 		}
 
 		const gridIdxNow = getGridIndex(u.lat, u.lng);
+		const _uSideIdx = countryToSideMap.get(u.sovereignId);
 		const isAtSea = gridIdxNow === -1 || landMask[gridIdxNow] === 0;
 		const mountainIntensity =
 			mountainsEnabled && gridIdxNow !== -1 ? terrainMask[gridIdxNow] : 0;
@@ -9705,7 +9712,7 @@ export function performSimulationTick() {
 					if (cx < 0) cx += maxKx;
 					else if (cx >= maxKx) cx -= maxKx;
 
-					const arr = unitHash.get(`${cx}_${cy}`);
+					const arr = unitHash.get(cx * 10000 + cy);
 					if (!arr) continue;
 
 					for (let j = 0; j < arr.length; j++) {
@@ -9822,7 +9829,7 @@ export function performSimulationTick() {
 							// Neutral garrison: station along borders with neutrals
 							let bestGP = null;
 							let bestGPDist = Infinity;
-							for (let gsi = countryToSideMap.get(u.sovereignId) * 10; gsi < countryToSideMap.get(u.sovereignId) * 10 + 10; gsi++) {
+							for (let gsi = _uSideIdx * 10; gsi < _uSideIdx * 10 + 10; gsi++) {
 								const gp = _neutralGarrisonPlan[gsi];
 								if (!gp || gp.type !== "NEUTRAL_GARRISON") continue;
 								if ((gp.activeUnitCount || 0) >= (gp.maxAssignedUnits || 0))
@@ -9842,7 +9849,7 @@ export function performSimulationTick() {
 
 							if (u.garrisonAssigned) {
 								let foundGP = false;
-								for (let gsi = countryToSideMap.get(u.sovereignId) * 10; gsi < countryToSideMap.get(u.sovereignId) * 10 + 10; gsi++) {
+								for (let gsi = _uSideIdx * 10; gsi < _uSideIdx * 10 + 10; gsi++) {
 									const gp = _neutralGarrisonPlan[gsi];
 									if (
 										!gp ||
@@ -9891,7 +9898,7 @@ export function performSimulationTick() {
 							let bestCDPlan = null;
 							let bestCDSlot = -1;
 							let bestCDDist = Infinity;
-							for (let csi = countryToSideMap.get(u.sovereignId) * 10; csi < countryToSideMap.get(u.sovereignId) * 10 + 10; csi++) {
+							for (let csi = _uSideIdx * 10; csi < _uSideIdx * 10 + 10; csi++) {
 								const cp = _coastalDefensePlan[csi];
 								if (!cp || cp.type !== "COASTAL_DEFENSE") continue;
 								if ((cp.activeUnitCount || 0) >= (cp.maxAssignedUnits || 0))
@@ -9911,7 +9918,7 @@ export function performSimulationTick() {
 
 							if (u.coastalAssigned) {
 								let foundCD = false;
-								for (let csi = countryToSideMap.get(u.sovereignId) * 10; csi < countryToSideMap.get(u.sovereignId) * 10 + 10; csi++) {
+								for (let csi = _uSideIdx * 10; csi < _uSideIdx * 10 + 10; csi++) {
 									const cp = _coastalDefensePlan[csi];
 									if (
 										!cp ||
@@ -10226,11 +10233,6 @@ export function performSimulationTick() {
 					const cIdx = getGridIndex(activeTheaterCities[ci].lat, activeTheaterCities[ci].lng);
 					if (cIdx !== -1) _cityIdxSet.add(cIdx);
 				}
-					const randIdx = Math.floor(Math.random() * worldControlMap.length);
-					const ownerAtIdx = worldControlMap[randIdx];
-					const deJureAtIdx = deJureMap[randIdx];
-
-					let isCandidate = false;
 					if (isRebel) {
 						if (deJureAtIdx === activeRebellion.rebelId) {
 							if (dominantSideMap[randIdx] !== u.sideIndex) isCandidate = true;
@@ -10270,7 +10272,7 @@ export function performSimulationTick() {
 						// URBAN strategy: heavily reward cells that contain cities to create road‑like thrusts
 						let cityBias = 0;
 						if (countryObj?.strategy === "URBAN") {
-							const hasCityHere = _cityIdxSet.has(randIdx);
+							const hasCityHere = _cityIdxSetTick.has(randIdx);
 							if (hasCityHere) cityBias = 450;
 						}
 
