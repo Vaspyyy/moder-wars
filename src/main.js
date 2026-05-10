@@ -8379,7 +8379,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.24.14",
+		_version: "V0.24.15",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0,
 		tickTotal: 0, maxTick: 0, ticks: 0,
@@ -8389,6 +8389,7 @@ export function performSimulationTick() {
 	};
 	window.__perf.ticks++;
 	_simTickCount++;
+	let moveDirLat, moveDirLng;
 	const _t0 = performance.now();
 	// TODO: Remove per-unit level thinking. Only army groups and war plans should
 	// move units — no per-unit level movement and decision making. War plans are the
