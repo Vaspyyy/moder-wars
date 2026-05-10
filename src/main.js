@@ -9770,7 +9770,7 @@ export function performSimulationTick() {
 							// Neutral garrison: station along borders with neutrals
 							let bestGP = null;
 							let bestGPDist = Infinity;
-							for (let gsi = sideIdx * 10; gsi < sideIdx * 10 + 10; gsi++) {
+							for (let gsi = countryToSideMap.get(u.sovereignId) * 10; gsi < countryToSideMap.get(u.sovereignId) * 10 + 10; gsi++) {
 								const gp = _neutralGarrisonPlan[gsi];
 								if (!gp || gp.type !== "NEUTRAL_GARRISON") continue;
 								if ((gp.activeUnitCount || 0) >= (gp.maxAssignedUnits || 0))
@@ -9790,7 +9790,7 @@ export function performSimulationTick() {
 
 							if (u.garrisonAssigned) {
 								let foundGP = false;
-								for (let gsi = sideIdx * 10; gsi < sideIdx * 10 + 10; gsi++) {
+								for (let gsi = countryToSideMap.get(u.sovereignId) * 10; gsi < countryToSideMap.get(u.sovereignId) * 10 + 10; gsi++) {
 									const gp = _neutralGarrisonPlan[gsi];
 									if (
 										!gp ||
@@ -9839,7 +9839,7 @@ export function performSimulationTick() {
 							let bestCDPlan = null;
 							let bestCDSlot = -1;
 							let bestCDDist = Infinity;
-							for (let csi = sideIdx * 10; csi < sideIdx * 10 + 10; csi++) {
+							for (let csi = countryToSideMap.get(u.sovereignId) * 10; csi < countryToSideMap.get(u.sovereignId) * 10 + 10; csi++) {
 								const cp = _coastalDefensePlan[csi];
 								if (!cp || cp.type !== "COASTAL_DEFENSE") continue;
 								if ((cp.activeUnitCount || 0) >= (cp.maxAssignedUnits || 0))
@@ -9859,7 +9859,7 @@ export function performSimulationTick() {
 
 							if (u.coastalAssigned) {
 								let foundCD = false;
-								for (let csi = sideIdx * 10; csi < sideIdx * 10 + 10; csi++) {
+								for (let csi = countryToSideMap.get(u.sovereignId) * 10; csi < countryToSideMap.get(u.sovereignId) * 10 + 10; csi++) {
 									const cp = _coastalDefensePlan[csi];
 									if (
 										!cp ||
