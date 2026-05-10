@@ -5185,6 +5185,7 @@ export function spawnSingleUnit(
 		sideIndex: sideIdx,
 		sovereignId: sovereignId,
 		beneficiaryId: sovereignId,
+		_planId: null,
 		isAlpenjager: !!isAlpen,
 		health: unitHealth,
 		lastAttack: 0,
@@ -5871,6 +5872,7 @@ export async function _startWarInner() {
 					sideIndex: sideIdx,
 					sovereignId: c.id,
 					beneficiaryId: c.id,
+					_planId: null,
 					isAlpenjager: !!isAlpen,
 					health: CONFIG.UNIT_HEALTH * (isAlpen ? CONFIG.ALPEN_HEALTH_MULT : 1),
 					lastAttack: 0,
@@ -6413,6 +6415,7 @@ export function activateCountryMidWar(country, sideIdx) {
 			sideIndex: sideIdx,
 			sovereignId: countryId,
 			beneficiaryId: countryId,
+			_planId: null,
 			isAlpenjager: !!isAlpen,
 			health: CONFIG.UNIT_HEALTH * (isAlpen ? CONFIG.ALPEN_HEALTH_MULT : 1),
 			lastAttack: 0,
@@ -7430,6 +7433,8 @@ export function selectPlans(sideIdx, scoredProposals) {
 	const makePlan = (p, phase) => ({
 		type: p.type,
 		phase,
+		planId: makePlanId(p.type, sideIdx),
+		recruitedUnits: [],
 		target: p.target || null,
 		stagingCells: p.stagingCells || [],
 		arrowPoints: p.arrowPoints || null,
@@ -7457,6 +7462,35 @@ export function selectPlans(sideIdx, scoredProposals) {
 	result.garrisons = selectedGarr.map((p) => makePlan(p, "EXECUTION"));
 
 	return result;
+}
+
+let _planIdCounter = 0;
+function makePlanId(type, sideIdx) {
+	return `${type}_${sideIdx}_${++_planIdCounter}`;
+}
+function resolvePlanById(planId) {
+	for (let si = 0; si < _warPlan.length; si++) {
+		if (_warPlan[si]?.planId === planId) return _warPlan[si];
+	}
+	for (let si = 0; si < _navalPlan.length; si++) {
+		if (_navalPlan[si]?.planId === planId) return _navalPlan[si];
+	}
+	for (let si = 0; si < _navalSupplyPlan.length; si++) {
+		if (_navalSupplyPlan[si]?.planId === planId) return _navalSupplyPlan[si];
+	}
+	for (let si = 0; si < _coastalDefensePlan.length; si++) {
+		if (_coastalDefensePlan[si]?.planId === planId)
+			return _coastalDefensePlan[si];
+	}
+	for (let si = 0; si < _neutralGarrisonPlan.length; si++) {
+		if (_neutralGarrisonPlan[si]?.planId === planId)
+			return _neutralGarrisonPlan[si];
+	}
+	for (let si = 0; si < _defenderReactionPlan.length; si++) {
+		if (_defenderReactionPlan[si]?.planId === planId)
+			return _defenderReactionPlan[si];
+	}
+	return null;
 }
 
 function shouldReassess(si) {
@@ -8152,6 +8186,8 @@ export function evaluateAllPlans() {
 					if (preActive >= 3) {
 						_defenderReactionPlan[si] = {
 							type: "DEFEND",
+							planId: makePlanId("DEFENDER_REACTION", si),
+							recruitedUnits: [],
 							target: {
 								lat: enemyNP.target.lat,
 								lng: enemyNP.target.lng,
@@ -8211,6 +8247,8 @@ export function evaluateAllPlans() {
 				if (!rpCur2 && enemyLandingForce >= 3) {
 					_defenderReactionPlan[si] = {
 						type: "DEFEND",
+						planId: makePlanId("DEFENDER_REACTION", si),
+						recruitedUnits: [],
 						target: {
 							lat: enemyNP.target.lat,
 							lng: enemyNP.target.lng,
@@ -8332,6 +8370,196 @@ export function evaluateAllPlans() {
 		}
 		_defenderReactionPlan[si] = null;
 	}
+}
+
+function distSqToPlan(u, plan) {
+	if (!plan?.target) return Infinity;
+	const dLat = plan.target.lat - u.lat;
+	let dLng = plan.target.lng - u.lng;
+	if (dLng > 180) dLng -= 360;
+	else if (dLng < -180) dLng += 360;
+	return dLat * dLat + dLng * dLng;
+}
+
+function recruitUnitsForPlan(plan, sideIdx) {
+	if (!plan || plan.maxAssignedUnits == null) return;
+	const needed = plan.maxAssignedUnits - plan.recruitedUnits.length;
+	if (needed <= 0) return;
+
+	const candidates = [];
+	for (let ui = units.length - 1; ui >= 0; ui--) {
+		const u = units[ui];
+		if (
+			u.sideIndex !== sideIdx ||
+			u.deployTicks > 0 ||
+			u.health <= 0 ||
+			u._planId !== null
+		)
+			continue;
+		candidates.push({ u, dSq: distSqToPlan(u, plan) });
+	}
+	candidates.sort((a, b) => a.dSq - b.dSq);
+
+	let recruited = 0;
+	for (const { u } of candidates) {
+		u._planId = plan.planId;
+		plan.recruitedUnits.push(u);
+		recruited++;
+		if (recruited >= needed) break;
+	}
+}
+
+function recruitAllPlans(sideIdx) {
+	if (!sides[sideIdx] || sides[sideIdx].length === 0) return;
+
+	// Release all units from plans for this side
+	for (let ui = units.length - 1; ui >= 0; ui--) {
+		if (units[ui].sideIndex === sideIdx) units[ui]._planId = null;
+	}
+	// Clear recruitedUnits on all active plans for this side
+	for (const arr of [
+		[_warPlan[sideIdx], _warPlan[sideIdx + sides.length]],
+		[_navalPlan[sideIdx]],
+		[_navalSupplyPlan[sideIdx]],
+		[_defenderReactionPlan[sideIdx]],
+	]) {
+		for (const p of arr) {
+			if (p?.recruitedUnits) p.recruitedUnits.length = 0;
+		}
+	}
+	for (let ci = 0; ci < 10; ci++) {
+		const cp = _coastalDefensePlan[sideIdx * 10 + ci];
+		if (cp?.recruitedUnits) cp.recruitedUnits.length = 0;
+	}
+	for (let gi = 0; gi < 10; gi++) {
+		const gp = _neutralGarrisonPlan[sideIdx * 10 + gi];
+		if (gp?.recruitedUnits) gp.recruitedUnits.length = 0;
+	}
+
+	// Build ranked list of active plans
+	const ranked = [];
+	const add = (p, priority) => {
+		if (p && (p.maxAssignedUnits || p.maxUnits))
+			ranked.push({ plan: p, priority });
+	};
+	add(_warPlan[sideIdx], 100);
+	add(_warPlan[sideIdx + sides.length], 90);
+	add(_navalPlan[sideIdx], 80);
+	add(_defenderReactionPlan[sideIdx], 75);
+	add(_navalSupplyPlan[sideIdx], 60);
+	for (let ci = 0; ci < 10; ci++) {
+		add(_coastalDefensePlan[sideIdx * 10 + ci], 50);
+		add(_neutralGarrisonPlan[sideIdx * 10 + ci], 40);
+	}
+	ranked.sort((a, b) => b.priority - a.priority);
+
+	for (const { plan } of ranked) {
+		recruitUnitsForPlan(plan, sideIdx);
+		plan.activeUnitCount = plan.recruitedUnits.length;
+	}
+}
+
+function getPlanMovementDirective(u) {
+	const plan = resolvePlanById(u._planId);
+	if (!plan || !plan.type) return null;
+
+	const tLat = plan.target?.lat;
+	const tLng = plan.target?.lng;
+	let dirLat = 0,
+		dirLng = 0,
+		speedMult = 1.0;
+
+	if (plan.type === "NAVAL_INVASION") {
+		if (plan.phase === "GATHERING" && plan.stagingPoint) {
+			dirLat = plan.stagingPoint.lat - u.lat;
+			dirLng = plan.stagingPoint.lng - u.lng;
+			speedMult = 1.5;
+		} else if (plan.phase === "EMBARKATION" || plan.phase === "TRANSIT") {
+			if (tLat != null) {
+				dirLat = tLat - u.lat;
+				dirLng = tLng - u.lng;
+			}
+			speedMult = 1.2;
+		} else if (plan.phase === "LANDING" && tLat != null) {
+			dirLat = tLat - u.lat;
+			dirLng = tLng - u.lng;
+			speedMult = 1.5;
+		}
+	} else if (plan.type === "NAVAL_SUPPLY") {
+		if (plan.phase === "GATHERING" && plan.stagingPoint) {
+			dirLat = plan.stagingPoint.lat - u.lat;
+			dirLng = plan.stagingPoint.lng - u.lng;
+			speedMult = 1.5;
+		} else if (plan.phase === "EMBARKATION" || plan.phase === "TRANSIT") {
+			if (tLat != null) {
+				dirLat = tLat - u.lat;
+				dirLng = tLng - u.lng;
+			}
+			speedMult = 1.2;
+		} else if (plan.phase === "DELIVERED") {
+			speedMult = 0.3;
+		}
+	} else if (plan.type === "DEFEND") {
+		if (plan.target && tLat != null) {
+			// Defender reaction: rush to beachhead
+			dirLat = tLat - u.lat;
+			dirLng = tLng - u.lng;
+			speedMult = 2.0;
+		} else {
+			// Hold the frontline
+			speedMult = 0.0;
+		}
+	} else if (
+		plan.type === "CAPTURE_CITY" ||
+		plan.type === "ENCIRCLE" ||
+		plan.type === "PUSH_FRONT"
+	) {
+		if (plan.phase === "PREPARATION" && plan.stagingCells?.length > 0) {
+			const sc =
+				plan.stagingCells[
+					Math.floor(Math.abs(u.id * 1000000) % plan.stagingCells.length)
+				];
+			if (sc) {
+				dirLat = sc.lat - u.lat;
+				dirLng = sc.lng - u.lng;
+			}
+			speedMult = 2.0;
+		} else if (plan.phase === "EXECUTION" && tLat != null) {
+			dirLat = tLat - u.lat;
+			dirLng = tLng - u.lng;
+			speedMult = 2.0;
+		} else if (plan.phase === "CONSOLIDATION" && tLat != null) {
+			dirLat = tLat - u.lat;
+			dirLng = tLng - u.lng;
+			speedMult = 1.5;
+		}
+	} else if (plan.type === "COASTAL_DEFENSE") {
+		if (plan.zonePolyline?.length > 0) {
+			const slot =
+				plan.zonePolyline[
+					Math.floor(Math.abs(u.id * 777) % plan.zonePolyline.length)
+				];
+			dirLat = slot.lat - u.lat;
+			dirLng = slot.lng - u.lng;
+		}
+		speedMult = 0.5;
+	} else if (plan.type === "NEUTRAL_GARRISON") {
+		if (plan.borderPolyline?.length > 0) {
+			const slot =
+				plan.borderPolyline[
+					Math.floor(Math.abs(u.id * 777) % plan.borderPolyline.length)
+				];
+			dirLat = slot.lat - u.lat;
+			dirLng = slot.lng - u.lng;
+		}
+		speedMult = 0.5;
+	}
+
+	if (dirLng > 180) dirLng -= 360;
+	else if (dirLng < -180) dirLng += 360;
+	const dist = Math.sqrt(dirLat * dirLat + dirLng * dirLng);
+	if (dist < 0.01) return { dirLat: 0, dirLng: 0, speedMult: 0 };
+	return { dirLat: dirLat / dist, dirLng: dirLng / dist, speedMult };
 }
 
 export function performSimulationTick() {
@@ -9105,6 +9333,11 @@ export function performSimulationTick() {
 	// Evaluate war plans — check completion/failure, regenerate if needed
 	evaluateAllPlans();
 
+	// ── Centralized unit recruitment ──
+	for (let si = 0; si < sides.length; si++) {
+		recruitAllPlans(si);
+	}
+
 	// ── Compute neutral border polylines ──
 	if (adjacencyCache) {
 		_neutralBorderPolys = {};
@@ -9770,7 +10003,11 @@ export function performSimulationTick() {
 							// Neutral garrison: station along borders with neutrals
 							let bestGP = null;
 							let bestGPDist = Infinity;
-							for (let gsi = countryToSideMap.get(u.sovereignId) * 10; gsi < countryToSideMap.get(u.sovereignId) * 10 + 10; gsi++) {
+							for (
+								let gsi = countryToSideMap.get(u.sovereignId) * 10;
+								gsi < countryToSideMap.get(u.sovereignId) * 10 + 10;
+								gsi++
+							) {
 								const gp = _neutralGarrisonPlan[gsi];
 								if (!gp || gp.type !== "NEUTRAL_GARRISON") continue;
 								if ((gp.activeUnitCount || 0) >= (gp.maxAssignedUnits || 0))
@@ -9790,7 +10027,11 @@ export function performSimulationTick() {
 
 							if (u.garrisonAssigned) {
 								let foundGP = false;
-								for (let gsi = countryToSideMap.get(u.sovereignId) * 10; gsi < countryToSideMap.get(u.sovereignId) * 10 + 10; gsi++) {
+								for (
+									let gsi = countryToSideMap.get(u.sovereignId) * 10;
+									gsi < countryToSideMap.get(u.sovereignId) * 10 + 10;
+									gsi++
+								) {
 									const gp = _neutralGarrisonPlan[gsi];
 									if (
 										!gp ||
@@ -9839,7 +10080,11 @@ export function performSimulationTick() {
 							let bestCDPlan = null;
 							let bestCDSlot = -1;
 							let bestCDDist = Infinity;
-							for (let csi = countryToSideMap.get(u.sovereignId) * 10; csi < countryToSideMap.get(u.sovereignId) * 10 + 10; csi++) {
+							for (
+								let csi = countryToSideMap.get(u.sovereignId) * 10;
+								csi < countryToSideMap.get(u.sovereignId) * 10 + 10;
+								csi++
+							) {
 								const cp = _coastalDefensePlan[csi];
 								if (!cp || cp.type !== "COASTAL_DEFENSE") continue;
 								if ((cp.activeUnitCount || 0) >= (cp.maxAssignedUnits || 0))
@@ -9859,7 +10104,11 @@ export function performSimulationTick() {
 
 							if (u.coastalAssigned) {
 								let foundCD = false;
-								for (let csi = countryToSideMap.get(u.sovereignId) * 10; csi < countryToSideMap.get(u.sovereignId) * 10 + 10; csi++) {
+								for (
+									let csi = countryToSideMap.get(u.sovereignId) * 10;
+									csi < countryToSideMap.get(u.sovereignId) * 10 + 10;
+									csi++
+								) {
 									const cp = _coastalDefensePlan[csi];
 									if (
 										!cp ||
@@ -10361,7 +10610,20 @@ export function performSimulationTick() {
 					planDirLng = 0,
 					isPlanUnit = false;
 				let activePlan = _warPlan[u.sideIndex];
-				// Land slot 2: pick the closer offensive plan if one exists
+
+				// ── Plan-driven movement (new centralized system) ──
+				if (u._planId !== null) {
+					const d = getPlanMovementDirective(u);
+					if (d) {
+						planDirLat = d.dirLat;
+						planDirLng = d.dirLng;
+						planSpeedMult = d.speedMult;
+						isPlanUnit = true;
+						moveDirLat = 0;
+						moveDirLng = 0;
+					}
+				}
+				// Land slot 2: pick the closer offensive plan if one exists (old system fallback)
 				const slot2Plan = _warPlan[u.sideIndex + sides.length];
 				if (slot2Plan && slot2Plan.type !== "DEFEND") {
 					const d1 = activePlan?.target
@@ -13174,7 +13436,8 @@ if (showWarplansCheckbox) {
 	showWarplansCheckbox.checked = showWarPlans;
 	showWarplansCheckbox.addEventListener("change", (e) => {
 		showWarPlans = e.target.checked;
-		if (warplansToggleBtn) warplansToggleBtn.classList.toggle("active", showWarPlans);
+		if (warplansToggleBtn)
+			warplansToggleBtn.classList.toggle("active", showWarPlans);
 		setCookie("mw_show_warplans", e.target.checked ? "true" : "false");
 		if (influenceLayer) influenceLayer.render();
 	});
@@ -13184,11 +13447,13 @@ if (showLabelsCheckbox) {
 	showLabelsCheckbox.addEventListener("change", (e) => {
 		showCountryLabels = e.target.checked;
 		countryLabelAnchors.clear();
-		if (labelsToggleBtn) labelsToggleBtn.classList.toggle("active", showCountryLabels);
+		if (labelsToggleBtn)
+			labelsToggleBtn.classList.toggle("active", showCountryLabels);
 		setCookie("mw_show_labels", e.target.checked ? "true" : "false");
 		if (influenceLayer) {
 			influenceLayer._forceRender = true;
-			if (typeof influenceLayer._update === "function") influenceLayer._update();
+			if (typeof influenceLayer._update === "function")
+				influenceLayer._update();
 			else influenceLayer.render();
 		}
 	});
@@ -13197,7 +13462,8 @@ if (showCitiesCheckbox) {
 	showCitiesCheckbox.checked = showNonCapitalCities;
 	showCitiesCheckbox.addEventListener("change", (e) => {
 		showNonCapitalCities = e.target.checked;
-		if (citiesToggleBtn) citiesToggleBtn.classList.toggle("active", showNonCapitalCities);
+		if (citiesToggleBtn)
+			citiesToggleBtn.classList.toggle("active", showNonCapitalCities);
 		setCookie("mw_show_cities", e.target.checked ? "true" : "false");
 		if (influenceLayer) influenceLayer.render();
 	});
@@ -13206,7 +13472,8 @@ if (showBattlesCheckbox) {
 	showBattlesCheckbox.checked = showBattleIndicators;
 	showBattlesCheckbox.addEventListener("change", (e) => {
 		showBattleIndicators = e.target.checked;
-		if (battlesToggleBtn) battlesToggleBtn.classList.toggle("active", showBattleIndicators);
+		if (battlesToggleBtn)
+			battlesToggleBtn.classList.toggle("active", showBattleIndicators);
 		setCookie("mw_show_battles", e.target.checked ? "true" : "false");
 		if (influenceLayer) influenceLayer.render();
 	});
@@ -13215,7 +13482,8 @@ if (showAllianceCheckbox) {
 	showAllianceCheckbox.checked = allianceViewEnabled;
 	showAllianceCheckbox.addEventListener("change", (e) => {
 		allianceViewEnabled = e.target.checked;
-		if (allianceViewCheckbox) allianceViewCheckbox.checked = allianceViewEnabled;
+		if (allianceViewCheckbox)
+			allianceViewCheckbox.checked = allianceViewEnabled;
 		setCookie("mw_show_alliance", e.target.checked ? "true" : "false");
 		if (influenceLayer) influenceLayer.render();
 	});
@@ -15087,7 +15355,6 @@ document.getElementById("back-to-nav-btn").addEventListener("click", () => {
  * DYNAMIC MENU BACKGROUND SYSTEM
  */
 
-
 export let queuedScenarioAction = null;
 export const enterScenarioBtn = document.getElementById("enter-scenario-btn");
 
@@ -15753,6 +16020,7 @@ export function _placeDivisionAt(latlng, sovereignId) {
 		sideIndex: sideIdx,
 		sovereignId: sovereignId,
 		beneficiaryId: sovereignId,
+		_planId: null,
 		isAlpenjager: !!isAlpen,
 		health: CONFIG.UNIT_HEALTH * (isAlpen ? CONFIG.ALPEN_HEALTH_MULT : 1),
 		lastAttack: 0,
