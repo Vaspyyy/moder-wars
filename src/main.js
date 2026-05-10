@@ -8337,6 +8337,8 @@ export function evaluateAllPlans() {
 
 export function performSimulationTick() {
 	// TODO: Remove per-unit level thinking. Only army groups and war plans should
+	const _pt0 = performance.now();
+	let _ptRecruit = 0, _ptNeutral = 0, _ptPlans = 0, _ptUnitLoop = 0, _ptPost = 0;
 	// move units — no per-unit level movement and decision making. War plans are the
 	// bread and butter of AI movement. Individual unit targeting, mop-up search,
 	// independent pathfinding, and proximity combat decisions should all be replaced
@@ -9105,9 +9107,11 @@ export function performSimulationTick() {
 
 	// Evaluate war plans — check completion/failure, regenerate if needed
 	evaluateAllPlans();
+	_ptPlans += performance.now() - _ptA;
 
 	// ── Compute neutral border polylines (throttled to every 60 ticks) ──
 	const NEUTRAL_BORDER_INTERVAL = 60;
+	const _ptA = performance.now();
 	if (adjacencyCache && (simFrameCount % NEUTRAL_BORDER_INTERVAL === 0 || Object.keys(_neutralBorderPolys).length === 0)) {
 		_neutralBorderPolys = {};
 
@@ -9169,6 +9173,7 @@ export function performSimulationTick() {
 		side.forEach((country) => {
 			const stats = countryStats.get(country.id);
 			if (!stats) return;
+	const _ptB = performance.now();
 			const aiProfile = aiCountryState.get(country.id) || null;
 
 			const currentUnits = stats.units;
@@ -9320,6 +9325,7 @@ export function performSimulationTick() {
 
 		u.dirLat = 0;
 		u.dirLng = 0; // Reset movement indicators for the current tick
+	const _ptC = performance.now();
 
 		// Handle deployment/mobilization phase
 		if (u.deployTicks > 0) {
@@ -11578,6 +11584,7 @@ export function performSimulationTick() {
 
 	for (let sIdx = 0; sIdx < MAX_SIDES; sIdx++) {
 		if (initialSideSoldiers[sIdx] > 0) {
+	const _ptD = performance.now();
 			sideCasualties[sIdx] = Math.max(
 				0,
 				initialSideSoldiers[sIdx] - sideSoldiers[sIdx],
