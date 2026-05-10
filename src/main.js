@@ -9105,8 +9105,9 @@ export function performSimulationTick() {
 	// Evaluate war plans — check completion/failure, regenerate if needed
 	evaluateAllPlans();
 
-	// ── Compute neutral border polylines ──
-	if (adjacencyCache) {
+	// ── Compute neutral border polylines (throttled to every 60 ticks) ──
+	const NEUTRAL_BORDER_INTERVAL = 60;
+	if (adjacencyCache && (simFrameCount % NEUTRAL_BORDER_INTERVAL === 0 || Object.keys(_neutralBorderPolys).length === 0)) {
 		_neutralBorderPolys = {};
 
 		// Identify combatant countries with neutral neighbors
