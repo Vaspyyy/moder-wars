@@ -2169,7 +2169,8 @@ const ControlMapLayer = L.Layer.extend({
 			for (let si = 0; si < _warPlan.length; si++) {
 				const plan = _warPlan[si];
 				if (!plan) continue;
-				const color = sideColors[si] || "rgba(255,255,0,0.6)";
+				const owningSide = si >= sides.length ? si - sides.length : si;
+				const color = sideColors[owningSide] || "rgba(255,255,0,0.6)";
 
 				// DEFEND plan: draw dotted frontline line
 				if (plan.type === "DEFEND" && plan.frontlinePoints?.length > 1) {

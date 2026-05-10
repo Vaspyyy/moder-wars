@@ -7668,6 +7668,82 @@ export function evaluateAllPlans() {
 		plan.lastProgressTick = simFrameCount;
 	}
 
+	// ── Land Plan Slot 2 Evaluation ──
+	for (let si = 0; si < sides.length; si++) {
+		if (!sides[si] || sides[si].length === 0) continue;
+		const lSlot2 = si + sides.length;
+		const plan2 = _warPlan[lSlot2];
+		if (!plan2) continue;
+
+		plan2.activeUnitCount = 0;
+
+		const ticksSinceStart2 =
+			simFrameCount - (plan2.startedTick || simFrameCount);
+		const ticksSinceProgress2 =
+			simFrameCount - (plan2.lastProgressTick || simFrameCount);
+
+		if (
+			(plan2.type === "CAPTURE_CITY" || plan2.type === "ENCIRCLE") &&
+			plan2.target
+		) {
+			const tIdx2 = getGridIndex(plan2.target.lat, plan2.target.lng);
+			const captured2 = tIdx2 !== -1 && dominantSideMap[tIdx2] === si;
+			if (captured2) {
+				plan2.phase = "CONSOLIDATION";
+				plan2.progress = 1.0;
+				if (ticksSinceProgress2 > 1800) {
+					_planReassessNeeded[si] = true;
+				}
+				continue;
+			}
+
+			if (plan2.phase === "PREPARATION" && plan2.stagingCells?.length > 0) {
+				let gathered2 = 0;
+				for (const u of units) {
+					if (u.sideIndex !== si || u.deployTicks > 0) continue;
+					const sc =
+						plan2.stagingCells[
+							Math.floor(Math.abs(u.id * 1000000) % plan2.stagingCells.length)
+						];
+					if (!sc) continue;
+					const sdLat2 = sc.lat - u.lat;
+					let sdLng2 = sc.lng - u.lng;
+					if (sdLng2 > 180) sdLng2 -= 360;
+					else if (sdLng2 < -180) sdLng2 += 360;
+					if (sdLat2 * sdLat2 + sdLng2 * sdLng2 < 2.0) gathered2++;
+				}
+				if (gathered2 >= Math.min(plan2.maxAssignedUnits || 5, 5)) {
+					plan2.phase = "EXECUTION";
+					plan2.lastProgressTick = simFrameCount;
+				}
+			}
+
+			if (ticksSinceProgress2 > 1800 && ticksSinceStart2 > 600) {
+				_planReassessNeeded[si] = true;
+				continue;
+			}
+
+			const sideCountries2 = sides[si] || [];
+			if (sideCountries2.length > 0) {
+				const firstCountry2 = sideCountries2[0];
+				const stats2 = latestCountryStats.get(firstCountry2.id);
+				if (stats2 && plan2._territoryAtStart !== undefined) {
+					const territoryLoss2 =
+						plan2._territoryAtStart - (stats2.controlled || 0);
+					if (territoryLoss2 > 50) {
+						_planReassessNeeded[si] = true;
+						continue;
+					}
+				}
+				if (stats2 && plan2._territoryAtStart === undefined) {
+					plan2._territoryAtStart = stats2.controlled || 0;
+				}
+			}
+		}
+
+		plan2.lastProgressTick = simFrameCount;
+	}
+
 	// ── Naval Plan Evaluation ──
 	for (let si = 0; si < sides.length; si++) {
 		if (!sides[si] || sides[si].length === 0) continue;
@@ -7887,14 +7963,15 @@ export function evaluateAllPlans() {
 		for (let ei = 0; ei < sides.length; ei++) {
 			if (ei === si) continue;
 			if (!sides[ei] || sides[ei].length === 0) continue;
-			const enemyPlan = _warPlan[ei];
-			if (!enemyPlan?.target) continue;
-			if (enemyPlan.type !== "CAPTURE_CITY" && enemyPlan.type !== "ENCIRCLE")
-				continue;
-			const tIdx = getGridIndex(enemyPlan.target.lat, enemyPlan.target.lng);
-			if (tIdx !== -1 && dominantSideMap[tIdx] === si) {
-				_planReassessNeeded[si] = true;
-				break;
+			for (const enemyPlan of [_warPlan[ei], _warPlan[ei + sides.length]]) {
+				if (!enemyPlan?.target) continue;
+				if (enemyPlan.type !== "CAPTURE_CITY" && enemyPlan.type !== "ENCIRCLE")
+					continue;
+				const tIdx = getGridIndex(enemyPlan.target.lat, enemyPlan.target.lng);
+				if (tIdx !== -1 && dominantSideMap[tIdx] === si) {
+					_planReassessNeeded[si] = true;
+					break;
+				}
 			}
 		}
 	}
@@ -8213,7 +8290,9 @@ export function evaluateAllPlans() {
 	}
 
 	// Clean up plans for inactive sides
-	for (let si = sides.length; si < _warPlan.length; si++) {
+	// Land plans use indices 0..sides.length-1 (slot 1) and
+	// sides.length..sides.length*2-1 (slot 2). Only null beyond slot 2.
+	for (let si = sides.length * 2; si < _warPlan.length; si++) {
 		_warPlan[si] = null;
 	}
 	for (let si = sides.length; si < _navalPlan.length; si++) {
@@ -10281,7 +10360,28 @@ export function performSimulationTick() {
 				let planDirLat = 0,
 					planDirLng = 0,
 					isPlanUnit = false;
-				const activePlan = _warPlan[u.sideIndex];
+				let activePlan = _warPlan[u.sideIndex];
+				// Land slot 2: pick the closer offensive plan if one exists
+				const slot2Plan = _warPlan[u.sideIndex + sides.length];
+				if (slot2Plan && slot2Plan.type !== "DEFEND") {
+					const d1 = activePlan?.target
+						? (activePlan.target.lat - u.lat) ** 2 +
+							Math.min(
+								Math.abs(((activePlan.target.lng - u.lng + 540) % 360) - 180),
+								180,
+							) **
+								2
+						: Infinity;
+					const d2 = slot2Plan.target
+						? (slot2Plan.target.lat - u.lat) ** 2 +
+							Math.min(
+								Math.abs(((slot2Plan.target.lng - u.lng + 540) % 360) - 180),
+								180,
+							) **
+								2
+						: Infinity;
+					if (d2 < d1) activePlan = slot2Plan;
+				}
 				const navalPlan = _navalPlan[u.sideIndex];
 				const supplyPlan = _navalSupplyPlan[u.sideIndex];
 
