@@ -1677,12 +1677,12 @@ export let gameTimeDate = null; // {year, month, day}
 export let gameTimeAccumulatorMs = 0;
 export let viewMode = "POLITICAL"; // 'POLITICAL' or 'FLAG'
 export let allianceViewEnabled = false; // when true, alliances override colors/flags in political/flag views
-export let showCountryLabels = false;
+export let showCountryLabels = true;
 export let showNonCapitalCities = true;
 // Cache for screen-space label curves so they don't move with the camera
 export const countryLabelAnchors = new Map(); // key: `${countryId}:${regionIndex}` -> { name, points, fontSize }
-export let showBattleIndicators = false;
-export let showWarPlans = false;
+export let showBattleIndicators = true;
+export let showWarPlans = true;
 export let cityFocusMode = false;
 // High‑level commanders ("generals") for each side, used to model strong plans.
 export let generals = [];
@@ -13130,9 +13130,93 @@ if (citiesToggleBtn) {
 }
 
 if (warplansToggleBtn) {
+	warplansToggleBtn.classList.toggle("active", showWarPlans);
 	warplansToggleBtn.addEventListener("click", () => {
 		showWarPlans = !showWarPlans;
 		warplansToggleBtn.classList.toggle("active", showWarPlans);
+		if (influenceLayer) influenceLayer.render();
+	});
+}
+
+// UI settings tab wiring
+const showWarplansCheckbox = document.getElementById("show-warplans-checkbox");
+const showLabelsCheckbox = document.getElementById("show-labels-checkbox");
+const showCitiesCheckbox = document.getElementById("show-cities-checkbox");
+const showBattlesCheckbox = document.getElementById("show-battles-checkbox");
+const showAllianceCheckbox = document.getElementById("show-alliance-checkbox");
+
+// Load saved UI preferences
+if (getCookie("mw_show_warplans") === "false") {
+	showWarPlans = false;
+	if (showWarplansCheckbox) showWarplansCheckbox.checked = false;
+}
+if (getCookie("mw_show_labels") === "false") {
+	showCountryLabels = false;
+	if (showLabelsCheckbox) showLabelsCheckbox.checked = false;
+}
+if (getCookie("mw_show_cities") === "false") {
+	showNonCapitalCities = false;
+	if (showCitiesCheckbox) showCitiesCheckbox.checked = false;
+}
+if (getCookie("mw_show_battles") === "true") {
+	showBattleIndicators = true;
+	if (showBattlesCheckbox) showBattlesCheckbox.checked = true;
+} else if (getCookie("mw_show_battles") === "false") {
+	showBattleIndicators = false;
+	if (showBattlesCheckbox) showBattlesCheckbox.checked = false;
+}
+if (getCookie("mw_show_alliance") === "true") {
+	allianceViewEnabled = true;
+	if (showAllianceCheckbox) showAllianceCheckbox.checked = true;
+}
+
+if (showWarplansCheckbox) {
+	showWarplansCheckbox.checked = showWarPlans;
+	showWarplansCheckbox.addEventListener("change", (e) => {
+		showWarPlans = e.target.checked;
+		if (warplansToggleBtn) warplansToggleBtn.classList.toggle("active", showWarPlans);
+		setCookie("mw_show_warplans", e.target.checked ? "true" : "false");
+		if (influenceLayer) influenceLayer.render();
+	});
+}
+if (showLabelsCheckbox) {
+	showLabelsCheckbox.checked = showCountryLabels;
+	showLabelsCheckbox.addEventListener("change", (e) => {
+		showCountryLabels = e.target.checked;
+		countryLabelAnchors.clear();
+		if (labelsToggleBtn) labelsToggleBtn.classList.toggle("active", showCountryLabels);
+		setCookie("mw_show_labels", e.target.checked ? "true" : "false");
+		if (influenceLayer) {
+			influenceLayer._forceRender = true;
+			if (typeof influenceLayer._update === "function") influenceLayer._update();
+			else influenceLayer.render();
+		}
+	});
+}
+if (showCitiesCheckbox) {
+	showCitiesCheckbox.checked = showNonCapitalCities;
+	showCitiesCheckbox.addEventListener("change", (e) => {
+		showNonCapitalCities = e.target.checked;
+		if (citiesToggleBtn) citiesToggleBtn.classList.toggle("active", showNonCapitalCities);
+		setCookie("mw_show_cities", e.target.checked ? "true" : "false");
+		if (influenceLayer) influenceLayer.render();
+	});
+}
+if (showBattlesCheckbox) {
+	showBattlesCheckbox.checked = showBattleIndicators;
+	showBattlesCheckbox.addEventListener("change", (e) => {
+		showBattleIndicators = e.target.checked;
+		if (battlesToggleBtn) battlesToggleBtn.classList.toggle("active", showBattleIndicators);
+		setCookie("mw_show_battles", e.target.checked ? "true" : "false");
+		if (influenceLayer) influenceLayer.render();
+	});
+}
+if (showAllianceCheckbox) {
+	showAllianceCheckbox.checked = allianceViewEnabled;
+	showAllianceCheckbox.addEventListener("change", (e) => {
+		allianceViewEnabled = e.target.checked;
+		if (allianceViewCheckbox) allianceViewCheckbox.checked = allianceViewEnabled;
+		setCookie("mw_show_alliance", e.target.checked ? "true" : "false");
 		if (influenceLayer) influenceLayer.render();
 	});
 }
