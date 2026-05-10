@@ -11662,11 +11662,13 @@ export function performSimulationTick() {
 			// countries, do a direct ownership pass to avoid stale values blocking annexation.
 			let liveOwnedWarTiles = stats.owned || 0;
 			if (stats.units === 0) {
+					// Throttle expensive grid scan to every 60 ticks
+					if (simFrameCount % 60 === 0) {
 				let exactOwned = 0;
 				for (let idx = 0; idx < worldControlMap.length; idx++) {
 					if (landMask[idx] === 2 && worldControlMap[idx] === country.id)
 						exactOwned++;
-				}
+					}
 				liveOwnedWarTiles = exactOwned;
 			}
 
@@ -11682,6 +11684,7 @@ export function performSimulationTick() {
 			if (stats.units === 0) {
 				directControlled = 0;
 				const scanSIdx = countryToSideMap.get(country.id);
+						if (simFrameCount % 60 === 0) {
 				for (let di = 0; di < worldControlMap.length; di++) {
 					if (
 						landMask[di] === 2 &&
@@ -11689,6 +11692,7 @@ export function performSimulationTick() {
 						dominantSideMap[di] === scanSIdx
 					) {
 						directControlled++;
+						}
 					}
 				}
 			}
