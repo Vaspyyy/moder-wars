@@ -27,7 +27,7 @@ import {
 	tabCountriesBtn,
 	tabFlagsBtn,
 	tabScenariosBtn,
-} from "./main.js";
+} from "./constants.js";
 
 function openHub(initialTab = "scenarios") {
 	const fade = document.getElementById("fade-transition-overlay");

@@ -1,0 +1,20 @@
+export const SCENARIO_MENU_BGS = {
+	"scroller-choice-modern": "assets/images/2022.webp",
+	"scroller-choice-1974": "assets/images/1974.webp",
+
+	"scroller-choice-1942": "assets/images/1942.webp",
+	"scroller-choice-1936": "assets/images/1936.webp",
+	"scroller-choice-1914": "assets/images/1914.webp",
+	"scroller-choice-1804": "assets/images/1804.webp",
+	"scroller-choice-1492": "assets/images/1492.webp",
+	"scroller-choice-1ad": "assets/images/1492.webp",
+	"scroller-choice-canada": "assets/images/2022.webp",
+	"scroller-choice-france": "assets/images/2022.webp",
+	"scroller-choice-germany": "assets/images/2022.webp",
+	"scroller-choice-england": "assets/images/2022.webp",
+	"scroller-choice-us": "assets/images/2022.webp",
+	"scroller-choice-poland": "assets/images/2022.webp",
+	"scroller-choice-kaiserreich": "assets/images/1936.webp",
+	"scroller-choice-fire": "assets/images/2022.webp",
+	"scroller-choice-1984-alt": "assets/images/1974.webp",
+};
