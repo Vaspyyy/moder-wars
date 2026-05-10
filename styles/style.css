@@ -267,28 +267,77 @@ body.use-system-font .scroller-card-name {
 }
 
 @media (max-width: 600px) {
+	/* Full-screen overlay on mobile instead of 50% panel */
+	.menu-v2-overlay {
+		width: 100%;
+		clip-path: none;
+		background: rgba(0, 0, 0, 0.65);
+	}
 	.menu-v2-container {
-		padding: 30px;
+		padding: 24px 20px;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+	}
+	.menu-v2-header {
+		text-align: center;
+		margin-bottom: 0;
 	}
 	.menu-v2-title {
-		font-size: 42px;
+		font-size: 36px;
+		letter-spacing: -1px;
 	}
 	.menu-v2-author {
-		font-size: 18px;
+		font-size: 14px;
+		margin-top: 8px;
 	}
 	.menu-v2-nav {
 		position: relative;
 		right: auto;
 		top: auto;
 		transform: none;
-		margin-top: 40px;
+		margin-top: 32px;
 		width: 100%;
+		padding: 0;
+		height: auto;
+		justify-content: center;
+	}
+	.nav-links-fade {
+		align-items: center;
+		gap: 8px;
 	}
 	.menu-v2-link.primary {
-		font-size: 32px;
+		font-size: 28px;
+		margin-bottom: 12px;
 	}
 	.menu-v2-link {
-		font-size: 18px;
+		font-size: 16px;
+		text-align: center;
+		justify-content: center;
+		padding: 8px 16px;
+		opacity: 0.9;
+		min-height: 44px;
+		min-width: 44px;
+		box-sizing: border-box;
+	}
+	.menu-v2-link:hover {
+		transform: none;
+	}
+	.menu-v2-link svg {
+		width: 36px;
+		height: 36px;
+	}
+	.nav-separator {
+		width: 120px;
+		margin: 0 auto 12px;
+	}
+	.menu-v2-footer {
+		position: relative;
+		bottom: auto;
+		right: auto;
+		text-align: center;
+		margin-top: auto;
+		padding-top: 20px;
 	}
 }
 
@@ -297,13 +346,21 @@ body.use-system-font .scroller-card-name {
 		grid-template-columns: 1fr;
 	}
 	.game-logo-img {
-		max-height: 100px;
+		max-height: 80px;
 	}
 	.settings-content {
-		padding: 20px;
+		padding: 16px;
+		max-height: 80vh;
+		overflow-y: auto;
 	}
 	.menu-content {
-		padding: 30px 20px;
+		padding: 20px 16px;
+	}
+	/* Make settings controls touch-friendly */
+	.settings-content select,
+	.settings-content input[type="range"] {
+		min-height: 44px;
+		font-size: 16px; /* prevents iOS zoom on focus */
 	}
 }
 
@@ -1588,6 +1645,16 @@ body.use-system-font .scroller-card-name {
 
 .thematic-overlay .menu-v2-nav {
 	pointer-events: auto;
+}
+
+@media (max-width: 600px) {
+	.thematic-overlay .menu-v2-container {
+		padding: 24px 20px;
+	}
+	.thematic-loading-body {
+		align-items: center;
+		text-align: center;
+	}
 }
 
 .thematic-loading-body {
