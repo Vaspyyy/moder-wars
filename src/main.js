@@ -15002,9 +15002,7 @@ document.getElementById("back-to-nav-btn").addEventListener("click", () => {
 /**
  * DYNAMIC MENU BACKGROUND SYSTEM
  */
-("scroller-choice-1984-alt");
-: "assets/images/1974.webp",
-}
+
 
 export let queuedScenarioAction = null;
 export const enterScenarioBtn = document.getElementById("enter-scenario-btn");
