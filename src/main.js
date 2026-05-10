@@ -1716,6 +1716,7 @@ export const soldiersPerUnit = new Float64Array(MAX_SIDES).fill(
 export const manualSideManpower = new Array(MAX_SIDES).fill(null);
 export let units = [];
 export let activeBattles = [];
+export let _battleHash = new Map(); // spatial hash: gridKey -> battle index in activeBattles
 export let capitalLostCountries = new Set();
 export let bombs = [];
 export let explosions = [];
@@ -8386,7 +8387,7 @@ export function performSimulationTick() {
 	// Random wars can still be started manually from the setup screen via the Random War button.
 
 	// 0. Initialize Tick Caches early to avoid access-before-initialization errors
-	activeBattles = [];
+	activeBattles = []; _battleHash.clear();
 	latestCountryStats.clear();
 	const countryStats = latestCountryStats;
 	_tickCombatantIds.clear();
@@ -9741,25 +9742,33 @@ export function performSimulationTick() {
 									e.lastCombatTick = simFrameCount;
 									if (e.health <= 0) u.victoryBoostTicks = 240;
 
-									const existing = activeBattles.find(
-										(b) => (u.lat - b.lat) ** 2 + (u.lng - b.lng) ** 2 < 0.16,
-									);
+									const battleLat = (u.lat + e.lat) / 2;
+									const battleLng = (u.lng + e.lng) / 2;
+									const bKey = Math.round(battleLat * 10) + ',' + Math.round(battleLng * 10);
+									let existing = null;
+									for (let bk = -1; bk <= 1 && !existing; bk++) {
+										for (let bl = -1; bl <= 1 && !existing; bl++) {
+											const nk = Math.round(battleLat * 10) + bk + ',' + (Math.round(battleLng * 10) + bl);
+											const bi = _battleHash.get(nk);
+											if (bi !== undefined) {
+												const b = activeBattles[bi];
+												if (b && (u.lat - b.lat) ** 2 + (u.lng - b.lng) ** 2 < 0.16) existing = b;
+											}
+										}
+									}
 									if (existing) {
 										existing.participants++;
 										existing.lat =
-											(existing.lat * (existing.participants - 1) +
-												(u.lat + e.lat) / 2) /
+											(existing.lat * (existing.participants - 1) + battleLat) /
 											existing.participants;
 										existing.lng =
-											(existing.lng * (existing.participants - 1) +
-												(u.lng + e.lng) / 2) /
+											(existing.lng * (existing.participants - 1) + battleLng) /
 											existing.participants;
+										const newKey = Math.round(existing.lat * 10) + ',' + Math.round(existing.lng * 10);
+										if (newKey !== bKey) _battleHash.set(newKey, activeBattles.indexOf(existing));
 									} else {
-										activeBattles.push({
-											lat: (u.lat + e.lat) / 2,
-											lng: (u.lng + e.lng) / 2,
-											participants: 2,
-										});
+										const idx = activeBattles.push({ lat: battleLat, lng: battleLng, participants: 2 }) - 1;
+										_battleHash.set(bKey, idx);
 									}
 								}
 							}
@@ -12768,7 +12777,7 @@ export function applyTreaty(type, winnerPoleOverride = null) {
 	unitSpatialHash.clear();
 	aiCountryState.clear();
 	_warPlan = [];
-	activeBattles = [];
+	activeBattles = []; _battleHash.clear();
 	bombs = [];
 	explosions = [];
 	bases = [];
@@ -12899,7 +12908,7 @@ export function resetToSelection() {
 	ffaToggleBtn.innerText = "FFA Mode";
 	units = [];
 	unitSpatialHash.clear();
-	activeBattles = [];
+	activeBattles = []; _battleHash.clear();
 	bombs = [];
 	explosions = [];
 	bases = [];
@@ -13354,7 +13363,7 @@ if (quickRestartBtn) {
 		bombs = [];
 		explosions = [];
 		bases = [];
-		activeBattles = [];
+		activeBattles = []; _battleHash.clear();
 		capitalLostCountries = new Set();
 		activeRebellion = null;
 		countryCasualties.clear();
@@ -17017,7 +17026,7 @@ export function resetConflictSetupState() {
 	bases = [];
 	bombs = [];
 	explosions = [];
-	activeBattles = [];
+	activeBattles = []; _battleHash.clear();
 	capitalLostCountries = new Set();
 	activeRebellion = null;
 	countryCasualties.clear();
