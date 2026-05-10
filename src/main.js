@@ -9489,32 +9489,33 @@ export function performSimulationTick() {
 		const _isWeak = effectiveBuff === "weakened";
 		const _isCripple = effectiveBuff === "crippled";
 
-		if (!isAtSea && !isMega && !isSuper) {
+		if (!isAtSea && !isMega && !isSuper && gridIdxNow !== -1) {
 			const eR = CONFIG.ENCIRCLEMENT_RADIUS;
-			const samples = [
-				[0, eR],
-				[0, -eR],
-				[eR, 0],
-				[-eR, 0],
-				[eR * 0.7, eR * 0.7],
-				[-eR * 0.7, -eR * 0.7],
-				[eR * 0.7, -eR * 0.7],
-				[-eR * 0.7, eR * 0.7],
+			const eRCells = Math.round(eR / CONFIG.GRID_RES);
+			const gw = gridWidth;
+			const row = Math.floor(gridIdxNow / gw);
+			const col = gridIdxNow % gw;
+			const offsets = [
+				[0, eRCells],
+				[0, -eRCells],
+				[eRCells, 0],
+				[-eRCells, 0],
+				[Math.round(eRCells * 0.7), Math.round(eRCells * 0.7)],
+				[-Math.round(eRCells * 0.7), -Math.round(eRCells * 0.7)],
+				[Math.round(eRCells * 0.7), -Math.round(eRCells * 0.7)],
+				[-Math.round(eRCells * 0.7), Math.round(eRCells * 0.7)],
 			];
 			let enemyCount = 0;
-			samples.forEach(([dlng, dlat]) => {
-				const _val = getControlValue(u.lat + dlat, u.lng + dlng);
-				const sIdx = getGridIndex(u.lat + dlat, u.lng + dlng);
-				// Geography (water) should NOT count as an enemy encirclement point.
-				// Only actual enemy-controlled territory cuts off supplies.
-				// This prevents units from instantly dying upon landing on coastlines.
-				if (sIdx !== -1 && landMask[sIdx] > 0) {
-					if (isEnemyTerritory(sIdx, u.sideIndex)) {
-						enemyCount++;
-					}
-				}
-			});
-			encirclementFactor = enemyCount / samples.length;
+			for (let oi = 0; oi < offsets.length; oi++) {
+				const [dc, dr] = offsets[oi];
+				const nr = row + dr;
+				const nc = col + dc;
+				if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gw) continue;
+				const sIdx = nr * gw + nc;
+				if (landMask[sIdx] > 0 && isEnemyTerritory(sIdx, u.sideIndex))
+					enemyCount++;
+			}
+			encirclementFactor = enemyCount / offsets.length;
 		}
 		const isEncircled = encirclementFactor > 0.75;
 
