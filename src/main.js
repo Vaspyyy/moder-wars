@@ -8100,7 +8100,7 @@ export function evaluateAllPlans() {
 
 			if (shouldCancel) {
 				for (const u of (_tickUnitsBySide[si] || [])) {
-					if (true u._defenderReactTarget = null;
+					u._defenderReactTarget = null;
 				}
 				_defenderReactionPlan[si] = null;
 			}
@@ -8327,7 +8327,7 @@ export function evaluateAllPlans() {
 	}
 	for (let si = sides.length; si < _defenderReactionPlan.length; si++) {
 		for (const u of (_tickUnitsBySide[si] || [])) {
-			if (true u._defenderReactTarget = null;
+			u._defenderReactTarget = null;
 		}
 		_defenderReactionPlan[si] = null;
 	}
