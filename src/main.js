@@ -5306,7 +5306,6 @@ export function deepClone(obj) {
 }
 
 export async function startWar() {
-	console.time("[MW] startWar");
 	const activeSides = sides.filter((s) => s.length > 0);
 	if (activeSides.length < 2) {
 		alert("Please assign countries to at least two sides.");
@@ -6078,7 +6077,6 @@ export async function _startWarInner() {
 		});
 	}
 
-	console.timeEnd("[MW] startWar");
 	requestAnimationFrame(updateLoop);
 }
 
@@ -8336,7 +8334,10 @@ export function evaluateAllPlans() {
 }
 
 export function performSimulationTick() {
-	console.time("simTick");
+	// PERF PROFILER - check window.__perf in console
+	if (!window.__perf) window.__perf = { plans: 0, recruit: 0, unitLoop: 0, post: 0, ticks: 0 };
+	window.__perf.ticks++;
+	const _t0 = performance.now();
 	// TODO: Remove per-unit level thinking. Only army groups and war plans should
 	// move units — no per-unit level movement and decision making. War plans are the
 	// bread and butter of AI movement. Individual unit targeting, mop-up search,
@@ -9105,7 +9106,9 @@ export function performSimulationTick() {
 	}
 
 	// Evaluate war plans — check completion/failure, regenerate if needed
+	const _t1 = performance.now();
 	evaluateAllPlans();
+	window.__perf.plans += performance.now() - _t1;
 
 	// ── Compute neutral border polylines (throttled to every 60 ticks) ──
 	const NEUTRAL_BORDER_INTERVAL = 60;
@@ -9165,6 +9168,7 @@ export function performSimulationTick() {
 		}
 	}
 
+	const _t2 = performance.now();
 	// Mid-War Recruitment (Steady, Land-Capped, and Underdog-Aware)
 	sides.forEach((side, sIdx) => {
 		side.forEach((country) => {
@@ -9310,6 +9314,8 @@ export function performSimulationTick() {
 		if (m && m.id !== undefined) _metadataById.set(m.id, m);
 	}
 
+	window.__perf.recruit += performance.now() - _t2;
+	const _t3 = performance.now();
 	for (let i = units.length - 1; i >= 0; i--) {
 		const u = units[i];
 
@@ -11574,6 +11580,8 @@ export function performSimulationTick() {
 	// NOTE: even if sideSoldiers reach 0, sides remain on the field and can still recruit.
 	// This keeps wars from hard-locking when a side's manpower bar is exhausted.
 
+	window.__perf.unitLoop += performance.now() - _t3;
+	const _t4 = performance.now();
 	// 4. Individual Capitulation & Treaty Logic
 	const timeSinceTreaty = Date.now() - lastTreatyTime;
 
@@ -11950,7 +11958,7 @@ export function performSimulationTick() {
 	_cachedSideUnitCounts = unitCounts;
 	_cachedSideSoldierEsts = soldierEsts;
 
-	console.timeEnd("simTick");
+	window.__perf.post += performance.now() - _t4;
 	return false;
 }
 
