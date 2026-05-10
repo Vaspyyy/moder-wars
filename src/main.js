@@ -7559,7 +7559,7 @@ export function evaluateAllPlans() {
 			}
 
 			// Apply coastal defense plans
-			if (selected.coastal.length > 0) {
+			if (selected.coastal && selected.coastal.length > 0) {
 				for (let ci = 0; ci < selected.coastal.length; ci++) {
 					const slot = si * 10 + ci;
 					_coastalDefensePlan[slot] = selected.coastal[ci];
@@ -7567,7 +7567,7 @@ export function evaluateAllPlans() {
 			}
 
 			// Apply neutral garrison plans
-			if (selected.garrisons.length > 0) {
+			if (selected.garrisons && selected.garrisons.length > 0) {
 				for (let gi = 0; gi < selected.garrisons.length; gi++) {
 					const slot = si * 10 + gi;
 					_neutralGarrisonPlan[slot] = selected.garrisons[gi];
