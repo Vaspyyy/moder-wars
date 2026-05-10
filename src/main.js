@@ -7600,7 +7600,7 @@ export function evaluateAllPlans() {
 		}
 	}
 
-	if (simFrameCount % 30 === 0) {
+	if (simFrameCount % 5 === 0) {
 	for (let si = 0; si < sides.length; si++) {
 		if (!sides[si] || sides[si].length === 0) continue;
 		const plan = _warPlan[si];
