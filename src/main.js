@@ -8378,8 +8378,10 @@ function distSqToPlan(u, plan) {
 }
 
 function recruitUnitsForPlan(plan, sideIdx) {
-	if (!plan || plan.maxAssignedUnits == null) return;
-	const needed = plan.maxAssignedUnits - plan.recruitedUnits.length;
+	if (!plan) return;
+	const cap = plan.maxAssignedUnits ?? plan.maxUnits ?? 0;
+	if (cap <= 0) return;
+	const needed = cap - plan.recruitedUnits.length;
 	if (needed <= 0) return;
 
 	const candidates = [];
