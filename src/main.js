@@ -10009,7 +10009,7 @@ export function performSimulationTick() {
 
 		// Frontline Pressure: If unit is too close to a moving/losing border, push it back
 		const borderBuffer = -0.05; // Tightened buffer to prevent endless retreating / stuttering
-		const currentIdx = getGridIndex(u.lat, u.lng);
+		const currentIdx = gridIdxNow;
 		const currentOwnerId = currentIdx !== -1 ? worldControlMap[currentIdx] : 0;
 		const currentOwnerSideIdx = countryToSideMap.get(currentOwnerId);
 
@@ -10735,7 +10735,7 @@ export function performSimulationTick() {
 						isPlanUnit = true;
 						activePlan.activeUnitCount = (activePlan.activeUnitCount || 0) + 1;
 						// Check if unit is behind or at the frontline (on our side)
-						const unitIdx = getGridIndex(u.lat, u.lng);
+						const unitIdx = gridIdxNow;
 						const onOurSide =
 							unitIdx !== -1 && dominantSideMap[unitIdx] === u.sideIndex;
 						const nearFrontline =
@@ -11452,7 +11452,7 @@ export function performSimulationTick() {
 
 				// Strategic Depth: Units defending their own de jure (historical) territory get a defense boost.
 				let defenseBonus = 1.0;
-				const currentIdx = getGridIndex(u.lat, u.lng);
+				const currentIdx = gridIdxNow;
 				const isDeJureLand =
 					currentIdx !== -1 && deJureMap[currentIdx] === u.sovereignId;
 
