@@ -7618,8 +7618,8 @@ export function evaluateAllPlans() {
 			// PREPARATION → EXECUTION: advance when enough units rally at staging cells
 			if (plan.phase === "PREPARATION" && plan.stagingCells?.length > 0) {
 				let gathered = 0;
-				for (const u of units) {
-					if (u.sideIndex !== si || u.deployTicks > 0) continue;
+				for (const u of (_tickUnitsBySide[si] || [])) {
+					if (u.deployTicks > 0) continue;
 					const sc =
 						plan.stagingCells[
 							Math.floor(Math.abs(u.id * 1000000) % plan.stagingCells.length)
@@ -7698,8 +7698,8 @@ export function evaluateAllPlans() {
 
 			if (plan2.phase === "PREPARATION" && plan2.stagingCells?.length > 0) {
 				let gathered2 = 0;
-				for (const u of units) {
-					if (u.sideIndex !== si || u.deployTicks > 0) continue;
+				for (const u of (_tickUnitsBySide[si] || [])) {
+					if (u.deployTicks > 0) continue;
 					const sc =
 						plan2.stagingCells[
 							Math.floor(Math.abs(u.id * 1000000) % plan2.stagingCells.length)
@@ -7772,8 +7772,8 @@ export function evaluateAllPlans() {
 		// Stall detection: if stalled for 30s, cancel naval plan
 		if (ticksSinceProgress > 1800 && ticksSinceStart > 600) {
 			// Release all assigned units
-			for (const u of units) {
-				if (u.sideIndex === si && u.navalAssigned) {
+			for (const u of (_tickUnitsBySide[si] || [])) {
+				if (u.navalAssigned) {
 					u.navalAssigned = false;
 					u.isTransport = false;
 				}
@@ -7787,8 +7787,8 @@ export function evaluateAllPlans() {
 		if (np.phase === "GATHERING") {
 			// Count how many naval units are near staging point
 			let gathered = 0;
-			for (const u of units) {
-				if (u.sideIndex !== si || !u.navalAssigned) continue;
+			for (const u of (_tickUnitsBySide[si] || [])) {
+				if (!u.navalAssigned) continue;
 				const sdLat = np.stagingPoint.lat - u.lat;
 				let sdLng = np.stagingPoint.lng - u.lng;
 				if (sdLng > 180) sdLng -= 360;
@@ -7803,8 +7803,8 @@ export function evaluateAllPlans() {
 			// Check if most naval units are at sea
 			let atSea = 0;
 			let total = 0;
-			for (const u of units) {
-				if (u.sideIndex !== si || !u.navalAssigned) continue;
+			for (const u of (_tickUnitsBySide[si] || [])) {
+				if (!u.navalAssigned) continue;
 				total++;
 				const gi = getGridIndex(u.lat, u.lng);
 				if (gi === -1 || landMask[gi] === 0) atSea++;
@@ -7816,8 +7816,8 @@ export function evaluateAllPlans() {
 		} else if (np.phase === "TRANSIT") {
 			// Check if naval units are reaching the target coast
 			let landed = 0;
-			for (const u of units) {
-				if (u.sideIndex !== si || !u.navalAssigned) continue;
+			for (const u of (_tickUnitsBySide[si] || [])) {
+				if (!u.navalAssigned) continue;
 				const gi = getGridIndex(u.lat, u.lng);
 				if (gi !== -1 && landMask[gi] > 0) {
 					const tdLat = np.target.lat - u.lat;
@@ -7853,8 +7853,8 @@ export function evaluateAllPlans() {
 				}
 
 				// Release naval-assigned units so they join the new land plan
-				for (const u of units) {
-					if (u.sideIndex === si && u.navalAssigned) {
+				for (const u of (_tickUnitsBySide[si] || [])) {
+					if (u.navalAssigned) {
 						u.navalAssigned = false;
 						u.isTransport = false;
 					}
@@ -7885,8 +7885,8 @@ export function evaluateAllPlans() {
 
 		// Stall detection
 		if (ticksSinceProgress > 1800) {
-			for (const u of units) {
-				if (u.sideIndex === si && u.supplyAssigned) {
+			for (const u of (_tickUnitsBySide[si] || [])) {
+				if (u.supplyAssigned) {
 					u.supplyAssigned = false;
 					u.isTransport = false;
 				}
@@ -7899,8 +7899,8 @@ export function evaluateAllPlans() {
 		// Phase transitions (mirrors naval invasion: GATHERING -> EMBARKATION -> TRANSIT -> DELIVERED)
 		if (sp.phase === "GATHERING") {
 			let gathered = 0;
-			for (const u of units) {
-				if (u.sideIndex !== si || !u.supplyAssigned) continue;
+			for (const u of (_tickUnitsBySide[si] || [])) {
+				if (!u.supplyAssigned) continue;
 				const sdLat = sp.stagingPoint.lat - u.lat;
 				let sdLng = sp.stagingPoint.lng - u.lng;
 				if (sdLng > 180) sdLng -= 360;
@@ -7914,8 +7914,8 @@ export function evaluateAllPlans() {
 		} else if (sp.phase === "EMBARKATION") {
 			let atSea = 0;
 			let total = 0;
-			for (const u of units) {
-				if (u.sideIndex !== si || !u.supplyAssigned) continue;
+			for (const u of (_tickUnitsBySide[si] || [])) {
+				if (!u.supplyAssigned) continue;
 				total++;
 				const gi = getGridIndex(u.lat, u.lng);
 				if (gi === -1 || landMask[gi] === 0) atSea++;
@@ -7926,8 +7926,8 @@ export function evaluateAllPlans() {
 			}
 		} else if (sp.phase === "TRANSIT") {
 			let landed = 0;
-			for (const u of units) {
-				if (u.sideIndex !== si || !u.supplyAssigned) continue;
+			for (const u of (_tickUnitsBySide[si] || [])) {
+				if (!u.supplyAssigned) continue;
 				const gi = getGridIndex(u.lat, u.lng);
 				if (gi !== -1 && landMask[gi] > 0) {
 					const tdLat = sp.target.lat - u.lat;
@@ -7943,8 +7943,8 @@ export function evaluateAllPlans() {
 			}
 		} else if (sp.phase === "DELIVERED") {
 			if (ticksSinceProgress > 600) {
-				for (const u of units) {
-					if (u.sideIndex === si && u.supplyAssigned) {
+				for (const u of (_tickUnitsBySide[si] || [])) {
+					if (u.supplyAssigned) {
 						u.supplyAssigned = false;
 						u.isTransport = false;
 					}
@@ -7985,8 +7985,8 @@ export function evaluateAllPlans() {
 			if (cp.target) {
 				const tIdx = getGridIndex(cp.target.lat, cp.target.lng);
 				if (tIdx !== -1 && dominantSideMap[tIdx] !== si) {
-					for (const u of units) {
-						if (u.sideIndex === si && u.coastalAssigned)
+					for (const u of (_tickUnitsBySide[si] || [])) {
+						if (u.coastalAssigned)
 							u.coastalAssigned = false;
 					}
 					_coastalDefensePlan[slot] = null;
@@ -8015,8 +8015,8 @@ export function evaluateAllPlans() {
 				gp.neutralCountryId != null &&
 				_tickCountryToSideMap.get(gp.neutralCountryId) !== undefined
 			) {
-				for (const u of units) {
-					if (u.sideIndex === si && u.garrisonAssigned)
+				for (const u of (_tickUnitsBySide[si] || [])) {
+					if (u.garrisonAssigned)
 						u.garrisonAssigned = false;
 				}
 				_neutralGarrisonPlan[slot] = null;
@@ -8034,8 +8034,8 @@ export function evaluateAllPlans() {
 			if (!enemyNP?.target) continue;
 
 			if (enemyNP.phase === "TRANSIT") {
-				for (const u of units) {
-					if (u.sideIndex !== ei || !u.navalAssigned) continue;
+				for (const u of (_tickUnitsBySide[ei] || [])) {
+					if (!u.navalAssigned) continue;
 					for (let csi = si * 10; csi < si * 10 + 10; csi++) {
 						const cp = _coastalDefensePlan[csi];
 						if (!cp?.target) continue;
@@ -8099,8 +8099,8 @@ export function evaluateAllPlans() {
 			}
 
 			if (shouldCancel) {
-				for (const u of units) {
-					if (u.sideIndex === si) u._defenderReactTarget = null;
+				for (const u of (_tickUnitsBySide[si] || [])) {
+					if (true u._defenderReactTarget = null;
 				}
 				_defenderReactionPlan[si] = null;
 			}
@@ -8110,8 +8110,8 @@ export function evaluateAllPlans() {
 		if (_defenderReactionPlan[si]) {
 			_defenderReactionPlan[si].activeUnitCount = 0;
 			let anyArrived = false;
-			for (const u of units) {
-				if (u.sideIndex !== si || !u._defenderReactTarget) continue;
+			for (const u of (_tickUnitsBySide[si] || [])) {
+				if (!u._defenderReactTarget) continue;
 				_defenderReactionPlan[si].activeUnitCount++;
 				const rdLat = u._defenderReactTarget.lat - u.lat;
 				let rdLng = u._defenderReactTarget.lng - u.lng;
@@ -8169,8 +8169,8 @@ export function evaluateAllPlans() {
 
 				const slotsOpen = rpCur2.maxUnits - rpCur2.activeUnitCount;
 				let recruited = 0;
-				for (const u of units) {
-					if (u.sideIndex !== si) continue;
+				for (const u of (_tickUnitsBySide[si] || [])) {
+					// side-filtered via _tickUnitsBySide
 					if (u.deployTicks > 0) continue;
 					if (u.navalAssigned || u.supplyAssigned) continue;
 					if (u.coastalAssigned || u.garrisonAssigned) continue;
@@ -8197,8 +8197,8 @@ export function evaluateAllPlans() {
 			// LANDING: full reactive response
 			if (enemyNP.phase === "LANDING" && onOurTerritory) {
 				let enemyLandingForce = 0;
-				for (const u of units) {
-					if (u.sideIndex !== ei) continue;
+				for (const u of (_tickUnitsBySide[ei] || [])) {
+					// side-filtered via _tickUnitsBySide
 					const dLat = enemyNP.target.lat - u.lat;
 					let dLng = enemyNP.target.lng - u.lng;
 					if (dLng > 180) dLng -= 360;
@@ -8234,8 +8234,8 @@ export function evaluateAllPlans() {
 				rpCur2._landingDefeatedTick = 0;
 
 				let localDefenders = 0;
-				for (const u of units) {
-					if (u.sideIndex !== si) continue;
+				for (const u of (_tickUnitsBySide[si] || [])) {
+					// side-filtered via _tickUnitsBySide
 					if (u.deployTicks > 0) continue;
 					const dLat = enemyNP.target.lat - u.lat;
 					let dLng = enemyNP.target.lng - u.lng;
@@ -8254,8 +8254,8 @@ export function evaluateAllPlans() {
 
 				const slotsOpen = rpCur2.maxUnits - rpCur2.activeUnitCount;
 				let recruited = 0;
-				for (const u of units) {
-					if (u.sideIndex !== si) continue;
+				for (const u of (_tickUnitsBySide[si] || [])) {
+					// side-filtered via _tickUnitsBySide
 					if (u.deployTicks > 0) continue;
 					if (u.navalAssigned || u.supplyAssigned) continue;
 					if (u.coastalAssigned || u.garrisonAssigned) continue;
@@ -8320,14 +8320,14 @@ export function evaluateAllPlans() {
 		_coastalDefensePlan[si] = null;
 	}
 	for (let si = sides.length * 10; si < _neutralGarrisonPlan.length; si++) {
-		for (const u of units) {
+		for (const u of (_tickUnitsBySide[si] || [])) {
 			if (u.garrisonAssigned) u.garrisonAssigned = false;
 		}
 		_neutralGarrisonPlan[si] = null;
 	}
 	for (let si = sides.length; si < _defenderReactionPlan.length; si++) {
-		for (const u of units) {
-			if (u.sideIndex === si) u._defenderReactTarget = null;
+		for (const u of (_tickUnitsBySide[si] || [])) {
+			if (true u._defenderReactTarget = null;
 		}
 		_defenderReactionPlan[si] = null;
 	}
