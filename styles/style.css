@@ -790,6 +790,20 @@ body.use-system-font .scroller-card-name {
 	margin-bottom: 10px;
 }
 
+@media (max-width: 768px) {
+	.setup-panel {
+		top: auto;
+		bottom: 0;
+		left: 0;
+		right: 0;
+		max-width: 100%;
+		min-width: 0;
+		border-radius: 12px 12px 0 0;
+		padding: 16px;
+		max-height: 60vh;
+	}
+}
+
 .stats-panel.minimized .stats-grid,
 .stats-panel.minimized .tug-of-war {
 	display: none;
@@ -1016,17 +1030,51 @@ body.use-system-font .scroller-card-name {
 @media (max-width: 768px) {
 	.status-panel {
 		flex-direction: column;
-		gap: 10px;
-		padding: 10px;
+		gap: 8px;
+		padding: 8px 10px;
+		margin-bottom: 6px;
+	}
+	#status-text {
+		font-size: 14px;
+	}
+	#unit-counts {
+		font-size: 11px;
 	}
 	.status-right {
 		width: 100%;
-		justify-content: center;
 		flex-wrap: wrap;
+		gap: 6px;
 	}
 	.control-group {
 		border-right: none;
 		padding-right: 0;
+		gap: 4px;
+		flex-wrap: wrap;
+	}
+	.mini-btn {
+		padding: 8px 10px;
+		font-size: 11px;
+		min-height: 36px;
+		min-width: 36px;
+		border-radius: 4px;
+	}
+	.mini-btn.active {
+		box-shadow: 0 0 8px rgba(63, 169, 106, 0.3);
+	}
+	/* Hide some less-used toggle buttons on mobile to save space */
+	#arrows-toggle-btn,
+	#battles-toggle-btn {
+		display: none !important;
+	}
+	#minimize-status-btn {
+		font-size: 18px;
+		padding: 4px 12px;
+	}
+	.simulation-controls {
+		justify-content: center;
+	}
+	.utility-controls {
+		justify-content: center;
 	}
 }
 
