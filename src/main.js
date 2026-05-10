@@ -10178,6 +10178,13 @@ export function performSimulationTick() {
 				const _relLng = groupCentroid ? u.lng - groupCentroid.lng : 0;
 
 				for (let j = 0; j < 250; j++) {
+
+				// Pre-build city grid index Set for O(1) lookups in mop-up loop
+				const _cityIdxSet = new Set();
+				for (let ci = 0; ci < activeTheaterCities.length; ci++) {
+					const cIdx = getGridIndex(activeTheaterCities[ci].lat, activeTheaterCities[ci].lng);
+					if (cIdx !== -1) _cityIdxSet.add(cIdx);
+				}
 					const randIdx = Math.floor(Math.random() * worldControlMap.length);
 					const ownerAtIdx = worldControlMap[randIdx];
 					const deJureAtIdx = deJureMap[randIdx];
@@ -10222,9 +10229,7 @@ export function performSimulationTick() {
 						// URBAN strategy: heavily reward cells that contain cities to create road‑like thrusts
 						let cityBias = 0;
 						if (countryObj?.strategy === "URBAN") {
-							const hasCityHere = activeTheaterCities.some(
-								(c) => getGridIndex(c.lat, c.lng) === randIdx,
-							);
+							const hasCityHere = _cityIdxSet.has(randIdx);
 							if (hasCityHere) cityBias = 450;
 						}
 
