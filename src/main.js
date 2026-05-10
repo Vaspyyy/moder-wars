@@ -7531,6 +7531,8 @@ function shouldReassess(si) {
 
 export function evaluateAllPlans() {
 	// ── Reassessment: run the proposal pipeline when triggers fire ──
+	if (!window.__perf) window.__perf = {};
+	const _tp = performance.now();
 	for (let si = 0; si < sides.length; si++) {
 		if (!sides[si] || sides[si].length === 0) continue;
 
@@ -7596,6 +7598,7 @@ export function evaluateAllPlans() {
 			_proposalsCache[si] = proposals;
 		}
 	}
+	window.__perf.proposals = (window.__perf.proposals || 0) + performance.now() - _tp;
 
 	// Reset plan activeUnitCount every tick (cheap, no unit iteration)
 	for (let _ri = 0; _ri < sides.length; _ri++) {
@@ -7614,6 +7617,7 @@ export function evaluateAllPlans() {
 		}
 	}
 
+	const _te = performance.now();
 	if (simFrameCount % 5 === 0) {
 	for (let si = 0; si < sides.length; si++) {
 		if (!sides[si] || sides[si].length === 0) continue;
@@ -8364,11 +8368,12 @@ export function evaluateAllPlans() {
 		_defenderReactionPlan[si] = null;
 	}
 	}
+	window.__perf.eval = (window.__perf.eval || 0) + performance.now() - _te;
 }
 
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
-	if (!window.__perf) window.__perf = { plans: 0, recruit: 0, unitLoop: 0, post: 0, ticks: 0 };
+	if (!window.__perf) window.__perf = { plans: 0, proposals: 0, eval: 0, neutralBorder: 0, recruit: 0, unitLoop: 0, post: 0, ticks: 0 };
 	window.__perf.ticks++;
 	const _t0 = performance.now();
 	// TODO: Remove per-unit level thinking. Only army groups and war plans should
@@ -9159,6 +9164,7 @@ export function performSimulationTick() {
 	window.__perf.plans += performance.now() - _t1;
 
 	// ── Compute neutral border polylines (throttled to every 60 ticks) ──
+	const _tn = performance.now();
 	const NEUTRAL_BORDER_INTERVAL = 60;
 	if (adjacencyCache && (simFrameCount % NEUTRAL_BORDER_INTERVAL === 0 || Object.keys(_neutralBorderPolys).length === 0)) {
 		_neutralBorderPolys = {};
@@ -9215,6 +9221,7 @@ export function performSimulationTick() {
 			}
 		}
 	}
+	window.__perf.neutralBorder += performance.now() - _tn;
 
 	const _t2 = performance.now();
 	// Mid-War Recruitment (Steady, Land-Capped, and Underdog-Aware)
@@ -11662,8 +11669,8 @@ export function performSimulationTick() {
 			// countries, do a direct ownership pass to avoid stale values blocking annexation.
 			let liveOwnedWarTiles = stats.owned || 0;
 			if (stats.units === 0) {
-					// Throttle expensive grid scan to every 60 ticks
-					if (simFrameCount % 60 === 0) {
+					// Throttle expensive grid scan to every 60 ticks (staggered offset 1)
+					if (simFrameCount % 60 === 1) {
 				let exactOwned = 0;
 				for (let idx = 0; idx < worldControlMap.length; idx++) {
 					if (landMask[idx] === 2 && worldControlMap[idx] === country.id)
@@ -11685,7 +11692,7 @@ export function performSimulationTick() {
 			if (stats.units === 0) {
 				directControlled = 0;
 				const scanSIdx = countryToSideMap.get(country.id);
-						if (simFrameCount % 60 === 0) {
+						if (simFrameCount % 60 === 2) {
 				for (let di = 0; di < worldControlMap.length; di++) {
 					if (
 						landMask[di] === 2 &&
