@@ -8391,7 +8391,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.24.28",
+		_version: "V0.24.29",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -11733,10 +11733,11 @@ export function performSimulationTick() {
 			// On non-counting frames, owned/controlled may be cached. For unitless
 			// countries, do a direct ownership pass to avoid stale values blocking annexation.
 			let liveOwnedWarTiles = stats.owned || 0;
+			let exactOwned = 0;
 			if (stats.units === 0) {
 					// Throttle expensive grid scan to every 60 ticks (staggered offset 1)
 					if (simFrameCount % 60 === 1) {
-				let exactOwned = 0;
+					exactOwned = 0;
 				for (let idx = 0; idx < worldControlMap.length; idx++) {
 					if (landMask[idx] === 2 && worldControlMap[idx] === country.id)
 						exactOwned++;
