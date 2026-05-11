@@ -8549,8 +8549,9 @@ export function performSimulationTick() {
 	// countInterval balances data freshness vs CPU — 20*speed keeps AI responsive
 	const countInterval = Math.max(30, Math.floor(20 * simSpeed));
 	const shouldCountLand = _simTickCount % countInterval === 0;
+	let _tCount;
 	if (shouldCountLand) {
-		const _tCount = performance.now();
+		_tCount = performance.now();
 		const integBase = 5000;
 		const integSamples = Math.max(
 			1000,
