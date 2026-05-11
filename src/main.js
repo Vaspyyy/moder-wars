@@ -8393,7 +8393,7 @@ export function performSimulationTick() {
 	if (!window.__perf) window.__perf = {
 		_version: "V0.24.22",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
-		recruit: 0, unitLoop: 0, post: 0, prePlans: 0, caches: 0, spatialHash: 0, posture: 0, counting: 0,
+		recruit: 0, unitLoop: 0, post: 0, prePlans: 0, smoothing: 0, caches: 0, spatialHash: 0, posture: 0, counting: 0,
 		tickTotal: 0, maxTick: 0, ticks: 0,
 		proposalRuns: 0, proposalFailed: 0,
 		reassess_noPlan: 0, reassess_interval: 0, reassess_forced: 0,
@@ -8489,6 +8489,7 @@ export function performSimulationTick() {
 	updatePersistentInfluence(p1UnitsCount, p2UnitsCount, countryToSideMap);
 
 	// 1a. Occupancy Smoothing: Occasionally clean up primaryOccupierMap during war to prevent speckling
+	const _tSmooth = performance.now();
 	if (simFrameCount % 120 === 0) {
 		const sampleCount = 5000;
 		const modified = [];
@@ -8538,6 +8539,7 @@ export function performSimulationTick() {
 			primaryOccupierMap[modified[i].idx] = modified[i].dominantAlly;
 		}
 	}
+	window.__perf.smoothing = (window.__perf.smoothing || 0) + performance.now() - _tSmooth;
 
 	// 1b. Territorial Integrity: Collapse deep pockets and isolated protrusions (Enclaves/Exclaves)
 	// We sample the grid to find territory that is surrounded by the enemy.
