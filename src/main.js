@@ -8508,7 +8508,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.15",
+		_version: "V0.25.16",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -8521,6 +8521,7 @@ export function performSimulationTick() {
 	};
 	window.__perf.ticks++;
 	_simTickCount++;
+	let _dbgLogCount = 0; // DEBUG: throttle diagnostic logging
 	let moveDirLat, moveDirLng;
 	const _t0 = performance.now();
 	// TODO: Remove per-unit level thinking. Only army groups and war plans should
@@ -8541,8 +8542,19 @@ export function performSimulationTick() {
 			dmg <= 0 ||
 			Number.isNaN(targetUnit.health) ||
 			targetUnit.health <= 0
-		)
+		) {
+			if (simFrameCount > 100 && simFrameCount < 500 && _dbgLogCount++ < 200) {
+				console.warn('[RECD-DBG] recordDamage REJECTED:',
+					'isNaN(dmg)=', Number.isNaN(dmg),
+					'dmg=', dmg,
+					'dmg<=0=', dmg <= 0,
+					'isNaN(health)=', Number.isNaN(targetUnit.health),
+					'health<=0=', targetUnit.health <= 0,
+					'targetSideIdx=', targetUnit.sideIndex,
+					'attackerSideIdx=', attackerUnit?.sideIndex);
+			}
 			return;
+		}
 
 		const effectiveDmg = Math.min(targetUnit.health, dmg);
 		const sIdx = targetUnit.sideIndex;
@@ -10248,6 +10260,17 @@ export function performSimulationTick() {
 
 		u.lastAllyCount = localAllyCount;
 
+		if (simFrameCount > 100 && simFrameCount < 500 && _dbgLogCount++ < 200 && simFrameCount % 10 === 0) {
+			console.warn('[HASH-DBG] unit summary:',
+				'sideIdx=', u.sideIndex,
+				'enemiesFound=', localEnemyCount,
+				'alliesFound=', localAllyCount,
+				'targetSet=', !!target,
+				'targetIsUnit=', target && typeof target.health !== 'undefined',
+				'isTacticallyIdle=', isTacticallyIdle,
+				'idleTicks=', idleTicks);
+		}
+
 		// Retreat logic: If enemy force is > 5x ally force (increased threshold to prevent premature dodging)
 		if (
 			localEnemyCount > localAllyCount * aiProfile.retreatTriggerMultiple &&
@@ -10648,6 +10671,20 @@ export function performSimulationTick() {
 
 			const isEngaged =
 				u.lastCombatTick && simFrameCount - u.lastCombatTick < 15;
+
+			if (simFrameCount > 100 && simFrameCount < 500 && _dbgLogCount++ < 200) {
+				const hasHealth = target && typeof target.health !== 'undefined';
+				console.warn('[GATE-DBG] dist gate:',
+					'side', u.sideIndex,
+					'dist=', dist.toFixed(4),
+					'dist>0.05=', dist > 0.05,
+					'isEngaged=', isEngaged,
+					'hasTarget=', !!target,
+					'targetHasHealth=', hasHealth,
+					'localEnemyCount=', localEnemyCount,
+					'going=', dist > 0.05 ? 'MOVE' : (hasHealth ? 'COMBAT' : 'ELSE'));
+			}
+
 			if (dist > 0.05) {
 				// Movement logic
 				const baseSpeed = isAtSea ? CONFIG.UNIT_NAVAL_SPEED : CONFIG.UNIT_SPEED;
@@ -11828,6 +11865,20 @@ export function performSimulationTick() {
 					defenseBonus *
 					longWarDefense;
 
+				if (simFrameCount > 100 && simFrameCount < 500 && _dbgLogCount++ < 200) {
+					console.warn('[CMBT-DBG] combat:',
+						'side', u.sideIndex, 'vs', target.sideIndex,
+						'tDmg=', tDmg.toFixed(3),
+						'uDmg=', uDmg.toFixed(3),
+						'targetHealth=', target.health?.toFixed(2),
+						'myHealth=', u.health?.toFixed(2),
+						'dmgDealtMult=', damageDealtMult.toFixed(3),
+						'dmgTakenMult=', damageTakenMult.toFixed(3),
+						'defBonus=', defenseBonus.toFixed(3),
+						'longWarDef=', longWarDefense.toFixed(3),
+						'dist=', dist.toFixed(4));
+				}
+
 				// Casualties increase while battling (direct engagement)
 				recordDamage(target, tDmg, u);
 				recordDamage(u, uDmg, target);
@@ -11886,6 +11937,13 @@ export function performSimulationTick() {
 				}
 			}
 		} else {
+			if (simFrameCount > 100 && simFrameCount < 500 && _dbgLogCount++ < 200) {
+				console.warn('[ELSE-DBG] fell to empty else:',
+					'side', u.sideIndex,
+					'dist=', dist?.toFixed(4),
+					'hasTarget=', !!target,
+					'targetType=', target ? (typeof target.health !== 'undefined' ? 'unit' : 'coord') : 'null');
+			}
 			u.lastCombatTick = 0;
 		}
 
