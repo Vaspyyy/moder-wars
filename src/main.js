@@ -8508,7 +8508,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.13",
+		_version: "V0.25.14",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -12372,9 +12372,9 @@ export function updateLoop(now) {
 		const el = _cachedSoldierEls[si];
 		if (el)
 			el.textContent = influenceLayer.formatSoldiers(
-				sideSoldiers[si] > 0 && sideSoldiers[si] < 1
+				sideSoldierEsts[si] > 0 && sideSoldierEsts[si] < 1
 					? 1
-					: sideSoldiers[si],
+					: sideSoldierEsts[si],
 			);
 	}
 
