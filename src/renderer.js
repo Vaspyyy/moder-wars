@@ -2282,7 +2282,7 @@ const ControlMapLayer = L.Layer.extend({
 				ctx.fillText(plan.phase, midX + 10, midY - 2);
 			}
 
-			// Draw naval invasion arrows (dashed, blue-tinted)
+			// Draw naval invasion arrows (dashed, country-colored)
 			if (typeof _navalPlan !== "undefined" && _navalPlan) {
 				for (let si = 0; si < _navalPlan.length; si++) {
 					const np = _navalPlan[si];
@@ -2299,9 +2299,10 @@ const ControlMapLayer = L.Layer.extend({
 					const p1 = map.latLngToContainerPoint([pts[1].lat, pts[1].lng]);
 					const midX = (p0.x + p1.x) / 2;
 					const midY = (p0.y + p1.y) / 2 - 50;
+					const sideColor = sideColors[si] || "rgba(255,255,0,0.6)";
 
 					ctx.setLineDash([4, 4]);
-					ctx.strokeStyle = "rgba(100,180,255,0.7)";
+					ctx.strokeStyle = sideColor.replace(rgbaRe, "0.75)");
 					ctx.lineWidth = Math.max(
 						2,
 						Math.min(5, 2 + Math.floor((np.activeUnitCount || 0) / 3)),
@@ -2325,16 +2326,16 @@ const ControlMapLayer = L.Layer.extend({
 						p1.y - headLen * Math.sin(angle + 0.5),
 					);
 					ctx.closePath();
-					ctx.fillStyle = "rgba(100,180,255,0.8)";
+					ctx.fillStyle = sideColor.replace(rgbaRe, "0.85)");
 					ctx.fill();
 
 					ctx.font = "bold 9px monospace";
-					ctx.fillStyle = "rgba(100,180,255,0.9)";
+					ctx.fillStyle = sideColor.replace(rgbaRe, "0.9)");
 					ctx.fillText(`NAVAL: ${np.phase}`, midX + 10, midY - 2);
 				}
 			}
 
-			// Draw naval supply arrows (dashed, green-tinted)
+			// Draw naval supply arrows (dashed, country-colored)
 			if (typeof _navalSupplyPlan !== "undefined" && _navalSupplyPlan) {
 				for (let si = 0; si < _navalSupplyPlan.length; si++) {
 					const sp = _navalSupplyPlan[si];
@@ -2351,9 +2352,10 @@ const ControlMapLayer = L.Layer.extend({
 					const p1 = map.latLngToContainerPoint([pts[1].lat, pts[1].lng]);
 					const midX = (p0.x + p1.x) / 2;
 					const midY = (p0.y + p1.y) / 2 - 50;
+					const sideColor = sideColors[si] || "rgba(255,255,0,0.6)";
 
 					ctx.setLineDash([3, 5]);
-					ctx.strokeStyle = "rgba(80,220,100,0.6)";
+					ctx.strokeStyle = sideColor.replace(rgbaRe, "0.6)");
 					ctx.lineWidth = Math.max(
 						2,
 						Math.min(4, 2 + Math.floor((sp.activeUnitCount || 0) / 3)),
@@ -2377,11 +2379,11 @@ const ControlMapLayer = L.Layer.extend({
 						p1.y - headLen * Math.sin(angle + 0.5),
 					);
 					ctx.closePath();
-					ctx.fillStyle = "rgba(80,220,100,0.7)";
+					ctx.fillStyle = sideColor.replace(rgbaRe, "0.75)");
 					ctx.fill();
 
 					ctx.font = "bold 8px monospace";
-					ctx.fillStyle = "rgba(80,220,100,0.8)";
+					ctx.fillStyle = sideColor.replace(rgbaRe, "0.85)");
 					ctx.fillText(`SUPPLY: ${sp.phase}`, midX + 10, midY + 10);
 				}
 			}
