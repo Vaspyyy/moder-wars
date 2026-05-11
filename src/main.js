@@ -8508,7 +8508,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.14",
+		_version: "V0.25.15",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -9909,11 +9909,10 @@ export function performSimulationTick() {
 		let enemyCentroidLat = 0;
 		let enemyCentroidLng = 0;
 
-		// At high sim speeds, skip tactical awareness for units far from combat
-		// to reduce the 3×3 spatial-hash neighbor iteration cost (~5-10% CPU at 5×).
+		// Skip full spatial-hash scan for units that have been idle for a while,
+		// but maintain a wider 5×5 sweep so nearby enemies are never invisible.
 		const idleTicks = simFrameCount - (u.lastCombatTick || 0);
 		const isTacticallyIdle =
-			simSpeed >= 3 &&
 			idleTicks > 60 &&
 			idleTicks < 600 && // force re-scan after 600 idle frames to break perpetual idle loop
 			u.mopUpTargetId === 0 &&
@@ -9933,14 +9932,13 @@ export function performSimulationTick() {
 		const ky = Math.floor((u.lat + 90) / HASH_SIZE);
 		const maxKx = Math.ceil(360 / HASH_SIZE);
 
-		// Only search adjacent 3x3 hash cells (approx 6x6 degrees footprint).
-		// Tactically idle units: only scan own cell (dx=0,dy=0) so overlapping
-		// armies still deal proximity damage instead of phasing through each other.
+		// Active units search adjacent 3×3 hash cells; idle units widen to 5×5
+		// so enemies in neighboring buckets (as close as 0.3°) are never missed.
 		const fullScan = !isTacticallyIdle;
-		for (let dy = -1; dy <= 1; dy++) {
-				for (let dx = -1; dx <= 1; dx++) {
-					// When idle: only scan own cell (0,0) for overlap detection
-					if (!fullScan && !(dx === 0 && dy === 0)) continue;
+		for (let dy = -2; dy <= 2; dy++) {
+				for (let dx = -2; dx <= 2; dx++) {
+					// When idle: scan 5x5 for overlap detection; active: 3x3
+					if (fullScan && (dx < -1 || dx > 1 || dy < -1 || dy > 1)) continue;
 					let cx = kx + dx;
 					const cy = ky + dy;
 
@@ -10015,7 +10013,7 @@ export function performSimulationTick() {
 									if (inWarGrace) continue;
 									let proximityDamage =
 										CONFIG.COMBAT_DAMAGE *
-										0.15 *
+										0.45 *
 										damageDealtMult *
 										(1.0 - Math.sqrt(dSq) / 0.3);
 									if (isAtSea && eAtSea) proximityDamage *= 2.2;
@@ -10649,8 +10647,8 @@ export function performSimulationTick() {
 			const dist = Math.sqrt(dLat * dLat + dLng * dLng);
 
 			const isEngaged =
-				u.lastCombatTick && simFrameCount - u.lastCombatTick < 0;
-			if (dist > 0.05 && !isEngaged) {
+				u.lastCombatTick && simFrameCount - u.lastCombatTick < 15;
+			if (dist > 0.05) {
 				// Movement logic
 				const baseSpeed = isAtSea ? CONFIG.UNIT_NAVAL_SPEED : CONFIG.UNIT_SPEED;
 
@@ -11255,7 +11253,9 @@ export function performSimulationTick() {
 
 				// Blend plan direction into movement
 				if (isPlanUnit && (planDirLat !== 0 || planDirLng !== 0)) {
-					const planBlend = aiProfile.frontlineBlend > 0 ? 0.85 : 0.65;
+					const planBlend = (isEngaged || localEnemyCount > 0)
+						? 0.3
+						: (aiProfile.frontlineBlend > 0 ? 0.85 : 0.65);
 					moveDirLat = moveDirLat * (1 - planBlend) + planDirLat * planBlend;
 					moveDirLng = moveDirLng * (1 - planBlend) + planDirLng * planBlend;
 					const magP = Math.sqrt(
@@ -11264,6 +11264,27 @@ export function performSimulationTick() {
 					if (magP > 0) {
 						moveDirLat /= magP;
 						moveDirLng /= magP;
+					}
+				}
+
+				// When enemies are nearby, push toward local enemy centroid
+				if (localEnemyCount > 0 && !isAtSea && (enemyCentroidLat !== 0 || enemyCentroidLng !== 0)) {
+					enemyCentroidLat /= localEnemyCount;
+					enemyCentroidLng /= localEnemyCount;
+					let cLat = enemyCentroidLat - u.lat;
+					let cLng = enemyCentroidLng - u.lng;
+					if (cLng > 180) cLng -= 360;
+					else if (cLng < -180) cLng += 360;
+					const cDist = Math.sqrt(cLat * cLat + cLng * cLng);
+					if (cDist > 0.0001) {
+						const combatWeight = 0.7;
+						moveDirLat = (cLat / cDist) * combatWeight + moveDirLat * (1 - combatWeight);
+						moveDirLng = (cLng / cDist) * combatWeight + moveDirLng * (1 - combatWeight);
+						const magC = Math.sqrt(moveDirLat * moveDirLat + moveDirLng * moveDirLng);
+						if (magC > 0) {
+							moveDirLat /= magC;
+							moveDirLng /= magC;
+						}
 					}
 				}
 
@@ -11865,6 +11886,7 @@ export function performSimulationTick() {
 				}
 			}
 		} else {
+			u.lastCombatTick = 0;
 		}
 
 		if (u.health <= 0) {
