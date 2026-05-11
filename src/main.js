@@ -8393,7 +8393,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.24.32",
+		_version: "V0.24.33",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -12280,8 +12280,7 @@ export function updateLoop(now) {
 					if (currentSide !== -1) {
 						// Close previous side with manpower footer
 						const mpRemaining = Math.max(0, sideSoldiers[currentSide]);
-						const mpInitial = initialSideSoldiers[currentSide] || 1;
-						html += `<div class="casualty-side-mp" data-sidemp="${currentSide}" style="margin-top:4px; padding-top:4px; border-top:1px solid rgba(255,255,255,0.1); font-size:10px; color:#3498db; text-align:right;">⚔️ ${influenceLayer.formatSoldiers(mpRemaining)} / ${influenceLayer.formatSoldiers(mpInitial)}</div>`;
+						html += `<div class="casualty-side-mp" data-sidemp="${currentSide}" style="margin-top:4px; padding-top:4px; border-top:1px solid rgba(255,255,255,0.1); font-size:10px; color:#3498db; text-align:right;">${influenceLayer.formatSoldiers(mpRemaining)}</div>`;
 						html += `</div>`;
 					}
 					currentSide = e.side;
@@ -12305,8 +12304,7 @@ export function updateLoop(now) {
 			}
 			if (currentSide !== -1) {
 				const mpRemaining = Math.max(0, sideSoldiers[currentSide]);
-				const mpInitial = initialSideSoldiers[currentSide] || 1;
-				html += `<div class="casualty-side-mp" data-sidemp="${currentSide}" style="margin-top:4px; padding-top:4px; border-top:1px solid rgba(255,255,255,0.1); font-size:10px; color:#3498db; text-align:right;">⚔️ ${influenceLayer.formatSoldiers(mpRemaining)} / ${influenceLayer.formatSoldiers(mpInitial)}</div>`;
+				html += `<div class="casualty-side-mp" data-sidemp="${currentSide}" style="margin-top:4px; padding-top:4px; border-top:1px solid rgba(255,255,255,0.1); font-size:10px; color:#3498db; text-align:right;">${influenceLayer.formatSoldiers(mpRemaining)}</div>`;
 				html += `</div>`;
 			}
 			casualtyContainer.innerHTML = html;
@@ -12330,8 +12328,7 @@ export function updateLoop(now) {
 			for (const [si, el] of Object.entries(_casualtySideMpEls || {})) {
 				const sIdx = Number(si);
 				const mpRemaining = Math.max(0, sideSoldiers[sIdx]);
-				const mpInitial = initialSideSoldiers[sIdx] || 1;
-				el.textContent = `⚔️ ${influenceLayer.formatSoldiers(mpRemaining)} / ${influenceLayer.formatSoldiers(mpInitial)}`;
+				el.textContent = `${influenceLayer.formatSoldiers(mpRemaining)}`;
 			}
 		}
 	}
