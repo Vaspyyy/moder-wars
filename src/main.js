@@ -7422,7 +7422,7 @@ export function selectPlans(sideIdx, scoredProposals) {
 	const selectedOff = [land1, land2, naval1, supply1].filter(Boolean);
 	const offSum = selectedOff.reduce((s, p) => s + (p.priority || 0), 0);
 	// Count local enemies near each target and scale force accordingly
-	const _allUnits = allUnitsRef || [];
+	const _allUnits = units || [];
 	for (const p of selectedOff) {
 		p.allocatedForce =
 			offSum > 0 ? Math.ceil(offensiveForce * ((p.priority || 0) / offSum)) : 0;
@@ -7430,7 +7430,7 @@ export function selectPlans(sideIdx, scoredProposals) {
 		if (p.target) {
 			let localEnemies = 0;
 			for (const eu of _allUnits) {
-				if (eu.sideIndex === si) continue;
+				if (eu.sideIndex === sideIdx) continue;
 				const dLat = p.target.lat - eu.lat;
 				let dLng = p.target.lng - eu.lng;
 				if (dLng > 180) dLng -= 360;
@@ -8498,7 +8498,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.5",
+		_version: "V0.25.6",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
