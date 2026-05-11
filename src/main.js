@@ -1889,7 +1889,7 @@ export let frontlineDirLat = null; // Float32Array, length = gridWidth * gridHei
 export let frontlineDirLng = null; // Float32Array, length = gridWidth * gridHeight
 export let frontlineFieldTick = -999; // last simFrameCount when field was rebuilt
 export let _frontlineSourceCell = null; // reusable Int32Array for BFS — allocated once
-export const FRONTLINE_FIELD_UPDATE_INTERVAL = 15; // rebuild every N ticks (not every 4 — grid is 2.88M cells)
+export const FRONTLINE_FIELD_UPDATE_INTERVAL = 30; // rebuild every N ticks (not every 4 — grid is 2.88M cells)
 export let _simWorker = null; // Web Worker for async frontline BFS
 export let _workerBusy = false;
 // Frontline polyline system: distributed unit stationing along war fronts
@@ -8391,7 +8391,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.24.25-p",
+		_version: "V0.24.26", _tCount: 0,
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, counting: 0, spatialHash: 0,
@@ -8555,9 +8555,8 @@ export function performSimulationTick() {
 	// countInterval balances data freshness vs CPU — 20*speed keeps AI responsive
 	const countInterval = Math.max(30, Math.floor(20 * simSpeed));
 	const shouldCountLand = _simTickCount % countInterval === 0;
-	let _tCount;
 	if (shouldCountLand) {
-		_tCount = performance.now();
+		window.__perf._tCount = performance.now();
 		const integBase = 5000;
 		const integSamples = Math.max(
 			1000,
@@ -8687,8 +8686,8 @@ export function performSimulationTick() {
 	if (simFrameCount - _frontlinePolyTick >= FRONTLINE_POLY_UPDATE_INTERVAL) {
 		computeFrontlinePolys();
 		_frontlinePolyTick = simFrameCount;
+		assignFrontlineSlots();
 	}
-	assignFrontlineSlots();
 	window.__perf.frontline = (window.__perf.frontline || 0) + performance.now() - _tFrontline;
 
 	const _tConsolidate = performance.now();
@@ -8846,7 +8845,7 @@ export function performSimulationTick() {
 					c.lastOwnedCount !== undefined ? c.lastOwnedCount : fallback;
 			}
 		});
-		window.__perf.counting = (window.__perf.counting || 0) + performance.now() - _tCount;
+		window.__perf.counting = (window.__perf.counting || 0) + performance.now() - (window.__perf._tCount || 0);
 	}
 
 	// Persist stats for next frame's "non-counting" logic
