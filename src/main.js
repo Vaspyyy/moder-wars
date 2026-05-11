@@ -7495,11 +7495,21 @@ export function selectPlans(sideIdx, scoredProposals) {
 function shouldReassess(si) {
 	const REASSESS_INTERVAL = 300; // sim-ticks (was visual frames; now per-tick)
 	const HARD_COOLDOWN = 150; // minimum sim-ticks between reassessments (even forced)
+	const FORCED_COOLDOWN = 20; // shorter cooldown for forced reassess — prevents infinite retry loops
 
 	const lastReassess = _proposalReassessTick[si] || 0;
 
-	// Allow forced reassess (enemy offensive, plan stall, territory shift) to bypass cooldown
-	if (_planReassessNeeded[si]) { if (window.__perf) window.__perf.reassess_forced++; return true; }
+	// Forced reassess (enemy offensive, plan stall, territory shift): bypass regular
+	// cooldown but enforce a short gap to prevent CPU-burning retry cascades
+	if (_planReassessNeeded[si]) {
+		const gap = _simTickCount - lastReassess;
+		if (gap >= FORCED_COOLDOWN) {
+			if (window.__perf) window.__perf.reassess_forced++;
+			return true;
+		}
+		// Flag stays set; will retry in FORCED_COOLDOWN ticks
+		return false;
+	}
 
 	// Hard cooldown: prevent eval-block spam
 	if (_simTickCount - lastReassess < HARD_COOLDOWN) return false;
@@ -8498,7 +8508,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.6",
+		_version: "V0.25.7",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
