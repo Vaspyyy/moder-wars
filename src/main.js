@@ -8508,7 +8508,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.7",
+		_version: "V0.25.8",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -15823,6 +15823,43 @@ export function _setVassalage(vassalId, overlordId) {
 	influenceLayer.render();
 }
 
+export function recruitNewSideMidWar(id) {
+	// Create a new independent side and declare war on ALL existing sides
+	if (sides.length >= MAX_SIDES) return;
+
+	const meta = countryMetadata.find((m) => m && m.id === id);
+	if (!meta) return;
+
+	const newSideIdx = sides.length;
+
+	// Remove from any existing side first (shouldn't happen for neutrals, but safety)
+	sides.forEach((side) => {
+		const idx = side.findIndex((c) => c.id === id);
+		if (idx > -1) side.splice(idx, 1);
+	});
+
+	const newCountry = {
+		id: id,
+		name: meta.name,
+		color: meta.color,
+		role: "OFFENSE",
+		strategy: "BALANCED",
+		buffState: meta.buffState || "none",
+		overlordId: meta.overlordId || null,
+	};
+
+	sides.push([newCountry]);
+	activeSideIndex = newSideIdx;
+	activateCountryMidWar(newCountry, newSideIdx);
+
+	updateSidesUI();
+	influenceLayer.render();
+
+	const sideLabel = String.fromCharCode(65 + newSideIdx);
+	statusText.innerText = `${newCountry.name} HAS JOINED AS SIDE ${sideLabel} — WAR ON ALL`;
+	playWarStartSound();
+}
+
 export function recruitNeutralMidWar(id, sideIdx) {
 	// 1. Remove from existing side if present (handle mid-war switching)
 	let oldSideIdx = -1;
@@ -15944,6 +15981,25 @@ export function openInspector(id) {
 				}
 				btnContainer.appendChild(btn);
 			});
+
+			// "Join New Side" — neutral country declares war on ALL sides as a new independent faction
+			if (currentSideIdx === -1 && _isNeutral && sides.length < MAX_SIDES) {
+				const newSideBtn = document.createElement("button");
+				newSideBtn.className = "mini-btn";
+				newSideBtn.innerText = "JOIN NEW SIDE";
+				newSideBtn.style.background = "#ff4500";
+				newSideBtn.style.padding = "8px 12px";
+				newSideBtn.style.fontSize = "10px";
+				newSideBtn.style.fontWeight = "900";
+				newSideBtn.style.width = "100%";
+				newSideBtn.style.marginTop = "4px";
+				newSideBtn.title = "Declare war on ALL existing sides as an independent faction";
+				newSideBtn.onclick = () => {
+					recruitNewSideMidWar(id);
+					countryInspector.style.display = "none";
+				};
+				btnContainer.appendChild(newSideBtn);
+			}
 
 			// Vassalization Logic: Check if target can be vassalized
 			// Requires enough territory taken by a side
