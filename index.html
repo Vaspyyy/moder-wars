@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>MW-V0.24.31</title>
+    <title>MW-V0.24.32</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
@@ -412,11 +412,6 @@
                 <div id="unit-counts" style="display:none; font-size: 10px; color: #888; margin-top: 4px;">
                     <span id="unit-counts-display"></span> <span data-i18n="UNITS">UNITS</span>
                 </div>
-                <div id="casualty-row" style="display:none; margin-top: 3px;">
-                    <span id="casualty-counts-display" style="font-size: 10px; color: #e74c3c;"></span> <span style="font-size: 9px; color: #e74c3c;">CASUALTIES</span>
-                    <span style="margin: 0 6px; color: #555;">|</span>
-                    <span id="manpower-counts-display" style="font-size: 10px; color: #3498db;"></span> <span style="font-size: 9px; color: #3498db;">MANPOWER</span>
-                </div>
             </div>
             <div class="status-right">
                 <button id="minimize-status-btn" class="mini-btn" style="background:#555;font-size:14px;padding:2px 8px;margin-right:4px;">−</button>
@@ -567,7 +562,7 @@
         <div id="game-date-display" class="game-date-display" style="display:none;">0000/00/00</div>
 
         <div id="casualty-panel" class="casualty-panel" style="display:none">
-            <div class="casualty-title">CASUALTIES</div>
+            <div class="casualty-title">CASUALTIES &amp; MANPOWER</div>
             <div id="casualty-lists-container"></div>
         </div>
 

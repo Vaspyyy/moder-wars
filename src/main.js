@@ -1789,10 +1789,10 @@ export let _cachedCityEls = [];
 export let _cachedUnitCountSpans = [];
 export let _cachedTerritoryCtrlEls = [];
 export let _cachedTerritorySegEls = [];
-export let _cachedCasualtySpans = [];
 export let _cachedManpowerSpans = [];
 export let _casualtyStructureKey = "";
 export let _casualtyValueEls = {};
+export let _casualtySideMpEls = {};
 export let isPaused = false;
 export let frameAccumulator = 0;
 export let lastTreatyTime = 0;
@@ -2924,9 +2924,6 @@ export const tugOfWarContainer = document.getElementById(
 export const coordsDisplay = document.getElementById("coords");
 export const unitCountsDiv = document.getElementById("unit-counts");
 export const unitCountsDisplay = document.getElementById("unit-counts-display");
-export const casualtyRow = document.getElementById("casualty-row");
-export const casualtyCountsDisplay = document.getElementById("casualty-counts-display");
-export const manpowerCountsDisplay = document.getElementById("manpower-counts-display");
 
 export function rebuildStatsPanel() {
 	const activeSides = sides
@@ -2989,44 +2986,6 @@ export function rebuildStatsPanel() {
 			spans[i] = span;
 		}
 		_cachedUnitCountSpans = spans;
-	}
-
-	if (casualtyCountsDisplay) {
-		casualtyCountsDisplay.innerHTML = "";
-		const cSpans = [];
-		for (let i = 0; i < sides.length; i++) {
-			if (i > 0) {
-				const vs = document.createElement("span");
-				vs.style.color = "#555";
-				vs.textContent = " vs ";
-				casualtyCountsDisplay.appendChild(vs);
-			}
-			const span = document.createElement("span");
-			span.style.color = sideColors[i].replace(rgbaRe, "1)");
-			span.textContent = "0";
-			casualtyCountsDisplay.appendChild(span);
-			cSpans[i] = span;
-		}
-		_cachedCasualtySpans = cSpans;
-	}
-
-	if (manpowerCountsDisplay) {
-		manpowerCountsDisplay.innerHTML = "";
-		const mSpans = [];
-		for (let i = 0; i < sides.length; i++) {
-			if (i > 0) {
-				const vs = document.createElement("span");
-				vs.style.color = "#555";
-				vs.textContent = " vs ";
-				manpowerCountsDisplay.appendChild(vs);
-			}
-			const span = document.createElement("span");
-			span.style.color = sideColors[i].replace(rgbaRe, "1)");
-			span.textContent = "0";
-			manpowerCountsDisplay.appendChild(span);
-			mSpans[i] = span;
-		}
-		_cachedManpowerSpans = mSpans;
 	}
 
 	let tugHtml = '<div class="tug-bar">';
@@ -5536,7 +5495,6 @@ export async function _startWarInner() {
 	if (godModeActive) godBombBtn.style.display = "block";
 	forcePeaceBtn.style.display = "block";
 	unitCountsDiv.style.display = "flex";
-	casualtyRow.style.display = "flex";
 	treatyAlert.style.display = "none";
 
 	const getCode = (feat) => {
@@ -8435,7 +8393,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.24.31",
+		_version: "V0.24.32",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -12271,28 +12229,6 @@ export function updateLoop(now) {
 		}
 	}
 
-	// Update casualty + manpower row (throttled to every 5 frames)
-	if (_cachedCasualtySpans.length && simFrameCount % 5 === 0) {
-		for (let si = 0; si < _cachedCasualtySpans.length; si++) {
-			if (initialSideSoldiers[si] > 0) {
-				const loss = Math.max(0, initialSideSoldiers[si] - sideSoldiers[si]);
-				_cachedCasualtySpans[si].textContent = influenceLayer.formatSoldiers(loss);
-			} else {
-				_cachedCasualtySpans[si].textContent = "0";
-			}
-		}
-	}
-	if (_cachedManpowerSpans.length && simFrameCount % 5 === 0) {
-		for (let si = 0; si < _cachedManpowerSpans.length; si++) {
-			if (initialSideSoldiers[si] > 0) {
-				const remaining = Math.max(0, sideSoldiers[si]);
-				_cachedManpowerSpans[si].textContent = influenceLayer.formatSoldiers(remaining);
-			} else {
-				_cachedManpowerSpans[si].textContent = "0";
-			}
-		}
-	}
-
 	const sideCityCounts = new Array(sides.length).fill(0);
 	activeTheaterCities.forEach((c) => {
 		const dm = dominantSideMap[getGridIndex(c.lat, c.lng)];
@@ -12341,7 +12277,13 @@ export function updateLoop(now) {
 				const formatted = influenceLayer.formatSoldiers(casualties);
 				const isDefeated = !sides.flat().some((active) => active.id === e.id);
 				if (e.side !== currentSide) {
-					if (currentSide !== -1) html += `</div>`;
+					if (currentSide !== -1) {
+						// Close previous side with manpower footer
+						const mpRemaining = Math.max(0, sideSoldiers[currentSide]);
+						const mpInitial = initialSideSoldiers[currentSide] || 1;
+						html += `<div class="casualty-side-mp" data-sidemp="${currentSide}" style="margin-top:4px; padding-top:4px; border-top:1px solid rgba(255,255,255,0.1); font-size:10px; color:#3498db; text-align:right;">⚔️ ${influenceLayer.formatSoldiers(mpRemaining)} / ${influenceLayer.formatSoldiers(mpInitial)}</div>`;
+						html += `</div>`;
+					}
 					currentSide = e.side;
 					sidePos = 0;
 					html += `<div class="casualty-side-list">`;
@@ -12361,11 +12303,20 @@ export function updateLoop(now) {
                 </div>`;
 				sidePos++;
 			}
-			if (currentSide !== -1) html += `</div>`;
+			if (currentSide !== -1) {
+				const mpRemaining = Math.max(0, sideSoldiers[currentSide]);
+				const mpInitial = initialSideSoldiers[currentSide] || 1;
+				html += `<div class="casualty-side-mp" data-sidemp="${currentSide}" style="margin-top:4px; padding-top:4px; border-top:1px solid rgba(255,255,255,0.1); font-size:10px; color:#3498db; text-align:right;">⚔️ ${influenceLayer.formatSoldiers(mpRemaining)} / ${influenceLayer.formatSoldiers(mpInitial)}</div>`;
+				html += `</div>`;
+			}
 			casualtyContainer.innerHTML = html;
 			_casualtyValueEls = {};
 			casualtyContainer.querySelectorAll("[data-cval]").forEach((el) => {
 				_casualtyValueEls[el.getAttribute("data-cval")] = el;
+			});
+			_casualtySideMpEls = {};
+			casualtyContainer.querySelectorAll("[data-sidemp]").forEach((el) => {
+				_casualtySideMpEls[el.getAttribute("data-sidemp")] = el;
 			});
 		} else {
 			for (const e of entriesFlat) {
@@ -12374,6 +12325,13 @@ export function updateLoop(now) {
 					const casualties = countryCasualties.get(e.id) || 0;
 					el.textContent = influenceLayer.formatSoldiers(casualties);
 				}
+			}
+			// Update side manpower footers
+			for (const [si, el] of Object.entries(_casualtySideMpEls || {})) {
+				const sIdx = Number(si);
+				const mpRemaining = Math.max(0, sideSoldiers[sIdx]);
+				const mpInitial = initialSideSoldiers[sIdx] || 1;
+				el.textContent = `⚔️ ${influenceLayer.formatSoldiers(mpRemaining)} / ${influenceLayer.formatSoldiers(mpInitial)}`;
 			}
 		}
 	}
@@ -13140,7 +13098,6 @@ export function resetToSelection() {
 		ffBtn.style.display = "none";
 		forcePeaceBtn.style.display = "none";
 		unitCountsDiv.style.display = "none";
-	casualtyRow.style.display = "none";
 		updateRestartVisibility();
 		influenceLayer.render();
 		if (!godModeActive) return;
@@ -13183,7 +13140,6 @@ export function resetToSelection() {
 	godBombBtn.classList.remove("active");
 	forcePeaceBtn.style.display = "none";
 	unitCountsDiv.style.display = "none";
-	casualtyRow.style.display = "none";
 }
 
 export async function resetGame() {
@@ -13649,7 +13605,6 @@ if (quickRestartBtn) {
 		godModeBtn.style.display = gameMode === "CONQUEST" ? "block" : "none";
 		forcePeaceBtn.style.display = "none";
 		unitCountsDiv.style.display = "none";
-	casualtyRow.style.display = "none";
 		treatyAlert.style.display = "none";
 		frameAccumulator = 0;
 		simFrameCount = 0;
@@ -17293,7 +17248,6 @@ export function resetConflictSetupState() {
 	treatyAlert.style.display = "none";
 	statusText.innerText = getTranslation("SELECT_P1");
 	unitCountsDiv.style.display = "none";
-	casualtyRow.style.display = "none";
 	statsPanel.style.display = "none";
 	casualtyPanel.style.display = "none";
 	document.getElementById("speed-controls").style.display = "none";
