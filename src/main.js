@@ -7396,7 +7396,7 @@ export function selectPlans(sideIdx, scoredProposals) {
 				const m2 = Math.sqrt(d2Lat * d2Lat + d2Lng * d2Lng);
 				const dot =
 					m1 > 0 && m2 > 0 ? (d1Lat * d2Lat + d1Lng * d2Lng) / (m1 * m2) : 0;
-				if (dot <= 0.7) land2 = second;
+				if (dot <= 0.85) land2 = second;
 			} else {
 				land2 = second;
 			}
@@ -7871,7 +7871,8 @@ export function evaluateAllPlans() {
 				else if (sdLng < -180) sdLng += 360;
 				if (sdLat * sdLat + sdLng * sdLng < 0.5) gathered++;
 			}
-			if (gathered >= Math.min(np.maxAssignedUnits, 5)) {
+				// Force advance if gathering takes too long (staging point on land, ships loop)
+				if (gathered >= Math.min(np.maxAssignedUnits, 5) || ticksSinceProgress > 600) {
 				np.phase = "EMBARKATION";
 				np.lastProgressTick = simFrameCount;
 			}
@@ -7983,7 +7984,7 @@ export function evaluateAllPlans() {
 				else if (sdLng < -180) sdLng += 360;
 				if (sdLat * sdLat + sdLng * sdLng < 0.5) gathered++;
 			}
-			if (gathered >= Math.min(sp.maxAssignedUnits, 3)) {
+				if (gathered >= Math.min(sp.maxAssignedUnits, 3) || ticksSinceProgress > 600) {
 				sp.phase = "EMBARKATION";
 				sp.lastProgressTick = simFrameCount;
 			}
@@ -8498,7 +8499,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.1",
+		_version: "V0.25.2",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -9288,6 +9289,8 @@ export function performSimulationTick() {
 			if (prof?.mode === "OFFENSIVE_DESPERATION") hasOffDesp = true;
 		});
 
+		// Force defensive posture if a defender reaction plan is active
+		if (_defenderReactionPlan[si]) _sidePosture[si] = "DEFENSIVE";
 		if (hasLastStand) {
 			_sidePosture[si] = "DEFENSIVE";
 		} else if (hasOffDesp) {
@@ -9968,7 +9971,11 @@ export function performSimulationTick() {
 
 							// Prefer wounded targets: reduce score for low-health enemies
 							const healthModifier = Math.max(0, 1.0 - (e.health || 100) / 100) * 0.02;
-							const targetScore = noisyDSq - healthModifier;
+							// Penalize super/buffed enemies for regular units (avoid wasting units)
+							const eCountry = _countryById.get(e.sovereignId);
+							let eBuff = eCountry?.buffState || "none";
+							const superPenalty = (!isMega && !isSuper && (eBuff === "super" || eBuff === "godly")) ? 5.0 : 0;
+							const targetScore = noisyDSq - healthModifier + superPenalty;
 							if (targetScore < minDist) {
 								minDist = targetScore;
 								target = e;
@@ -9991,14 +9998,14 @@ export function performSimulationTick() {
 								enemyCentroidLat += e.lat * eWeight;
 								enemyCentroidLng += e.lng * eWeight;
 
-								if (dSq < 0.04) {
+								if (dSq < 0.09) {
 									const inWarGrace = simFrameCount < warGraceEndTick;
 									if (inWarGrace) continue;
 									let proximityDamage =
 										CONFIG.COMBAT_DAMAGE *
 										0.15 *
 										damageDealtMult *
-										(1.0 - Math.sqrt(dSq) / 0.2);
+										(1.0 - Math.sqrt(dSq) / 0.3);
 									if (isAtSea && eAtSea) proximityDamage *= 2.2;
 									// Transports take extra damage at sea from non-transport enemies
 									if (e.isTransport && !u.isTransport) proximityDamage *= 1.05;
@@ -11565,11 +11572,18 @@ export function performSimulationTick() {
 						u._neutralDirLng = moveDirLng;
 						u._neutralBlocked = false;
 					} else {
-						// No safe corridor that avoids neutral/protected land – do not move this tick
-						// so units hold their line instead of drifting through neutral territory.
-						moveDirLat = 0;
-						moveDirLng = 0;
-						u._neutralDirLat = 0;
+						// No safe corridor that avoids neutral/protected land – try a desperation retreat
+						// away from enemies and blocking terrain, even if imperfect.
+						const desperationLat = moveDirLat * 0.3;
+						const desperationLng = moveDirLng * 0.3;
+						// Add jitter to avoid all units trying the same blocked path
+						moveDirLat = desperationLat + (Math.random() - 0.5) * 0.4;
+						moveDirLng = desperationLng + (Math.random() - 0.5) * 0.4;
+						const dMag = Math.sqrt(moveDirLat ** 2 + moveDirLng ** 2);
+						if (dMag > 0) {
+							moveDirLat /= dMag;
+							moveDirLng /= dMag;
+						}
 						u._neutralDirLng = 0;
 						u._neutralBlocked = true;
 					}
