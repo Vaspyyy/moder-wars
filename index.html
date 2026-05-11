@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>MW-V0.24.30</title>
+    <title>MW-V0.24.31</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
@@ -411,6 +411,11 @@
                 <span id="status-text" data-i18n="SELECT_P1">Select First Country</span>
                 <div id="unit-counts" style="display:none; font-size: 10px; color: #888; margin-top: 4px;">
                     <span id="unit-counts-display"></span> <span data-i18n="UNITS">UNITS</span>
+                </div>
+                <div id="casualty-row" style="display:none; margin-top: 3px;">
+                    <span id="casualty-counts-display" style="font-size: 10px; color: #e74c3c;"></span> <span style="font-size: 9px; color: #e74c3c;">CASUALTIES</span>
+                    <span style="margin: 0 6px; color: #555;">|</span>
+                    <span id="manpower-counts-display" style="font-size: 10px; color: #3498db;"></span> <span style="font-size: 9px; color: #3498db;">MANPOWER</span>
                 </div>
             </div>
             <div class="status-right">

@@ -1789,6 +1789,8 @@ export let _cachedCityEls = [];
 export let _cachedUnitCountSpans = [];
 export let _cachedTerritoryCtrlEls = [];
 export let _cachedTerritorySegEls = [];
+export let _cachedCasualtySpans = [];
+export let _cachedManpowerSpans = [];
 export let _casualtyStructureKey = "";
 export let _casualtyValueEls = {};
 export let isPaused = false;
@@ -2922,6 +2924,9 @@ export const tugOfWarContainer = document.getElementById(
 export const coordsDisplay = document.getElementById("coords");
 export const unitCountsDiv = document.getElementById("unit-counts");
 export const unitCountsDisplay = document.getElementById("unit-counts-display");
+export const casualtyRow = document.getElementById("casualty-row");
+export const casualtyCountsDisplay = document.getElementById("casualty-counts-display");
+export const manpowerCountsDisplay = document.getElementById("manpower-counts-display");
 
 export function rebuildStatsPanel() {
 	const activeSides = sides
@@ -2984,6 +2989,44 @@ export function rebuildStatsPanel() {
 			spans[i] = span;
 		}
 		_cachedUnitCountSpans = spans;
+	}
+
+	if (casualtyCountsDisplay) {
+		casualtyCountsDisplay.innerHTML = "";
+		const cSpans = [];
+		for (let i = 0; i < sides.length; i++) {
+			if (i > 0) {
+				const vs = document.createElement("span");
+				vs.style.color = "#555";
+				vs.textContent = " vs ";
+				casualtyCountsDisplay.appendChild(vs);
+			}
+			const span = document.createElement("span");
+			span.style.color = sideColors[i].replace(rgbaRe, "1)");
+			span.textContent = "0";
+			casualtyCountsDisplay.appendChild(span);
+			cSpans[i] = span;
+		}
+		_cachedCasualtySpans = cSpans;
+	}
+
+	if (manpowerCountsDisplay) {
+		manpowerCountsDisplay.innerHTML = "";
+		const mSpans = [];
+		for (let i = 0; i < sides.length; i++) {
+			if (i > 0) {
+				const vs = document.createElement("span");
+				vs.style.color = "#555";
+				vs.textContent = " vs ";
+				manpowerCountsDisplay.appendChild(vs);
+			}
+			const span = document.createElement("span");
+			span.style.color = sideColors[i].replace(rgbaRe, "1)");
+			span.textContent = "0";
+			manpowerCountsDisplay.appendChild(span);
+			mSpans[i] = span;
+		}
+		_cachedManpowerSpans = mSpans;
 	}
 
 	let tugHtml = '<div class="tug-bar">';
@@ -5493,6 +5536,7 @@ export async function _startWarInner() {
 	if (godModeActive) godBombBtn.style.display = "block";
 	forcePeaceBtn.style.display = "block";
 	unitCountsDiv.style.display = "flex";
+	casualtyRow.style.display = "flex";
 	treatyAlert.style.display = "none";
 
 	const getCode = (feat) => {
@@ -8391,7 +8435,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.24.30",
+		_version: "V0.24.31",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -9195,13 +9239,26 @@ export function performSimulationTick() {
 		}
 
 		// Apply posture to country profiles
+		// MANPOWER: critically low manpower forces defensive posture regardless of strength
+		if (initialSideSoldiers[si] > 0) {
+			const mpRatio = sideSoldiers[si] / initialSideSoldiers[si];
+			if (mpRatio < 0.15) {
+				_sidePosture[si] = "DEFENSIVE"; // under 15% manpower = forced defense
+			}
+		}
+
 		if (_sidePosture[si] === "DEFENSIVE") {
 			sides[si].forEach((c) => {
 				const prof = aiCountryState.get(c.id);
 				if (prof) {
 					prof.forceDefensive = true;
-					prof.frontlineBlend = Math.min(prof.frontlineBlend, 0.3);
-					prof.speedMult = Math.min(prof.speedMult, 0.96);
+					// Scale defensive severity by manpower: lower MP = tighter defense
+					const mpRatio = initialSideSoldiers[si] > 0
+						? Math.max(0, sideSoldiers[si] / initialSideSoldiers[si])
+						: 0;
+					const defensiveScale = mpRatio < 0.25 ? 0.6 : mpRatio < 0.5 ? 0.8 : 1.0;
+					prof.frontlineBlend = Math.min(prof.frontlineBlend, 0.3 * defensiveScale);
+					prof.speedMult = Math.min(prof.speedMult, 0.96 * defensiveScale);
 				}
 			});
 		} else if (_sidePosture[si] === "OFFENSIVE") {
@@ -9347,6 +9404,15 @@ export function performSimulationTick() {
 			if (supplyFailed) {
 				absoluteCap = Math.min(absoluteCap, 5);
 			}
+			// MANPOWER: hard cap based on remaining side manpower
+			const mpCap = sideSoldiers[sIdx] > 0
+				? Math.ceil(sideSoldiers[sIdx] / (soldiersPerUnit[sIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO))
+				: 0;
+			if (mpCap === 0 && sideSoldiers[sIdx] <= 0) {
+				absoluteCap = 0; // no manpower = no more troops
+			} else if (mpCap > 0) {
+				absoluteCap = Math.min(absoluteCap, mpCap);
+			}
 
 			if (currentUnits < absoluteCap) {
 				const controlRatio = currentLand / initialLand;
@@ -9393,6 +9459,17 @@ export function performSimulationTick() {
 				// If the capital is lost, recruitment almost collapses
 				if (supplyFailed) {
 					recruitmentChance *= 0.1; // 90% reduction in new troops
+				// MANPOWER: scale recruitment chance by remaining manpower ratio
+				// At 50% manpower: 70% chance. At 25%: 35%. At 0%: no recruits.
+				if (initialSideSoldiers[sIdx] > 0) {
+					const mpRatio = Math.max(0, sideSoldiers[sIdx] / initialSideSoldiers[sIdx]);
+					if (mpRatio <= 0) {
+						recruitmentChance = 0; // no manpower = no new units
+					} else {
+						recruitmentChance *= Math.min(1, mpRatio * 2); // linear scale, capped at 100%
+					}
+				}
+
 				}
 
 				if (Math.random() < recruitmentChance) {
@@ -12194,6 +12271,28 @@ export function updateLoop(now) {
 		}
 	}
 
+	// Update casualty + manpower row (throttled to every 5 frames)
+	if (_cachedCasualtySpans.length && simFrameCount % 5 === 0) {
+		for (let si = 0; si < _cachedCasualtySpans.length; si++) {
+			if (initialSideSoldiers[si] > 0) {
+				const loss = Math.max(0, initialSideSoldiers[si] - sideSoldiers[si]);
+				_cachedCasualtySpans[si].textContent = influenceLayer.formatSoldiers(loss);
+			} else {
+				_cachedCasualtySpans[si].textContent = "0";
+			}
+		}
+	}
+	if (_cachedManpowerSpans.length && simFrameCount % 5 === 0) {
+		for (let si = 0; si < _cachedManpowerSpans.length; si++) {
+			if (initialSideSoldiers[si] > 0) {
+				const remaining = Math.max(0, sideSoldiers[si]);
+				_cachedManpowerSpans[si].textContent = influenceLayer.formatSoldiers(remaining);
+			} else {
+				_cachedManpowerSpans[si].textContent = "0";
+			}
+		}
+	}
+
 	const sideCityCounts = new Array(sides.length).fill(0);
 	activeTheaterCities.forEach((c) => {
 		const dm = dominantSideMap[getGridIndex(c.lat, c.lng)];
@@ -13041,6 +13140,7 @@ export function resetToSelection() {
 		ffBtn.style.display = "none";
 		forcePeaceBtn.style.display = "none";
 		unitCountsDiv.style.display = "none";
+	casualtyRow.style.display = "none";
 		updateRestartVisibility();
 		influenceLayer.render();
 		if (!godModeActive) return;
@@ -13083,6 +13183,7 @@ export function resetToSelection() {
 	godBombBtn.classList.remove("active");
 	forcePeaceBtn.style.display = "none";
 	unitCountsDiv.style.display = "none";
+	casualtyRow.style.display = "none";
 }
 
 export async function resetGame() {
@@ -13548,6 +13649,7 @@ if (quickRestartBtn) {
 		godModeBtn.style.display = gameMode === "CONQUEST" ? "block" : "none";
 		forcePeaceBtn.style.display = "none";
 		unitCountsDiv.style.display = "none";
+	casualtyRow.style.display = "none";
 		treatyAlert.style.display = "none";
 		frameAccumulator = 0;
 		simFrameCount = 0;
@@ -17191,6 +17293,7 @@ export function resetConflictSetupState() {
 	treatyAlert.style.display = "none";
 	statusText.innerText = getTranslation("SELECT_P1");
 	unitCountsDiv.style.display = "none";
+	casualtyRow.style.display = "none";
 	statsPanel.style.display = "none";
 	casualtyPanel.style.display = "none";
 	document.getElementById("speed-controls").style.display = "none";
