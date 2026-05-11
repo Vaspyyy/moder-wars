@@ -8834,6 +8834,7 @@ export function performSimulationTick() {
 				}
 			}
 		});
+		window.__perf.phase133 = (window.__perf.phase133 || 0) + performance.now() - _tP133;
 	} else {
 		// Carry over stats from the last "counting" frame.
 		// For unitless countries, never inflate controlled/owned to initialCells —
@@ -8851,7 +8852,6 @@ export function performSimulationTick() {
 					c.lastOwnedCount !== undefined ? c.lastOwnedCount : fallback;
 			}
 		});
-		window.__perf.phase133 = (window.__perf.phase133 || 0) + performance.now() - _tP133;
 	}
 
 	// Persist stats for next frame's "non-counting" logic
