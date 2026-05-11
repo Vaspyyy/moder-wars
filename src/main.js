@@ -8492,14 +8492,13 @@ export function evaluateAllPlans() {
 		}
 		_defenderReactionPlan[si] = null;
 	}
-	}
 	window.__perf.eval = (window.__perf.eval || 0) + performance.now() - _te;
 }
 
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.2",
+		_version: "V0.25.3",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
