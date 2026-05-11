@@ -5196,7 +5196,7 @@ export function spawnSingleUnit(
 	});
 
 	if (sideIdx >= 0 && sideIdx < MAX_SIDES) {
-		sideSoldiers[sideIdx] += soldiersPerUnit[sideIdx];
+		sideSoldiers[sideIdx] = Math.max(0, sideSoldiers[sideIdx] - soldiersPerUnit[sideIdx]);
 	}
 
 	return true;
@@ -6022,7 +6022,7 @@ export async function _startWarInner() {
 		initialSideSoldiers[sIdx] =
 			manualSideManpower[sIdx] !== null
 				? manualSideManpower[sIdx]
-				: Math.round(initialUnits);
+				: Math.round(initialUnits * 6); // auto pool is 6× initial army size
 		sideSoldiers[sIdx] = initialSideSoldiers[sIdx];
 		soldiersPerUnit[sIdx] =
 			sideUnitCounts[sIdx] > 0
@@ -8393,7 +8393,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.24.33",
+		_version: "V0.24.34",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -8433,13 +8433,9 @@ export function performSimulationTick() {
 		const sIdx = targetUnit.sideIndex;
 		const ratio =
 			sIdx >= 0 && sIdx < MAX_SIDES
-				? soldiersPerUnit[sIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO
 				: CONFIG.UNIT_TO_SOLDIER_RATIO;
 		const loss = (effectiveDmg / CONFIG.UNIT_HEALTH) * ratio;
 
-		if (sIdx >= 0 && sIdx < MAX_SIDES) {
-			sideSoldiers[sIdx] = Math.max(0, sideSoldiers[sIdx] - loss);
-		}
 
 		const currentTotal = countryCasualties.get(targetUnit.sovereignId) || 0;
 		countryCasualties.set(targetUnit.sovereignId, currentTotal + loss);
@@ -15971,7 +15967,7 @@ export function _placeDivisionAt(latlng, sovereignId) {
 	});
 
 	if (sideIdx >= 0 && sideIdx < MAX_SIDES) {
-		sideSoldiers[sideIdx] += soldiersPerUnit[sideIdx];
+		sideSoldiers[sideIdx] = Math.max(0, sideSoldiers[sideIdx] - soldiersPerUnit[sideIdx]);
 	}
 
 	statusText.innerText = `MANUAL DEPLOYMENT: Division placed for ${countryMetadata[sovereignId - 1]?.name || "Nation"}`;
