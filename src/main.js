@@ -8498,7 +8498,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.0",
+		_version: "V0.25.1",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -9787,7 +9787,7 @@ export function performSimulationTick() {
 			}
 			encirclementFactor = enemyCount / offsets.length;
 		}
-		const isEncircled = encirclementFactor > 0.75;
+		const isEncircled = encirclementFactor > 0.875;
 
 		if (isEncircled && !isMega && !isSuper) {
 			damageDealtMult *= 0.25; // Massive reduction in combat effectiveness
@@ -9833,9 +9833,6 @@ export function performSimulationTick() {
 			recordDamage(u, dmg * damageTakenMult);
 
 			// Instant death triggers full remaining health as casualties
-			if (isEncircled && Math.random() < 0.025) {
-				recordDamage(u, u.health);
-			}
 		}
 
 		// --- EXPEDITIONARY SUPPORT SYSTEM ---
@@ -9960,7 +9957,7 @@ export function performSimulationTick() {
 									(isRebelUnit
 										? deJureMap[eIdx] === u.sovereignId
 										: worldControlMap[eIdx] === u.sovereignId);
-								if (!isEnemyInMyMandatedLand && dSq > 0.09) continue;
+								if (!isEnemyInMyMandatedLand && dSq > 0.25) continue;
 							}
 
 							const distMult = eAtSea && !isAtSea ? 50.0 : 1.0;
@@ -10262,6 +10259,7 @@ export function performSimulationTick() {
 			localEnemyCount > 0 && localAllyCount > localEnemyCount * 3;
 
 		// Global Target Fallback (if no enemies were found in the local 6-degree spatial hash but enemies exist somewhere)
+		// Add scatter to avoid blob: ±1° random offset
 		if (!target && !cityFocusTarget && totalEnemiesCount > 0) {
 			let bestCentroidDist = Infinity;
 			sideCentroids.forEach((centroids, idx) => {
@@ -10275,7 +10273,13 @@ export function performSimulationTick() {
 						const dSq = (u.lat - c.lat) ** 2 + dcLng ** 2;
 						if (dSq < bestCentroidDist) {
 							bestCentroidDist = dSq;
-							target = c;
+							// Add scatter to avoid blob: ±1° random offset
+							const scatterLat = (Math.random() - 0.5) * 2;
+							const scatterLng = (Math.random() - 0.5) * 2;
+							target = {
+								lat: c.lat + scatterLat,
+								lng: c.lng + scatterLng,
+							};
 						}
 					});
 				}
@@ -10587,7 +10591,11 @@ export function performSimulationTick() {
 			}
 
 			if (bestCity) {
-				if (target && target.lat !== undefined && target.lng !== undefined) {
+				// Don't blend city into unit target — blending with a coordinate
+				// destroys the .health property needed for direct combat
+				if (target && target.health !== undefined) {
+					// Keep the enemy unit target; city is secondary objective
+				} else if (target && target.lat !== undefined && target.lng !== undefined) {
 					const w = aiProfile.targetCityWeight;
 					target = {
 						lat: target.lat * (1 - w) + bestCity.lat * w,
@@ -11337,7 +11345,7 @@ export function performSimulationTick() {
 						dCentLat * dCentLat + dCentLng * dCentLng,
 					);
 					if (dCentDist > 0.1) {
-						const cohesionStr = 0.15;
+						const cohesionStr = 0.06;
 						moveDirLat += (dCentLat / dCentDist) * cohesionStr;
 						moveDirLng += (dCentLng / dCentDist) * cohesionStr;
 					}
@@ -11626,7 +11634,7 @@ export function performSimulationTick() {
 				// Massive speed boost when actively retreating to avoid being swallowed by fast borders
 				// BUT trapped/encircled units cannot retreat efficiently
 				let retreatBoost = activeRetreat ? 5.5 : 1.0;
-				if (isEncircled) retreatBoost *= 0.05;
+				if (isEncircled) retreatBoost *= 0.25;
 
 				// --- FORCED PUSH COORDINATION (Victory-Driven) ---
 				// Disabled when a war/naval plan is driving the unit
