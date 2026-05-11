@@ -8391,7 +8391,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.24.21",
+		_version: "V0.24.22",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0, caches: 0, spatialHash: 0, posture: 0, counting: 0,
 		tickTotal: 0, maxTick: 0, ticks: 0,
