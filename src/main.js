@@ -1889,7 +1889,7 @@ export let frontlineDirLat = null; // Float32Array, length = gridWidth * gridHei
 export let frontlineDirLng = null; // Float32Array, length = gridWidth * gridHeight
 export let frontlineFieldTick = -999; // last simFrameCount when field was rebuilt
 export let _frontlineSourceCell = null; // reusable Int32Array for BFS — allocated once
-export const FRONTLINE_FIELD_UPDATE_INTERVAL = 30; // rebuild every N ticks (not every 4 — grid is 2.88M cells)
+export const FRONTLINE_FIELD_UPDATE_INTERVAL = 60; // rebuild every N ticks (was 15→30→60)
 export let _simWorker = null; // Web Worker for async frontline BFS
 export let _workerBusy = false;
 // Frontline polyline system: distributed unit stationing along war fronts
@@ -8391,11 +8391,12 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.24.26", _tCount: 0,
+		_version: "V0.24.27",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
-		influence: 0, smoothing: 0, counting: 0, spatialHash: 0,
-		frontline: 0, consolidate: 0, caches: 0, victory: 0, aiPosture: 0, posture: 0,
+		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
+		spatialHash: 0, frontline: 0, consolidate: 0, caches: 0,
+		victory: 0, aiPosture: 0, posture: 0,
 		tickTotal: 0, maxTick: 0, ticks: 0,
 		proposalRuns: 0, proposalFailed: 0,
 		reassess_noPlan: 0, reassess_interval: 0, reassess_forced: 0,
@@ -8548,15 +8549,17 @@ export function performSimulationTick() {
 	// 1b. Territorial Integrity: Collapse deep pockets and isolated protrusions (Enclaves/Exclaves)
 	// We sample the grid to find territory that is surrounded by the enemy.
 	// This aggressively decays "border gore" and isolated bubbles.
-	// PERF: Throttled — only runs on "counting" frames (same cadence as shouldCountLand)
-	//       to avoid 5000-sample random scans on every single tick (was 13% self-time).
+	// PERF: Phased — 3 heavy scans staggered across different ticks to avoid spike clustering.
+	//       Phase 0: territorial integrity (5k samples). Phase 100: occupationMap (2.88M cells).
+	//       Phase 200: worldControlMap frontier scan (2.88M cells). Interval: 300 sim-ticks.
 	const optimizationFactor = getOptimizationFactor();
-	// Use _simTickCount (per-tick) so interval matches simulation progress, not visual frames
-	// countInterval balances data freshness vs CPU — 20*speed keeps AI responsive
-	const countInterval = Math.max(30, Math.floor(20 * simSpeed));
-	const shouldCountLand = _simTickCount % countInterval === 0;
+	const countInterval = 200;
+	const countPhase = _simTickCount % countInterval;
+	const shouldCountLand = countPhase === 0;
+	const shouldScanOccupancy = countPhase === 67;
+	const shouldScanFrontier = countPhase === 133;
 	if (shouldCountLand) {
-		window.__perf._tCount = performance.now();
+		const _tP0 = performance.now();
 		const integBase = 5000;
 		const integSamples = Math.max(
 			1000,
@@ -8604,12 +8607,13 @@ export function performSimulationTick() {
 				syncOccupationFromSideInfluence(idx);
 			}
 		}
-	} // end shouldCountLand guard for territorial integrity
+		window.__perf.phase0 = (window.__perf.phase0 || 0) + performance.now() - _tP0;
+	} // end territorial integrity
 
 	// 2. Statistics & Soldiers (Dynamic based on units)
-	// PERF: Full 2.88M-cell occupationMap scan throttled to shouldCountLand frames only.
-	//       Was 29% total time — now runs every 15+ frames and caches the result.
-	if (shouldCountLand) {
+	// PERF: Full 2.88M-cell occupationMap scan — phase 67 (staggered from integrity)
+	if (shouldScanOccupancy) {
+		const _tP67 = performance.now();
 		let p1Tmp = 0,
 			p2Tmp = 0;
 		for (let i = 0; i < occupationMap.length; i++) {
@@ -8621,6 +8625,7 @@ export function performSimulationTick() {
 		}
 		_cachedP1T = p1Tmp;
 		_cachedP2T = p2Tmp;
+		window.__perf.phase67 = (window.__perf.phase67 || 0) + performance.now() - _tP67;
 	}
 	const p1T = _cachedP1T,
 		p2T = _cachedP2T;
@@ -8758,7 +8763,8 @@ export function performSimulationTick() {
 		}
 	}
 	window.__perf.consolidate = (window.__perf.consolidate || 0) + performance.now() - _tConsolidate;
-	if (shouldCountLand) {
+	if (shouldScanFrontier) {
+		const _tP133 = performance.now();
 		recalculateAllBounds();
 		const countryFrontlines = new Map();
 		sides.flat().forEach((c) => {
@@ -8845,13 +8851,13 @@ export function performSimulationTick() {
 					c.lastOwnedCount !== undefined ? c.lastOwnedCount : fallback;
 			}
 		});
-		window.__perf.counting = (window.__perf.counting || 0) + performance.now() - (window.__perf._tCount || 0);
+		window.__perf.phase133 = (window.__perf.phase133 || 0) + performance.now() - _tP133;
 	}
 
 	// Persist stats for next frame's "non-counting" logic
 	sides.flat().forEach((c) => {
 		const stats = countryStats.get(c.id);
-		if (stats && shouldCountLand) {
+		if (stats && shouldScanFrontier) {
 			c.lastControlledCount = stats.controlled;
 			c.lastOwnedCount = stats.owned;
 		}
