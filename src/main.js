@@ -8391,7 +8391,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.24.22",
+		_version: "V0.24.24-p",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0, smoothing: 0, caches: 0, spatialHash: 0, posture: 0, counting: 0,
 		tickTotal: 0, maxTick: 0, ticks: 0,
@@ -8618,7 +8618,6 @@ export function performSimulationTick() {
 		}
 		_cachedP1T = p1Tmp;
 		_cachedP2T = p2Tmp;
-		window.__perf.counting = (window.__perf.counting || 0) + performance.now() - _tCount;
 	}
 	const p1T = _cachedP1T,
 		p2T = _cachedP2T;
@@ -8839,6 +8838,7 @@ export function performSimulationTick() {
 					c.lastOwnedCount !== undefined ? c.lastOwnedCount : fallback;
 			}
 		});
+		window.__perf.counting = (window.__perf.counting || 0) + performance.now() - _tCount;
 	}
 
 	// Persist stats for next frame's "non-counting" logic
