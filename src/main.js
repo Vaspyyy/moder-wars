@@ -1889,14 +1889,14 @@ export let frontlineDirLat = null; // Float32Array, length = gridWidth * gridHei
 export let frontlineDirLng = null; // Float32Array, length = gridWidth * gridHeight
 export let frontlineFieldTick = -999; // last simFrameCount when field was rebuilt
 export let _frontlineSourceCell = null; // reusable Int32Array for BFS — allocated once
-export const FRONTLINE_FIELD_UPDATE_INTERVAL = 60; // rebuild every N ticks (was 15→30→60)
+export const FRONTLINE_FIELD_UPDATE_INTERVAL = 150; // rebuild field via worker every N ticks (15→30→60→150)
 export let _simWorker = null; // Web Worker for async frontline BFS
 export let _workerBusy = false;
 // Frontline polyline system: distributed unit stationing along war fronts
 export let _frontlinePolys = {};
 export let _neutralBorderPolys = {}; // combatant-vs-neutral border polylines for garrison stationing
 export let _frontlinePolyTick = -999;
-export const FRONTLINE_POLY_UPDATE_INTERVAL = 15;
+export const FRONTLINE_POLY_UPDATE_INTERVAL = 30; // visual frames between polyline rebuilds (15→30)
 export let _cachedFrontierCells = []; // cached BFS frontier seed cells (incremental rebuild)
 export let _frontierScanCounter = 0; // counter for full-scan cadence
 
@@ -8391,7 +8391,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.24.29",
+		_version: "V0.24.30",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
