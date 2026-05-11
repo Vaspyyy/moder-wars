@@ -8391,7 +8391,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.24.20-p",
+		_version: "V0.24.21",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0, caches: 0, spatialHash: 0, posture: 0, counting: 0,
 		tickTotal: 0, maxTick: 0, ticks: 0,
@@ -8546,9 +8546,11 @@ export function performSimulationTick() {
 	//       to avoid 5000-sample random scans on every single tick (was 13% self-time).
 	const optimizationFactor = getOptimizationFactor();
 	// Use _simTickCount (per-tick) so interval matches simulation progress, not visual frames
-	const countInterval = Math.max(15, Math.floor(15 * simSpeed));
+	// countInterval balances data freshness vs CPU — 20*speed keeps AI responsive
+	const countInterval = Math.max(30, Math.floor(20 * simSpeed));
 	const shouldCountLand = _simTickCount % countInterval === 0;
 	if (shouldCountLand) {
+		const _tCount = performance.now();
 		const integBase = 5000;
 		const integSamples = Math.max(
 			1000,
@@ -8613,6 +8615,7 @@ export function performSimulationTick() {
 		}
 		_cachedP1T = p1Tmp;
 		_cachedP2T = p2Tmp;
+		window.__perf.counting = (window.__perf.counting || 0) + performance.now() - _tCount;
 	}
 	const p1T = _cachedP1T,
 		p2T = _cachedP2T;
