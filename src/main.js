@@ -8251,7 +8251,7 @@ export function evaluateAllPlans() {
 			if (rpCur && rpCur.enemySideIdx !== ei) continue;
 
 			// TRANSIT: pre-emptive reaction if heading to our territory
-			if (enemyNP.phase === "TRANSIT" && onOurTerritory) {
+			if (enemyNP && enemyNP.phase === "TRANSIT" && onOurTerritory) {
 				let rpCur2 = _defenderReactionPlan[si];
 				if (!rpCur2) {
 					const preActive = Math.min(
@@ -8365,7 +8365,7 @@ export function evaluateAllPlans() {
 			}
 
 			// LANDING: full reactive response
-			if (enemyNP.phase === "LANDING" && onOurTerritory) {
+			if (enemyNP && enemyNP.phase === "LANDING" && onOurTerritory) {
 				let enemyLandingForce = 0;
 				for (const u of (_tickUnitsBySide[ei] || [])) {
 					// side-filtered via _tickUnitsBySide
@@ -8508,7 +8508,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.8",
+		_version: "V0.25.9",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
