@@ -8391,9 +8391,9 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.24.17",
+		_version: "V0.24.18-p",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
-		recruit: 0, unitLoop: 0, post: 0,
+		recruit: 0, unitLoop: 0, post: 0, spatialHash: 0, counting: 0, posture: 0,
 		tickTotal: 0, maxTick: 0, ticks: 0,
 		proposalRuns: 0, proposalFailed: 0,
 		reassess_noPlan: 0, reassess_interval: 0, reassess_forced: 0,
@@ -8631,6 +8631,7 @@ export function performSimulationTick() {
 
 	// Build Spatial Hash for ultra-fast O(1) local combat & target lookup
 	// Shared with renderer to allow high-performance unit culling
+	const _tsh = performance.now();
 	unitSpatialHash.clear();
 	const unitHash = unitSpatialHash;
 	const HASH_SIZE = UNIT_HASH_CELL_SIZE;
@@ -8647,6 +8648,7 @@ export function performSimulationTick() {
 		}
 		arr.push(u);
 	}
+	window.__perf.spatialHash = (window.__perf.spatialHash || 0) + performance.now() - _tsh;
 
 	// OPT-1: Rebuild frontline direction field every N ticks via Web Worker.
 	// getBorderDirection() now does an O(1) array lookup instead of a 12-radius grid scan.
@@ -9112,6 +9114,7 @@ export function performSimulationTick() {
 	}
 
 	// ── Auto Posture: per-side strength ratio → OFFENSIVE/BALANCED/DEFENSIVE ──
+	const _tpo = performance.now();
 	const sideStrength = new Array(sides.length).fill(0);
 	const sideUnitCounts = new Array(sides.length).fill(0);
 	for (let i = 0; i < units.length; i++) {
@@ -9187,6 +9190,7 @@ export function performSimulationTick() {
 	}
 
 	// Evaluate war plans — check completion/failure, regenerate if needed
+	window.__perf.posture = (window.__perf.posture || 0) + performance.now() - _tpo;
 	const _t1 = performance.now();
 	evaluateAllPlans();
 	window.__perf.plans += performance.now() - _t1;
