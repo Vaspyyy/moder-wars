@@ -8391,9 +8391,9 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.24.19-p",
+		_version: "V0.24.20-p",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
-		recruit: 0, unitLoop: 0, post: 0, spatialHash: 0, counting: 0, posture: 0,
+		recruit: 0, unitLoop: 0, post: 0, prePlans: 0, caches: 0, spatialHash: 0, posture: 0, counting: 0,
 		tickTotal: 0, maxTick: 0, ticks: 0,
 		proposalRuns: 0, proposalFailed: 0,
 		reassess_noPlan: 0, reassess_interval: 0, reassess_forced: 0,
@@ -8846,6 +8846,7 @@ export function performSimulationTick() {
 
 	while (_tickUnitsBySide.length < sides.length) _tickUnitsBySide.push([]);
 	for (let si = 0; si < sides.length; si++) _tickUnitsBySide[si].length = 0;
+	const _tbs = performance.now();
 	for (let ui = 0; ui < units.length; ui++) {
 		const sIdx = units[ui].sideIndex;
 		if (sIdx >= 0 && sIdx < sides.length)
@@ -8867,6 +8868,7 @@ export function performSimulationTick() {
 			_countryById.set(sides[_csi][_cc].id, sides[_csi][_cc]);
 		}
 	}
+	window.__perf.caches = (window.__perf.caches || 0) + performance.now() - _tbs;
 	// City target list used for CITY FOCUS and URBAN strategies; prefer the active theater,
 	// and fall back to all known cities if no theater is defined.
 	const cityTargets = activeTheaterCities?.length
