@@ -7235,7 +7235,7 @@ export function scoreProposal(proposal, sideIdx) {
 		score += 25;
 	}
 	if (proposal.type === "PUSH_FRONT") {
-		score += 5;
+		score += 15;
 	}
 	if (proposal.type === "NAVAL_SUPPLY") {
 		score += 20;
@@ -7250,8 +7250,8 @@ export function scoreProposal(proposal, sideIdx) {
 	else score -= 30;
 
 	// ── Risk (0–20, inverted) ──
-	if (globalForceRatio >= 3.0) score += 20;
-	else if (globalForceRatio >= 1.5) score += 10;
+	if (globalForceRatio >= 4.0) score += 20;
+	else if (globalForceRatio >= 2.5) score += 10;
 	else score -= 20;
 
 	// ── Urgency (0–10) ──
@@ -7421,9 +7421,26 @@ export function selectPlans(sideIdx, scoredProposals) {
 	// ── Force allocation ──
 	const selectedOff = [land1, land2, naval1, supply1].filter(Boolean);
 	const offSum = selectedOff.reduce((s, p) => s + (p.priority || 0), 0);
+	// Count local enemies near each target and scale force accordingly
+	const _allUnits = allUnitsRef || [];
 	for (const p of selectedOff) {
 		p.allocatedForce =
 			offSum > 0 ? Math.ceil(offensiveForce * ((p.priority || 0) / offSum)) : 0;
+		// Scale by local enemy presence
+		if (p.target) {
+			let localEnemies = 0;
+			for (const eu of _allUnits) {
+				if (eu.sideIndex === si) continue;
+				const dLat = p.target.lat - eu.lat;
+				let dLng = p.target.lng - eu.lng;
+				if (dLng > 180) dLng -= 360;
+				else if (dLng < -180) dLng += 360;
+				if (dLat * dLat + dLng * dLng < 9.0) localEnemies++; // within ~3°
+			}
+			if (localEnemies > 0) {
+				p.allocatedForce = Math.max(p.allocatedForce, Math.ceil(localEnemies * 1.5));
+			}
+		}
 	}
 
 	const selectedDef = [defend1, ...selectedCoastal, ...selectedGarr].filter(
@@ -7464,11 +7481,11 @@ export function selectPlans(sideIdx, scoredProposals) {
 		activeUnitCount: 0,
 	});
 
-	if (land1) result.land1 = makePlan(land1, "PREPARATION");
-	if (land2) result.land2 = makePlan(land2, "PREPARATION");
+	if (land1) result.land1 = makePlan(land1, "EXECUTION");
+	if (land2) result.land2 = makePlan(land2, "EXECUTION");
 	if (naval1) result.naval = makePlan(naval1, "GATHERING");
 	if (supply1) result.supply = makePlan(supply1, "GATHERING");
-	if (defend1) result.defend = makePlan(defend1, "PREPARATION");
+	if (defend1) result.defend = makePlan(defend1, "EXECUTION");
 	result.coastal = selectedCoastal.map((p) => makePlan(p, "EXECUTION"));
 	result.garrisons = selectedGarr.map((p) => makePlan(p, "EXECUTION"));
 
@@ -7479,9 +7496,12 @@ function shouldReassess(si) {
 	const REASSESS_INTERVAL = 300; // sim-ticks (was visual frames; now per-tick)
 	const HARD_COOLDOWN = 150; // minimum sim-ticks between reassessments (even forced)
 
-	// Hard cooldown: prevent eval-block spam from triggering reassessment
-	// every 5 ticks (was producing 97% forced rate: 507/521 forced)
 	const lastReassess = _proposalReassessTick[si] || 0;
+
+	// Allow forced reassess (enemy offensive, plan stall, territory shift) to bypass cooldown
+	if (_planReassessNeeded[si]) { if (window.__perf) window.__perf.reassess_forced++; return true; }
+
+	// Hard cooldown: prevent eval-block spam
 	if (_simTickCount - lastReassess < HARD_COOLDOWN) return false;
 
 	// Stagger first reassessment per side to avoid all 70 sides firing on the
@@ -7489,7 +7509,6 @@ function shouldReassess(si) {
 	if (lastReassess === 0 && _simTickCount < HARD_COOLDOWN + (si % (HARD_COOLDOWN / 2)) * 2) {
 		return false;
 	}
-
 	let result = false;
 
 	if (_planReassessNeeded[si]) { result = true; if (window.__perf) window.__perf.reassess_forced++; }
@@ -7654,9 +7673,9 @@ export function evaluateAllPlans() {
 			simFrameCount - (plan.lastProgressTick || simFrameCount);
 
 		if (
-			(plan.type === "CAPTURE_CITY" || plan.type === "ENCIRCLE") &&
-			plan.target
+			(plan.type === "CAPTURE_CITY" || plan.type === "ENCIRCLE" || plan.type === "PUSH_FRONT" || plan.type === "DEFEND")
 		) {
+			if (plan.target) {
 			// Check if target area is now under friendly control
 			const tIdx = getGridIndex(plan.target.lat, plan.target.lng);
 			const captured = tIdx !== -1 && dominantSideMap[tIdx] === si;
@@ -7664,10 +7683,11 @@ export function evaluateAllPlans() {
 				plan.phase = "CONSOLIDATION";
 				plan.progress = 1.0;
 				// After consolidation period, generate next plan
-				if (ticksSinceProgress > 1800) {
+				if (ticksSinceProgress > 600) {
 					_planReassessNeeded[si] = true;
 				}
 				continue;
+			}
 			}
 
 			// PREPARATION → EXECUTION: advance when enough units rally at staging cells
@@ -7693,7 +7713,7 @@ export function evaluateAllPlans() {
 			}
 
 			// Check for stall
-			if (ticksSinceProgress > 1800 && ticksSinceStart > 600) {
+			if (ticksSinceProgress > 600 && ticksSinceStart > 600) {
 				_planReassessNeeded[si] = true; // Failed — reassess
 				continue;
 			}
@@ -7737,18 +7757,19 @@ export function evaluateAllPlans() {
 			simFrameCount - (plan2.lastProgressTick || simFrameCount);
 
 		if (
-			(plan2.type === "CAPTURE_CITY" || plan2.type === "ENCIRCLE") &&
-			plan2.target
+			(plan2.type === "CAPTURE_CITY" || plan2.type === "ENCIRCLE" || plan2.type === "PUSH_FRONT" || plan2.type === "DEFEND")
 		) {
+			if (plan2.target) {
 			const tIdx2 = getGridIndex(plan2.target.lat, plan2.target.lng);
 			const captured2 = tIdx2 !== -1 && dominantSideMap[tIdx2] === si;
 			if (captured2) {
 				plan2.phase = "CONSOLIDATION";
 				plan2.progress = 1.0;
-				if (ticksSinceProgress2 > 1800) {
+				if (ticksSinceProgress2 > 600) {
 					_planReassessNeeded[si] = true;
 				}
 				continue;
+			}
 			}
 
 			if (plan2.phase === "PREPARATION" && plan2.stagingCells?.length > 0) {
@@ -7825,7 +7846,7 @@ export function evaluateAllPlans() {
 		}
 
 		// Stall detection: if stalled for 30s, cancel naval plan
-		if (ticksSinceProgress > 1800 && ticksSinceStart > 600) {
+		if (ticksSinceProgress > 600 && ticksSinceStart > 600) {
 			// Release all assigned units
 			for (const u of (_tickUnitsBySide[si] || [])) {
 				if (u.navalAssigned) {
@@ -7939,7 +7960,7 @@ export function evaluateAllPlans() {
 			simFrameCount - (sp.lastProgressTick || simFrameCount);
 
 		// Stall detection
-		if (ticksSinceProgress > 1800) {
+		if (ticksSinceProgress > 600) {
 			for (const u of (_tickUnitsBySide[si] || [])) {
 				if (u.supplyAssigned) {
 					u.supplyAssigned = false;
@@ -8183,14 +8204,37 @@ export function evaluateAllPlans() {
 		}
 
 		// ---- Detect threats & manage reaction plan ----
+		// Check both naval and land threats from enemies
 		for (let ei = 0; ei < sides.length; ei++) {
 			if (ei === si) continue;
 			if (!sides[ei] || sides[ei].length === 0) continue;
 			const enemyNP = _navalPlan[ei];
-			if (!enemyNP?.target) continue;
+			const enemyLand1 = _warPlan[ei];
+			const enemyLand2 = _warPlan[ei + sides.length];
 
-			const tIdx = getGridIndex(enemyNP.target.lat, enemyNP.target.lng);
-			const onOurTerritory = tIdx !== -1 && dominantSideMap[tIdx] === si;
+			// Check naval plan
+			let threatTarget = null;
+			let onOurTerritory = false;
+			if (enemyNP?.target) {
+				const tIdx = getGridIndex(enemyNP.target.lat, enemyNP.target.lng);
+				if (tIdx !== -1 && dominantSideMap[tIdx] === si) {
+					threatTarget = enemyNP.target;
+					onOurTerritory = true;
+				}
+			}
+			// Check land plans targeting our territory
+			if (!threatTarget) {
+				for (const lp of [enemyLand1, enemyLand2]) {
+					if (!lp?.target || lp.phase !== "EXECUTION") continue;
+					const tIdx = getGridIndex(lp.target.lat, lp.target.lng);
+					if (tIdx !== -1 && dominantSideMap[tIdx] === si) {
+						threatTarget = lp.target;
+						onOurTerritory = true;
+						break;
+					}
+				}
+			}
+			if (!threatTarget) continue;
 
 			const rpCur = _defenderReactionPlan[si];
 			if (rpCur && rpCur.enemySideIdx !== ei) continue;
@@ -8247,6 +8291,67 @@ export function evaluateAllPlans() {
 					if (recruited >= slotsOpen) break;
 				}
 				rpCur2.activeUnitCount += recruited;
+			}
+
+			// ---- Land threat response (enemy land plan targeting our territory) ----
+			if (!enemyNP && onOurTerritory) {
+				let rpCur = _defenderReactionPlan[si];
+				if (rpCur && rpCur.enemySideIdx !== ei) continue;
+				// Count enemy units near the threatened area
+				let enemyForceNear = 0;
+				for (const eu of (_tickUnitsBySide[ei] || [])) {
+					const dLat = threatTarget.lat - eu.lat;
+					let dLng = threatTarget.lng - eu.lng;
+					if (dLng > 180) dLng -= 360;
+					else if (dLng < -180) dLng += 360;
+					if (dLat * dLat + dLng * dLng < 9.0) enemyForceNear++;
+				}
+				if (enemyForceNear < 3) continue;
+				if (!rpCur) {
+					const reactForce = Math.min(
+						Math.ceil(enemyForceNear * 1.5),
+						Math.floor((_tickUnitsBySide[si]?.length || 0) * 0.3),
+					);
+					if (reactForce >= 3) {
+						_defenderReactionPlan[si] = {
+							type: "DEFEND",
+							target: {
+								lat: threatTarget.lat,
+								lng: threatTarget.lng,
+							},
+							enemySideIdx: ei,
+							phase: "EXECUTION",
+							maxUnits: reactForce,
+							activeUnitCount: 0,
+							startedTick: simFrameCount,
+							lastProgressTick: simFrameCount,
+						};
+						rpCur = _defenderReactionPlan[si];
+					}
+				}
+				if (!rpCur || rpCur.activeUnitCount >= rpCur.maxUnits) continue;
+				const slotsOpen = rpCur.maxUnits - rpCur.activeUnitCount;
+				let recruited = 0;
+				for (const u of (_tickUnitsBySide[si] || [])) {
+					if (u.deployTicks > 0) continue;
+					if (u.navalAssigned || u.supplyAssigned) continue;
+					if (u.coastalAssigned || u.garrisonAssigned) continue;
+					if (u._defenderReactTarget) continue;
+					const dLat = rpCur.target.lat - u.lat;
+					let dLng = rpCur.target.lng - u.lng;
+					if (dLng > 180) dLng -= 360;
+					else if (dLng < -180) dLng += 360;
+					const dSq = dLat * dLat + dLng * dLng;
+					if (dSq < 9.0 || dSq > 100.0) continue;
+					u._defenderReactTarget = {
+						lat: rpCur.target.lat,
+						lng: rpCur.target.lng,
+					};
+					recruited++;
+					if (recruited >= slotsOpen) break;
+				}
+				rpCur.activeUnitCount += recruited;
+			}
 			}
 
 			// LANDING: full reactive response
@@ -8393,7 +8498,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.24.36",
+		_version: "V0.25.0",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -9864,8 +9969,11 @@ export function performSimulationTick() {
 								((u.lat - e.lat + noise) ** 2 + (deLng + noise) ** 2) *
 								distMult;
 
-							if (noisyDSq < minDist) {
-								minDist = noisyDSq;
+							// Prefer wounded targets: reduce score for low-health enemies
+							const healthModifier = Math.max(0, 1.0 - (e.health || 100) / 100) * 0.02;
+							const targetScore = noisyDSq - healthModifier;
+							if (targetScore < minDist) {
+								minDist = targetScore;
 								target = e;
 							}
 
@@ -9891,15 +9999,15 @@ export function performSimulationTick() {
 									if (inWarGrace) continue;
 									let proximityDamage =
 										CONFIG.COMBAT_DAMAGE *
-										0.07 *
+										0.15 *
 										damageDealtMult *
 										(1.0 - Math.sqrt(dSq) / 0.2);
 									if (isAtSea && eAtSea) proximityDamage *= 2.2;
 									// Transports take extra damage at sea from non-transport enemies
-									if (e.isTransport && !u.isTransport) proximityDamage *= 1.5;
+									if (e.isTransport && !u.isTransport) proximityDamage *= 1.05;
 									if (u.isTransport && !e.isTransport) {
-										recordDamage(u, proximityDamage * 1.2 * damageTakenMult, e);
-										proximityDamage *= 0.7;
+										recordDamage(u, proximityDamage * 1.05 * damageTakenMult, e);
+										proximityDamage *= 0.85;
 									}
 
 									recordDamage(e, proximityDamage, u);
@@ -10221,10 +10329,12 @@ export function performSimulationTick() {
 		const borderDir = getBorderDirection(u);
 
 		if (isTooNearBorder && !isAtSea) {
-			// Frontline Skirmish Damage: Being pushed back by an advancing border is taxing and represents rear-guard casualties
-			const skirmishDamage =
-				CONFIG.COMBAT_DAMAGE * 0.15 * (1.0 + Math.abs(currentControl) * 2);
-			recordDamage(u, skirmishDamage * damageTakenMult);
+			// Frontline Skirmish Damage: only when losing control badly (< -0.3)
+			if (currentControl < -0.3) {
+				const skirmishDamage =
+					CONFIG.COMBAT_DAMAGE * 0.15 * (1.0 + Math.abs(currentControl) * 2);
+				recordDamage(u, skirmishDamage * damageTakenMult);
+			}
 
 			// Find direction of safety (deeper into friendly territory) by sampling nearby grid
 			let bestLat = 0,
@@ -10513,7 +10623,7 @@ export function performSimulationTick() {
 			const dist = Math.sqrt(dLat * dLat + dLng * dLng);
 
 			const isEngaged =
-				u.lastCombatTick && simFrameCount - u.lastCombatTick < 2;
+				u.lastCombatTick && simFrameCount - u.lastCombatTick < 0;
 			if (dist > 0.05 && !isEngaged) {
 				// Movement logic
 				const baseSpeed = isAtSea ? CONFIG.UNIT_NAVAL_SPEED : CONFIG.UNIT_SPEED;
@@ -11119,7 +11229,7 @@ export function performSimulationTick() {
 
 				// Blend plan direction into movement
 				if (isPlanUnit && (planDirLat !== 0 || planDirLng !== 0)) {
-					const planBlend = aiProfile.frontlineBlend > 0 ? 0.65 : 0.85;
+					const planBlend = aiProfile.frontlineBlend > 0 ? 0.85 : 0.65;
 					moveDirLat = moveDirLat * (1 - planBlend) + planDirLat * planBlend;
 					moveDirLng = moveDirLng * (1 - planBlend) + planDirLng * planBlend;
 					const magP = Math.sqrt(
