@@ -7474,12 +7474,24 @@ export function selectPlans(sideIdx, scoredProposals) {
 }
 
 function shouldReassess(si) {
-	const REASSESS_INTERVAL = 300;
+	const REASSESS_INTERVAL = 300; // sim-ticks (was visual frames; now per-tick)
+	const HARD_COOLDOWN = 150; // minimum sim-ticks between reassessments (even forced)
+
+	// Hard cooldown: prevent eval-block spam from triggering reassessment
+	// every 5 ticks (was producing 97% forced rate: 507/521 forced)
 	const lastReassess = _proposalReassessTick[si] || 0;
+	if (_simTickCount - lastReassess < HARD_COOLDOWN) return false;
+
+	// Stagger first reassessment per side to avoid all 70 sides firing on the
+	// same tick — spreads reassessments across 140 ticks (70 sides × 2 offset)
+	if (lastReassess === 0 && _simTickCount < HARD_COOLDOWN + (si % (HARD_COOLDOWN / 2)) * 2) {
+		return false;
+	}
+
 	let result = false;
 
 	if (_planReassessNeeded[si]) { result = true; if (window.__perf) window.__perf.reassess_forced++; }
-	if (simFrameCount - lastReassess >= REASSESS_INTERVAL) { result = true; if (window.__perf) window.__perf.reassess_interval++; }
+	if (_simTickCount - lastReassess >= REASSESS_INTERVAL) { result = true; if (window.__perf) window.__perf.reassess_interval++; }
 	if (!_warPlan[si]) { result = true; if (window.__perf) window.__perf.reassess_noPlan++; }
 
 	// Territory change >2%
@@ -7597,7 +7609,7 @@ export function evaluateAllPlans() {
 				window.__perf.proposalFailed++;
 			}
 
-			_proposalReassessTick[si] = simFrameCount;
+			_proposalReassessTick[si] = _simTickCount;
 			_proposalsCache[si] = proposals;
 		}
 	}
@@ -8379,7 +8391,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.24.16",
+		_version: "V0.24.17",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0,
 		tickTotal: 0, maxTick: 0, ticks: 0,
