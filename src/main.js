@@ -8391,7 +8391,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.24.18-p",
+		_version: "V0.24.19-p",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, spatialHash: 0, counting: 0, posture: 0,
 		tickTotal: 0, maxTick: 0, ticks: 0,
@@ -9191,6 +9191,8 @@ export function performSimulationTick() {
 
 	// Evaluate war plans — check completion/failure, regenerate if needed
 	window.__perf.posture = (window.__perf.posture || 0) + performance.now() - _tpo;
+	// Cumulative pre-plans profiler: everything from tick start (_t0) to here
+	window.__perf.prePlans = (window.__perf.prePlans || 0) + performance.now() - _t0;
 	const _t1 = performance.now();
 	evaluateAllPlans();
 	window.__perf.plans += performance.now() - _t1;
