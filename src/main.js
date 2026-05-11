@@ -8508,7 +8508,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.11",
+		_version: "V0.25.12",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -9934,10 +9934,13 @@ export function performSimulationTick() {
 		const maxKx = Math.ceil(360 / HASH_SIZE);
 
 		// Only search adjacent 3x3 hash cells (approx 6x6 degrees footprint).
-		// Skip for tactically idle units at high sim speeds to reduce CPU load.
-		if (!isTacticallyIdle) {
-			for (let dy = -1; dy <= 1; dy++) {
+		// Tactically idle units: only scan own cell (dx=0,dy=0) so overlapping
+		// armies still deal proximity damage instead of phasing through each other.
+		const fullScan = !isTacticallyIdle;
+		for (let dy = -1; dy <= 1; dy++) {
 				for (let dx = -1; dx <= 1; dx++) {
+					// When idle: only scan own cell (0,0) for overlap detection
+					if (!fullScan && !(dx === 0 && dy === 0)) continue;
 					let cx = kx + dx;
 					const cy = ky + dy;
 
@@ -10244,7 +10247,6 @@ export function performSimulationTick() {
 					}
 				}
 			}
-		} // !isTacticallyIdle
 
 		u.lastAllyCount = localAllyCount;
 
