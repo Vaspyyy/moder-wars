@@ -8391,9 +8391,11 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.24.24-p",
+		_version: "V0.24.25-p",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
-		recruit: 0, unitLoop: 0, post: 0, prePlans: 0, smoothing: 0, caches: 0, spatialHash: 0, posture: 0, counting: 0,
+		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
+		influence: 0, smoothing: 0, counting: 0, spatialHash: 0,
+		frontline: 0, consolidate: 0, caches: 0, victory: 0, aiPosture: 0, posture: 0,
 		tickTotal: 0, maxTick: 0, ticks: 0,
 		proposalRuns: 0, proposalFailed: 0,
 		reassess_noPlan: 0, reassess_interval: 0, reassess_forced: 0,
@@ -8475,6 +8477,7 @@ export function performSimulationTick() {
 	const isNeutralCountry = (idx) => isNeutral(idx) && worldControlMap[idx] > 0;
 
 	// Determine unit counts once
+	const _tInfluence = performance.now();
 	let p1UnitsCount = 0;
 	let p2UnitsCount = 0;
 	for (let i = 0; i < units.length; i++) {
@@ -8487,6 +8490,7 @@ export function performSimulationTick() {
 
 	// 1. Update territory
 	updatePersistentInfluence(p1UnitsCount, p2UnitsCount, countryToSideMap);
+	window.__perf.influence = (window.__perf.influence || 0) + performance.now() - _tInfluence;
 
 	// 1a. Occupancy Smoothing: Occasionally clean up primaryOccupierMap during war to prevent speckling
 	const _tSmooth = performance.now();
@@ -8655,6 +8659,7 @@ export function performSimulationTick() {
 	}
 	window.__perf.spatialHash = (window.__perf.spatialHash || 0) + performance.now() - _tsh;
 
+	const _tFrontline = performance.now();
 	// OPT-1: Rebuild frontline direction field every N ticks via Web Worker.
 	// getBorderDirection() now does an O(1) array lookup instead of a 12-radius grid scan.
 	if (_simTickCount - frontlineFieldTick >= FRONTLINE_FIELD_UPDATE_INTERVAL) {
@@ -8684,7 +8689,9 @@ export function performSimulationTick() {
 		_frontlinePolyTick = simFrameCount;
 	}
 	assignFrontlineSlots();
+	window.__perf.frontline = (window.__perf.frontline || 0) + performance.now() - _tFrontline;
 
+	const _tConsolidate = performance.now();
 	// --- UNIT CONSOLIDATION (Merge Stacks) ---
 	// Periodically merge units of the same team that are virtually overlapping.
 	// This fulfills the "no stacks" optimization and boosts performance in massive wars.
@@ -8751,6 +8758,7 @@ export function performSimulationTick() {
 			// No action needed here as personnel display derives from live unit health.
 		}
 	}
+	window.__perf.consolidate = (window.__perf.consolidate || 0) + performance.now() - _tConsolidate;
 	if (shouldCountLand) {
 		recalculateAllBounds();
 		const countryFrontlines = new Map();
@@ -8875,6 +8883,8 @@ export function performSimulationTick() {
 		}
 	}
 	window.__perf.caches = (window.__perf.caches || 0) + performance.now() - _tbs;
+
+	const _tVictory = performance.now();
 	// City target list used for CITY FOCUS and URBAN strategies; prefer the active theater,
 	// and fall back to all known cities if no theater is defined.
 	const cityTargets = activeTheaterCities?.length
@@ -9009,6 +9019,8 @@ export function performSimulationTick() {
 
 	// --- COUNTRY AI POSTURE (Desperation + realism tuning) ---
 	// Recomputed on counting frames and reused between them.
+	const _tAiPosture = performance.now();
+	window.__perf.victory = (window.__perf.victory || 0) + performance.now() - _tVictory;
 	if (shouldCountLand) {
 		sides.flat().forEach((country) => {
 			if (!country) return;
@@ -9120,6 +9132,7 @@ export function performSimulationTick() {
 			aiCountryState.set(country.id, profile);
 		});
 	}
+	window.__perf.aiPosture = (window.__perf.aiPosture || 0) + performance.now() - _tAiPosture;
 
 	// ── Auto Posture: per-side strength ratio → OFFENSIVE/BALANCED/DEFENSIVE ──
 	const _tpo = performance.now();
