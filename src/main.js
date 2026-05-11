@@ -8393,7 +8393,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.24.35",
+		_version: "V0.24.36",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -12274,12 +12274,7 @@ export function updateLoop(now) {
 				const formatted = influenceLayer.formatSoldiers(casualties);
 				const isDefeated = !sides.flat().some((active) => active.id === e.id);
 				if (e.side !== currentSide) {
-					if (currentSide !== -1) {
-						// Close previous side with manpower footer
-						const mpRemaining = Math.max(0, sideSoldiers[currentSide]);
-						html += `<div class="casualty-side-mp" data-sidemp="${currentSide}" style="margin-top:4px; padding-top:4px; border-top:1px solid rgba(255,255,255,0.1); font-size:10px; color:#3498db; text-align:right;">${influenceLayer.formatSoldiers(mpRemaining)}</div>`;
-						html += `</div>`;
-					}
+					if (currentSide !== -1) html += `</div>`;
 					currentSide = e.side;
 					sidePos = 0;
 					html += `<div class="casualty-side-list">`;
@@ -12295,22 +12290,22 @@ export function updateLoop(now) {
 				}
 				html += `<div class="casualty-item ${isPrimary ? "primary" : "secondary"}" style="opacity: ${isDefeated ? 0.45 : 1};" data-ctype="cas-item" data-cid="${e.id}">
                     <img src="${flagSrc}" class="cas-flag ${isPrimary ? "" : "small"}" alt="" loading="lazy" decoding="async" style="${isDefeated ? "filter: grayscale(1);" : ""}">
-                    <div class="cas-value" data-cval="${e.id}" style="font-size: ${isPrimary ? "18px" : "12px"}; color: ${sideColor};">${formatted}</div>
-                </div>`;
+                    <div class="cas-value" data-cval="${e.id}" style="font-size: ${isPrimary ? "18px" : "12px"}; color: ${sideColor};">${formatted}</div>`;
+				if (isPrimary) {
+					const mpRemaining = Math.max(0, sideSoldiers[currentSide]);
+					html += `<span class="cas-side-mp" data-sidemp="${currentSide}" style="font-size:9px; color:#5dade2; margin-left:6px; vertical-align:middle;">${influenceLayer.formatSoldiers(mpRemaining)}</span>`;
+				}
+				html += `</div>`;
 				sidePos++;
 			}
-			if (currentSide !== -1) {
-				const mpRemaining = Math.max(0, sideSoldiers[currentSide]);
-				html += `<div class="casualty-side-mp" data-sidemp="${currentSide}" style="margin-top:4px; padding-top:4px; border-top:1px solid rgba(255,255,255,0.1); font-size:10px; color:#3498db; text-align:right;">${influenceLayer.formatSoldiers(mpRemaining)}</div>`;
-				html += `</div>`;
-			}
+			if (currentSide !== -1) html += `</div>`;
 			casualtyContainer.innerHTML = html;
 			_casualtyValueEls = {};
 			casualtyContainer.querySelectorAll("[data-cval]").forEach((el) => {
 				_casualtyValueEls[el.getAttribute("data-cval")] = el;
 			});
 			_casualtySideMpEls = {};
-			casualtyContainer.querySelectorAll("[data-sidemp]").forEach((el) => {
+			casualtyContainer.querySelectorAll(".cas-side-mp").forEach((el) => {
 				_casualtySideMpEls[el.getAttribute("data-sidemp")] = el;
 			});
 		} else {
