@@ -3614,12 +3614,12 @@ export function updateSidesUI() {
                         <option value="OFFENSE" ${country.role === "OFFENSE" ? "selected" : ""} title="OFF: Offensive main participant, pushes its own fronts.">OFF</option>
                         <option value="SUPPORT" ${country.role === "SUPPORT" ? "selected" : ""} title="SUP: Support nation; mostly sends troops to help allies instead of starting new invasions.">SUP</option>
                     </select>
-                    <select class="mini-select strategy-select" title="Per-country behavior: BAL = mixed; AGG = push hard; DEF = hold cores; BLZ = fast spearheads; URB = city road wars.">
+                    <select class="mini-select strategy-select" title="Per-country behavior: TUR = pure defense; DEF = hold cores; BAL = mixed; AGG = push hard; BLZ = fast breakthroughs.">
+                        <option value="TURTLE" ${country.strategy === "TURTLE" ? "selected" : ""} title="TUR: Zero offensive plans until force advantage. Pure defense.">TUR</option>
+                        <option value="DEFENSIVE" ${country.strategy === "DEFENSIVE" ? "selected" : ""} title="DEF: Focuses on defending own cores and reclaiming lost land.">DEF</option>
                         <option value="BALANCED" ${country.strategy === "BALANCED" ? "selected" : ""} title="BAL: Balanced offense and defense along the whole front.">BAL</option>
                         <option value="AGGRESSIVE" ${country.strategy === "AGGRESSIVE" ? "selected" : ""} title="AGG: Very aggressive, tries to push hard even when risky.">AGG</option>
-                        <option value="DEFENSIVE" ${country.strategy === "DEFENSIVE" ? "selected" : ""} title="DEF: Focuses on defending own cores and reclaiming lost land.">DEF</option>
                         <option value="BLITZ" ${country.strategy === "BLITZ" ? "selected" : ""} title="BLZ: Blitz-style spearheads that seek breakthroughs and deep pushes.">BLZ</option>
-                        <option value="URBAN" ${country.strategy === "URBAN" ? "selected" : ""} title="URB: Urban warfare; pushes along roads into cities in thin invasion lines.">URB</option>
                     </select>
                     <button class="clear-slot-btn" title="Remove this country from the selected side.">×</button>
                 </div>
@@ -4015,7 +4015,6 @@ export function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
 		const sideList = sides[u.sideIndex] || [];
 		const countryObj = sideList.find((c) => c.id === u.sovereignId);
 		const role = countryObj?.role || "OFFENSE";
-		const _isUrbanStrategy = countryObj?.strategy === "URBAN";
 
 		if (countryObj) {
 			if (countryObj.buffState === "buff") teamMult = 2.5;
@@ -7312,13 +7311,17 @@ export function scoreProposal(proposal, sideIdx) {
 	].includes(proposal.type);
 
 	const multipliers = {
-		AGGRESSIVE: { offensive: 1.3, defensive: 0.5 },
 		BLITZ: { offensive: 1.4, defensive: 0.4 },
+		AGGRESSIVE: { offensive: 1.3, defensive: 0.5 },
 		BALANCED: { offensive: 1.0, defensive: 1.0 },
 		DEFENSIVE: { offensive: 0.4, defensive: 1.4 },
-		URBAN: { offensive: 1.1, defensive: 0.9 },
+		TURTLE: { offensive: 0.0, defensive: 1.5 },
 	};
 	const mult = multipliers[strategy] || multipliers.BALANCED;
+	// TURTLE: only permit offensive plans when we have overall force advantage
+	if (strategy === "TURTLE" && globalForceRatio >= 1.0) {
+		mult.offensive = 0.3;
+	}
 	if (isOffensive) score *= mult.offensive;
 	else if (isDefensive) score *= mult.defensive;
 
@@ -7356,12 +7359,23 @@ export function selectPlans(sideIdx, scoredProposals) {
 
 	// Force allocation by strategy
 	const alloc = {
-		AGGRESSIVE: { offense: 0.75, defense: 0.2, reserve: 0.05 },
 		BLITZ: { offense: 0.85, defense: 0.1, reserve: 0.05 },
+		AGGRESSIVE: { offense: 0.75, defense: 0.2, reserve: 0.05 },
 		BALANCED: { offense: 0.5, defense: 0.4, reserve: 0.1 },
 		DEFENSIVE: { offense: 0.25, defense: 0.65, reserve: 0.1 },
-		URBAN: { offense: 0.55, defense: 0.35, reserve: 0.1 },
+		TURTLE: { offense: 0.0, defense: 0.9, reserve: 0.1 },
 	}[strategy] || { offense: 0.5, defense: 0.4, reserve: 0.1 };
+
+	// TURTLE: only allocate offense when we have force advantage
+	if (strategy === "TURTLE") {
+		const turtleEnemyCount = units.filter(
+			(u) => u.sideIndex !== sideIdx && u.deployTicks === 0 && u.health > 0,
+		).length;
+		if (unitCount >= turtleEnemyCount) {
+			alloc.offense = 0.3;
+			alloc.defense = 0.6;
+		}
+	}
 
 	const totalForce = Math.max(1, unitCount);
 	const offensiveForce = Math.floor(totalForce * alloc.offense);
@@ -8534,7 +8548,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.27",
+		_version: "V0.25.28",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -9042,7 +9056,7 @@ export function performSimulationTick() {
 	window.__perf.caches = (window.__perf.caches || 0) + performance.now() - _tbs;
 
 	const _tVictory = performance.now();
-	// City target list used for CITY FOCUS and URBAN strategies; prefer the active theater,
+	// City target list used for CITY FOCUS (URBAN renamed to TURTLE); prefer the active theater,
 	// and fall back to all known cities if no theater is defined.
 	const cityTargets = activeTheaterCities?.length
 		? activeTheaterCities
@@ -9611,7 +9625,7 @@ export function performSimulationTick() {
 		});
 	});
 
-	// Precompute city list once per tick; URBAN strategy and global city‑focus both reuse this
+	// Precompute city list once per tick; global city-focus both reuse this
 	const globalCityTargets = activeTheaterCities?.length
 		? activeTheaterCities
 		: cities;
@@ -9696,7 +9710,6 @@ export function performSimulationTick() {
 		};
 		const isDefensive = countryObj?.strategy === "DEFENSIVE";
 		const effectiveDefensive = isDefensive || aiProfile.forceDefensive;
-		const _isUrban = countryObj?.strategy === "URBAN";
 		const metaForBuff = _metadataById.get(u.sovereignId) || null;
 		const effectiveBuff = getEffectiveBuffState(countryObj, metaForBuff);
 
@@ -10586,12 +10599,8 @@ export function performSimulationTick() {
 						const occ = occupationMap[randIdx];
 						const occFavor = (1.0 - Math.abs(occ)) * 120;
 
-						// URBAN strategy: heavily reward cells that contain cities to create road‑like thrusts
-						let cityBias = 0;
-						if (countryObj?.strategy === "URBAN") {
-							const hasCityHere = _cityIdxSetTick.has(randIdx);
-							if (hasCityHere) cityBias = 450;
-						}
+						// City bias removed (was URBAN strategy, now TURTLE)
+						const cityBias = 0;
 
 						// Combinatorial score: Proximity + Frontline Freshness + Squad Sector Focus + City priority
 						let score = occFavor - distSq * 0.4 + sectorBias + cityBias;
