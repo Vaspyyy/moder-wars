@@ -8508,7 +8508,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.17",
+		_version: "V0.25.18",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -9194,6 +9194,14 @@ export function performSimulationTick() {
 				(country._aiStallTicks || 0) >= AI_DESPERATION.OFFENSE_STALL_TICKS &&
 				controlRatio > 0.45;
 
+			// UNDER_MOBILIZED: safe territory but severely under‑armied relative to manpower pool
+			const countrySideIdx = countryToSideMap.get(country.id);
+			const deployedPersonnel =
+				stats.units * (soldiersPerUnit[countrySideIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO);
+			const mobilizationRatio =
+				deployedPersonnel / Math.max(1, sideSoldiers[countrySideIdx]);
+			const canUseUnderMobilized = mobilizationRatio < 0.35;
+
 			const lastStand =
 				controlRatio <= AI_DESPERATION.LAST_STAND_TRIGGER_RATIO ||
 				cityRatio <= AI_DESPERATION.CITY_RATIO_LAST_STAND_TRIGGER;
@@ -9206,6 +9214,7 @@ export function performSimulationTick() {
 			if (lastStand) mode = "LAST_STAND";
 			else if (defensiveDesperation) mode = "DEFENSIVE_DESPERATION";
 			else if (canUseOffensiveDesperation) mode = "OFFENSIVE_DESPERATION";
+			else if (canUseUnderMobilized) mode = "UNDER_MOBILIZED";
 
 			let profile = {
 				mode,
@@ -9257,6 +9266,19 @@ export function performSimulationTick() {
 					forceDefensive: true,
 					reserveShare: 0.1,
 					peacePressure: 0.7,
+				};
+			} else if (mode === "UNDER_MOBILIZED") {
+				profile = {
+					mode,
+					recruitCapMult: 2.0,
+					recruitChanceMult: 3.0,
+					retreatTriggerMultiple: 8.0,
+					frontlineBlend: 0.35,
+					speedMult: 1.0,
+					targetCityWeight: 0.0,
+					forceDefensive: false,
+					reserveShare: 0.02,
+					peacePressure: 0.0,
 				};
 			}
 
