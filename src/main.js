@@ -8508,7 +8508,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.18",
+		_version: "V0.25.19",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -9199,7 +9199,7 @@ export function performSimulationTick() {
 			const deployedPersonnel =
 				stats.units * (soldiersPerUnit[countrySideIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO);
 			const mobilizationRatio =
-				deployedPersonnel / Math.max(1, sideSoldiers[countrySideIdx]);
+				deployedPersonnel / Math.max(1, initialSideSoldiers[countrySideIdx]);
 			const canUseUnderMobilized = mobilizationRatio < 0.35;
 
 			const lastStand =
