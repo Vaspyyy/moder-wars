@@ -8508,7 +8508,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.20",
+		_version: "V0.25.21",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -11962,7 +11962,6 @@ export function performSimulationTick() {
 			if (simFrameCount > 100 && simFrameCount < 500 && _dbgLogCount++ < 200) {
 				console.warn('[ELSE-DBG] fell to empty else:',
 					'side', u.sideIndex,
-					'dist=', dist?.toFixed(4),
 					'hasTarget=', !!target,
 					'targetType=', target ? (typeof target.health !== 'undefined' ? 'unit' : 'coord') : 'null');
 			}
