@@ -7214,6 +7214,131 @@ export function generateAllProposals(sideIdx) {
 		}
 	}
 
+
+	// ── Exclave reinforcement ──
+	// For each country on this side, detect territory not land-connected
+	// to the capital (exclaves) and generate supply runs to reinforce them.
+	// Uses one BFS per side from all capitals; only triggers when exclave
+	// borders enemy territory.
+	if (friendlyCoastCells.length > 0 && unitCount >= 8 && proposals.length < 12) {
+		const totalCells = landMask.length;
+		const reachable = new Uint8Array(totalCells);
+		const bfsq = new Int32Array(totalCells);
+		let qTail = 0;
+		const MAX_BFS = 80000;
+		for (const c of sideCountries) {
+			const capLat = c.capital?.lat;
+			if (capLat == null) continue;
+			const capLng = c.capital?.lng !== undefined ? c.capital.lng : c.lng;
+			const ci = getGridIndex(capLat, capLng);
+			if (ci !== -1 && landMask[ci] !== 0 && !reachable[ci]) {
+				bfsq[qTail++] = ci;
+				reachable[ci] = 1;
+			}
+		}
+		if (qTail > 0) {
+			for (let qHead = 0; qHead < qTail && qHead < MAX_BFS; qHead++) {
+				const gi = bfsq[qHead];
+				const row = Math.floor(gi / gridWidth);
+				const col = gi % gridWidth;
+				for (let dr = -1; dr <= 1; dr++) {
+					for (let dc = -1; dc <= 1; dc++) {
+						if (dr === 0 && dc === 0) continue;
+						const nr = row + dr, nc = col + dc;
+						if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
+						const ni = nr * gridWidth + nc;
+						if (reachable[ni]) continue;
+						if (landMask[ni] === 0) continue;
+						const nds = dominantSideMap[ni];
+						if (nds !== -1 && nds !== sideIdx) continue;
+						reachable[ni] = 1;
+						bfsq[qTail++] = ni;
+					}
+				}
+			}
+			// Sample-scan for unreachable exclaves with enemy adjacency
+			for (const country of sideCountries) {
+				const exclaveCells = [];
+				const step = Math.max(3, Math.floor(totalCells / 6000));
+				for (let gi = 0; gi < totalCells; gi += step) {
+					if (landMask[gi] === 0) continue;
+					if (reachable[gi]) continue;
+					if (dominantSideMap[gi] !== sideIdx) continue;
+					if (worldControlMap[gi] !== country.id) continue;
+					const r = Math.floor(gi / gridWidth);
+					const cc = gi % gridWidth;
+					let hasEnemy = false;
+					for (let dr = -1; dr <= 1 && !hasEnemy; dr++) {
+						for (let dc = -1; dc <= 1 && !hasEnemy; dc++) {
+							if (dr === 0 && dc === 0) continue;
+							const nr = r + dr, nc = cc + dc;
+							if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
+							const ni = nr * gridWidth + nc;
+							if (landMask[ni] === 0) continue;
+							const nds = dominantSideMap[ni];
+							if (nds !== -1 && nds !== sideIdx) hasEnemy = true;
+						}
+					}
+					if (hasEnemy) {
+						exclaveCells.push({ lat: r * CONFIG.GRID_RES - 90, lng: cc * CONFIG.GRID_RES - 180 });
+					}
+				}
+				if (exclaveCells.length < 5) continue;
+
+				// Centroid of exclave
+				let exLat = 0, exLng = 0;
+				for (const ec of exclaveCells) { exLat += ec.lat; exLng += ec.lng; }
+				exLat /= exclaveCells.length;
+				exLng /= exclaveCells.length;
+
+				// Skip if existing supply plan targets near this exclave
+				const sp = _navalSupplyPlan[sideIdx];
+				if (sp && sp.phase !== "DELIVERED") {
+					const st = sp.target;
+					if (st) {
+						const dLat = st.lat - exLat;
+						let dLng = st.lng - exLng;
+						if (dLng > 180) dLng -= 360; else if (dLng < -180) dLng += 360;
+						if (dLat * dLat + dLng * dLng < 16) continue;
+					}
+				}
+
+				// Find nearest friendly staging point
+				let bestStaging = null;
+				let bestDist = Infinity;
+				for (const fc of friendlyCoastCells) {
+					const sgi = getGridIndex(fc.lat, fc.lng);
+					if (sgi === -1 || !reachable[sgi]) continue;
+					const dLat = exLat - fc.lat;
+					let dLng = exLng - fc.lng;
+					if (dLng > 180) dLng -= 360; else if (dLng < -180) dLng += 360;
+					const dSq = dLat * dLat + dLng * dLng;
+					if (dSq < bestDist) {
+						bestDist = dSq;
+						bestStaging = fc;
+					}
+				}
+				if (!bestStaging || bestDist > 400) continue;
+
+				proposals.push({
+					type: "NAVAL_SUPPLY",
+					target: { lat: exLat, lng: exLng, name: `${country.name} Exclave`, isCapital: false },
+					stagingPoint: { lat: bestStaging.lat, lng: bestStaging.lng },
+					arrowPoints: [
+						{ lat: bestStaging.lat, lng: bestStaging.lng },
+						{ lat: exLat, lng: exLng },
+					],
+					estimatedForceNeeded: Math.ceil(unitCount * 0.08),
+					geographicData: {
+						frontlineDistSq: 0,
+						reachesTarget: true,
+						minSeaDist: bestDist,
+						minLandDist: 0,
+					},
+				});
+			}
+		}
+	}
 	return proposals;
 }
 /**
@@ -8548,7 +8673,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.31",
+		_version: "V0.25.32",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
