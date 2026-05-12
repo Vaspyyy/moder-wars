@@ -1,7 +1,7 @@
 // Service Worker — cache-first for same-origin static assets
 // Updated for MW-V0.23.0: geodata now bundled locally, added to precache
 
-const CACHE_VERSION = "mw-v0.25.28";
+const CACHE_VERSION = "mw-v0.25.29";
 const CACHE_NAME = `mw-cache-${CACHE_VERSION}`;
 
 const PRECACHE_URLS = [

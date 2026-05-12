@@ -8548,7 +8548,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.28",
+		_version: "V0.25.29",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -12746,7 +12746,14 @@ export function showTreatyOffer(proposerSideIdx, willAccept) {
 	setTimeout(() => {
 		if (willAccept) {
 			document.getElementById("treaty-status").innerText = "Treaty Accepted";
-			setTimeout(() => applyTreaty("PEACE_TREATY"), 1500);
+			setTimeout(() => {
+				// Multi-side war: proposer's side exits, war continues for remaining sides
+				if (sides.length > 2) {
+					_signSelectiveSideExit(proposerSideIdx);
+				} else {
+					applyTreaty("PEACE_TREATY");
+				}
+			}, 1500);
 		} else {
 			document.getElementById("treaty-status").innerText = "Proposal Rejected";
 			setTimeout(() => {
@@ -14255,6 +14262,69 @@ export function unilateralExitConflict(country, sideIdx) {
 
 	if (activePoles.size < 2) {
 		applyTreaty("PEACE_TREATY");
+	}
+}
+
+export function _signSelectiveSideExit(sideIdx) {
+	const side = sides[sideIdx];
+	if (!side || side.length === 0) return;
+
+	const exitingIds = new Set(side.map((c) => c.id));
+
+	// Clean up territory controlled by exiting side
+	for (let i = 0; i < worldControlMap.length; i++) {
+		if (landMask[i] !== 2) continue;
+		const ownerId = worldControlMap[i];
+		const occupierId = primaryOccupierMap[i];
+		const ds = dominantSideMap[i];
+
+		if (exitingIds.has(ownerId)) {
+			if (ds !== -1 && ds !== sideIdx) {
+				worldControlMap[i] =
+					occupierId > 0 && !exitingIds.has(occupierId)
+						? occupierId
+						: occupierId > 0
+							? occupierId
+							: ownerId;
+			}
+			landMask[i] = 1;
+			clearCellInfluence(i);
+			primaryOccupierMap[i] = 0;
+		} else if (exitingIds.has(occupierId)) {
+			if (ds === sideIdx) {
+				worldControlMap[i] = ownerId;
+				landMask[i] = 1;
+				clearCellInfluence(i);
+			} else {
+				clearCellInfluence(i);
+			}
+			primaryOccupierMap[i] = 0;
+		}
+	}
+
+	// Remove all countries from this side
+	sides[sideIdx] = [];
+
+	// Purge units belonging to exiting nations
+	units = units.filter((u) => !exitingIds.has(u.sovereignId));
+	units.forEach((u) => {
+		if (exitingIds.has(u.beneficiaryId)) u.beneficiaryId = u.sovereignId;
+	});
+
+	// Check if war is over
+	const activePoles = new Set();
+	sides.forEach((s, idx) => {
+		if (s.length > 0) activePoles.add(idx);
+	});
+
+	if (activePoles.size < 2) {
+		applyTreaty("PEACE_TREATY");
+	} else {
+		playPeaceSound();
+		gameState = "SIMULATING";
+		statusText.innerText = "Separate peace signed. Conflict continues.";
+		cancelAnimationFrame(animationFrameId);
+		requestAnimationFrame(updateLoop);
 	}
 }
 
