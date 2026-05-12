@@ -32,9 +32,22 @@ function syncOccupationFromSideInfluence(idx) {
 			bestSide = s;
 		}
 	}
+	const currentOccupier = dominantSideMap[idx];
+	// Hysteresis: require meaningful advantage to flip, prevents ping-pong flickering
+	const HYSTERESIS = 0.15;
 	if (bestSide >= 0) {
-		dominantSideMap[idx] = bestSide;
-		occupationMap[idx] = bestSide % 2 === 0 ? bestVal : -bestVal;
+		if (currentOccupier === -1 || currentOccupier === bestSide) {
+			// Unclaimed or same occupier: accept freely
+			dominantSideMap[idx] = bestSide;
+			occupationMap[idx] = bestSide % 2 === 0 ? bestVal : -bestVal;
+		} else {
+			// Challenger must beat current occupier by threshold
+			const currentVal = sideInfluenceMaps[currentOccupier]?.[idx] || 0;
+			if (bestVal > currentVal + HYSTERESIS) {
+				dominantSideMap[idx] = bestSide;
+				occupationMap[idx] = bestSide % 2 === 0 ? bestVal : -bestVal;
+			}
+		}
 	} else {
 		dominantSideMap[idx] = -1;
 		occupationMap[idx] = 0;
