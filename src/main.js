@@ -7339,6 +7339,89 @@ export function generateAllProposals(sideIdx) {
 			}
 		}
 	}
+	// ── Friendly-only reachability for waypoint routing ──
+	// Compute which cells are reachable from side capitals through friendly-only
+	// territory (not neutral/enemy). Used to route units around neutral blocks.
+	const friendlyTotal = landMask.length;
+	const friendlyOnly = new Uint8Array(friendlyTotal);
+	const fq = new Int32Array(friendlyTotal);
+	let fqTail = 0;
+	for (const c of sideCountries) {
+		const capLat = c.capital?.lat;
+		if (capLat == null) continue;
+		const capLng = c.capital?.lng !== undefined ? c.capital.lng : c.lng;
+		const ci = getGridIndex(capLat, capLng);
+		if (ci !== -1 && landMask[ci] !== 0 && !friendlyOnly[ci]) {
+			fq[fqTail++] = ci;
+			friendlyOnly[ci] = 1;
+		}
+	}
+	for (let qHead = 0; qHead < fqTail; qHead++) {
+		const gi = fq[qHead];
+		const row = Math.floor(gi / gridWidth);
+		const col = gi % gridWidth;
+		for (let dr = -1; dr <= 1; dr++) {
+			for (let dc = -1; dc <= 1; dc++) {
+				if (dr === 0 && dc === 0) continue;
+				const nr = row + dr, nc = col + dc;
+				if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
+				const ni = nr * gridWidth + nc;
+				if (friendlyOnly[ni]) continue;
+				if (landMask[ni] === 0) continue;
+				if (dominantSideMap[ni] !== sideIdx) continue;
+				friendlyOnly[ni] = 1;
+				fq[fqTail++] = ni;
+			}
+		}
+	}
+	// Add waypoints for land proposals whose targets are blocked by neutral territory
+	for (const p of proposals) {
+		if (p.type !== "CAPTURE_CITY" && p.type !== "ENCIRCLE" && p.type !== "PUSH_FRONT" && p.type !== "DEFEND") continue;
+		if (!p.target) continue;
+		const tIdx = getGridIndex(p.target.lat, p.target.lng);
+		if (tIdx === -1) continue;
+		// Target reachable through friendly territory — no waypoint needed
+		if (friendlyOnly[tIdx]) continue;
+		// Find the closest friendly-reachable frontier cell to the target
+		let bestDist = Infinity;
+		let bestLat = 0, bestLng = 0;
+		const wstep = Math.max(3, Math.floor(friendlyTotal / 6000));
+		for (let gi = 0; gi < friendlyTotal; gi += wstep) {
+			if (!friendlyOnly[gi]) continue;
+			if (landMask[gi] === 0) continue;
+			// Only cells at the frontline (adjacent to enemy territory)
+			const r = Math.floor(gi / gridWidth);
+			const ccol = gi % gridWidth;
+			let bordersEnemy = false;
+			for (let dr = -1; dr <= 1 && !bordersEnemy; dr++) {
+				for (let dc = -1; dc <= 1 && !bordersEnemy; dc++) {
+					if (dr === 0 && dc === 0) continue;
+					const nr2 = r + dr, nc2 = ccol + dc;
+					if (nr2 < 0 || nr2 >= gridHeight || nc2 < 0 || nc2 >= gridWidth) continue;
+					const ni2 = nr2 * gridWidth + nc2;
+					if (landMask[ni2] === 0) continue;
+					const nds2 = dominantSideMap[ni2];
+					if (nds2 !== -1 && nds2 !== sideIdx) bordersEnemy = true;
+				}
+			}
+			if (!bordersEnemy) continue;
+			const clat = r * CONFIG.GRID_RES - 90;
+			const clng = ccol * CONFIG.GRID_RES - 180;
+			const dLat = p.target.lat - clat;
+			let dLng = p.target.lng - clng;
+			if (dLng > 180) dLng -= 360;
+			else if (dLng < -180) dLng += 360;
+			const dSq = dLat * dLat + dLng * dLng;
+			if (dSq < bestDist) {
+				bestDist = dSq;
+				bestLat = clat;
+				bestLng = clng;
+			}
+		}
+		if (bestDist < Infinity) {
+			p._waypoints = [{ lat: bestLat, lng: bestLng }];
+		}
+	}
 	return proposals;
 }
 /**
@@ -8686,7 +8769,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.33",
+		_version: "V0.25.34",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -11408,6 +11491,26 @@ export function performSimulationTick() {
 								activePlan.phase === "EXECUTION" &&
 								activePlan.target
 							) {
+							// Waypoint routing: steer toward friendly waypoints around neutral blocks
+							let useWaypoint = false;
+							if (activePlan._waypoints && activePlan._waypoints.length > 0) {
+								const wp = activePlan._waypoints[0];
+								const wLat = wp.lat - u.lat;
+								let wLng = wp.lng - u.lng;
+								if (wLng > 180) wLng -= 360;
+								else if (wLng < -180) wLng += 360;
+								const wDistSq = wLat * wLat + wLng * wLng;
+								if (wDistSq < 1.0) {
+									activePlan._waypoints.shift();
+								} else {
+									const wDist = Math.sqrt(wDistSq);
+									planDirLat = wLat / wDist;
+									planDirLng = wLng / wDist;
+									planSpeedMult = 2.0;
+									useWaypoint = true;
+								}
+							}
+							if (!useWaypoint) {
 								const pdLat = activePlan.target.lat - u.lat;
 								let pdLng = activePlan.target.lng - u.lng;
 								if (pdLng > 180) pdLng -= 360;
@@ -11452,6 +11555,7 @@ export function performSimulationTick() {
 								// Zero out target direction so plan dominates; units follow the plan
 								moveDirLat = 0;
 								moveDirLng = 0;
+							}
 							} else if (
 								activePlan.phase === "CONSOLIDATION" &&
 								activePlan.target
