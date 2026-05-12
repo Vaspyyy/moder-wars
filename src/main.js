@@ -7775,7 +7775,6 @@ export function evaluateAllPlans() {
 				}
 			}
 
-			// Apply naval / supply plans
 			// Apply naval / supply plans — naval plans have their own lifecycle
 			// and should not be force-replaced just because a land plan triggered reassessment
 			if (selected.naval) {
@@ -7795,7 +7794,6 @@ export function evaluateAllPlans() {
 			}
 			if (selected.supply && !_navalSupplyPlan[si]) {
 				_navalSupplyPlan[si] = selected.supply;
-			}
 			}
 
 			// Apply coastal defense plans
