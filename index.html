@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>MW-V0.25.21</title>
+    <title>MW-V0.25.22</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
@@ -41,6 +41,7 @@
                             <button class="settings-tab-btn" data-tab="pre">PRESETS</button>
                             <button class="settings-tab-btn" data-tab="eng">ENGINE</button>
                             <button class="settings-tab-btn" data-tab="vis">VISUALS</button>
+                            <button class="settings-tab-btn" data-tab="aud">AUDIO</button>
                             <button class="settings-tab-btn" data-tab="ui">UI</button>
                         </div>
                     </div>
@@ -184,6 +185,27 @@
                         <input type="checkbox" id="disable-country-gradient-checkbox" style="width: 18px; height: 18px; accent-color: #3498db;">
                         <span>Disable Country Gradient</span>
                     </label>
+                </div>
+            </div>
+            <div id="settings-tab-aud" class="settings-tab-pane" style="display:none">
+                <div class="setting-group" style="display: flex; flex-direction: column; gap: 10px;">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                        <input type="checkbox" id="use-secret-sounds-checkbox" style="width: 18px; height: 18px; accent-color: #e74c3c;" checked>
+                        <span>Use Secret Sounds</span>
+                    </label>
+                </div>
+                <div class="setting-group" style="margin-top: 12px;">
+                    <label style="font-size: 11px; color: #888;">Sound Effects</label>
+                    <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 6px;">
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="secret-sound-war-checkbox" style="width: 18px; height: 18px; accent-color: #e67e22;" checked>
+                            <span>War Declaration (HoI4)</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="secret-sound-peace-checkbox" style="width: 18px; height: 18px; accent-color: #2ecc71;" checked>
+                            <span>Peace Deal (HoI4)</span>
+                        </label>
+                    </div>
                 </div>
             </div>
             <div id="settings-tab-ui" class="settings-tab-pane" style="display:none">
@@ -421,11 +443,6 @@
                         <input type="checkbox" id="alliance-view-checkbox" style="width:14px;height:14px; accent-color:#16a085;">
                         <span>ALLIANCE</span>
                     </label>
-                    <button id="arrows-toggle-btn" class="mini-btn" title="Toggle Alliance View (legacy toggle)" data-i18n="ARROWS">ARROWS (BUGGY)</button>
-                    <button id="battles-toggle-btn" class="mini-btn" title="Toggle Battle Visuals" data-i18n="BATTLE_VIS">BATTLE VISUALS</button>
-                    <button id="labels-toggle-btn" class="mini-btn" title="Toggle Country Labels">LABELS</button>
-                    <button id="cities-toggle-btn" class="mini-btn" title="Toggle Cities">CITIES</button>
-                    <button id="warplans-toggle-btn" class="mini-btn" title="Toggle War Plan Arrows">WAR PLANS</button>
                 </div>
 
                 <div class="control-group simulation-controls">

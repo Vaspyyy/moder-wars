@@ -1258,6 +1258,8 @@ export const bgMusicUrls = [
 export const warStartUrl = "assets/audio/war.wav";
 export const peaceUrl = "assets/audio/peace.wav";
 export const warAmbianceUrl = "assets/audio/modern-war-129016.mp3";
+export const secretWarDeclaredUrl = "super-secret-settings/hoi4-war-declared.mp3";
+export const secretPeaceDealUrl = "super-secret-settings/hoi4-peace-deal.mp3";
 
 // Initialize Audio Context immediately so it's ready for early decoding
 export const audioCtx = new (
@@ -1271,6 +1273,9 @@ export let isAudioLoading = false;
 export let warStartBuffer = null;
 export let peaceBuffer = null;
 export let warAmbianceBuffer = null;
+export let secretWarDeclaredBuffer = null;
+export let secretPeaceDealBuffer = null;
+export let useSecretSounds = true;
 export let bgMusicSource = null;
 export let bgMusicGain = null;
 // Track index currently playing from bgMusicUrls
@@ -1442,6 +1447,8 @@ export async function initAudio() {
 			: Promise.resolve(),
 		load(warStartUrl).then((b) => (warStartBuffer = b || warStartBuffer)),
 		load(peaceUrl).then((b) => (peaceBuffer = b || peaceBuffer)),
+		load(secretWarDeclaredUrl).then((b) => (secretWarDeclaredBuffer = b || secretWarDeclaredBuffer)),
+		load(secretPeaceDealUrl).then((b) => (secretPeaceDealBuffer = b || secretPeaceDealBuffer)),
 		load(warAmbianceUrl).then(
 			(b) => (warAmbianceBuffer = b || warAmbianceBuffer),
 		),
@@ -1532,9 +1539,12 @@ export function playClickSound() {
 }
 
 export function playWarStartSound() {
-	if (isMuted || !audioCtx || !warStartBuffer) return;
+	if (isMuted || !audioCtx) return;
+	const secretWarCb = document.getElementById("secret-sound-war-checkbox");
+	const buffer = (useSecretSounds && secretWarCb?.checked && secretWarDeclaredBuffer) ? secretWarDeclaredBuffer : warStartBuffer;
+	if (!buffer) return;
 	const source = audioCtx.createBufferSource();
-	source.buffer = warStartBuffer;
+	source.buffer = buffer;
 	const gainNode = audioCtx.createGain();
 	gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime); // Quiet start
 	source.connect(gainNode);
@@ -1543,9 +1553,12 @@ export function playWarStartSound() {
 }
 
 export function playPeaceSound() {
-	if (isMuted || !audioCtx || !peaceBuffer) return;
+	if (isMuted || !audioCtx) return;
+	const secretPeaceCb = document.getElementById("secret-sound-peace-checkbox");
+	const buffer = (useSecretSounds && secretPeaceCb?.checked && secretPeaceDealBuffer) ? secretPeaceDealBuffer : peaceBuffer;
+	if (!buffer) return;
 	const source = audioCtx.createBufferSource();
-	source.buffer = peaceBuffer;
+	source.buffer = buffer;
 	const gainNode = audioCtx.createGain();
 	gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
 	source.connect(gainNode);
@@ -5446,7 +5459,7 @@ export async function _startWarInner() {
 
 	// Reset cached frontline field state between wars.
 	_frontlineSourceCell = null;
-	setSpeed(0); // Conflicts start at 0.5 speed (Index 0 in SPEED_STEPS)
+	setSpeed(0); // Conflicts start at 1x speed (Index 0 in SPEED_STEPS)
 
 	// Initialize diplomacy and technology toggles
 	peaceTreatiesDisabled = noPeaceCheckbox.checked;
@@ -6267,7 +6280,7 @@ export async function startBenchmark() {
 	updateSidesUI();
 	await startWar();
 	// Crank to max speed for stress testing
-	setSpeed(SPEED_STEPS.indexOf(5));
+	setSpeed(SPEED_STEPS.length - 1); // max speed
 	// Initialize benchmark state
 	isPaused = false;
 	_perfSamples = [];
@@ -8508,7 +8521,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.21",
+		_version: "V0.25.22",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -13557,11 +13570,13 @@ if (allianceViewCheckbox) {
 	});
 }
 
-battlesToggleBtn.addEventListener("click", () => {
-	showBattleIndicators = !showBattleIndicators;
-	battlesToggleBtn.classList.toggle("active", showBattleIndicators);
-	influenceLayer.render();
-});
+if (battlesToggleBtn) {
+	battlesToggleBtn.addEventListener("click", () => {
+		showBattleIndicators = !showBattleIndicators;
+		battlesToggleBtn.classList.toggle("active", showBattleIndicators);
+		influenceLayer.render();
+	});
+}
 
 if (labelsToggleBtn) {
 	labelsToggleBtn.classList.toggle("active", showCountryLabels);
@@ -13693,6 +13708,31 @@ if (noPeaceCheckbox) {
 if (cityFocusCheckbox) {
 	cityFocusCheckbox.addEventListener("change", () => {
 		cityFocusMode = cityFocusCheckbox.checked;
+	});
+}
+
+// Secret Sounds checkboxes
+const useSecretSoundsCheckbox = document.getElementById("use-secret-sounds-checkbox");
+const secretSoundWarCheckbox = document.getElementById("secret-sound-war-checkbox");
+const secretSoundPeaceCheckbox = document.getElementById("secret-sound-peace-checkbox");
+
+if (useSecretSoundsCheckbox) {
+	useSecretSoundsCheckbox.checked = useSecretSounds;
+	useSecretSoundsCheckbox.addEventListener("change", (e) => {
+		useSecretSounds = e.target.checked;
+		setCookie("mw_secret_sounds", e.target.checked ? "true" : "false");
+		if (secretSoundWarCheckbox) secretSoundWarCheckbox.disabled = !useSecretSounds;
+		if (secretSoundPeaceCheckbox) secretSoundPeaceCheckbox.disabled = !useSecretSounds;
+	});
+}
+if (secretSoundWarCheckbox) {
+	secretSoundWarCheckbox.addEventListener("change", (e) => {
+		setCookie("mw_secret_sound_war", e.target.checked ? "true" : "false");
+	});
+}
+if (secretSoundPeaceCheckbox) {
+	secretSoundPeaceCheckbox.addEventListener("change", (e) => {
+		setCookie("mw_secret_sound_peace", e.target.checked ? "true" : "false");
 	});
 }
 
@@ -14362,7 +14402,7 @@ export function _signSelectivePeace(exiter, target) {
 	}
 }
 
-export const SPEED_STEPS = [0.5, 1, 1.5, 3, 5];
+export const SPEED_STEPS = [1, 2, 3];
 export let currentSpeedIndex = 0; // Index for "0.1x"
 
 export function togglePause() {
