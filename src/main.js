@@ -6018,27 +6018,42 @@ export async function _startWarInner() {
 	}
 
 	// Initialize displayed manpower, honoring any manual overrides if present.
-	// Base manpower comes from units, with an additional city-based bonus so more cities = more manpower.
+	// Manpower pool = territory cells × 5000 + cities × 50000 (floor: initial army size)
 	sideSoldiers.fill(0);
 	initialSideSoldiers.fill(0);
-	soldiersPerUnit.fill(CONFIG.UNIT_TO_SOLDIER_RATIO);
+	soldiersPerUnit.fill(CONFIG.UNIT_TO_SOLDIER_RATIO); // fixed 1000, NOT pool-derived
 	const sideUnitCounts = new Float64Array(MAX_SIDES);
+	const sideCellCounts = new Float64Array(MAX_SIDES);
+	const sideCityCounts = new Float64Array(MAX_SIDES);
 	for (let i = 0; i < units.length; i++) {
 		const sIdx = units[i].sideIndex;
 		if (sIdx >= 0 && sIdx < MAX_SIDES) sideUnitCounts[sIdx]++;
 	}
+	// Count territory cells and cities per side
+	for (const [countryId, cellArr] of countryIndices) {
+		const sIdx = countryToSideMap.get(countryId);
+		if (sIdx != null && sIdx >= 0 && sIdx < MAX_SIDES) {
+			sideCellCounts[sIdx] += cellArr.length;
+		}
+	}
+	for (const city of activeTheaterCities) {
+		const sIdx = countryToSideMap.get(city.sovereignId);
+		if (sIdx != null && sIdx >= 0 && sIdx < MAX_SIDES) {
+			sideCityCounts[sIdx]++;
+		}
+	}
 
 	for (let sIdx = 0; sIdx < MAX_SIDES; sIdx++) {
-		const initialUnits = sideUnitCounts[sIdx] * CONFIG.UNIT_TO_SOLDIER_RATIO;
+		const initialArmyPool = sideUnitCounts[sIdx] * CONFIG.UNIT_TO_SOLDIER_RATIO;
+		const territoryPool = Math.round(sideCellCounts[sIdx] * 5000);
+		const cityPool = Math.round(sideCityCounts[sIdx] * 50000);
+		const autoPool = Math.max(initialArmyPool, territoryPool + cityPool);
 		initialSideSoldiers[sIdx] =
 			manualSideManpower[sIdx] !== null
 				? manualSideManpower[sIdx]
-				: Math.round(initialUnits * 6); // auto pool is 6× initial army size
+				: autoPool;
 		sideSoldiers[sIdx] = initialSideSoldiers[sIdx];
-		soldiersPerUnit[sIdx] =
-			sideUnitCounts[sIdx] > 0
-				? initialSideSoldiers[sIdx] / sideUnitCounts[sIdx]
-				: CONFIG.UNIT_TO_SOLDIER_RATIO;
+		// soldiersPerUnit stays at CONFIG.UNIT_TO_SOLDIER_RATIO (1000) — not pool-derived
 	}
 
 	const bounds = L.latLngBounds([]);
@@ -8519,7 +8534,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.23",
+		_version: "V0.25.24",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
