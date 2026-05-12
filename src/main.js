@@ -1540,8 +1540,7 @@ export function playClickSound() {
 
 export function playWarStartSound() {
 	if (isMuted || !audioCtx) return;
-	const secretWarCb = document.getElementById("secret-sound-war-checkbox");
-	const buffer = (useSecretSounds && secretWarCb?.checked && secretWarDeclaredBuffer) ? secretWarDeclaredBuffer : warStartBuffer;
+	const buffer = (useSecretSounds && secretWarDeclaredBuffer) ? secretWarDeclaredBuffer : warStartBuffer;
 	if (!buffer) return;
 	const source = audioCtx.createBufferSource();
 	source.buffer = buffer;
@@ -1554,8 +1553,7 @@ export function playWarStartSound() {
 
 export function playPeaceSound() {
 	if (isMuted || !audioCtx) return;
-	const secretPeaceCb = document.getElementById("secret-sound-peace-checkbox");
-	const buffer = (useSecretSounds && secretPeaceCb?.checked && secretPeaceDealBuffer) ? secretPeaceDealBuffer : peaceBuffer;
+	const buffer = (useSecretSounds && secretPeaceDealBuffer) ? secretPeaceDealBuffer : peaceBuffer;
 	if (!buffer) return;
 	const source = audioCtx.createBufferSource();
 	source.buffer = buffer;
@@ -8521,7 +8519,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.22",
+		_version: "V0.25.23",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -13711,28 +13709,14 @@ if (cityFocusCheckbox) {
 	});
 }
 
-// Secret Sounds checkboxes
+// Secret Sounds checkbox
 const useSecretSoundsCheckbox = document.getElementById("use-secret-sounds-checkbox");
-const secretSoundWarCheckbox = document.getElementById("secret-sound-war-checkbox");
-const secretSoundPeaceCheckbox = document.getElementById("secret-sound-peace-checkbox");
 
 if (useSecretSoundsCheckbox) {
 	useSecretSoundsCheckbox.checked = useSecretSounds;
 	useSecretSoundsCheckbox.addEventListener("change", (e) => {
 		useSecretSounds = e.target.checked;
 		setCookie("mw_secret_sounds", e.target.checked ? "true" : "false");
-		if (secretSoundWarCheckbox) secretSoundWarCheckbox.disabled = !useSecretSounds;
-		if (secretSoundPeaceCheckbox) secretSoundPeaceCheckbox.disabled = !useSecretSounds;
-	});
-}
-if (secretSoundWarCheckbox) {
-	secretSoundWarCheckbox.addEventListener("change", (e) => {
-		setCookie("mw_secret_sound_war", e.target.checked ? "true" : "false");
-	});
-}
-if (secretSoundPeaceCheckbox) {
-	secretSoundPeaceCheckbox.addEventListener("change", (e) => {
-		setCookie("mw_secret_sound_peace", e.target.checked ? "true" : "false");
 	});
 }
 
