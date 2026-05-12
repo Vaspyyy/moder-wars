@@ -7776,11 +7776,26 @@ export function evaluateAllPlans() {
 			}
 
 			// Apply naval / supply plans
-			if (selected.naval && (!_navalPlan[si] || forceReplace)) {
-				_navalPlan[si] = selected.naval;
+			// Apply naval / supply plans — naval plans have their own lifecycle
+			// and should not be force-replaced just because a land plan triggered reassessment
+			if (selected.naval) {
+				if (!_navalPlan[si]) {
+					_navalPlan[si] = selected.naval;
+				} else if (forceReplace) {
+					// Only replace if current naval plan is truly stalled (>1200 ticks no progress)
+					const nptsp = simFrameCount - (_navalPlan[si].lastProgressTick || simFrameCount);
+					const nptss = simFrameCount - (_navalPlan[si].startedTick || simFrameCount);
+					if (nptsp > 1200 && nptss > 1200) {
+						for (const u of (_tickUnitsBySide[si] || [])) {
+							if (u.navalAssigned) { u.navalAssigned = false; u.isTransport = false; }
+						}
+						_navalPlan[si] = selected.naval;
+					}
+				}
 			}
 			if (selected.supply && !_navalSupplyPlan[si]) {
 				_navalSupplyPlan[si] = selected.supply;
+			}
 			}
 
 			// Apply coastal defense plans
@@ -8673,7 +8688,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.32",
+		_version: "V0.25.33",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
