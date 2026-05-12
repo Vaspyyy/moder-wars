@@ -6045,8 +6045,8 @@ export async function _startWarInner() {
 
 	for (let sIdx = 0; sIdx < MAX_SIDES; sIdx++) {
 		const initialArmyPool = sideUnitCounts[sIdx] * CONFIG.UNIT_TO_SOLDIER_RATIO;
-		const territoryPool = Math.round(sideCellCounts[sIdx] * 5000);
-		const cityPool = Math.round(sideCityCounts[sIdx] * 50000);
+		const territoryPool = Math.round(sideCellCounts[sIdx] * 200);
+		const cityPool = Math.round(sideCityCounts[sIdx] * 10000);
 		const autoPool = Math.max(initialArmyPool, territoryPool + cityPool);
 		initialSideSoldiers[sIdx] =
 			manualSideManpower[sIdx] !== null
@@ -8534,7 +8534,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.24",
+		_version: "V0.25.25",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
