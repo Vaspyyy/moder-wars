@@ -8534,7 +8534,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.26",
+		_version: "V0.25.27",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -12578,7 +12578,7 @@ export function updateLoop(now) {
                     <div class="cas-value" data-cval="${e.id}" style="font-size: ${isPrimary ? "18px" : "12px"}; color: ${sideColor};">${formatted}</div>`;
 				if (isPrimary) {
 					const mpRemaining = Math.max(0, sideSoldiers[currentSide]);
-					html += `<span class="cas-side-mp" data-sidemp="${currentSide}" style="font-size:9px; color:#5dade2; margin-left:6px; vertical-align:middle;">${influenceLayer.formatSoldiers(mpRemaining)}</span>`;
+					html += `<span class="cas-side-mp" data-sidemp="${currentSide}" style="font-size: ${isPrimary ? "18px" : "12px"}; color: ${sideColor};">${influenceLayer.formatSoldiers(mpRemaining)}</span>`;
 				}
 				html += `</div>`;
 				sidePos++;
