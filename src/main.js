@@ -8548,7 +8548,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.29",
+		_version: "V0.25.30",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -9320,6 +9320,16 @@ export function performSimulationTick() {
 					reserveShare: 0.02,
 					peacePressure: 0.0,
 				};
+			}
+
+			// Total war strategies (TURTLE, BLITZ): all-in mobilization
+			// 3x unit cap, 4x recruitment speed — win or die trying
+			if (
+				countryObj?.strategy === "TURTLE" ||
+				countryObj?.strategy === "BLITZ"
+			) {
+				profile.recruitCapMult *= 3.0;
+				profile.recruitChanceMult *= 4.0;
 			}
 
 			aiCountryState.set(country.id, profile);
