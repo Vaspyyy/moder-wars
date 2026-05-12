@@ -8769,7 +8769,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.35",
+		_version: "V0.25.34",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -12120,17 +12120,6 @@ export function performSimulationTick() {
 						}
 					}
 
-					// Neutral border: don't enter neutral countries — slide along the border instead
-					if (!u.isTransport && !isAtSea) {
-						const nDestIdx = getGridIndex(
-							u.lat + moveDirLat * moveDist,
-							u.lng + moveDirLng * moveDist,
-						);
-						if (nDestIdx !== -1 && landMask[nDestIdx] > 0 && isNeutralCountry(nDestIdx)) {
-							moveDirLat = 0;
-							moveDirLng = 0;
-						}
-					}
 					u.lat += moveDirLat * moveDist;
 					u.lng += moveDirLng * moveDist;
 					u.dirLat = moveDirLat; // Store trajectory for renderer
