@@ -8508,7 +8508,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.16",
+		_version: "V0.25.17",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -9957,7 +9957,7 @@ export function performSimulationTick() {
 					if (cx < 0) cx += maxKx;
 					else if (cx >= maxKx) cx -= maxKx;
 
-					const arr = unitHash.get(cx * 10000 + cy);
+					const arr = unitHash.get(`${cx}_${cy}`);
 					if (!arr) continue;
 
 					for (let j = 0; j < arr.length; j++) {
