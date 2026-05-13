@@ -822,8 +822,58 @@ body.use-system-font .scroller-card-name {
 		max-width: 100%;
 		min-width: 0;
 		border-radius: 12px 12px 0 0;
-		padding: 16px;
-		max-height: 60vh;
+		padding: 12px 16px;
+		max-height: 38vh;
+		border-left: none;
+		border-right: none;
+	}
+
+	/* Mobile: compact inline casualty bar instead of map-blocking overlay */
+	.casualty-panel {
+		position: relative;
+		top: auto;
+		left: auto;
+		max-width: 100%;
+		min-width: 0;
+		margin: 0 0 2px 0;
+		padding: 6px 10px;
+		flex-direction: row;
+		flex-wrap: wrap;
+		gap: 6px;
+		background: rgba(10, 10, 12, 0.75);
+		border-radius: 0;
+		border: none;
+		border-bottom: 1px solid rgba(255,255,255,0.08);
+		box-shadow: none;
+	}
+	.casualty-panel .casualty-title {
+		display: none;
+	}
+	.casualty-side-list {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+		align-items: center;
+	}
+	.casualty-item {
+		font-size: 10px;
+		padding: 2px 6px;
+		background: rgba(0,0,0,0.35);
+		border-radius: 3px;
+		display: flex;
+		align-items: center;
+		gap: 3px;
+	}
+	.casualty-item .cas-flag { width: 12px !important; height: 8px !important; }
+	.casualty-item .cas-value { font-size: 10px !important; }
+	.casualty-item .cas-side-mp { font-size: 10px !important; }
+
+	/* Stats panel: keep it compact */
+	.stats-panel {
+		max-width: 100%;
+		margin-bottom: 4px;
+		padding: 10px 14px;
+		gap: 6px;
 	}
 }
 
