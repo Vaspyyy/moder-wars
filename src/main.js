@@ -8772,7 +8772,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.37",
+		_version: "V0.25.38",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -9534,8 +9534,8 @@ export function performSimulationTick() {
 			} else if (mode === "UNDER_MOBILIZED") {
 				profile = {
 					mode,
-					recruitCapMult: 2.0,
-					recruitChanceMult: 3.0,
+					recruitCapMult: 3.0,
+					recruitChanceMult: 5.0,
 					retreatTriggerMultiple: 8.0,
 					frontlineBlend: 0.35,
 					speedMult: 1.0,
@@ -9547,13 +9547,13 @@ export function performSimulationTick() {
 			}
 
 			// Total war strategies (TURTLE, BLITZ): all-in mobilization
-			// 3x unit cap, 4x recruitment speed — win or die trying
+			// 4x unit cap, 6x recruitment speed — meat grinder that sustains itself
 			if (
 				country.strategy === "TURTLE" ||
 				country.strategy === "BLITZ"
 			) {
-				profile.recruitCapMult *= 3.0;
-				profile.recruitChanceMult *= 4.0;
+				profile.recruitCapMult *= 4.0;
+				profile.recruitChanceMult *= 6.0;
 			}
 
 			aiCountryState.set(country.id, profile);
@@ -9794,7 +9794,9 @@ export function performSimulationTick() {
 				absoluteCap = Math.min(absoluteCap, mpCap);
 			}
 
-			if (currentUnits < absoluteCap) {
+			const isTotalWar = country.strategy === "TURTLE" || country.strategy === "BLITZ";
+			const overcapLimit = isTotalWar ? Math.floor(absoluteCap * 1.2) : absoluteCap;
+			if (currentUnits < overcapLimit) {
 				const controlRatio = currentLand / initialLand;
 				const cityCountLocal = countryToCityCount.get(country.id) || 0;
 				const cityBonus = 0.5 + cityCountLocal * 0.5; // Cities are a primary driver of recruitment speed
@@ -9816,7 +9818,7 @@ export function performSimulationTick() {
 
 				// Faster baseline recruitment, heavily amplified by city count, underdog status,
 				// and annexation urgency.
-				const baseRecruitmentChance = 0.006;
+				const baseRecruitmentChance = 0.012; // doubled for more aggressive mid-war reinforcement
 				let recruitmentChance =
 					baseRecruitmentChance *
 					scaleFactor *
@@ -9851,6 +9853,17 @@ export function performSimulationTick() {
 				}
 
 				}
+
+				// Cap-fill urgency: the more empty the army, the harder they draft
+				const capFillRatio = Math.min(1, currentUnits / Math.max(1, absoluteCap));
+				const capFillMult = 1.0 + (1 - capFillRatio) * 3.0; // 1× at full → 4× at empty
+				recruitmentChance *= capFillMult;
+				// Total war double-dip: extra recruitment pressure when losses mount
+				if (isTotalWar && capFillRatio < 0.5) {
+					recruitmentChance *= 1.0 + (0.5 - capFillRatio) * 4.0; // up to 3× extra when half-empty
+				}
+				// Clamp per-tick chance at 80% to prevent deterministic spam
+				if (recruitmentChance > 0.8) recruitmentChance = 0.8;
 
 				if (Math.random() < recruitmentChance) {
 					spawnSingleUnit(sIdx, country.id);
