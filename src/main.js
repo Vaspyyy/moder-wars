@@ -5168,7 +5168,10 @@ export function spawnSingleUnit(
 				theaterIndices.push(i);
 			}
 		}
-		if (theaterIndices.length === 0) return false;
+		if (theaterIndices.length === 0) {
+			console.warn("[MW] spawnSingleUnit FAILED for country", sovereignId, ": no friendly territory to spawn on (dominantSideMap check)");
+			return false;
+		}
 
 		const idx =
 			theaterIndices[Math.floor(Math.random() * theaterIndices.length)];
@@ -8769,7 +8772,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.34",
+		_version: "V0.25.36",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -9799,7 +9802,7 @@ export function performSimulationTick() {
 				// Manpower Scale: Diminishing returns on recruitment for massive nations
 				// to prevent them from overwhelmingly flooding the screen with unit flags.
 				const landRatio = currentLand / 2000; // Reference size
-				const scaleFactor = Math.max(0.5, landRatio ** 0.4);
+				const scaleFactor = Math.max(0.8, landRatio ** 0.4); // raised floor so small countries aren't recruit-starved
 
 				// Underdog Bonus: help nations that have lost most of their land cycle recruits faster
 				const underdogFactor =
@@ -10146,6 +10149,34 @@ export function performSimulationTick() {
 				warFatigueFactor;
 
 			if (isEncircled) dmg *= CONFIG.ENCIRCLEMENT_DAMAGE_MULT;
+			// SUPPLY CUT-OFF: units deep in enemy territory with no friendly tiles nearby
+			// take extreme damage — they're completely isolated from logistics.
+			if (inEnemyTerritory && !isEncircled && !isAtSea) {
+				let friendlyTilesNearby = 0;
+				const cutoffRadius = Math.round(0.8 / CONFIG.GRID_RES);
+				const gr = gridWidth;
+				const cRow = Math.floor(gridIdxNow / gr);
+				const cCol = gridIdxNow % gr;
+				for (let dr = -cutoffRadius; dr <= cutoffRadius; dr++) {
+					for (let dc = -cutoffRadius; dc <= cutoffRadius; dc++) {
+						if (dr === 0 && dc === 0) continue;
+						const nr = cRow + dr, nc = cCol + dc;
+						if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
+						const ni = nr * gr + nc;
+						if (landMask[ni] > 0 && dominantSideMap[ni] === u.sideIndex) {
+							friendlyTilesNearby++;
+						}
+					}
+				}
+				// No friendly tiles within ~0.8° → total supply collapse
+				if (friendlyTilesNearby === 0) {
+					dmg += 2.5; // massive cut-off damage: ~25× base attrition
+				} else if (friendlyTilesNearby < 3) {
+					dmg += 0.8; // severely isolated
+				} else if (friendlyTilesNearby < 8) {
+					dmg += 0.3; // partially cut off
+				}
+			}
 			recordDamage(u, dmg * damageTakenMult);
 
 			// Instant death triggers full remaining health as casualties
@@ -14556,6 +14587,12 @@ export function _signSelectiveSideExit(sideIdx) {
 
 	// Remove all countries from this side
 	sides[sideIdx] = [];
+
+	// Clear all war plans for the exiting side
+	if (sideIdx < _warPlan.length) _warPlan[sideIdx] = null;
+	if (sideIdx < _navalPlan.length) _navalPlan[sideIdx] = null;
+	if (sideIdx < _navalSupplyPlan.length) _navalSupplyPlan[sideIdx] = null;
+	if (sideIdx < _planReassessNeeded.length) _planReassessNeeded[sideIdx] = false;
 
 	// Purge units belonging to exiting nations
 	units = units.filter((u) => !exitingIds.has(u.sovereignId));
