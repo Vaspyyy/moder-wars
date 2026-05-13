@@ -6344,6 +6344,18 @@ export function activateCountryMidWar(country, sideIdx) {
 	});
 	activeTheaterCities = [...activeTheaterCities, ...newCities];
 
+	// Compute manpower pool contribution from the joining country
+	const territoryPool = Math.round(cellCount * 200);
+	const cityPool = Math.round(newCities.length * 10000);
+	const joiningPool = Math.max(0, territoryPool + cityPool);
+	if (initialSideSoldiers[sideIdx] <= 0) {
+		initialSideSoldiers[sideIdx] = joiningPool;
+		sideSoldiers[sideIdx] = joiningPool;
+	} else {
+		initialSideSoldiers[sideIdx] += joiningPool;
+		sideSoldiers[sideIdx] += joiningPool;
+	}
+
 	const meta = countryMetadata.find((m) => m && m.id === countryId);
 	if (meta?.tempFlag) {
 		country.flag = meta.tempFlag;
@@ -8772,7 +8784,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.39",
+		_version: "V0.25.40",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
