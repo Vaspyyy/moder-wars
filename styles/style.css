@@ -362,6 +362,29 @@ body.use-system-font .scroller-card-name {
 		min-height: 44px;
 		font-size: 16px; /* prevents iOS zoom on focus */
 	}
+
+	/* Mobile settings: prevent tab bar overflow, stack vertically */
+	.scenario-selection-container .selection-header {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 8px;
+	}
+	.settings-tab-container {
+		width: 100%;
+		flex-wrap: wrap;
+		justify-content: flex-start;
+		align-self: stretch;
+		margin-bottom: 0;
+	}
+	.settings-tab-btn {
+		padding: 6px 10px;
+		font-size: 8px;
+		letter-spacing: 1px;
+	}
+	.scenario-scroller-v2 {
+		overflow-x: hidden;
+		-webkit-overflow-scrolling: touch;
+	}
 }
 
 .settings-title {
