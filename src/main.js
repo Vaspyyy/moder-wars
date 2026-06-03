@@ -6808,8 +6808,10 @@ export function generateAllProposals(sideIdx) {
 		const dSq = (ec.city.lat - fLat) ** 2 + deLng ** 2;
 
 		// Water-crossing check: sample line from unit centroid to city
+		// Always check — some cities can be across water even when a land
+		// frontline exists with a different enemy (e.g. Spain→Morocco while at war with France)
 		let crossesWater = false;
-		if (uCount > 0 && !hasLandConnection) {
+		if (uCount > 0) {
 			const ddLat = ec.city.lat - uLat;
 			let ddLng = ec.city.lng - uLng;
 			if (ddLng > 180) ddLng -= 360;
@@ -6910,7 +6912,8 @@ export function generateAllProposals(sideIdx) {
 	}
 
 	// ── 3. PUSH_FRONT proposal ──
-	if (uCount > 0 && eCount > 0) {
+	// Only propose land push if we share a land border with at least one enemy
+	if (uCount > 0 && eCount > 0 && hasLandConnection) {
 		proposals.push({
 			type: "PUSH_FRONT",
 			target: null,
@@ -8784,7 +8787,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.40",
+		_version: "V0.25.41",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -8800,11 +8803,6 @@ export function performSimulationTick() {
 	let _dbgLogCount = 0; // DEBUG: throttle diagnostic logging
 	let moveDirLat, moveDirLng;
 	const _t0 = performance.now();
-	// TODO: Remove per-unit level thinking. Only army groups and war plans should
-	// move units — no per-unit level movement and decision making. War plans are the
-	// bread and butter of AI movement. Individual unit targeting, mop-up search,
-	// independent pathfinding, and proximity combat decisions should all be replaced
-	// by plan-driven directives.
 
 	// If war is over, stop simulation mechanics (but update loop may continue for aftermath recording)
 	if (gameState === "WAR_OVER") return false;
