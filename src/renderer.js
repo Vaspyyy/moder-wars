@@ -158,6 +158,7 @@ const ControlMapLayer = L.Layer.extend({
 		}
 	},
 	render: function () {
+		const _r0 = performance.now();
 		if (!worldControlMap || !landMask) return;
 		const viewBounds = map.getBounds();
 		const bounds = viewBounds;
@@ -2468,6 +2469,7 @@ const ControlMapLayer = L.Layer.extend({
 		}
 
 		ctx.restore();
+		if (window.__perf) window.__perf.render = (window.__perf.render || 0) + performance.now() - _r0;
 	},
 
 	drawCurvedLabel: function (ctx, sideIdx) {
