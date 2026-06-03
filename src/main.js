@@ -8831,7 +8831,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.44",
+		_version: "V0.25.45",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -8842,7 +8842,7 @@ export function performSimulationTick() {
 		reassess_noPlan: 0, reassess_interval: 0, reassess_forced: 0,
 		reassess_territory: 0, reassess_posture: 0, reassess_ratio: 0,
 		// unitLoop sub-timers
-		setupTerrain: 0, spatialHash: 0, retreatMopUp: 0, planMovement: 0, combatMove: 0,
+		unitSetupTerrain: 0, unitSpatialHash: 0, unitRetreatMopUp: 0, unitPlanMovement: 0, unitCombatMove: 0,
 	};
 	window.__perf.ticks++;
 	// ── Perf snapshot for per-tick delta computation ──
@@ -8850,7 +8850,7 @@ export function performSimulationTick() {
 	const _perfKeys = ['plans','proposals','eval','neutralBorder','recruit','unitLoop','post',
 		'prePlans','influence','smoothing','phase0','phase67','phase133',
 		'spatialHash','frontline','consolidate','caches','victory','aiPosture','posture','render',
-		'setupTerrain','spatialHash','retreatMopUp','planMovement','combatMove'];
+		'unitSetupTerrain','unitSpatialHash','unitRetreatMopUp','unitPlanMovement','unitCombatMove'];
 	for (const k of _perfKeys) _perfSnap[k] = window.__perf[k] || 0;
 	_simTickCount++;
 	let _dbgLogCount = 0; // DEBUG: throttle diagnostic logging
@@ -9968,7 +9968,6 @@ export function performSimulationTick() {
 
 	window.__perf.recruit += performance.now() - _t2;
 	const _t3 = performance.now();
-	const _u1 = _t3; // unitLoop sub-timer section start (setupTerrain)
 	// Pre-build city grid index Set once per tick (not per unit)
 	const _cityIdxSetTick = new Set();
 	for (let _cci = 0; _cci < activeTheaterCities.length; _cci++) {
@@ -9977,6 +9976,8 @@ export function performSimulationTick() {
 	}
 	for (let i = units.length - 1; i >= 0; i--) {
 		const u = units[i];
+		const _u1 = performance.now(); // per-unit sub-timer start
+		let _u5 = _u1; // fallback: tracks last checkpoint, defaults to start
 
 		// Scrub NaN units immediately to prevent rendering crashes
 		if (Number.isNaN(u.lat) || Number.isNaN(u.lng)) {
@@ -10309,8 +10310,8 @@ export function performSimulationTick() {
 			}
 		}
 
-		// ── unitLoop sub-timer checkpoint: end setupTerrain, start spatialHash ──
-		{ const _now = performance.now(); window.__perf.setupTerrain += _now - _u1; const _u2 = _now; }
+		// ── unitLoop sub-timer checkpoint: end setupTerrain, start unitSpatialHash ──
+		const _u2 = performance.now(); window.__perf.unitSetupTerrain += _u2 - _u1;
 
 		// Tactical Awareness: Identify enemies and local balance of power using O(1) Spatial Hash
 		let target = null;
@@ -10674,8 +10675,8 @@ export function performSimulationTick() {
 				'idleTicks=', idleTicks);
 		}
 
-		// ── unitLoop sub-timer checkpoint: end spatialHash, start retreatMopUp ──
-		{ const _now = performance.now(); window.__perf.spatialHash += _now - _u2; const _u3 = _now; }
+		// ── unitLoop sub-timer checkpoint: end unitSpatialHash, start retreatMopUp ──
+		const _u3 = performance.now(); window.__perf.unitSpatialHash += _u3 - _u2;
 
 		// Retreat logic: If enemy force is > 5x ally force (increased threshold to prevent premature dodging)
 		if (
@@ -11104,7 +11105,7 @@ export function performSimulationTick() {
 				moveDirLng = dLng / dist;
 
 				// ── unitLoop sub-timer checkpoint: end retreatMopUp, start planMovement ──
-				{ const _now = performance.now(); window.__perf.retreatMopUp += _now - _u3; const _u4 = _now; }
+				const _u4 = performance.now(); window.__perf.unitRetreatMopUp += _u4 - _u3;
 
 				// ── War Plan Movement: override direction based on active plan ──
 				let planSpeedMult = 1.0;
@@ -12105,7 +12106,7 @@ export function performSimulationTick() {
 				}
 
 				// ── unitLoop sub-timer checkpoint: end planMovement, start combatMove ──
-				{ const _now = performance.now(); window.__perf.planMovement += _now - _u4; const _u5 = _now; }
+				const _u5 = performance.now(); window.__perf.unitPlanMovement += _u5 - _u4;
 
 				// Neutral / protected territory: heavy penalty to discourage traversal.
 				// Units should path around neutral countries, not through them.
@@ -12380,12 +12381,12 @@ export function performSimulationTick() {
 			// This just cleans them up when they reach 0 health.
 			units.splice(i, 1);
 		}
+
+		// ── unitLoop sub-timer: end combatMove ──
+		window.__perf.unitCombatMove += performance.now() - _u5;
 	}
 
 	// NOTE: even if sideSoldiers reach 0, sides remain on the field and can still recruit.
-	// This keeps wars from hard-locking when a side's manpower bar is exhausted.
-
-	window.__perf.combatMove += performance.now() - _u5;
 	window.__perf.unitLoop += performance.now() - _t3;
 	const _t4 = performance.now();
 	// 4. Individual Capitulation & Treaty Logic
