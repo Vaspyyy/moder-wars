@@ -6747,20 +6747,6 @@ export function generateAllProposals(sideIdx) {
 		enemyCoastalTiles.push({ lat, lng, idx: gi });
 	}
 
-	// Check if this side has any land connection to enemies
-	let hasLandConnection = false;
-	if (_frontlinePolys) {
-		for (const key of Object.keys(_frontlinePolys)) {
-			const [a, b] = key.split("_").map(Number);
-			if (a === sideIdx || b === sideIdx) {
-				if (_frontlinePolys[key]?.length > 0) {
-					hasLandConnection = true;
-					break;
-				}
-			}
-		}
-	}
-
 	// ── 1. CAPTURE_CITY proposals ──
 	const enemyCities = [];
 	for (let ci = 0; ci < activeTheaterCities.length; ci++) {
@@ -6911,25 +6897,83 @@ export function generateAllProposals(sideIdx) {
 		}
 	}
 
-	// ── 3. PUSH_FRONT proposal ──
-	// Only propose land push if we share a land border with at least one enemy
-	if (uCount > 0 && eCount > 0 && hasLandConnection) {
-		proposals.push({
-			type: "PUSH_FRONT",
-			target: null,
-			stagingCells: [],
-			arrowPoints: [
-				{ lat: uLat, lng: uLng },
-				{ lat: eLat, lng: eLng },
-			],
-			estimatedForceNeeded: Math.ceil(unitCount * 0.5),
-			geographicData: {
-				frontlineDistSq: 0,
-				reachesTarget: hasLandConnection,
-				minSeaDist: Infinity,
-				minLandDist: 0,
-			},
-		});
+	// ── 3. PUSH_FRONT proposals (one per land-connected enemy side) ──
+	// Collect enemy sides that share a land frontline with us
+	const landConnectedEnemySides = new Set();
+	if (_frontlinePolys) {
+		for (const key of Object.keys(_frontlinePolys)) {
+			const [a, b] = key.split("_").map(Number);
+			if (a === sideIdx && b !== sideIdx && _frontlinePolys[key]?.length > 0) {
+				landConnectedEnemySides.add(b);
+			} else if (b === sideIdx && a !== sideIdx && _frontlinePolys[key]?.length > 0) {
+				landConnectedEnemySides.add(a);
+			}
+		}
+	}
+	// Generate a PUSH_FRONT proposal for each land-connected enemy side
+	if (uCount > 0 && landConnectedEnemySides.size > 0) {
+		for (const enemySide of landConnectedEnemySides) {
+			// Compute centroid of this specific enemy side's territory
+			let esLat = 0, esLng = 0, esCount = 0;
+			for (let i = 0; i < dominantSideMap.length; i += 20) {
+				if (landMask[i] === 0) continue;
+				if (dominantSideMap[i] !== enemySide) continue;
+				const row = Math.floor(i / gridWidth);
+				const col = i % gridWidth;
+				esLat += row * CONFIG.GRID_RES - 90;
+				esLng += col * CONFIG.GRID_RES - 180;
+				esCount++;
+			}
+			if (esCount === 0) continue;
+			esLat /= esCount;
+			esLng /= esCount;
+
+			// Water-crossing check: sample line from friendly centroid to enemy-side centroid
+			let crossesWater = false;
+			if (uCount > 0) {
+				const ddLat = esLat - uLat;
+				let ddLng = esLng - uLng;
+				if (ddLng > 180) ddLng -= 360;
+				else if (ddLng < -180) ddLng += 360;
+				const lineLen = Math.sqrt(ddLat * ddLat + ddLng * ddLng);
+				if (lineLen > 0.5) {
+					const steps = Math.min(20, Math.ceil(lineLen / 0.3));
+					let waterSamples = 0;
+					for (let s = 1; s < steps; s++) {
+						const t = s / steps;
+						const slat = uLat + ddLat * t;
+						const slng = uLng + ddLng * t;
+						const sIdx = getGridIndex(slat, slng);
+						if (sIdx !== -1 && landMask[sIdx] === 0) waterSamples++;
+					}
+					if (waterSamples > steps * 0.4) crossesWater = true;
+				}
+			}
+			// Skip if the path crosses water — this enemy isn't reachable by land
+			if (crossesWater) continue;
+
+			proposals.push({
+				type: "PUSH_FRONT",
+				target: {
+					lat: esLat,
+					lng: esLng,
+					name: `Enemy Side ${enemySide}`,
+					isCapital: false,
+				},
+				stagingCells: [],
+				arrowPoints: [
+					{ lat: uLat, lng: uLng },
+					{ lat: esLat, lng: esLng },
+				],
+				estimatedForceNeeded: Math.ceil(unitCount * 0.5),
+				geographicData: {
+					frontlineDistSq: 0,
+					reachesTarget: !crossesWater,
+					minSeaDist: Infinity,
+					minLandDist: 0,
+				},
+			});
+		}
 	}
 
 	// ── 4. DEFEND proposal ──
