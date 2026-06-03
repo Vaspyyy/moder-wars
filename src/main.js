@@ -8831,7 +8831,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.47",
+		_version: "V0.25.48",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -10350,6 +10350,7 @@ export function performSimulationTick() {
 		// Active units search adjacent 3×3 hash cells; idle units widen to 5×5
 		// so enemies in neighboring buckets (as close as 0.3°) are never missed.
 		const fullScan = !isTacticallyIdle;
+		const skipAllyScan = u.navalAssigned || u.supplyAssigned || u.coastalAssigned;
 		for (let dy = -2; dy <= 2; dy++) {
 				for (let dx = -2; dx <= 2; dx++) {
 					// When idle: scan 5x5 for overlap detection; active: 3x3
@@ -10389,10 +10390,7 @@ export function performSimulationTick() {
 							}
 
 							const distMult = eAtSea && !isAtSea ? 50.0 : 1.0;
-							const noise = Math.sin(u.id + simFrameCount * 0.02) * 0.03;
-							const noisyDSq =
-								((u.lat - e.lat + noise) ** 2 + (deLng + noise) ** 2) *
-								distMult;
+							const noisyDSq = dSq * distMult;
 
 							// Prefer wounded targets: reduce score for low-health enemies
 							const healthModifier = Math.max(0, 1.0 - (e.health || 100) / 100) * 0.02;
@@ -10410,14 +10408,8 @@ export function performSimulationTick() {
 								let eWeight = 1;
 								if (eAtSea) eWeight *= isAtSea ? 0.6 : 0.2;
 
-								const eSideIdx = countryToSideMap.get(e.sovereignId);
-								const eCountry =
-									eSideIdx !== undefined
-										? _countryById.get(e.sovereignId)
-										: null;
-
-								if (eCountry?.buffState === "super") eWeight *= 200;
-								else if (eCountry?.buffState === "buff") eWeight *= 50;
+								if (eBuff === "super") eWeight *= 200;
+								else if (eBuff === "buff") eWeight *= 50;
 
 								localEnemyCount += eWeight;
 								enemyCentroidLat += e.lat * eWeight;
@@ -10476,11 +10468,7 @@ export function performSimulationTick() {
 									}
 								}
 							}
-						} else if (
-							!u.navalAssigned &&
-							!u.supplyAssigned &&
-							!u.coastalAssigned
-						) {
+						} else if (!skipAllyScan) {
 							// Neutral garrison: station along borders with neutrals
 							let bestGP = null;
 							let bestGPDist = Infinity;
