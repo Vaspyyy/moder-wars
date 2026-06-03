@@ -8831,7 +8831,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.46",
+		_version: "V0.25.47",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -11088,7 +11088,7 @@ export function performSimulationTick() {
 			}
 
 		// ── unitLoop sub-timer checkpoint: end retreatMopUp, start combatMove ──
-			const _u4 = performance.now(); window.__perf.unitRetreatMopUp += _u4 - _u3;
+			var _u4 = performance.now(); window.__perf.unitRetreatMopUp += _u4 - _u3;
 
 			if (dist > 0.05) {
 				// Movement logic
