@@ -11289,7 +11289,7 @@ export function performSimulationTick() {
 					!isEngaged &&
 					!u.garrisonAssigned &&
 					!u.navalAssigned &&
-					(supplyPlan.activeUnitCount || 0) < (supplyPlan.maxAssignedUnits || 0)
+					((supplyPlan.activeUnitCount || 0) < (supplyPlan.maxAssignedUnits || 0) || (navalPlan && navalPlan.phase === "LANDING"))
 				) {
 					// Supply plan assignment
 					let isSupplyUnit = false;
