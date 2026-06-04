@@ -2060,6 +2060,22 @@ export let initialCountryMetadataSnapshot = null;
 export let initialCitiesSnapshot = null;
 export let flagProcessedBuffer;
 export let countryMetadata = []; // Stores {feature, color, id}
+export let countryUrbanPop = new Map(); // countryId -> total urban population from city data
+export let recruitModel = "balanced"; // "area" | "pop" | "balanced"
+
+/** Sum city populations per country for use in army size estimation. */
+export function computeCountryUrbanPop() {
+	if (!cities || !worldControlMap) return;
+	countryUrbanPop = new Map();
+	for (const city of cities) {
+		const idx = getGridIndex(city.lat, city.lng);
+		if (idx === -1) continue;
+		const ownerId = worldControlMap[idx];
+		if (ownerId > 0 && city.pop > 0) {
+			countryUrbanPop.set(ownerId, (countryUrbanPop.get(ownerId) || 0) + city.pop);
+		}
+	}
+}
 
 // UI Elements
 export const addSideBtn = document.getElementById("add-side-btn");
@@ -3501,8 +3517,20 @@ export function estimateUnitsForCountry(countryId) {
 	const sizeFactor = Math.max(1, cellCount / 1500);
 	const densityScale = 1.0 / sizeFactor ** 0.45;
 
+	// Blend land area with urban population for modern-day realism
+	let effectiveCount = cellCount;
+	const pop = countryUrbanPop.get(countryId) || 0;
+	if (pop > 0) {
+		const popScore = Math.sqrt(pop) * 0.04;
+		if (recruitModel === "pop") {
+			effectiveCount = popScore;
+		} else if (recruitModel === "balanced") {
+			effectiveCount = cellCount * 0.4 + popScore * 0.6;
+		}
+	}
+
 	let count = Math.floor(
-		cellCount * CONFIG.UNIT_DENSITY_FACTOR * multiplier * densityScale,
+		effectiveCount * CONFIG.UNIT_DENSITY_FACTOR * multiplier * densityScale,
 	);
 	const flatFloor = 3;
 	count = Math.max(flatFloor, Math.min(count, CONFIG.MAX_UNITS_PER_SIDE));
@@ -8831,7 +8859,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.48",
+		_version: "V0.25.61",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -8853,7 +8881,7 @@ export function performSimulationTick() {
 		'unitSetupTerrain','unitSpatialHash','unitRetreatMopUp','unitCombatMove'];
 	for (const k of _perfKeys) _perfSnap[k] = window.__perf[k] || 0;
 	_simTickCount++;
-	let _dbgLogCount = 0; // DEBUG: throttle diagnostic logging
+	let _dbgLogCount = 999999; // DEBUG: throttled out (was 0)
 	let moveDirLat, moveDirLng;
 	const _t0 = performance.now();
 
@@ -15661,6 +15689,8 @@ export function initializeEngine() {
 		document.getElementById("unit-limit-select").value,
 		10,
 	);
+
+	recruitModel = document.getElementById("recruit-model-select")?.value || "balanced";
 
 	// Sync global toggles from both main settings and setup panel sources
 	const mtDisabled =

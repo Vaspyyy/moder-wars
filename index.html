@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>MW-V0.25.48</title>
+    <title>MW-V0.25.61</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
@@ -143,6 +143,15 @@
                     </select>
                     <small data-i18n="GRID_SUB">Density affects the smoothness of frontlines.</small>
                 </div>
+                <div class="setting-group">
+                    <label>Recruitment Model</label>
+                    <select id="recruit-model-select">
+                        <option value="balanced" selected>Balanced (Pop + Area)</option>
+                        <option value="area">Land Area (Classic)</option>
+                        <option value="pop">Population (Modern)</option>
+                    </select>
+                    <small>How army size is calculated. Balanced uses 40% area + 60% urban population.</small>
+                </div>
             </div>
 
             <!-- Presets Tab -->
@@ -263,12 +272,12 @@
                                     <div class="scroller-card-desc">Current global geopolitics and real-world alliances.</div>
                                     <div class="scroller-card-credits">Map: UnionOfBritain</div>
                                 </div>
-                                <div class="scroller-card" id="scroller-choice-1936">
+                                <div class="scroller-card" id="scroller-choice-1936" style="display:none">
                                     <div class="scroller-card-name">1936 INTERWAR</div>
                                     <div class="scroller-card-desc">The buildup to the most destructive war in history.</div>
                                     <div class="scroller-card-credits">Map: filip</div>
                                 </div>
-                                <div class="scroller-card" id="scroller-choice-1914">
+                                <div class="scroller-card" id="scroller-choice-1914" style="display:none">
                                     <div class="scroller-card-name">1914 GREAT WAR</div>
                                     <div class="scroller-card-desc">Empires collide on the trenches of Europe.</div>
                                     <div class="scroller-card-credits">Map: orange</div>

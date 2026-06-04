@@ -8,6 +8,7 @@ import {
 	brushSize,
 	cities,
 	clearRefHandles,
+	computeCountryUrbanPop,
 	confirmRandomGenBtn,
 	countryInspector,
 	countryMetadata,
@@ -1426,6 +1427,9 @@ async function performPresetLoad(fileOrBlob, targetMode = "EDITOR") {
 		setInitialLandMaskSnapshot(new Uint8Array(landMask));
 		setInitialCountryMetadataSnapshot(deepClone(countryMetadata));
 		setInitialCitiesSnapshot(deepClone(cities));
+
+		// Compute urban population per country for army size estimation
+		computeCountryUrbanPop();
 
 		setTimeout(async () => {
 			// If the user chose to generate random nations earlier, trigger it now after the grid is ready
