@@ -1825,6 +1825,22 @@ export let preGodModeState = "SIMULATING";
 export const latestCountryStats = new Map();
 export let disableFullscreen = getCookie("mw_disable_fullscreen") === "true";
 
+// ── Global perf profiler init (once at module load, before any tick code runs) ──
+window.__perf = {
+	_version: "V0.25.62",
+	plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
+	recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
+	influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
+	spatialHash: 0, frontline: 0, consolidate: 0, caches: 0,
+	victory: 0, aiPosture: 0, posture: 0, render: 0,
+	tickTotal: 0, maxTick: 0, ticks: 0,
+	proposalRuns: 0, proposalFailed: 0,
+	reassess_noPlan: 0, reassess_interval: 0, reassess_forced: 0,
+	reassess_territory: 0, reassess_posture: 0, reassess_ratio: 0,
+	// unitLoop sub-timers
+	unitSetupTerrain: 0, unitSpatialHash: 0, unitRetreatMopUp: 0, unitCombatMove: 0,
+};
+
 // High-performance spatial cache for unit culling and combat
 export const unitSpatialHash = new Map();
 export const UNIT_HASH_CELL_SIZE = 2.5; // Degrees per spatial bucket
@@ -7913,7 +7929,6 @@ function shouldReassess(si) {
 
 export function evaluateAllPlans() {
 	// ── Reassessment: run the proposal pipeline when triggers fire ──
-	if (!window.__perf) window.__perf = {};
 	const _tp = performance.now();
 	for (let si = 0; si < sides.length; si++) {
 		if (!sides[si] || sides[si].length === 0) continue;
@@ -8859,7 +8874,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.61",
+		_version: "V0.25.62",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
