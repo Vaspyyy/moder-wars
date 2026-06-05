@@ -10412,6 +10412,10 @@ export function performSimulationTick() {
 		const ky = Math.floor((u.lat + 90) / HASH_SIZE);
 		const maxKx = Math.ceil(360 / HASH_SIZE);
 
+		// War-plan movement variables — declared here so both scan paths can use them
+		let planSpeedMult = 1.0;
+		let planDirLat = 0, planDirLng = 0, isPlanUnit = false;
+
 		// Active units search adjacent 3×3 hash cells; idle units widen to 5×5
 		const fullScan = !isTacticallyIdle;
 		const skipAllyScan = u.navalAssigned || u.supplyAssigned || u.coastalAssigned;
@@ -11435,10 +11439,10 @@ export function performSimulationTick() {
 				moveDirLng = dLng / dist;
 
 				// ── War Plan Movement: override direction based on active plan ──
-				let planSpeedMult = 1.0;
-				let planDirLat = 0,
-					planDirLng = 0,
-					isPlanUnit = false;
+				planSpeedMult = 1.0;
+				planDirLat = 0;
+				planDirLng = 0;
+				isPlanUnit = false;
 				let activePlan = _warPlan[u.sideIndex];
 				// Land slot 2: pick the closer offensive plan if one exists
 				const slot2Plan = _warPlan[u.sideIndex + sides.length];
