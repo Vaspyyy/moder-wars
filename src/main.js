@@ -1827,7 +1827,7 @@ export let disableFullscreen = getCookie("mw_disable_fullscreen") === "true";
 
 // ── Global perf profiler init (once at module load, before any tick code runs) ──
 window.__perf = {
-	_version: "V0.25.63",
+	_version: "V0.25.64",
 	plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 	recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 	influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -8877,7 +8877,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.63",
+		_version: "V0.25.64",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -9147,6 +9147,7 @@ export function performSimulationTick() {
 	// Shared with renderer to allow high-performance unit culling
 	const _tsh = performance.now();
 	unitSpatialHash.clear();
+	for (let si = 0; si < sides.length; si++) unitHashBySide[si].clear();
 	const unitHash = unitSpatialHash;
 	const HASH_SIZE = UNIT_HASH_CELL_SIZE;
 	for (let i = 0; i < units.length; i++) {
@@ -9161,6 +9162,16 @@ export function performSimulationTick() {
 			unitHash.set(k, arr);
 		}
 		arr.push(u);
+		// Phase 1: also index into per-side hash (unused until ENABLE_SIDE_HASH_COMBAT)
+		const si = u.sideIndex;
+		if (si >= 0 && si < sides.length) {
+			let sArr = unitHashBySide[si].get(k);
+			if (!sArr) {
+				sArr = [];
+				unitHashBySide[si].set(k, sArr);
+			}
+			sArr.push(u);
+		}
 	}
 	window.__perf.spatialHash = (window.__perf.spatialHash || 0) + performance.now() - _tsh;
 
@@ -9218,7 +9229,13 @@ export function performSimulationTick() {
 			const kx = Math.floor((u.lng + 180) / HASH_SIZE);
 			const ky = Math.floor((u.lat + 90) / HASH_SIZE);
 			const k = `${kx}_${ky}`;
-			const cellUnits = unitHash.get(k);
+			const si = u.sideIndex;
+			let cellUnits;
+			if (CONFIG.ENABLE_SIDE_HASH_COMBAT && si >= 0 && si < sides.length) {
+				cellUnits = unitHashBySide[si].get(k);
+			} else {
+				cellUnits = unitHash.get(k);
+			}
 			if (!cellUnits) continue;
 
 			for (let j = 0; j < cellUnits.length; j++) {
@@ -9227,7 +9244,7 @@ export function performSimulationTick() {
 				if (
 					other === u ||
 					unitsToRemove.has(other) ||
-					other.sideIndex === u.sideIndex ||
+					(CONFIG.ENABLE_SIDE_HASH_COMBAT ? false : other.sideIndex === u.sideIndex) ||
 					other.sovereignId !== u.sovereignId ||
 					other.deployTicks > 0
 				)
@@ -10396,10 +10413,282 @@ export function performSimulationTick() {
 		const maxKx = Math.ceil(360 / HASH_SIZE);
 
 		// Active units search adjacent 3×3 hash cells; idle units widen to 5×5
-		// so enemies in neighboring buckets (as close as 0.3°) are never missed.
 		const fullScan = !isTacticallyIdle;
 		const skipAllyScan = u.navalAssigned || u.supplyAssigned || u.coastalAssigned;
-		for (let dy = -2; dy <= 2; dy++) {
+		if (CONFIG.ENABLE_SIDE_HASH_COMBAT) {
+			// ═══ Phase 1: side-separated spatial hash scan ═══
+
+			// ── Enemy pass: iterate each enemy side's hash cells ──
+			for (let ei = 0; ei < sides.length; ei++) {
+				if (ei === sideIndex) continue;
+				const eHash = unitHashBySide[ei];
+				for (let dy = -2; dy <= 2; dy++) {
+					for (let dx = -2; dx <= 2; dx++) {
+						if (fullScan && (dx < -1 || dx > 1 || dy < -1 || dy > 1)) continue;
+						let cx = kx + dx;
+						const cy = ky + dy;
+						if (cx < 0) cx += maxKx;
+						else if (cx >= maxKx) cx -= maxKx;
+						const arr = eHash.get(`${cx}_${cy}`);
+						if (!arr) continue;
+						for (let j = 0; j < arr.length; j++) {
+							const e = arr[j];
+							let deLng = e.lng - u.lng;
+							if (deLng > 180) deLng -= 360;
+							else if (deLng < -180) deLng += 360;
+							const dSq = (u.lat - e.lat) ** 2 + deLng ** 2;
+							// (enemy — no isEnemy check; bucket is enemy-only)
+							const eIdx = _unitGridIdx.get(e) ?? -1;
+							const eAtSea = eIdx === -1 || landMask[eIdx] === 0;
+							if ((effectiveDefensive || isRebelUnit) && !isAtSea) {
+								const isEnemyInMyMandatedLand =
+									eIdx !== -1 &&
+									(isRebelUnit
+										? deJureMap[eIdx] === u.sovereignId
+										: worldControlMap[eIdx] === u.sovereignId);
+								if (!isEnemyInMyMandatedLand && dSq > 0.25) continue;
+							}
+							const distMult = eAtSea && !isAtSea ? 50.0 : 1.0;
+							const noisyDSq = dSq * distMult;
+							const healthModifier = Math.max(0, 1.0 - (e.health || 100) / 100) * 0.02;
+							const eCountry = _countryById.get(e.sovereignId);
+							let eBuff = eCountry?.buffState || "none";
+							const superPenalty = (!isMega && !isSuper && (eBuff === "super" || eBuff === "godly")) ? 5.0 : 0;
+							const targetScore = noisyDSq - healthModifier + superPenalty;
+							if (targetScore < minDist) {
+								minDist = targetScore;
+								target = e;
+							}
+							if (dSq < tacticalRadiusSq) {
+								let eWeight = 1;
+								if (eAtSea) eWeight *= isAtSea ? 0.6 : 0.2;
+								if (eBuff === "super") eWeight *= 200;
+								else if (eBuff === "buff") eWeight *= 50;
+								localEnemyCount += eWeight;
+								enemyCentroidLat += e.lat * eWeight;
+								enemyCentroidLng += e.lng * eWeight;
+								if (dSq < 0.09) {
+									const inWarGrace = simFrameCount < warGraceEndTick;
+									if (inWarGrace) continue;
+									let proximityDamage =
+										CONFIG.COMBAT_DAMAGE *
+										0.45 *
+										damageDealtMult *
+										(1.0 - Math.sqrt(dSq) / 0.3);
+									if (isAtSea && eAtSea) proximityDamage *= 2.2;
+									if (e.isTransport && !u.isTransport) proximityDamage *= 1.05;
+									if (u.isTransport && !e.isTransport) {
+										recordDamage(u, proximityDamage * 1.05 * damageTakenMult, e);
+										proximityDamage *= 0.85;
+									}
+									recordDamage(e, proximityDamage, u);
+									recordDamage(u, proximityDamage * 0.8 * damageTakenMult, e);
+									u.lastCombatTick = simFrameCount;
+									e.lastCombatTick = simFrameCount;
+									if (e.health <= 0) u.victoryBoostTicks = 240;
+									const battleLat = (u.lat + e.lat) / 2;
+									const battleLng = (u.lng + e.lng) / 2;
+									const bKey = Math.round(battleLat * 10) + ',' + Math.round(battleLng * 10);
+									let existing = null;
+									for (let bk = -1; bk <= 1 && !existing; bk++) {
+										for (let bl = -1; bl <= 1 && !existing; bl++) {
+											const nk = Math.round(battleLat * 10) + bk + ',' + (Math.round(battleLng * 10) + bl);
+											const bi = _battleHash.get(nk);
+											if (bi !== undefined) {
+												const b = activeBattles[bi];
+												if (b && (u.lat - b.lat) ** 2 + (u.lng - b.lng) ** 2 < 0.16) existing = b;
+											}
+										}
+									}
+									if (existing) {
+										existing.participants++;
+										existing.lat =
+											(existing.lat * (existing.participants - 1) + battleLat) /
+											existing.participants;
+										existing.lng =
+											(existing.lng * (existing.participants - 1) + battleLng) /
+											existing.participants;
+										const newKey = Math.round(existing.lat * 10) + ',' + Math.round(existing.lng * 10);
+										if (newKey !== bKey) _battleHash.set(newKey, activeBattles.indexOf(existing));
+									} else {
+										const idx = activeBattles.push({ lat: battleLat, lng: battleLng, participants: 2 }) - 1;
+										_battleHash.set(bKey, idx);
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+
+			const _tEnemyDone = performance.now();
+			window.__perf.unitEnemyScan = (window.__perf.unitEnemyScan || 0) + _tEnemyDone - _u2;
+
+			// ── Garrison (moved out of neighbor loop — runs once per unit) ──
+			if (!u.navalAssigned && !u.supplyAssigned && !u.coastalAssigned) {
+				let bestGP = null;
+				let bestGPDist = Infinity;
+				for (let gsi = _uSideIdx * 10; gsi < _uSideIdx * 10 + 10; gsi++) {
+					const gp = _neutralGarrisonPlan[gsi];
+					if (!gp || gp.type !== "NEUTRAL_GARRISON") continue;
+					if ((gp.activeUnitCount || 0) >= (gp.maxAssignedUnits || 0)) continue;
+					if (!gp.borderPolyline || gp.borderPolyline.length === 0) continue;
+					const dLat = gp.target.lat - u.lat;
+					let dLng = gp.target.lng - u.lng;
+					if (dLng > 180) dLng -= 360;
+					else if (dLng < -180) dLng += 360;
+					const gdSq = dLat * dLat + dLng * dLng;
+					if (gdSq < 256.0 && gdSq < bestGPDist) {
+						bestGPDist = gdSq;
+						bestGP = gp;
+					}
+				}
+				if (u.garrisonAssigned) {
+					let foundGP = false;
+					for (let gsi = _uSideIdx * 10; gsi < _uSideIdx * 10 + 10; gsi++) {
+						const gp = _neutralGarrisonPlan[gsi];
+						if (!gp || gp.type !== "NEUTRAL_GARRISON" || !gp.borderPolyline || gp.borderPolyline.length === 0) continue;
+						const dLat = gp.target.lat - u.lat;
+						let dLng = gp.target.lng - u.lng;
+						if (dLng > 180) dLng -= 360;
+						else if (dLng < -180) dLng += 360;
+						if (dLat * dLat + dLng * dLng < 256.0) {
+							foundGP = true;
+							isPlanUnit = true;
+							gp.activeUnitCount = (gp.activeUnitCount || 0) + 1;
+							const slot = gp.borderPolyline[Math.floor(Math.abs(u.id * 777) % gp.borderPolyline.length)];
+							const sLat = slot.lat - u.lat;
+							let sLng = slot.lng - u.lng;
+							if (sLng > 180) sLng -= 360;
+							else if (sLng < -180) sLng += 360;
+							const sDist = Math.sqrt(sLat * sLat + sLng * sLng);
+							if (sDist > 0.01) {
+								planDirLat = sLat / sDist;
+								planDirLng = sLng / sDist;
+							}
+							planSpeedMult = 0.5;
+							moveDirLat = 0;
+							moveDirLng = 0;
+							break;
+						}
+					}
+					if (!foundGP) { u.garrisonAssigned = false; }
+				} else if (bestGP) { u.garrisonAssigned = true; }
+			}
+
+			// ── Coastal defense (moved out of neighbor loop — runs once per unit) ──
+			if (!u.navalAssigned && !u.supplyAssigned) {
+				let bestCDPlan = null;
+				let bestCDSlot = -1;
+				let bestCDDist = Infinity;
+				for (let csi = _uSideIdx * 10; csi < _uSideIdx * 10 + 10; csi++) {
+					const cp = _coastalDefensePlan[csi];
+					if (!cp || cp.type !== "COASTAL_DEFENSE") continue;
+					if ((cp.activeUnitCount || 0) >= (cp.maxAssignedUnits || 0)) continue;
+					if (!cp.target) continue;
+					const dLat = cp.target.lat - u.lat;
+					let dLng = cp.target.lng - u.lng;
+					if (dLng > 180) dLng -= 360;
+					else if (dLng < -180) dLng += 360;
+					const cdSq = dLat * dLat + dLng * dLng;
+					if (cdSq < 64.0 && cdSq < bestCDDist) {
+						bestCDDist = cdSq;
+						bestCDPlan = cp;
+						bestCDSlot = csi;
+					}
+				}
+				if (u.coastalAssigned) {
+					let foundCD = false;
+					for (let csi = _uSideIdx * 10; csi < _uSideIdx * 10 + 10; csi++) {
+						const cp = _coastalDefensePlan[csi];
+						if (!cp || cp.type !== "COASTAL_DEFENSE" || !cp.zonePolyline || cp.zonePolyline.length === 0) continue;
+						const sdLat = cp.target.lat - u.lat;
+						let sdLng = cp.target.lng - u.lng;
+						if (sdLng > 180) sdLng -= 360;
+						else if (sdLng < -180) sdLng += 360;
+						if (sdLat * sdLat + sdLng * sdLng < 64.0) {
+							foundCD = true;
+							isPlanUnit = true;
+							cp.activeUnitCount = (cp.activeUnitCount || 0) + 1;
+							const threatActive = cp.threatContact && simFrameCount - (cp.threatenedTick || 0) < 900;
+							if (threatActive) {
+								const tLat = cp.threatContact.lat - u.lat;
+								let tLng = cp.threatContact.lng - u.lng;
+								if (tLng > 180) tLng -= 360;
+								else if (tLng < -180) tLng += 360;
+								const tDist = Math.sqrt(tLat * tLat + tLng * tLng);
+								if (tDist > 0.01) {
+									planDirLat = tLat / tDist;
+									planDirLng = tLng / tDist;
+								}
+								planSpeedMult = 1.5;
+							} else {
+								const slot = cp.zonePolyline[Math.floor(Math.abs(u.id * 777) % cp.zonePolyline.length)];
+								const sLat = slot.lat - u.lat;
+								let sLng = slot.lng - u.lng;
+								if (sLng > 180) sLng -= 360;
+								else if (sLng < -180) sLng += 360;
+								const sDist = Math.sqrt(sLat * sLat + sLng * sLng);
+								if (sDist > 0.01) {
+									planDirLat = sLat / sDist;
+									planDirLng = sLng / sDist;
+								}
+								planSpeedMult = 0.5;
+							}
+							moveDirLat = 0;
+							moveDirLng = 0;
+							break;
+						}
+					}
+					if (!foundCD) { u.coastalAssigned = false; }
+				} else if (bestCDPlan) {
+					u.coastalAssigned = true;
+					_coastalDefensePlan[bestCDSlot]._slotIdx = bestCDSlot;
+				}
+			}
+
+			// ── Ally pass: iterate own side's hash for repulsion ──
+			if (!skipAllyScan) {
+				const allyHash = unitHashBySide[sideIndex];
+				for (let dy = -2; dy <= 2; dy++) {
+					for (let dx = -2; dx <= 2; dx++) {
+						if (fullScan && (dx < -1 || dx > 1 || dy < -1 || dy > 1)) continue;
+						let cx = kx + dx;
+						const cy = ky + dy;
+						if (cx < 0) cx += maxKx;
+						else if (cx >= maxKx) cx -= maxKx;
+						const arr = allyHash.get(`${cx}_${cy}`);
+						if (!arr) continue;
+						for (let j = 0; j < arr.length; j++) {
+							const e = arr[j];
+							if (e === u) continue;
+							let deLng = e.lng - u.lng;
+							if (deLng > 180) deLng -= 360;
+							else if (deLng < -180) deLng += 360;
+							const dSq = (u.lat - e.lat) ** 2 + deLng ** 2;
+							if (dSq < tacticalRadiusSq) {
+								let aWeight = 1;
+								const aSideIdx = countryToSideMap.get(e.sovereignId);
+								const aCountry = aSideIdx !== undefined ? _countryById.get(e.sovereignId) : null;
+								if (aCountry?.buffState === "super") aWeight *= 200;
+								else if (aCountry?.buffState === "buff") aWeight *= 50;
+								localAllyCount += aWeight;
+								if (dSq < repulsionRadiusSq && dSq > 0.00001) {
+									const d = Math.sqrt(dSq);
+									if (!u.repulsionVector) u.repulsionVector = { lat: 0, lng: 0 };
+									u.repulsionVector.lat += (u.lat - e.lat) / d;
+									u.repulsionVector.lng += (u.lng - e.lng) / d;
+								}
+							}
+						}
+					}
+				}
+			}
+			const _tAllyDone = performance.now();
+			window.__perf.unitAllyScan = (window.__perf.unitAllyScan || 0) + _tAllyDone - _tEnemyDone;
+		} else {
+			// ═══ Legacy scan (flag off): iterates global unitSpatialHash ═══
+			for (let dy = -2; dy <= 2; dy++) {
 				for (let dx = -2; dx <= 2; dx++) {
 					// When idle: scan 5x5 for overlap detection; active: 3x3
 					if (fullScan && (dx < -1 || dx > 1 || dy < -1 || dy > 1)) continue;
@@ -10440,9 +10729,7 @@ export function performSimulationTick() {
 							const distMult = eAtSea && !isAtSea ? 50.0 : 1.0;
 							const noisyDSq = dSq * distMult;
 
-							// Prefer wounded targets: reduce score for low-health enemies
 							const healthModifier = Math.max(0, 1.0 - (e.health || 100) / 100) * 0.02;
-							// Penalize super/buffed enemies for regular units (avoid wasting units)
 							const eCountry = _countryById.get(e.sovereignId);
 							let eBuff = eCountry?.buffState || "none";
 							const superPenalty = (!isMega && !isSuper && (eBuff === "super" || eBuff === "godly")) ? 5.0 : 0;
@@ -10696,6 +10983,7 @@ export function performSimulationTick() {
 					}
 				}
 			}
+		}
 
 		u.lastAllyCount = localAllyCount;
 
@@ -13721,6 +14009,7 @@ export function applyTreaty(type, winnerPoleOverride = null) {
 
 	units = [];
 	unitSpatialHash.clear();
+	for (let si = 0; si < unitHashBySide.length; si++) unitHashBySide[si].clear();
 	aiCountryState.clear();
 	_warPlan = [];
 	activeBattles = []; _battleHash.clear();
@@ -13854,6 +14143,7 @@ export function resetToSelection() {
 	ffaToggleBtn.innerText = "FFA Mode";
 	units = [];
 	unitSpatialHash.clear();
+	for (let si = 0; si < unitHashBySide.length; si++) unitHashBySide[si].clear();
 	activeBattles = []; _battleHash.clear();
 	bombs = [];
 	explosions = [];
