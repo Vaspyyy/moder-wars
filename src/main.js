@@ -1827,7 +1827,7 @@ export let disableFullscreen = getCookie("mw_disable_fullscreen") === "true";
 
 // ── Global perf profiler init (once at module load, before any tick code runs) ──
 window.__perf = {
-	_version: "V0.25.62",
+	_version: "V0.25.63",
 	plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 	recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 	influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -1838,11 +1838,14 @@ window.__perf = {
 	reassess_noPlan: 0, reassess_interval: 0, reassess_forced: 0,
 	reassess_territory: 0, reassess_posture: 0, reassess_ratio: 0,
 	// unitLoop sub-timers
-	unitSetupTerrain: 0, unitSpatialHash: 0, unitRetreatMopUp: 0, unitCombatMove: 0,
+	unitSetupTerrain: 0, unitSpatialHash: 0, unitEnemyScan: 0, unitAllyScan: 0,
+	unitRetreatMopUp: 0, unitCombatMove: 0,
 };
 
 // High-performance spatial cache for unit culling and combat
 export const unitSpatialHash = new Map();
+// Per-side spatial buckets for combat scans (Phase 1+); renderer uses unitSpatialHash only
+export const unitHashBySide = Array.from({ length: MAX_SIDES }, () => new Map());
 export const UNIT_HASH_CELL_SIZE = 2.5; // Degrees per spatial bucket
 
 // Phase 2.1: Persistent tick caches (reused via .clear() to reduce GC pressure)
@@ -8874,7 +8877,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.62",
+		_version: "V0.25.63",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -8885,7 +8888,8 @@ export function performSimulationTick() {
 		reassess_noPlan: 0, reassess_interval: 0, reassess_forced: 0,
 		reassess_territory: 0, reassess_posture: 0, reassess_ratio: 0,
 		// unitLoop sub-timers
-		unitSetupTerrain: 0, unitSpatialHash: 0, unitRetreatMopUp: 0, unitCombatMove: 0,
+		unitSetupTerrain: 0, unitSpatialHash: 0, unitEnemyScan: 0, unitAllyScan: 0,
+		unitRetreatMopUp: 0, unitCombatMove: 0,
 	};
 	window.__perf.ticks++;
 	// ── Perf snapshot for per-tick delta computation ──
@@ -8893,7 +8897,8 @@ export function performSimulationTick() {
 	const _perfKeys = ['plans','proposals','eval','neutralBorder','recruit','unitLoop','post',
 		'prePlans','influence','smoothing','phase0','phase67','phase133',
 		'spatialHash','frontline','consolidate','caches','victory','aiPosture','posture','render',
-		'unitSetupTerrain','unitSpatialHash','unitRetreatMopUp','unitCombatMove'];
+		'unitSetupTerrain','unitSpatialHash','unitEnemyScan','unitAllyScan',
+		'unitRetreatMopUp','unitCombatMove'];
 	for (const k of _perfKeys) _perfSnap[k] = window.__perf[k] || 0;
 	_simTickCount++;
 	let _dbgLogCount = 999999; // DEBUG: throttled out (was 0)
@@ -12831,7 +12836,11 @@ export function performSimulationTick() {
 // ── Perf Report: type window.perfReport() in console ──
 window.perfReport = function() {
 	const h = window.__perf?._history;
-	if (!h || !h.length) return console.log('no perf history yet — let the sim run a few ticks');
+	if (!h || !h.length) {
+		const msg = 'no perf history yet — let the sim run a few ticks';
+		console.log(msg);
+		return msg;
+	}
 	const n = h.length;
 	const avgMs = h.reduce((s, e) => s + e.ms, 0) / n;
 	let maxMs = 0;
@@ -12842,16 +12851,24 @@ window.perfReport = function() {
 			avgs[k] = (avgs[k] || 0) + v / n;
 		}
 	}
-	const fps = avgMs > 0 ? (1000 / avgMs).toFixed(0) : '—';
-	console.log(`=== PERF REPORT (${n} ticks, avg ${avgMs.toFixed(1)}ms, ~${fps} fps, max ${maxMs.toFixed(1)}ms) ===`);
+	const fps = avgMs > 0 && Number.isFinite(avgMs) ? (1000 / avgMs).toFixed(0) : '—';
+	
+	const lines = [];
+	lines.push(`=== PERF REPORT (${n} ticks, avg ${Number.isFinite(avgMs) ? avgMs.toFixed(1) : '—'}ms, ~${fps} fps, max ${maxMs.toFixed(1)}ms) ===`);
 	const sorted = Object.entries(avgs).sort((a, b) => b[1] - a[1]);
 	for (const [k, v] of sorted) {
-		if (v < 0.05) continue;
-		const pct = ((v / avgMs) * 100).toFixed(0);
-		const bar = '█'.repeat(Math.min(30, Math.round((v / avgMs) * 30)));
-		console.log(`  ${k.padEnd(14)} ${String(v.toFixed(1)).padStart(6)}ms (${String(pct).padStart(2)}%) ${bar}`);
+		if (v < 0.05 || Number.isNaN(v)) continue;
+		const rawPct = avgMs > 0 ? v / avgMs : 0;
+		const pct = Number.isFinite(rawPct) ? (rawPct * 100).toFixed(0) : '—';
+		const barCount = Number.isFinite(rawPct) ? Math.min(30, Math.round(rawPct * 30)) : 0;
+		const bar = '█'.repeat(Math.max(0, barCount));
+		lines.push(`  ${k.padEnd(14)} ${String(v.toFixed(1)).padStart(6)}ms (${String(pct).padStart(2)}%) ${bar}`);
 	}
-	console.log(`  reassess runs: ${window.__perf.proposalRuns} | forced: ${window.__perf.reassess_forced} | failed: ${window.__perf.proposalFailed}`);
+	lines.push(`  reassess runs: ${window.__perf.proposalRuns} | forced: ${window.__perf.reassess_forced} | failed: ${window.__perf.proposalFailed}`);
+	
+	const report = lines.join('\n');
+	console.log(report);
+	return report;
 };
 
 export function updateLoop(now) {

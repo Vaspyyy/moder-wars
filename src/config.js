@@ -68,4 +68,9 @@ export const CONFIG = {
 	TEAM_A_COLOR: "rgba(255, 50, 50, 0.5)",
 	TEAM_B_COLOR: "rgba(50, 100, 255, 0.5)",
 	FRONTLINE_COLOR: "rgba(0, 0, 0, 1.0)",
+	// Combat perf flags (Phase 1+); all off = legacy behavior
+	ENABLE_SIDE_HASH_COMBAT: false,
+	ENABLE_STALE_TARGET_SKIP: false,
+	STALE_TARGET_SCAN_INTERVAL: 3,
+	STALE_TARGET_MAX_CACHE_DIST_SQ: 0.09, // ~0.3° engagement radius squared
 };
