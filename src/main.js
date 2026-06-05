@@ -10417,6 +10417,10 @@ export function performSimulationTick() {
 		const skipAllyScan = u.navalAssigned || u.supplyAssigned || u.coastalAssigned;
 		if (CONFIG.ENABLE_SIDE_HASH_COMBAT) {
 			// ═══ Phase 1: side-separated spatial hash scan ═══
+			if (!window.__perf._sideHashLogged) {
+				window.__perf._sideHashLogged = true;
+				console.info('%c⚡ Phase 1 active: side-separated spatial hash scan','color:#0f0;font-size:14px');
+			}
 
 			// ── Enemy pass: iterate each enemy side's hash cells ──
 			for (let ei = 0; ei < sides.length; ei++) {
