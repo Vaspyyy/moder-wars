@@ -1827,7 +1827,7 @@ export let disableFullscreen = getCookie("mw_disable_fullscreen") === "true";
 
 // ── Global perf profiler init (once at module load, before any tick code runs) ──
 window.__perf = {
-	_version: "V0.25.65",
+	_version: "V0.25.66",
 	plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 	recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 	influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -5253,6 +5253,11 @@ export function spawnSingleUnit(
 		health: unitHealth,
 		lastAttack: 0,
 		deployTicks: 30,
+		// Phase 3 stale-target cache
+		_cachedTarget: null,
+		_cachedScanKx: -999,
+		_cachedScanKy: -999,
+		_lastFullScanTick: 0,
 	});
 
 	if (sideIdx >= 0 && sideIdx < MAX_SIDES) {
@@ -6358,6 +6363,10 @@ export function activateCountryMidWar(country, sideIdx) {
 			u.sideIndex = sideIdx;
 			u.beneficiaryId = countryId;
 			u.deployTicks = 15;
+			// Phase 3: clear stale cache on side change
+			u._cachedTarget = null;
+			u._cachedScanKx = -999;
+			u._cachedScanKy = -999;
 		}
 	});
 
@@ -8877,7 +8886,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.65",
+		_version: "V0.25.66",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -10426,7 +10435,78 @@ export function performSimulationTick() {
 				console.info('%c⚡ Phase 1 active: side-separated spatial hash scan','color:#0f0;font-size:14px');
 			}
 
+			// ── Phase 3: stale-target skip ──
+			let didStaleSkip = false;
+			if (CONFIG.ENABLE_STALE_TARGET_SKIP && u._cachedTarget && u._cachedTarget.health > 0) {
+				const movedCell = u._cachedScanKx !== kx || u._cachedScanKy !== ky;
+				const staggerSkip = (simFrameCount + u.id * 7) % CONFIG.STALE_TARGET_SCAN_INTERVAL !== 0;
+				if (!movedCell && staggerSkip) {
+					const cached = u._cachedTarget;
+					let deLng = cached.lng - u.lng;
+					if (deLng > 180) deLng -= 360;
+					else if (deLng < -180) deLng += 360;
+					const cdSq = (u.lat - cached.lat) ** 2 + deLng ** 2;
+					if (cdSq <= CONFIG.STALE_TARGET_MAX_CACHE_DIST_SQ) {
+						target = cached;
+						didStaleSkip = true;
+						// Proximity damage vs cached target (same logic as full scan)
+						if (cdSq < 0.09) {
+							const inWarGrace = simFrameCount < warGraceEndTick;
+							if (!inWarGrace) {
+								const eIdx = _unitGridIdx.get(cached) ?? -1;
+								const eAtSea = eIdx === -1 || landMask[eIdx] === 0;
+								let proximityDamage =
+									CONFIG.COMBAT_DAMAGE *
+									0.45 *
+									damageDealtMult *
+									(1.0 - Math.sqrt(cdSq) / 0.3);
+								if (isAtSea && eAtSea) proximityDamage *= 2.2;
+								if (cached.isTransport && !u.isTransport) proximityDamage *= 1.05;
+								if (u.isTransport && !cached.isTransport) {
+									recordDamage(u, proximityDamage * 1.05 * damageTakenMult, cached);
+									proximityDamage *= 0.85;
+								}
+								recordDamage(cached, proximityDamage, u);
+								recordDamage(u, proximityDamage * 0.8 * damageTakenMult, cached);
+								u.lastCombatTick = simFrameCount;
+								cached.lastCombatTick = simFrameCount;
+								if (cached.health <= 0) u.victoryBoostTicks = 240;
+								const battleLat = (u.lat + cached.lat) / 2;
+								const battleLng = (u.lng + cached.lng) / 2;
+								const bKey = Math.round(battleLat * 10) + ',' + Math.round(battleLng * 10);
+								let existing = null;
+								for (let bk = -1; bk <= 1 && !existing; bk++) {
+									for (let bl = -1; bl <= 1 && !existing; bl++) {
+										const nk = Math.round(battleLat * 10) + bk + ',' + (Math.round(battleLng * 10) + bl);
+										const bi = _battleHash.get(nk);
+										if (bi !== undefined) {
+											const b = activeBattles[bi];
+											if (b && (u.lat - b.lat) ** 2 + (u.lng - b.lng) ** 2 < 0.16) existing = b;
+										}
+									}
+								}
+								if (existing) {
+									existing.participants++;
+									existing.lat =
+										(existing.lat * (existing.participants - 1) + battleLat) /
+										existing.participants;
+									existing.lng =
+										(existing.lng * (existing.participants - 1) + battleLng) /
+										existing.participants;
+									const newKey = Math.round(existing.lat * 10) + ',' + Math.round(existing.lng * 10);
+									if (newKey !== bKey) _battleHash.set(newKey, activeBattles.indexOf(existing));
+								} else {
+									const idx = activeBattles.push({ lat: battleLat, lng: battleLng, participants: 2 }) - 1;
+									_battleHash.set(bKey, idx);
+								}
+							}
+						}
+					}
+				}
+			}
+
 			// ── Enemy pass: iterate each enemy side's hash cells ──
+			if (!didStaleSkip) {
 			for (let ei = 0; ei < sides.length; ei++) {
 				if (ei === sideIndex) continue;
 				const eHash = unitHashBySide[ei];
@@ -10528,6 +10608,15 @@ export function performSimulationTick() {
 					}
 				}
 			}
+			// ── Phase 3: update stale-target cache after full scan ──
+			if (CONFIG.ENABLE_STALE_TARGET_SKIP && target) {
+				u._cachedTarget = target;
+				u._cachedScanKx = kx;
+				u._cachedScanKy = ky;
+				u._lastFullScanTick = simFrameCount;
+			}
+			}
+			// ── End stale-skip guard ──
 
 			const _tEnemyDone = performance.now();
 			window.__perf.unitEnemyScan = (window.__perf.unitEnemyScan || 0) + _tEnemyDone - _u2;
