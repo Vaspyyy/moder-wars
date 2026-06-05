@@ -13127,7 +13127,7 @@ window.perfReport = function() {
 	if (!h || !h.length) {
 		const msg = 'no perf history yet — let the sim run a few ticks';
 		console.log(msg);
-		return msg;
+		return;
 	}
 	const n = h.length;
 	const avgMs = h.reduce((s, e) => s + e.ms, 0) / n;
@@ -13156,7 +13156,6 @@ window.perfReport = function() {
 	
 	const report = lines.join('\n');
 	console.log(report);
-	return report;
 };
 
 export function updateLoop(now) {
