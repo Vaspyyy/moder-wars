@@ -13251,9 +13251,7 @@ window.perfReport = function() {
 	}
 	lines.push(`  reassess runs: ${window.__perf.proposalRuns} | forced: ${window.__perf.reassess_forced} | failed: ${window.__perf.proposalFailed}`);
 	
-	const report = lines.join('\n');
-	console.log(report);
-	return report;
+	for (const line of lines) console.log(line);
 };
 
 export function updateLoop(now) {
