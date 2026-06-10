@@ -13223,7 +13223,7 @@ window.perfReport = function() {
 	const h = window.__perf?._history;
 	if (!h || !h.length) {
 		const msg = 'no perf history yet — let the sim run a few ticks';
-		console.log(msg);
+		console.info(msg);
 		return msg;
 	}
 	const n = h.length;
@@ -13251,7 +13251,7 @@ window.perfReport = function() {
 	}
 	lines.push(`  reassess runs: ${window.__perf.proposalRuns} | forced: ${window.__perf.reassess_forced} | failed: ${window.__perf.proposalFailed}`);
 	
-	for (const line of lines) console.log(line);
+	for (const line of lines) console.info(line);
 };
 
 export function updateLoop(now) {
