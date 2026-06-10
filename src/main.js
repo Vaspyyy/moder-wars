@@ -7887,7 +7887,6 @@ function shouldReassess(si) {
 	}
 	let result = false;
 
-	if (_planReassessNeeded[si]) { result = true; if (window.__perf) window.__perf.reassess_forced++; }
 	if (_simTickCount - lastReassess >= REASSESS_INTERVAL) { result = true; if (window.__perf) window.__perf.reassess_interval++; }
 	if (!_warPlan[si]) { result = true; if (window.__perf) window.__perf.reassess_noPlan++; }
 
@@ -8431,7 +8430,9 @@ export function evaluateAllPlans() {
 					continue;
 				const tIdx = getGridIndex(enemyPlan.target.lat, enemyPlan.target.lng);
 				if (tIdx !== -1 && dominantSideMap[tIdx] === si) {
-					_planReassessNeeded[si] = true;
+					// Don't force reassessment — territory change detection (line 7903)
+					// handles this via the standard path. Setting the flag here caused
+					// ALL reassessments to be forced (30/30) because it fires every 5 ticks.
 					break;
 				}
 			}
