@@ -8012,9 +8012,8 @@ export function evaluateAllPlans() {
 				}
 			}
 
-			// If nothing was selected, flag for forced reassess next tick
+			// Track failed proposals (standard reassessment interval handles retry)
 			if (!_warPlan[si]) {
-				_planReassessNeeded[si] = true;
 				window.__perf.proposalFailed++;
 			}
 
@@ -8048,7 +8047,6 @@ export function evaluateAllPlans() {
 		const plan = _warPlan[si];
 		const plan2 = _warPlan[si + sides.length];
 		if (!plan && !plan2) {
-			_planReassessNeeded[si] = true;
 			continue;
 		}
 		if (!plan) continue;
