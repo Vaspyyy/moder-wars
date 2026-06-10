@@ -11477,6 +11477,7 @@ export function performSimulationTick() {
 			target = cityFocusTarget;
 		}
 
+		let _u4;
 		if (target) {
 			// Spatial Jitter: Add a small, unit-specific offset to the target destination
 			// to prevent multiple units from converging on the exact same coordinate.
@@ -11510,7 +11511,7 @@ export function performSimulationTick() {
 			}
 
 		// ── unitLoop sub-timer checkpoint: end retreatMopUp, start combatMove ──
-			var _u4 = performance.now(); window.__perf.unitRetreatMopUp += _u4 - _u3;
+			_u4 = performance.now(); window.__perf.unitRetreatMopUp += _u4 - _u3;
 
 			if (dist > 0.05) {
 				// Movement logic
@@ -12804,7 +12805,7 @@ export function performSimulationTick() {
 		}
 
 		// ── unitLoop sub-timer: end combatMove ──
-		window.__perf.unitCombatMove += performance.now() - _u4;
+		if (_u4 !== undefined) window.__perf.unitCombatMove += performance.now() - _u4;
 	}
 
 	// NOTE: even if sideSoldiers reach 0, sides remain on the field and can still recruit.
