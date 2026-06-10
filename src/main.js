@@ -13273,15 +13273,13 @@ window.perfReport = function() {
 		}
 	}
 
-	// Delta since last report
-	const prev = window.__perf._lastReportTotals;
-	const curTotals = {};
-	for (const k of catKeys) curTotals[k] = window.__perf[k] || 0;
+	// Delta since last report (per-tick average change)
+	const prevAvgs = window.__perf._lastReportAvgs;
 	const delta = {};
-	if (prev) {
-		for (const k of catKeys) delta[k] = curTotals[k] - (prev[k] || 0);
+	if (prevAvgs) {
+		for (const k of catKeys) delta[k] = (avgs[k] || 0) - (prevAvgs[k] || 0);
 	}
-	window.__perf._lastReportTotals = { ...curTotals };
+	window.__perf._lastReportAvgs = { ...avgs };
 
 	const lines = [];
 	lines.push(`=== PERF REPORT (${n} ticks, avg ${avgMs.toFixed(1)}ms, ~${fps} fps) ===`);
@@ -13298,7 +13296,7 @@ window.perfReport = function() {
 		const bar = '█'.repeat(Math.max(0, barCount));
 		const samples = catSamples[k];
 		const catP95 = samples[Math.floor(samples.length * 0.95)];
-		const deltaStr = prev ? `  Δ${(delta[k] || 0) >= 0 ? '+' : ''}${(delta[k] || 0).toFixed(1)}ms` : '';
+		const deltaStr = prevAvgs ? `  Δ${(delta[k] || 0) >= 0 ? '+' : ''}${(delta[k] || 0).toFixed(2)}ms` : '';
 		lines.push(`  ${k.padEnd(14)} ${v.toFixed(1).padStart(6)}ms (${pct.padStart(2)}%) ${bar.padEnd(20)} p95:${catP95.toFixed(1).padStart(5)}ms${deltaStr}`);
 	}
 
