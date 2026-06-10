@@ -1827,7 +1827,7 @@ export let disableFullscreen = getCookie("mw_disable_fullscreen") === "true";
 
 // ── Global perf profiler init (once at module load, before any tick code runs) ──
 window.__perf = {
-	_version: "V0.25.69",
+	_version: "V0.25.70",
 	plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 	recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 	influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -8884,7 +8884,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.69",
+		_version: "V0.25.70",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -8907,6 +8907,8 @@ export function performSimulationTick() {
 		'unitSetupTerrain','unitSpatialHash','unitEnemyScan','unitAllyScan',
 		'unitRetreatMopUp','unitCombatMove'];
 	for (const k of _perfKeys) _perfSnap[k] = window.__perf[k] || 0;
+	for (const k of ['proposalRuns','proposalFailed','reassess_noPlan','reassess_interval','reassess_forced','reassess_territory','reassess_posture','reassess_ratio'])
+		_perfSnap[k] = window.__perf[k] || 0;
 	_simTickCount++;
 	let _dbgLogCount = 999999; // DEBUG: throttled out (was 0)
 	let moveDirLat, moveDirLng;
@@ -13214,11 +13216,13 @@ export function performSimulationTick() {
 	if (_tickMs > window.__perf.maxTick) window.__perf.maxTick = _tickMs;
 
 	// ── Per-tick perf history ring buffer ──
-	const _tickEntry = { tick: window.__perf.ticks, ms: _tickMs, cats: {} };
+	const _tickEntry = { tick: window.__perf.ticks, ms: _tickMs, units: units.length, cats: {}, reassess: {} };
 	for (const k of _perfKeys) _tickEntry.cats[k] = (window.__perf[k] || 0) - _perfSnap[k];
+	for (const k of ['proposalRuns','proposalFailed','reassess_noPlan','reassess_interval','reassess_forced','reassess_territory','reassess_posture','reassess_ratio'])
+		_tickEntry.reassess[k] = (window.__perf[k] || 0) - (_perfSnap[k] || 0);
 	if (!window.__perf._history) window.__perf._history = [];
 	window.__perf._history.push(_tickEntry);
-	if (window.__perf._history.length > 60) window.__perf._history.shift();
+	if (window.__perf._history.length > 300) window.__perf._history.shift();
 
 	return false;
 }
@@ -13231,30 +13235,77 @@ window.perfReport = function() {
 		return msg;
 	}
 	const n = h.length;
-	const avgMs = h.reduce((s, e) => s + e.ms, 0) / n;
-	let maxMs = 0;
+	const allMs = h.map(e => e.ms).sort((a, b) => a - b);
+	const avgMs = allMs.reduce((s, v) => s + v, 0) / n;
+	const p50 = allMs[Math.floor(n * 0.5)];
+	const p95 = allMs[Math.floor(n * 0.95)];
+	const p99 = allMs[Math.floor(n * 0.99)];
+	const maxMs = allMs[n - 1];
+	const minMs = allMs[0];
+	const fps = avgMs > 0 && Number.isFinite(avgMs) ? (1000 / avgMs).toFixed(0) : '—';
+
+	// Unit stats
+	const unitCounts = h.map(e => e.units || 0);
+	const avgUnits = unitCounts.reduce((s, v) => s + v, 0) / n;
+	const maxUnits = Math.max(...unitCounts);
+
+	// Per-category averages and p95
+	const catKeys = Object.keys(h[0].cats || {});
 	const avgs = {};
+	const catSamples = {};
+	for (const k of catKeys) catSamples[k] = [];
 	for (const e of h) {
-		if (e.ms > maxMs) maxMs = e.ms;
-		for (const [k, v] of Object.entries(e.cats)) {
+		for (const k of catKeys) {
+			const v = e.cats[k] || 0;
 			avgs[k] = (avgs[k] || 0) + v / n;
+			catSamples[k].push(v);
 		}
 	}
-	const fps = avgMs > 0 && Number.isFinite(avgMs) ? (1000 / avgMs).toFixed(0) : '—';
-	
+	for (const k of catKeys) catSamples[k].sort((a, b) => a - b);
+
+	// Reassessment totals from history
+	const reassessKeys = ['proposalRuns','proposalFailed','reassess_noPlan','reassess_interval','reassess_forced','reassess_territory','reassess_posture','reassess_ratio'];
+	const reassessTotals = {};
+	for (const k of reassessKeys) reassessTotals[k] = 0;
+	for (const e of h) {
+		if (e.reassess) {
+			for (const k of reassessKeys) reassessTotals[k] += (e.reassess[k] || 0);
+		}
+	}
+
+	// Delta since last report
+	const prev = window.__perf._lastReportTotals;
+	const curTotals = {};
+	for (const k of catKeys) curTotals[k] = window.__perf[k] || 0;
+	const delta = {};
+	if (prev) {
+		for (const k of catKeys) delta[k] = curTotals[k] - (prev[k] || 0);
+	}
+	window.__perf._lastReportTotals = { ...curTotals };
+
 	const lines = [];
-	lines.push(`=== PERF REPORT (${n} ticks, avg ${Number.isFinite(avgMs) ? avgMs.toFixed(1) : '—'}ms, ~${fps} fps, max ${maxMs.toFixed(1)}ms) ===`);
+	lines.push(`=== PERF REPORT (${n} ticks, avg ${avgMs.toFixed(1)}ms, ~${fps} fps) ===`);
+	lines.push(`  min: ${minMs.toFixed(1)}ms | p50: ${p50.toFixed(1)}ms | p95: ${p95.toFixed(1)}ms | p99: ${p99.toFixed(1)}ms | max: ${maxMs.toFixed(1)}ms`);
+	lines.push(`  units: avg ${avgUnits.toFixed(0)} | max ${maxUnits}`);
+	lines.push('  ─────────────────────────────────────────────');
+
 	const sorted = Object.entries(avgs).sort((a, b) => b[1] - a[1]);
 	for (const [k, v] of sorted) {
 		if (v < 0.05 || Number.isNaN(v)) continue;
 		const rawPct = avgMs > 0 ? v / avgMs : 0;
 		const pct = Number.isFinite(rawPct) ? (rawPct * 100).toFixed(0) : '—';
-		const barCount = Number.isFinite(rawPct) ? Math.min(30, Math.round(rawPct * 30)) : 0;
+		const barCount = Number.isFinite(rawPct) ? Math.min(20, Math.round(rawPct * 20)) : 0;
 		const bar = '█'.repeat(Math.max(0, barCount));
-		lines.push(`  ${k.padEnd(14)} ${String(v.toFixed(1)).padStart(6)}ms (${String(pct).padStart(2)}%) ${bar}`);
+		const samples = catSamples[k];
+		const catP95 = samples[Math.floor(samples.length * 0.95)];
+		const deltaStr = prev ? `  Δ${(delta[k] || 0) >= 0 ? '+' : ''}${(delta[k] || 0).toFixed(1)}ms` : '';
+		lines.push(`  ${k.padEnd(14)} ${v.toFixed(1).padStart(6)}ms (${pct.padStart(2)}%) ${bar.padEnd(20)} p95:${catP95.toFixed(1).padStart(5)}ms${deltaStr}`);
 	}
-	lines.push(`  reassess runs: ${window.__perf.proposalRuns} | forced: ${window.__perf.reassess_forced} | failed: ${window.__perf.proposalFailed}`);
-	
+
+	lines.push('  ─────────────────────────────────────────────');
+	lines.push(`  reassess: ${reassessTotals.proposalRuns} runs | forced: ${reassessTotals.reassess_forced} | failed: ${reassessTotals.proposalFailed}`);
+	lines.push(`    noPlan:${reassessTotals.reassess_noPlan}  interval:${reassessTotals.reassess_interval}  forced:${reassessTotals.reassess_forced}  territory:${reassessTotals.reassess_territory}  posture:${reassessTotals.reassess_posture}  ratio:${reassessTotals.reassess_ratio}`);
+
 	return lines.join('\n');
 };
 
