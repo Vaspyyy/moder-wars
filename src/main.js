@@ -1727,7 +1727,7 @@ export const soldiersPerUnit = new Float64Array(MAX_SIDES).fill(
 export const manualSideManpower = new Array(MAX_SIDES).fill(null);
 export let units = [];
 export let activeBattles = [];
-export let _battleHash = new Map(); // spatial hash: gridKey -> battle index in activeBattles
+export let _battleHash = new Map(); // spatial hash: gridKey -> battle object reference
 export let capitalLostCountries = new Set();
 export let bombs = [];
 export let explosions = [];
@@ -8212,7 +8212,7 @@ export function evaluateAllPlans() {
 		if (!sides[si] || sides[si].length === 0) continue;
 		const np = _navalPlan[si];
 		if (!np) {
-			_planReassessNeeded[si] = true;
+			// Don't force reassessment — naval plans are optional; the 300-tick interval handles it
 			continue;
 		}
 
@@ -8337,7 +8337,7 @@ export function evaluateAllPlans() {
 		const sp = _navalSupplyPlan[si];
 
 		if (!sp) {
-			_planReassessNeeded[si] = true;
+			// Don't force reassessment — naval supply plans are optional; the 300-tick interval handles it
 			continue;
 		}
 
@@ -9164,7 +9164,7 @@ export function performSimulationTick() {
 		if (Number.isNaN(u.lat) || Number.isNaN(u.lng)) continue;
 		const kx = Math.floor((u.lng + 180) / HASH_SIZE);
 		const ky = Math.floor((u.lat + 90) / HASH_SIZE);
-		const k = `${kx}_${ky}`;
+		const k = kx * 100 + ky;
 		let arr = unitHash.get(k);
 		if (!arr) {
 			arr = [];
@@ -9237,7 +9237,7 @@ export function performSimulationTick() {
 
 			const kx = Math.floor((u.lng + 180) / HASH_SIZE);
 			const ky = Math.floor((u.lat + 90) / HASH_SIZE);
-			const k = `${kx}_${ky}`;
+			const k = kx * 100 + ky;
 			const si = u.sideIndex;
 			let cellUnits;
 			if (CONFIG.ENABLE_SIDE_HASH_COMBAT && si >= 0 && si < sides.length) {
@@ -10048,6 +10048,15 @@ export function performSimulationTick() {
 		const _cIdx = getGridIndex(activeTheaterCities[_cci].lat, activeTheaterCities[_cci].lng);
 		if (_cIdx !== -1) _cityIdxSetTick.add(_cIdx);
 	}
+	// Pre-build city-by-sovereign Map for O(1) lookup in combat (replaces O(C) activeTheaterCities.find)
+	const _theaterCitiesBySovereign = new Map();
+	for (let _cci = 0; _cci < activeTheaterCities.length; _cci++) {
+		const city = activeTheaterCities[_cci];
+		if (!city.sovereignId) continue;
+		let arr = _theaterCitiesBySovereign.get(city.sovereignId);
+		if (!arr) { arr = []; _theaterCitiesBySovereign.set(city.sovereignId, arr); }
+		arr.push(city);
+	}
 	for (let i = units.length - 1; i >= 0; i--) {
 		const u = units[i];
 		const _u1 = performance.now(); // per-unit sub-timer start
@@ -10478,11 +10487,8 @@ export function performSimulationTick() {
 								for (let bk = -1; bk <= 1 && !existing; bk++) {
 									for (let bl = -1; bl <= 1 && !existing; bl++) {
 										const nk = Math.round(battleLat * 10) + bk + ',' + (Math.round(battleLng * 10) + bl);
-										const bi = _battleHash.get(nk);
-										if (bi !== undefined) {
-											const b = activeBattles[bi];
-											if (b && (u.lat - b.lat) ** 2 + (u.lng - b.lng) ** 2 < 0.16) existing = b;
-										}
+										const b = _battleHash.get(nk);
+										if (b && (u.lat - b.lat) ** 2 + (u.lng - b.lng) ** 2 < 0.16) existing = b;
 									}
 								}
 								if (existing) {
@@ -10494,10 +10500,11 @@ export function performSimulationTick() {
 										(existing.lng * (existing.participants - 1) + battleLng) /
 										existing.participants;
 									const newKey = Math.round(existing.lat * 10) + ',' + Math.round(existing.lng * 10);
-									if (newKey !== bKey) _battleHash.set(newKey, activeBattles.indexOf(existing));
+									if (newKey !== bKey) _battleHash.set(newKey, existing);
 								} else {
-									const idx = activeBattles.push({ lat: battleLat, lng: battleLng, participants: 2 }) - 1;
-									_battleHash.set(bKey, idx);
+									const battle = { lat: battleLat, lng: battleLng, participants: 2 };
+									activeBattles.push(battle);
+									_battleHash.set(bKey, battle);
 								}
 							}
 						}
@@ -10517,7 +10524,7 @@ export function performSimulationTick() {
 						const cy = ky + dy;
 						if (cx < 0) cx += maxKx;
 						else if (cx >= maxKx) cx -= maxKx;
-						const arr = eHash.get(`${cx}_${cy}`);
+						const arr = eHash.get(cx * 100 + cy);
 						if (!arr) continue;
 						for (let j = 0; j < arr.length; j++) {
 							const e = arr[j];
@@ -10581,11 +10588,8 @@ export function performSimulationTick() {
 									for (let bk = -1; bk <= 1 && !existing; bk++) {
 										for (let bl = -1; bl <= 1 && !existing; bl++) {
 											const nk = Math.round(battleLat * 10) + bk + ',' + (Math.round(battleLng * 10) + bl);
-											const bi = _battleHash.get(nk);
-											if (bi !== undefined) {
-												const b = activeBattles[bi];
-												if (b && (u.lat - b.lat) ** 2 + (u.lng - b.lng) ** 2 < 0.16) existing = b;
-											}
+											const b = _battleHash.get(nk);
+											if (b && (u.lat - b.lat) ** 2 + (u.lng - b.lng) ** 2 < 0.16) existing = b;
 										}
 									}
 									if (existing) {
@@ -10597,10 +10601,11 @@ export function performSimulationTick() {
 											(existing.lng * (existing.participants - 1) + battleLng) /
 											existing.participants;
 										const newKey = Math.round(existing.lat * 10) + ',' + Math.round(existing.lng * 10);
-										if (newKey !== bKey) _battleHash.set(newKey, activeBattles.indexOf(existing));
+										if (newKey !== bKey) _battleHash.set(newKey, existing);
 									} else {
-										const idx = activeBattles.push({ lat: battleLat, lng: battleLng, participants: 2 }) - 1;
-										_battleHash.set(bKey, idx);
+										const battle = { lat: battleLat, lng: battleLng, participants: 2 };
+										activeBattles.push(battle);
+										_battleHash.set(bKey, battle);
 									}
 								}
 							}
@@ -10754,7 +10759,7 @@ export function performSimulationTick() {
 						const cy = ky + dy;
 						if (cx < 0) cx += maxKx;
 						else if (cx >= maxKx) cx -= maxKx;
-						const arr = allyHash.get(`${cx}_${cy}`);
+						const arr = allyHash.get(cx * 100 + cy);
 						if (!arr) continue;
 						for (let j = 0; j < arr.length; j++) {
 							const e = arr[j];
@@ -10795,7 +10800,7 @@ export function performSimulationTick() {
 					if (cx < 0) cx += maxKx;
 					else if (cx >= maxKx) cx -= maxKx;
 
-					const arr = unitHash.get(`${cx}_${cy}`);
+					const arr = unitHash.get(cx * 100 + cy);
 					if (!arr) continue;
 
 					for (let j = 0; j < arr.length; j++) {
@@ -10877,11 +10882,8 @@ export function performSimulationTick() {
 									for (let bk = -1; bk <= 1 && !existing; bk++) {
 										for (let bl = -1; bl <= 1 && !existing; bl++) {
 											const nk = Math.round(battleLat * 10) + bk + ',' + (Math.round(battleLng * 10) + bl);
-											const bi = _battleHash.get(nk);
-											if (bi !== undefined) {
-												const b = activeBattles[bi];
-												if (b && (u.lat - b.lat) ** 2 + (u.lng - b.lng) ** 2 < 0.16) existing = b;
-											}
+											const b = _battleHash.get(nk);
+											if (b && (u.lat - b.lat) ** 2 + (u.lng - b.lng) ** 2 < 0.16) existing = b;
 										}
 									}
 									if (existing) {
@@ -10893,10 +10895,11 @@ export function performSimulationTick() {
 											(existing.lng * (existing.participants - 1) + battleLng) /
 											existing.participants;
 										const newKey = Math.round(existing.lat * 10) + ',' + Math.round(existing.lng * 10);
-										if (newKey !== bKey) _battleHash.set(newKey, activeBattles.indexOf(existing));
+										if (newKey !== bKey) _battleHash.set(newKey, existing);
 									} else {
-										const idx = activeBattles.push({ lat: battleLat, lng: battleLng, participants: 2 }) - 1;
-										_battleHash.set(bKey, idx);
+										const battle = { lat: battleLat, lng: battleLng, participants: 2 };
+										activeBattles.push(battle);
+										_battleHash.set(bKey, battle);
 									}
 								}
 							}
@@ -11323,7 +11326,7 @@ export function performSimulationTick() {
 				const _relLat = groupCentroid ? u.lat - groupCentroid.lat : 0;
 				const _relLng = groupCentroid ? u.lng - groupCentroid.lng : 0;
 
-				for (let j = 0; j < 250; j++) {
+				for (let j = 0; j < 100; j++) {
 						const randIdx = Math.floor(Math.random() * worldControlMap.length);
 						const ownerAtIdx = worldControlMap[randIdx];
 						const deJureAtIdx = deJureMap[randIdx];
@@ -11401,7 +11404,7 @@ export function performSimulationTick() {
 				} else {
 					// Fallback: If no priority cells found, target ANY cell of the target nation.
 					// This prevents units (especially defensive or weakened ones) from freezing when priority targets are gone.
-					for (let j = 0; j < 80; j++) {
+					for (let j = 0; j < 40; j++) {
 						const randIdx = Math.floor(Math.random() * worldControlMap.length);
 						if (worldControlMap[randIdx] === targetId) {
 							const y = Math.floor(randIdx / gridWidth);
@@ -12690,11 +12693,14 @@ export function performSimulationTick() {
 					}
 
 					// City Fortification: Units near friendly cities are much harder to destroy
-					const nearbyCity = activeTheaterCities.find(
-						(c) =>
-							c.sovereignId === u.sovereignId &&
-							(u.lat - c.lat) ** 2 + (u.lng - c.lng) ** 2 < 0.04,
-					);
+					let nearbyCity = null;
+					const _myCities = _theaterCitiesBySovereign.get(u.sovereignId);
+					if (_myCities) {
+						for (let ci = 0; ci < _myCities.length; ci++) {
+							const c = _myCities[ci];
+							if ((u.lat - c.lat) ** 2 + (u.lng - c.lng) ** 2 < 0.04) { nearbyCity = c; break; }
+						}
+					}
 					if (nearbyCity) {
 						defenseBonus *= 0.45; // Significant defense boost in urban centers
 					}

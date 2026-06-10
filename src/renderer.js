@@ -1760,7 +1760,7 @@ const ControlMapLayer = L.Layer.extend({
 				// Handle longitude wrap
 				const wrappedKx = ((kx % 144) + 144) % 144; // 360/2.5 = 144 buckets
 				for (let ky = minKy; ky <= maxKy; ky++) {
-					const bucket = unitSpatialHash.get(`${wrappedKx}_${ky}`);
+					const bucket = unitSpatialHash.get(wrappedKx * 100 + ky);
 					if (bucket) {
 						for (let bu = 0; bu < bucket.length; bu++) {
 							const u = bucket[bu];
