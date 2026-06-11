@@ -1827,7 +1827,7 @@ export let disableFullscreen = getCookie("mw_disable_fullscreen") === "true";
 
 // ── Global perf profiler init (once at module load, before any tick code runs) ──
 window.__perf = {
-	_version: "V0.25.82",
+	_version: "V0.26.0",
 	plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 	recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 	influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -1869,6 +1869,7 @@ export let _sidePosture = []; // per-side auto posture (OFFENSIVE/BALANCED/DEFEN
 export let _warPlan = []; // per-side war plan: { type, phase, target, ... }
 export const _navalPlan = []; // per-side naval invasion plan (1 per side max)
 export const _navalSupplyPlan = []; // per-side naval supply run plan (1 per side max)
+export const _transportPlan = []; // per-side transport plan (1 per side max)
 export const _coastalDefensePlan = []; // per-side coastal defense passive overlay
 export const _neutralGarrisonPlan = []; // per-side neutral border garrison plans
 export const _defenderReactionPlan = []; // per-side emergency DEFEND at enemy naval beachhead
@@ -1887,6 +1888,7 @@ export const WAR_PLAN_TYPES = [
 	"NAVAL_SUPPLY",
 	"COASTAL_DEFENSE",
 	"NEUTRAL_GARRISON",
+	"TRANSPORT",
 ];
 export const WAR_PLAN_PHASES = [
 	"PREPARATION",
@@ -7617,6 +7619,52 @@ export function generateAllProposals(sideIdx) {
 			p._waypoints = [{ lat: bestLat, lng: bestLng }];
 		}
 	}
+	// ── 9. TRANSPORT proposals ──
+	// Find units stranded far from the frontline and propose fast transport to front.
+	// Simulates railways/logistics — prevents large countries from losing due to
+	// units spawning far behind the front.
+	{
+		const sideUnitList = _tickUnitsBySide[sideIdx] || [];
+		const deployed = sideUnitList.filter((u) => u.deployTicks === 0 && u.health > 0);
+		if (deployed.length >= 6 && fCount > 0) {
+			const strandedThreshold = 3.0; // degrees from frontline
+			let strandedCount = 0;
+			let strandedLat = 0, strandedLng = 0;
+			for (const u of deployed) {
+				const dLat = u.lat - fLat;
+				let dLng = u.lng - fLng;
+				if (dLng > 180) dLng -= 360;
+				else if (dLng < -180) dLng += 360;
+				const dSq = dLat * dLat + dLng * dLng;
+				if (dSq > strandedThreshold * strandedThreshold) {
+					strandedCount++;
+					strandedLat += u.lat;
+					strandedLng += u.lng;
+				}
+			}
+			if (strandedCount >= 5) {
+				strandedLat /= strandedCount;
+				strandedLng /= strandedCount;
+				proposals.push({
+					type: "TRANSPORT",
+					target: { lat: fLat, lng: fLng, name: "Frontline" },
+					stagingCells: [],
+					arrowPoints: [
+						{ lat: strandedLat, lng: strandedLng },
+						{ lat: fLat, lng: fLng },
+					],
+					estimatedForceNeeded: strandedCount,
+					strandedCount,
+					geographicData: {
+						frontlineDistSq: 0,
+						reachesTarget: true,
+						minSeaDist: Infinity,
+						minLandDist: 0,
+					},
+				});
+			}
+		}
+	}
 	return proposals;
 }
 /**
@@ -7667,6 +7715,9 @@ export function scoreProposal(proposal, sideIdx) {
 	}
 	if (proposal.type === "NAVAL_SUPPLY") {
 		score += 20;
+	}
+	if (proposal.type === "TRANSPORT") {
+		score += 25 + Math.min(30, (proposal.strandedCount || 0) * 2);
 	}
 
 	// ── Feasibility (0–30) ──
@@ -7810,6 +7861,9 @@ export function selectPlans(sideIdx, scoredProposals) {
 	const garrisons = sorted.filter(
 		(p) => p.type === "NEUTRAL_GARRISON" && (p.priority || 0) > 0,
 	);
+	const transports = sorted.filter(
+		(p) => p.type === "TRANSPORT" && (p.priority || 0) > 0,
+	);
 
 	const result = {};
 
@@ -7931,6 +7985,7 @@ export function selectPlans(sideIdx, scoredProposals) {
 	if (defend1) result.defend = makePlan(defend1, "EXECUTION");
 	result.coastal = selectedCoastal.map((p) => makePlan(p, "EXECUTION"));
 	result.garrisons = selectedGarr.map((p) => makePlan(p, "EXECUTION"));
+	if (transports[0]) result.transport = makePlan(transports[0], "EXECUTION");
 
 	return result;
 }
@@ -8088,6 +8143,13 @@ export function evaluateAllPlans() {
 				}
 			}
 
+			// Apply transport plan
+			if (selected.transport) {
+				if (!_transportPlan[si] || forceReplace) {
+					_transportPlan[si] = selected.transport;
+				}
+			}
+
 			// Track failed proposals (standard reassessment interval handles retry)
 			if (!_warPlan[si]) {
 				window.__perf.proposalFailed++;
@@ -8107,6 +8169,7 @@ export function evaluateAllPlans() {
 		if (_warPlan[_l2]) _warPlan[_l2].activeUnitCount = 0;
 		if (_navalPlan[_ri]) _navalPlan[_ri].activeUnitCount = 0;
 		if (_navalSupplyPlan[_ri]) _navalSupplyPlan[_ri].activeUnitCount = 0;
+		if (_transportPlan[_ri]) _transportPlan[_ri].activeUnitCount = 0;
 		if (_defenderReactionPlan[_ri]) _defenderReactionPlan[_ri].activeUnitCount = 0;
 		for (let _ci = 0; _ci < 10; _ci++) {
 			const _cp = _coastalDefensePlan[_ri * 10 + _ci];
@@ -8938,6 +9001,9 @@ export function evaluateAllPlans() {
 		}
 		_navalSupplyPlan[si] = null;
 	}
+	for (let si = sides.length; si < _transportPlan.length; si++) {
+		_transportPlan[si] = null;
+	}
 	for (let si = sides.length * 10; si < _coastalDefensePlan.length; si++) {
 		for (const u of units) {
 			if (u.coastalAssigned) u.coastalAssigned = false;
@@ -8962,7 +9028,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.82",
+		_version: "V0.26.0",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -12058,6 +12124,35 @@ export function performSimulationTick() {
 				} else {
 					u.navalAssigned = false;
 					u.isTransport = false;
+
+					// TRANSPORT plan: fast-move stranded units toward frontline
+					const transportPlan = _transportPlan[u.sideIndex];
+					if (
+						transportPlan &&
+						!shouldMopUp &&
+						!retreatVector &&
+						!isEngaged &&
+						localEnemyCount < 2 &&
+						transportPlan.target
+					) {
+						const tdLat = transportPlan.target.lat - u.lat;
+						let tdLng = transportPlan.target.lng - u.lng;
+						if (tdLng > 180) tdLng -= 360;
+						else if (tdLng < -180) tdLng += 360;
+						const tdSq = tdLat * tdLat + tdLng * tdLng;
+						// Exit transport when within 1.5 degrees of frontline
+						if (tdSq > 2.25) {
+							isPlanUnit = true;
+							transportPlan.activeUnitCount = (transportPlan.activeUnitCount || 0) + 1;
+							u.isTransport = true;
+							const td = Math.sqrt(tdSq);
+							planDirLat = tdLat / td;
+							planDirLng = tdLng / td;
+							planSpeedMult = 6.0;
+							moveDirLat = 0;
+							moveDirLng = 0;
+						}
+					}
 
 					// DEFEND plan: hold the frontline, do not advance
 					if (
@@ -15404,6 +15499,7 @@ export function _signSelectiveSideExit(sideIdx) {
 	if (sideIdx < _warPlan.length) _warPlan[sideIdx] = null;
 	if (sideIdx < _navalPlan.length) _navalPlan[sideIdx] = null;
 	if (sideIdx < _navalSupplyPlan.length) _navalSupplyPlan[sideIdx] = null;
+	if (sideIdx < _transportPlan.length) _transportPlan[sideIdx] = null;
 	if (sideIdx < _planReassessNeeded.length) _planReassessNeeded[sideIdx] = false;
 
 	// Purge units belonging to exiting nations

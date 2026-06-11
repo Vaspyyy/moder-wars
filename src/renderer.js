@@ -8,6 +8,7 @@ import {
 	_navalPlan,
 	_navalSupplyPlan,
 	_neutralGarrisonPlan,
+	_transportPlan,
 	_warPlan,
 	activeBattles,
 	activeTheaterCities,
@@ -2404,6 +2405,56 @@ const ControlMapLayer = L.Layer.extend({
 					ctx.font = "bold 8px monospace";
 					ctx.fillStyle = sideColor.replace(rgbaRe, "0.85)");
 					ctx.fillText(`SUPPLY: ${sp.phase}`, midX + 10, midY + 10);
+				}
+			}
+
+			// Draw transport arrows (dashed, side-colored, railway-style)
+			if (typeof _transportPlan !== "undefined" && _transportPlan) {
+				for (let si = 0; si < _transportPlan.length; si++) {
+					const tp = _transportPlan[si];
+					if (!tp?.arrowPoints || tp.arrowPoints.length < 2) continue;
+					const pts = tp.arrowPoints;
+					if (
+						Number.isNaN(pts[0].lat) ||
+						Number.isNaN(pts[0].lng) ||
+						Number.isNaN(pts[1].lat) ||
+						Number.isNaN(pts[1].lng)
+					)
+						continue;
+					const p0 = map.latLngToContainerPoint([pts[0].lat, pts[0].lng]);
+					const p1 = map.latLngToContainerPoint([pts[1].lat, pts[1].lng]);
+					const midX = (p0.x + p1.x) / 2;
+					const midY = (p0.y + p1.y) / 2 - 30;
+					const sideColor = sideColors[si] || "rgba(255,255,0,0.6)";
+
+					ctx.setLineDash([8, 4]);
+					ctx.strokeStyle = sideColor.replace(rgbaRe, "0.5)");
+					ctx.lineWidth = 2;
+					ctx.beginPath();
+					ctx.moveTo(p0.x, p0.y);
+					ctx.quadraticCurveTo(midX, midY, p1.x, p1.y);
+					ctx.stroke();
+					ctx.setLineDash([]);
+
+					const angle = Math.atan2(p1.y - midY, p1.x - midX);
+					const headLen = 8;
+					ctx.beginPath();
+					ctx.moveTo(p1.x, p1.y);
+					ctx.lineTo(
+						p1.x - headLen * Math.cos(angle - 0.5),
+						p1.y - headLen * Math.sin(angle - 0.5),
+					);
+					ctx.lineTo(
+						p1.x - headLen * Math.cos(angle + 0.5),
+						p1.y - headLen * Math.sin(angle + 0.5),
+					);
+					ctx.closePath();
+					ctx.fillStyle = sideColor.replace(rgbaRe, "0.6)");
+					ctx.fill();
+
+					ctx.font = "bold 9px monospace";
+					ctx.fillStyle = sideColor.replace(rgbaRe, "0.8)");
+					ctx.fillText(`TRANSPORT (${tp.activeUnitCount || 0})`, midX + 10, midY - 2);
 				}
 			}
 
