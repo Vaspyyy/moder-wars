@@ -146,6 +146,10 @@ const ControlMapLayer = L.Layer.extend({
 		map.off("zoomend", this._onZoomEnd, this);
 	},
 	_update: function () {
+		// During zoom animation, CSS transform handles the visual zoom.
+		// Skip expensive canvas re-render — zoomend will re-render at final zoom.
+		if (this._zooming) return;
+
 		const size = map.getSize();
 		const dpr = window.devicePixelRatio || 1;
 		const newW = Math.round(size.x * dpr);
