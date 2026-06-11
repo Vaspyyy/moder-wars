@@ -1909,6 +1909,8 @@ const _tickUnitsBySide = [];
 // Temporary diagnostics for cross-war state/capitulation bugs.
 export const aiCountryState = new Map();
 export let _sidePosture = []; // per-side auto posture (OFFENSIVE/BALANCED/DEFENSIVE)
+export let _sideMomentumHistory = []; // per-side: array of {tick, controlled} entries
+export let _sideWarPhase = []; // per-side: "ADVANCING" | "STALEMATE" | "RETREATING" | "COLLAPSING"
 export let _warPlan = []; // per-side war plan: { type, phase, target, ... }
 export const _navalPlan = []; // per-side naval invasion plan (1 per side max)
 export const _navalSupplyPlan = []; // per-side naval supply run plan (1 per side max)
@@ -5509,6 +5511,8 @@ export async function _startWarInner() {
 	latestCountryStats.clear();
 	aiCountryState.clear();
 	_warPlan = [];
+	_sideMomentumHistory = [];
+	_sideWarPhase = [];
 	sides.flat().forEach((c) => {
 		if (!c) return;
 		c.lastControlledCount = undefined;
@@ -10072,6 +10076,56 @@ export function performSimulationTick() {
 	window.__perf.aiPosture =
 		(window.__perf.aiPosture || 0) + performance.now() - _tAiPosture;
 
+	// ── Momentum Tracking & War Phase Computation ──
+	if (shouldCountLand) {
+		const MOMENTUM_WINDOW = 10;
+		for (let si = 0; si < sides.length; si++) {
+			if (!sides[si] || sides[si].length === 0) continue;
+			if (!_sideMomentumHistory[si]) _sideMomentumHistory[si] = [];
+			let totalControlled = 0;
+			for (const c of sides[si]) {
+				const s = countryStats.get(c.id);
+				if (s) totalControlled += s.controlled || 0;
+			}
+			_sideMomentumHistory[si].push({
+				tick: simFrameCount,
+				controlled: totalControlled,
+			});
+			if (_sideMomentumHistory[si].length > MOMENTUM_WINDOW) {
+				_sideMomentumHistory[si].shift();
+			}
+		}
+
+		// Compute war phase from momentum slope
+		for (let si = 0; si < sides.length; si++) {
+			const hist = _sideMomentumHistory[si];
+			if (!hist || hist.length < 3) {
+				_sideWarPhase[si] = "STALEMATE";
+				continue;
+			}
+
+			const first = hist[0].controlled;
+			const last = hist[hist.length - 1].controlled;
+			const delta = last - first;
+			const deltaRatio = first > 0 ? delta / first : 0;
+
+			const mpRatio =
+				initialSideSoldiers[si] > 0
+					? sideSoldiers[si] / initialSideSoldiers[si]
+					: 1;
+
+			if (deltaRatio < -0.15 || mpRatio < 0.1) {
+				_sideWarPhase[si] = "COLLAPSING";
+			} else if (deltaRatio < -0.02) {
+				_sideWarPhase[si] = "RETREATING";
+			} else if (deltaRatio > 0.02) {
+				_sideWarPhase[si] = "ADVANCING";
+			} else {
+				_sideWarPhase[si] = "STALEMATE";
+			}
+		}
+	}
+
 	// ── Auto Posture: per-side strength ratio → OFFENSIVE/BALANCED/DEFENSIVE ──
 	const _tpo = performance.now();
 	const sideStrength = new Array(sides.length).fill(0);
@@ -10396,6 +10450,10 @@ export function performSimulationTick() {
 				if (isTotalWar && capFillRatio < 0.5) {
 					recruitmentChance *= 1.0 + (0.5 - capFillRatio) * 4.0; // up to 3× extra when half-empty
 				}
+				// Collapsing sides struggle to recruit
+				if (_sideWarPhase[sIdx] === "COLLAPSING") {
+					recruitmentChance *= 0.5;
+				}
 				// Clamp per-tick chance at 80% to prevent deterministic spam
 				if (recruitmentChance > 0.8) recruitmentChance = 0.8;
 
@@ -10526,6 +10584,14 @@ export function performSimulationTick() {
 			damageDealtMult *= 0.8; // 20% reduction (was 35%)
 			damageTakenMult *= 1.15; // 15% more vulnerable (was 25%)
 			speedBuffMult *= 0.9; // 10% slower (was 20%)
+		}
+
+		// Momentum cascade effects
+		const warPhase = _sideWarPhase[u.sideIndex];
+		if (warPhase === "COLLAPSING") {
+			damageDealtMult *= 0.7;
+		} else if (warPhase === "ADVANCING") {
+			damageDealtMult *= 1.15;
 		}
 
 		const gridIdxNow = getGridIndex(u.lat, u.lng);
@@ -14984,6 +15050,8 @@ export function applyTreaty(type, winnerPoleOverride = null) {
 	for (let si = 0; si < unitHashBySide.length; si++) unitHashBySide[si].clear();
 	aiCountryState.clear();
 	_warPlan = [];
+	_sideMomentumHistory = [];
+	_sideWarPhase = [];
 	activeBattles = [];
 	_battleHash.clear();
 	bombs = [];
