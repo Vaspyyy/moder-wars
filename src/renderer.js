@@ -100,37 +100,50 @@ const ControlMapLayer = L.Layer.extend({
 			}
 		};
 
+		this._onZoomStart = () => {
+			this._zooming = true;
+			this._zoomStartZoom = map.getZoom();
+		};
+
+		this._onZoomAnim = (e) => {
+			// Apply CSS transform to match Leaflet's tile zoom animation
+			const scale = Math.pow(2, e.zoom - this._zoomStartZoom);
+			const size = map.getSize();
+			const originX = size.x / 2;
+			const originY = size.y / 2;
+			this._container.style.transformOrigin = `${originX}px ${originY}px`;
+			this._container.style.transform = `scale(${scale})`;
+		};
+
+		this._onZoomEnd = () => {
+			this._zooming = false;
+			// Remove CSS transform and re-render at final zoom
+			this._container.style.transform = "";
+			this._container.style.transformOrigin = "";
+			this._update();
+			// Satellite stabilization: trigger a delayed cleanup render to ensure
+			// grid projection aligns with final post-zoom viewport coordinates.
+			setTimeout(() => {
+				this._forceRender = true;
+				this._onMove();
+			}, 100);
+		};
+
 		map.on("move", this._onMove, this);
 		map.on("moveend", this._onMove, this);
-		map.on(
-			"zoomstart",
-			() => {
-				this._zooming = true;
-			},
-			this,
-		);
-		map.on(
-			"zoomend",
-			() => {
-				this._zooming = false;
-				this._update();
-				// Satellite stabilization: trigger a delayed cleanup render to ensure
-				// grid projection aligns with final post-zoom viewport coordinates.
-				setTimeout(() => {
-					this._forceRender = true;
-					this._onMove();
-				}, 100);
-			},
-			this,
-		);
+		map.on("zoomstart", this._onZoomStart, this);
+		map.on("zoomanim", this._onZoomAnim, this);
+		map.on("zoomend", this._onZoomEnd, this);
 	},
 	onRemove: function (map) {
 		if (this._container?.parentNode) {
 			this._container.parentNode.removeChild(this._container);
 		}
 		map.off("move", this._onMove, this);
-		map.off("zoomstart");
-		map.off("zoomend");
+		map.off("moveend", this._onMove, this);
+		map.off("zoomstart", this._onZoomStart, this);
+		map.off("zoomanim", this._onZoomAnim, this);
+		map.off("zoomend", this._onZoomEnd, this);
 	},
 	_update: function () {
 		const size = map.getSize();
