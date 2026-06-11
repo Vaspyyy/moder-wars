@@ -1827,7 +1827,7 @@ export let disableFullscreen = getCookie("mw_disable_fullscreen") === "true";
 
 // ── Global perf profiler init (once at module load, before any tick code runs) ──
 window.__perf = {
-	_version: "V0.25.78",
+	_version: "V0.25.79",
 	plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 	recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 	influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -6933,6 +6933,46 @@ export function generateAllProposals(sideIdx) {
 			}
 
 			if (enemyCount >= 2 && friendlyCount >= enemyCount * 3) {
+				// Water check: verify friendly units can reach the encirclement target by land
+				let crossesWater = false;
+				if (friendlyCount > 0) {
+					let fLat = 0, fLng = 0;
+					for (let ui = 0; ui < units.length; ui++) {
+						const other = units[ui];
+						if (other.deployTicks > 0 || other.sideIndex !== sideIdx) continue;
+						const dLat2 = other.lat - cell.lat;
+						let dLng2 = other.lng - cell.lng;
+						if (dLng2 > 180) dLng2 -= 360;
+						else if (dLng2 < -180) dLng2 += 360;
+						if (dLat2 * dLat2 + dLng2 * dLng2 > radSq) continue;
+						fLat += other.lat;
+						fLng += other.lng;
+					}
+					if (friendlyCount > 0) {
+						fLat /= friendlyCount;
+						fLng /= friendlyCount;
+						const ddLat = cell.lat - fLat;
+						let ddLng = cell.lng - fLng;
+						if (ddLng > 180) ddLng -= 360;
+						else if (ddLng < -180) ddLng += 360;
+						const lineLen = Math.sqrt(ddLat * ddLat + ddLng * ddLng);
+						if (lineLen > 0.5) {
+							const steps = Math.min(12, Math.ceil(lineLen / 0.4));
+							let waterSamples = 0;
+							for (let s = 1; s < steps; s++) {
+								const t = s / steps;
+								const wIdx = getGridIndex(
+									fLat + ddLat * t,
+									fLng + ddLng * t,
+								);
+								if (wIdx !== -1 && landMask[wIdx] === 0) waterSamples++;
+							}
+							if (waterSamples > steps * 0.4) crossesWater = true;
+						}
+					}
+				}
+				if (crossesWater) continue;
+
 				proposals.push({
 					type: "ENCIRCLE",
 					target: {
@@ -8891,7 +8931,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.78",
+		_version: "V0.25.79",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -10163,7 +10203,7 @@ export function performSimulationTick() {
 				if (!isGoodTarget) continue;
 				const dSq = (u.lat - city.lat) ** 2 + (u.lng - city.lng) ** 2;
 				// Water-path check: skip cities unreachable by land
-				if (!isAtSea && dSq > 0.25) {
+				if (!isAtSea && dSq > 4.0) {
 					let dcLng = city.lng - u.lng;
 					if (dcLng > 180) dcLng -= 360;
 					else if (dcLng < -180) dcLng += 360;
@@ -10582,7 +10622,7 @@ export function performSimulationTick() {
 							let targetScore = noisyDSq - healthModifier + superPenalty;
 							if (targetScore < minDist) {
 								// Water-path check: penalize land enemies unreachable by land
-								if (!isAtSea && !eAtSea && dSq > 0.25) {
+								if (!isAtSea && !eAtSea && dSq > 4.0) {
 									const lineLen = Math.sqrt(dSq);
 									const steps = Math.min(12, Math.ceil(lineLen / 0.4));
 									let waterSamples = 0;
@@ -10888,7 +10928,7 @@ export function performSimulationTick() {
 							let targetScore = noisyDSq - healthModifier + superPenalty;
 							if (targetScore < minDist) {
 								// Water-path check: penalize land enemies unreachable by land
-								if (!isAtSea && !eAtSea && dSq > 0.25) {
+								if (!isAtSea && !eAtSea && dSq > 4.0) {
 									const lineLen = Math.sqrt(dSq);
 									const steps = Math.min(12, Math.ceil(lineLen / 0.4));
 									let waterSamples = 0;
@@ -11514,7 +11554,7 @@ export function performSimulationTick() {
 				const dSq = (u.lat - c.lat) ** 2 + dlng ** 2;
 
 				// Water-path check: skip cities unreachable by land
-				if (!isAtSea && dSq > 0.25) {
+				if (!isAtSea && dSq > 4.0) {
 					const lineLen = Math.sqrt(dSq);
 					const steps = Math.min(12, Math.ceil(lineLen / 0.4));
 					let waterSamples = 0;

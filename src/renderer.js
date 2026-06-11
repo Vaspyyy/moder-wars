@@ -2297,7 +2297,8 @@ const ControlMapLayer = L.Layer.extend({
 
 				ctx.font = "bold 10px monospace";
 				ctx.fillStyle = color;
-				ctx.fillText(plan.phase, midX + 10, midY - 2);
+				const planLabel = plan.type ? `${plan.type} ${plan.phase}` : plan.phase;
+				ctx.fillText(planLabel, midX + 10, midY - 2);
 			}
 
 			// Draw naval invasion arrows (dashed, country-colored)
