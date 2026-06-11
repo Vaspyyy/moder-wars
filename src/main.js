@@ -1258,7 +1258,8 @@ export const bgMusicUrls = [
 export const warStartUrl = "assets/audio/war.wav";
 export const peaceUrl = "assets/audio/peace.wav";
 export const warAmbianceUrl = "assets/audio/modern-war-129016.mp3";
-export const secretWarDeclaredUrl = "super-secret-settings/hoi4-war-declared.mp3";
+export const secretWarDeclaredUrl =
+	"super-secret-settings/hoi4-war-declared.mp3";
 export const secretPeaceDealUrl = "super-secret-settings/hoi4-peace-deal.mp3";
 
 // Initialize Audio Context immediately so it's ready for early decoding
@@ -1447,8 +1448,12 @@ export async function initAudio() {
 			: Promise.resolve(),
 		load(warStartUrl).then((b) => (warStartBuffer = b || warStartBuffer)),
 		load(peaceUrl).then((b) => (peaceBuffer = b || peaceBuffer)),
-		load(secretWarDeclaredUrl).then((b) => (secretWarDeclaredBuffer = b || secretWarDeclaredBuffer)),
-		load(secretPeaceDealUrl).then((b) => (secretPeaceDealBuffer = b || secretPeaceDealBuffer)),
+		load(secretWarDeclaredUrl).then(
+			(b) => (secretWarDeclaredBuffer = b || secretWarDeclaredBuffer),
+		),
+		load(secretPeaceDealUrl).then(
+			(b) => (secretPeaceDealBuffer = b || secretPeaceDealBuffer),
+		),
 		load(warAmbianceUrl).then(
 			(b) => (warAmbianceBuffer = b || warAmbianceBuffer),
 		),
@@ -1540,7 +1545,10 @@ export function playClickSound() {
 
 export function playWarStartSound() {
 	if (isMuted || !audioCtx) return;
-	const buffer = (useSecretSounds && secretWarDeclaredBuffer) ? secretWarDeclaredBuffer : warStartBuffer;
+	const buffer =
+		useSecretSounds && secretWarDeclaredBuffer
+			? secretWarDeclaredBuffer
+			: warStartBuffer;
 	if (!buffer) return;
 	const source = audioCtx.createBufferSource();
 	source.buffer = buffer;
@@ -1553,7 +1561,10 @@ export function playWarStartSound() {
 
 export function playPeaceSound() {
 	if (isMuted || !audioCtx) return;
-	const buffer = (useSecretSounds && secretPeaceDealBuffer) ? secretPeaceDealBuffer : peaceBuffer;
+	const buffer =
+		useSecretSounds && secretPeaceDealBuffer
+			? secretPeaceDealBuffer
+			: peaceBuffer;
 	if (!buffer) return;
 	const source = audioCtx.createBufferSource();
 	source.buffer = buffer;
@@ -1727,7 +1738,7 @@ export const soldiersPerUnit = new Float64Array(MAX_SIDES).fill(
 export const manualSideManpower = new Array(MAX_SIDES).fill(null);
 export let units = [];
 export let activeBattles = [];
-export let _battleHash = new Map(); // spatial hash: gridKey -> battle object reference
+export const _battleHash = new Map(); // spatial hash: gridKey -> battle object reference
 export let capitalLostCountries = new Set();
 export let bombs = [];
 export let explosions = [];
@@ -1800,7 +1811,7 @@ export let _cachedCityEls = [];
 export let _cachedUnitCountSpans = [];
 export let _cachedTerritoryCtrlEls = [];
 export let _cachedTerritorySegEls = [];
-export let _cachedManpowerSpans = [];
+export const _cachedManpowerSpans = [];
 export let _casualtyStructureKey = "";
 export let _casualtyValueEls = {};
 export let _casualtySideMpEls = {};
@@ -1828,27 +1839,59 @@ export let disableFullscreen = getCookie("mw_disable_fullscreen") === "true";
 // ── Global perf profiler init (once at module load, before any tick code runs) ──
 window.__perf = {
 	_version: "V0.26.1",
-	plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
-	recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
-	influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
-	spatialHash: 0, frontline: 0, consolidate: 0, caches: 0,
-	victory: 0, aiPosture: 0, posture: 0, render: 0,
-	tickTotal: 0, maxTick: 0, ticks: 0,
-	proposalRuns: 0, proposalFailed: 0,
-	reassess_noPlan: 0, reassess_interval: 0, reassess_forced: 0,
-	reassess_territory: 0, reassess_posture: 0, reassess_ratio: 0,
+	plans: 0,
+	proposals: 0,
+	eval: 0,
+	neutralBorder: 0,
+	recruit: 0,
+	unitLoop: 0,
+	post: 0,
+	prePlans: 0,
+	influence: 0,
+	smoothing: 0,
+	phase0: 0,
+	phase67: 0,
+	phase133: 0,
+	spatialHash: 0,
+	frontline: 0,
+	consolidate: 0,
+	caches: 0,
+	victory: 0,
+	aiPosture: 0,
+	posture: 0,
+	render: 0,
+	tickTotal: 0,
+	maxTick: 0,
+	ticks: 0,
+	proposalRuns: 0,
+	proposalFailed: 0,
+	reassess_noPlan: 0,
+	reassess_interval: 0,
+	reassess_forced: 0,
+	reassess_territory: 0,
+	reassess_posture: 0,
+	reassess_ratio: 0,
 	// unitLoop sub-timers
-	unitSetupTerrain: 0, unitSpatialHash: 0, unitEnemyScan: 0, unitAllyScan: 0,
-	unitRetreatMopUp: 0, unitCombatMove: 0,
+	unitSetupTerrain: 0,
+	unitSpatialHash: 0,
+	unitEnemyScan: 0,
+	unitAllyScan: 0,
+	unitRetreatMopUp: 0,
+	unitCombatMove: 0,
 	// Water avoidance debug counters
-	coastDeflectHalved: 0, knockbackBlocked: 0,
-	waterPathPenalized: 0, coastStuckAbandoned: 0,
+	coastDeflectHalved: 0,
+	knockbackBlocked: 0,
+	waterPathPenalized: 0,
+	coastStuckAbandoned: 0,
 };
 
 // High-performance spatial cache for unit culling and combat
 export const unitSpatialHash = new Map();
 // Per-side spatial buckets for combat scans (Phase 1+); renderer uses unitSpatialHash only
-export const unitHashBySide = Array.from({ length: MAX_SIDES }, () => new Map());
+export const unitHashBySide = Array.from(
+	{ length: MAX_SIDES },
+	() => new Map(),
+);
 export const UNIT_HASH_CELL_SIZE = 2.5; // Degrees per spatial bucket
 
 // Phase 2.1: Persistent tick caches (reused via .clear() to reduce GC pressure)
@@ -2096,7 +2139,10 @@ export function computeCountryUrbanPop() {
 		if (idx === -1) continue;
 		const ownerId = worldControlMap[idx];
 		if (ownerId > 0 && city.pop > 0) {
-			countryUrbanPop.set(ownerId, (countryUrbanPop.get(ownerId) || 0) + city.pop);
+			countryUrbanPop.set(
+				ownerId,
+				(countryUrbanPop.get(ownerId) || 0) + city.pop,
+			);
 		}
 	}
 }
@@ -5221,7 +5267,11 @@ export function spawnSingleUnit(
 			}
 		}
 		if (theaterIndices.length === 0) {
-			console.warn("[MW] spawnSingleUnit FAILED for country", sovereignId, ": no friendly territory to spawn on (dominantSideMap check)");
+			console.warn(
+				"[MW] spawnSingleUnit FAILED for country",
+				sovereignId,
+				": no friendly territory to spawn on (dominantSideMap check)",
+			);
 			return false;
 		}
 
@@ -5266,7 +5316,10 @@ export function spawnSingleUnit(
 	});
 
 	if (sideIdx >= 0 && sideIdx < MAX_SIDES) {
-		sideSoldiers[sideIdx] = Math.max(0, sideSoldiers[sideIdx] - soldiersPerUnit[sideIdx]);
+		sideSoldiers[sideIdx] = Math.max(
+			0,
+			sideSoldiers[sideIdx] - soldiersPerUnit[sideIdx],
+		);
 	}
 
 	return true;
@@ -6108,9 +6161,7 @@ export async function _startWarInner() {
 		const cityPool = Math.round(sideCityCounts[sIdx] * 10000);
 		const autoPool = Math.max(initialArmyPool, territoryPool + cityPool);
 		initialSideSoldiers[sIdx] =
-			manualSideManpower[sIdx] !== null
-				? manualSideManpower[sIdx]
-				: autoPool;
+			manualSideManpower[sIdx] !== null ? manualSideManpower[sIdx] : autoPool;
 		sideSoldiers[sIdx] = initialSideSoldiers[sIdx];
 		// soldiersPerUnit stays at CONFIG.UNIT_TO_SOLDIER_RATIO (1000) — not pool-derived
 	}
@@ -6292,14 +6343,16 @@ export function triggerRandomWar() {
 		const meta = countryMetadata[pick - 1];
 		if (!meta) break;
 		combatantIds.add(pick);
-		sides.push([{
-			id: pick,
-			name: meta.name,
-			color: meta.color,
-			role: "OFFENSE",
-			strategy: "BALANCED",
-			buffState: "none",
-		}]);
+		sides.push([
+			{
+				id: pick,
+				name: meta.name,
+				color: meta.color,
+				role: "OFFENSE",
+				strategy: "BALANCED",
+				buffState: "none",
+			},
+		]);
 	}
 	activeSideIndex = 0;
 	updateSidesUI();
@@ -6761,22 +6814,22 @@ export function generateAllProposals(sideIdx) {
 	}
 
 	// Enemy territory centroid
-	let eLat = 0,
-		eLng = 0,
+	let _eLat = 0,
+		_eLng = 0,
 		eCount = 0;
 	for (let i = 0; i < dominantSideMap.length; i += 20) {
 		if (landMask[i] === 0) continue;
 		if (dominantSideMap[i] !== sideIdx && dominantSideMap[i] >= 0) {
 			const row = Math.floor(i / gridWidth);
 			const col = i % gridWidth;
-			eLat += row * CONFIG.GRID_RES - 90;
-			eLng += col * CONFIG.GRID_RES - 180;
+			_eLat += row * CONFIG.GRID_RES - 90;
+			_eLng += col * CONFIG.GRID_RES - 180;
 			eCount++;
 		}
 	}
 	if (eCount > 0) {
-		eLat /= eCount;
-		eLng /= eCount;
+		_eLat /= eCount;
+		_eLng /= eCount;
 	}
 
 	// Friendly coastal staging cells (for naval proposals)
@@ -6969,7 +7022,8 @@ export function generateAllProposals(sideIdx) {
 				// Water check: verify friendly units can reach the encirclement target by land
 				let crossesWater = false;
 				if (friendlyCount > 0) {
-					let fLat = 0, fLng = 0;
+					let fLat = 0,
+						fLng = 0;
 					for (let ui = 0; ui < units.length; ui++) {
 						const other = units[ui];
 						if (other.deployTicks > 0 || other.sideIndex !== sideIdx) continue;
@@ -6994,10 +7048,7 @@ export function generateAllProposals(sideIdx) {
 							let waterSamples = 0;
 							for (let s = 1; s < steps; s++) {
 								const t = s / steps;
-								const wIdx = getGridIndex(
-									fLat + ddLat * t,
-									fLng + ddLng * t,
-								);
+								const wIdx = getGridIndex(fLat + ddLat * t, fLng + ddLng * t);
 								if (wIdx !== -1 && landMask[wIdx] === 0) waterSamples++;
 							}
 							if (waterSamples > steps * 0.4) crossesWater = true;
@@ -7040,7 +7091,11 @@ export function generateAllProposals(sideIdx) {
 			const [a, b] = key.split("_").map(Number);
 			if (a === sideIdx && b !== sideIdx && _frontlinePolys[key]?.length > 0) {
 				landConnectedEnemySides.add(b);
-			} else if (b === sideIdx && a !== sideIdx && _frontlinePolys[key]?.length > 0) {
+			} else if (
+				b === sideIdx &&
+				a !== sideIdx &&
+				_frontlinePolys[key]?.length > 0
+			) {
 				landConnectedEnemySides.add(a);
 			}
 		}
@@ -7049,7 +7104,9 @@ export function generateAllProposals(sideIdx) {
 	if (uCount > 0 && landConnectedEnemySides.size > 0) {
 		for (const enemySide of landConnectedEnemySides) {
 			// Compute centroid of this specific enemy side's territory
-			let esLat = 0, esLng = 0, esCount = 0;
+			let esLat = 0,
+				esLng = 0,
+				esCount = 0;
 			for (let i = 0; i < dominantSideMap.length; i += 20) {
 				if (landMask[i] === 0) continue;
 				if (dominantSideMap[i] !== enemySide) continue;
@@ -7141,21 +7198,28 @@ export function generateAllProposals(sideIdx) {
 	});
 
 	// ── 5. NAVAL_INVASION proposals ──
-		// Only propose naval invasions if enough units are near the coast
-		let _coastalUnitCount = 0;
-		for (let _cui = 0; _cui < (_tickUnitsBySide[sideIdx] || []).length; _cui++) {
-			const _cu = _tickUnitsBySide[sideIdx][_cui];
-			if (_cu.deployTicks > 0) continue;
-			for (let _fci = 0; _fci < friendlyCoastCells.length; _fci++) {
-				const _dLat = _cu.lat - friendlyCoastCells[_fci].lat;
-				let _dLng = _cu.lng - friendlyCoastCells[_fci].lng;
-				if (_dLng > 180) _dLng -= 360;
-				else if (_dLng < -180) _dLng += 360;
-				if (_dLat * _dLat + _dLng * _dLng < 9.0) { _coastalUnitCount++; break; }
+	// Only propose naval invasions if enough units are near the coast
+	let _coastalUnitCount = 0;
+	for (let _cui = 0; _cui < (_tickUnitsBySide[sideIdx] || []).length; _cui++) {
+		const _cu = _tickUnitsBySide[sideIdx][_cui];
+		if (_cu.deployTicks > 0) continue;
+		for (let _fci = 0; _fci < friendlyCoastCells.length; _fci++) {
+			const _dLat = _cu.lat - friendlyCoastCells[_fci].lat;
+			let _dLng = _cu.lng - friendlyCoastCells[_fci].lng;
+			if (_dLng > 180) _dLng -= 360;
+			else if (_dLng < -180) _dLng += 360;
+			if (_dLat * _dLat + _dLng * _dLng < 9.0) {
+				_coastalUnitCount++;
+				break;
 			}
 		}
+	}
 
-		if (friendlyCoastCells.length > 0 && enemyCoastalTiles.length > 0 && _coastalUnitCount >= 5) {
+	if (
+		friendlyCoastCells.length > 0 &&
+		enemyCoastalTiles.length > 0 &&
+		_coastalUnitCount >= 5
+	) {
 		for (const et of enemyCoastalTiles) {
 			let minSeaDist = Infinity;
 			let minLandDist = Infinity;
@@ -7411,13 +7475,16 @@ export function generateAllProposals(sideIdx) {
 		}
 	}
 
-
 	// ── Exclave reinforcement ──
 	// For each country on this side, detect territory not land-connected
 	// to the capital (exclaves) and generate supply runs to reinforce them.
 	// Uses one BFS per side from all capitals; only triggers when exclave
 	// borders enemy territory.
-	if (friendlyCoastCells.length > 0 && unitCount >= 8 && proposals.length < 12) {
+	if (
+		friendlyCoastCells.length > 0 &&
+		unitCount >= 8 &&
+		proposals.length < 12
+	) {
 		const totalCells = landMask.length;
 		const reachable = new Uint8Array(totalCells);
 		const bfsq = new Int32Array(totalCells);
@@ -7441,8 +7508,10 @@ export function generateAllProposals(sideIdx) {
 				for (let dr = -1; dr <= 1; dr++) {
 					for (let dc = -1; dc <= 1; dc++) {
 						if (dr === 0 && dc === 0) continue;
-						const nr = row + dr, nc = col + dc;
-						if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
+						const nr = row + dr,
+							nc = col + dc;
+						if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth)
+							continue;
 						const ni = nr * gridWidth + nc;
 						if (reachable[ni]) continue;
 						if (landMask[ni] === 0) continue;
@@ -7468,8 +7537,10 @@ export function generateAllProposals(sideIdx) {
 					for (let dr = -1; dr <= 1 && !hasEnemy; dr++) {
 						for (let dc = -1; dc <= 1 && !hasEnemy; dc++) {
 							if (dr === 0 && dc === 0) continue;
-							const nr = r + dr, nc = cc + dc;
-							if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
+							const nr = r + dr,
+								nc = cc + dc;
+							if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth)
+								continue;
 							const ni = nr * gridWidth + nc;
 							if (landMask[ni] === 0) continue;
 							const nds = dominantSideMap[ni];
@@ -7477,14 +7548,21 @@ export function generateAllProposals(sideIdx) {
 						}
 					}
 					if (hasEnemy) {
-						exclaveCells.push({ lat: r * CONFIG.GRID_RES - 90, lng: cc * CONFIG.GRID_RES - 180 });
+						exclaveCells.push({
+							lat: r * CONFIG.GRID_RES - 90,
+							lng: cc * CONFIG.GRID_RES - 180,
+						});
 					}
 				}
 				if (exclaveCells.length < 5) continue;
 
 				// Centroid of exclave
-				let exLat = 0, exLng = 0;
-				for (const ec of exclaveCells) { exLat += ec.lat; exLng += ec.lng; }
+				let exLat = 0,
+					exLng = 0;
+				for (const ec of exclaveCells) {
+					exLat += ec.lat;
+					exLng += ec.lng;
+				}
 				exLat /= exclaveCells.length;
 				exLng /= exclaveCells.length;
 
@@ -7495,7 +7573,8 @@ export function generateAllProposals(sideIdx) {
 					if (st) {
 						const dLat = st.lat - exLat;
 						let dLng = st.lng - exLng;
-						if (dLng > 180) dLng -= 360; else if (dLng < -180) dLng += 360;
+						if (dLng > 180) dLng -= 360;
+						else if (dLng < -180) dLng += 360;
 						if (dLat * dLat + dLng * dLng < 16) continue;
 					}
 				}
@@ -7508,7 +7587,8 @@ export function generateAllProposals(sideIdx) {
 					if (sgi === -1 || !reachable[sgi]) continue;
 					const dLat = exLat - fc.lat;
 					let dLng = exLng - fc.lng;
-					if (dLng > 180) dLng -= 360; else if (dLng < -180) dLng += 360;
+					if (dLng > 180) dLng -= 360;
+					else if (dLng < -180) dLng += 360;
 					const dSq = dLat * dLat + dLng * dLng;
 					if (dSq < bestDist) {
 						bestDist = dSq;
@@ -7519,7 +7599,12 @@ export function generateAllProposals(sideIdx) {
 
 				proposals.push({
 					type: "NAVAL_SUPPLY",
-					target: { lat: exLat, lng: exLng, name: `${country.name} Exclave`, isCapital: false },
+					target: {
+						lat: exLat,
+						lng: exLng,
+						name: `${country.name} Exclave`,
+						isCapital: false,
+					},
 					stagingPoint: { lat: bestStaging.lat, lng: bestStaging.lng },
 					arrowPoints: [
 						{ lat: bestStaging.lat, lng: bestStaging.lng },
@@ -7560,7 +7645,8 @@ export function generateAllProposals(sideIdx) {
 		for (let dr = -1; dr <= 1; dr++) {
 			for (let dc = -1; dc <= 1; dc++) {
 				if (dr === 0 && dc === 0) continue;
-				const nr = row + dr, nc = col + dc;
+				const nr = row + dr,
+					nc = col + dc;
 				if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
 				const ni = nr * gridWidth + nc;
 				if (friendlyOnly[ni]) continue;
@@ -7573,7 +7659,13 @@ export function generateAllProposals(sideIdx) {
 	}
 	// Add waypoints for land proposals whose targets are blocked by neutral territory
 	for (const p of proposals) {
-		if (p.type !== "CAPTURE_CITY" && p.type !== "ENCIRCLE" && p.type !== "PUSH_FRONT" && p.type !== "DEFEND") continue;
+		if (
+			p.type !== "CAPTURE_CITY" &&
+			p.type !== "ENCIRCLE" &&
+			p.type !== "PUSH_FRONT" &&
+			p.type !== "DEFEND"
+		)
+			continue;
 		if (!p.target) continue;
 		const tIdx = getGridIndex(p.target.lat, p.target.lng);
 		if (tIdx === -1) continue;
@@ -7581,7 +7673,8 @@ export function generateAllProposals(sideIdx) {
 		if (friendlyOnly[tIdx]) continue;
 		// Find the closest friendly-reachable frontier cell to the target
 		let bestDist = Infinity;
-		let bestLat = 0, bestLng = 0;
+		let bestLat = 0,
+			bestLng = 0;
 		const wstep = Math.max(3, Math.floor(friendlyTotal / 6000));
 		for (let gi = 0; gi < friendlyTotal; gi += wstep) {
 			if (!friendlyOnly[gi]) continue;
@@ -7593,8 +7686,10 @@ export function generateAllProposals(sideIdx) {
 			for (let dr = -1; dr <= 1 && !bordersEnemy; dr++) {
 				for (let dc = -1; dc <= 1 && !bordersEnemy; dc++) {
 					if (dr === 0 && dc === 0) continue;
-					const nr2 = r + dr, nc2 = ccol + dc;
-					if (nr2 < 0 || nr2 >= gridHeight || nc2 < 0 || nc2 >= gridWidth) continue;
+					const nr2 = r + dr,
+						nc2 = ccol + dc;
+					if (nr2 < 0 || nr2 >= gridHeight || nc2 < 0 || nc2 >= gridWidth)
+						continue;
 					const ni2 = nr2 * gridWidth + nc2;
 					if (landMask[ni2] === 0) continue;
 					const nds2 = dominantSideMap[ni2];
@@ -7625,11 +7720,14 @@ export function generateAllProposals(sideIdx) {
 	// units spawning far behind the front.
 	{
 		const sideUnitList = _tickUnitsBySide[sideIdx] || [];
-		const deployed = sideUnitList.filter((u) => u.deployTicks === 0 && u.health > 0);
+		const deployed = sideUnitList.filter(
+			(u) => u.deployTicks === 0 && u.health > 0,
+		);
 		if (deployed.length >= 6 && fCount > 0) {
 			const strandedThreshold = 3.0; // degrees from frontline
 			let strandedCount = 0;
-			let strandedLat = 0, strandedLng = 0;
+			let strandedLat = 0,
+				strandedLng = 0;
 			for (const u of deployed) {
 				const dLat = u.lat - fLat;
 				let dLng = u.lng - fLng;
@@ -7938,7 +8036,10 @@ export function selectPlans(sideIdx, scoredProposals) {
 				if (dLat * dLat + dLng * dLng < 9.0) localEnemies++; // within ~3°
 			}
 			if (localEnemies > 0) {
-				p.allocatedForce = Math.max(p.allocatedForce, Math.ceil(localEnemies * 1.5));
+				p.allocatedForce = Math.max(
+					p.allocatedForce,
+					Math.ceil(localEnemies * 1.5),
+				);
 			}
 		}
 	}
@@ -8017,13 +8118,22 @@ function shouldReassess(si) {
 
 	// Stagger first reassessment per side to avoid all 70 sides firing on the
 	// same tick — spreads reassessments across 140 ticks (70 sides × 2 offset)
-	if (lastReassess === 0 && _simTickCount < HARD_COOLDOWN + (si % (HARD_COOLDOWN / 2)) * 2) {
+	if (
+		lastReassess === 0 &&
+		_simTickCount < HARD_COOLDOWN + (si % (HARD_COOLDOWN / 2)) * 2
+	) {
 		return false;
 	}
 	let result = false;
 
-	if (_simTickCount - lastReassess >= REASSESS_INTERVAL) { result = true; if (window.__perf) window.__perf.reassess_interval++; }
-	if (!_warPlan[si]) { result = true; if (window.__perf) window.__perf.reassess_noPlan++; }
+	if (_simTickCount - lastReassess >= REASSESS_INTERVAL) {
+		result = true;
+		if (window.__perf) window.__perf.reassess_interval++;
+	}
+	if (!_warPlan[si]) {
+		result = true;
+		if (window.__perf) window.__perf.reassess_noPlan++;
+	}
 
 	// Territory change >2%
 	const sideCountries = sides[si];
@@ -8035,7 +8145,8 @@ function shouldReassess(si) {
 		}
 		const prev = _sidePrevControlled[si] || 0;
 		if (!result && prev > 0 && Math.abs(cur - prev) / Math.max(1, cur) > 0.02) {
-			result = true; if (window.__perf) window.__perf.reassess_territory++;
+			result = true;
+			if (window.__perf) window.__perf.reassess_territory++;
 		}
 		_sidePrevControlled[si] = cur;
 	}
@@ -8044,7 +8155,8 @@ function shouldReassess(si) {
 	const curPosture = _sidePosture[si] || "BALANCED";
 	const prevPosture = _sidePrevPosture[si];
 	if (!result && prevPosture !== undefined && prevPosture !== curPosture) {
-		result = true; if (window.__perf) window.__perf.reassess_posture++;
+		result = true;
+		if (window.__perf) window.__perf.reassess_posture++;
 	}
 	_sidePrevPosture[si] = curPosture;
 
@@ -8065,7 +8177,8 @@ function shouldReassess(si) {
 		Number.isFinite(curRatio)
 	) {
 		if (Math.abs(curRatio - prevRatio) / Math.max(0.01, prevRatio) > 0.2) {
-			result = true; if (window.__perf) window.__perf.reassess_ratio++;
+			result = true;
+			if (window.__perf) window.__perf.reassess_ratio++;
 		}
 	}
 	_sidePrevStrengthRatio[si] = curRatio;
@@ -8116,11 +8229,16 @@ export function evaluateAllPlans() {
 					_navalPlan[si] = selected.naval;
 				} else if (forceReplace) {
 					// Only replace if current naval plan is truly stalled (>1200 ticks no progress)
-					const nptsp = simFrameCount - (_navalPlan[si].lastProgressTick || simFrameCount);
-					const nptss = simFrameCount - (_navalPlan[si].startedTick || simFrameCount);
+					const nptsp =
+						simFrameCount - (_navalPlan[si].lastProgressTick || simFrameCount);
+					const nptss =
+						simFrameCount - (_navalPlan[si].startedTick || simFrameCount);
 					if (nptsp > 1200 && nptss > 1200) {
-						for (const u of (_tickUnitsBySide[si] || [])) {
-							if (u.navalAssigned) { u.navalAssigned = false; u.isTransport = false; }
+						for (const u of _tickUnitsBySide[si] || []) {
+							if (u.navalAssigned) {
+								u.navalAssigned = false;
+								u.isTransport = false;
+							}
 						}
 						_navalPlan[si] = selected.naval;
 					}
@@ -8162,7 +8280,8 @@ export function evaluateAllPlans() {
 			_proposalsCache[si] = proposals;
 		}
 	}
-	window.__perf.proposals = (window.__perf.proposals || 0) + performance.now() - _tp;
+	window.__perf.proposals =
+		(window.__perf.proposals || 0) + performance.now() - _tp;
 
 	// Reset plan activeUnitCount every tick (cheap, no unit iteration)
 	for (let _ri = 0; _ri < sides.length; _ri++) {
@@ -8173,7 +8292,8 @@ export function evaluateAllPlans() {
 		if (_navalPlan[_ri]) _navalPlan[_ri].activeUnitCount = 0;
 		if (_navalSupplyPlan[_ri]) _navalSupplyPlan[_ri].activeUnitCount = 0;
 		if (_transportPlan[_ri]) _transportPlan[_ri].activeUnitCount = 0;
-		if (_defenderReactionPlan[_ri]) _defenderReactionPlan[_ri].activeUnitCount = 0;
+		if (_defenderReactionPlan[_ri])
+			_defenderReactionPlan[_ri].activeUnitCount = 0;
 		for (let _ci = 0; _ci < 10; _ci++) {
 			const _cp = _coastalDefensePlan[_ri * 10 + _ci];
 			if (_cp) _cp.activeUnitCount = 0;
@@ -8184,601 +8304,735 @@ export function evaluateAllPlans() {
 
 	const _te = performance.now();
 	if (simFrameCount % 5 === 0) {
-	for (let si = 0; si < sides.length; si++) {
-		if (!sides[si] || sides[si].length === 0) continue;
-		const plan = _warPlan[si];
-		const plan2 = _warPlan[si + sides.length];
-		if (!plan && !plan2) {
-			continue;
-		}
-		if (!plan) continue;
-
-		// Reset per-tick unit count
-		plan.activeUnitCount = 0;
-
-		const ticksSinceStart = simFrameCount - (plan.startedTick || simFrameCount);
-		const ticksSinceProgress =
-			simFrameCount - (plan.lastProgressTick || simFrameCount);
-
-		if (
-			(plan.type === "CAPTURE_CITY" || plan.type === "ENCIRCLE" || plan.type === "PUSH_FRONT" || plan.type === "DEFEND")
-		) {
-			if (plan.target) {
-			// Check if target area is now under friendly control
-			const tIdx = getGridIndex(plan.target.lat, plan.target.lng);
-			const captured = tIdx !== -1 && dominantSideMap[tIdx] === si;
-			if (captured) {
-				plan.phase = "CONSOLIDATION";
-				plan.progress = 1.0;
-				// After consolidation period, generate next plan
-				if (ticksSinceProgress > 600) {
-					_planReassessNeeded[si] = true;
-				}
+		for (let si = 0; si < sides.length; si++) {
+			if (!sides[si] || sides[si].length === 0) continue;
+			const plan = _warPlan[si];
+			const plan2 = _warPlan[si + sides.length];
+			if (!plan && !plan2) {
 				continue;
 			}
+			if (!plan) continue;
+
+			// Reset per-tick unit count
+			plan.activeUnitCount = 0;
+
+			const ticksSinceStart =
+				simFrameCount - (plan.startedTick || simFrameCount);
+			const ticksSinceProgress =
+				simFrameCount - (plan.lastProgressTick || simFrameCount);
+
+			if (
+				plan.type === "CAPTURE_CITY" ||
+				plan.type === "ENCIRCLE" ||
+				plan.type === "PUSH_FRONT" ||
+				plan.type === "DEFEND"
+			) {
+				if (plan.target) {
+					// Check if target area is now under friendly control
+					const tIdx = getGridIndex(plan.target.lat, plan.target.lng);
+					const captured = tIdx !== -1 && dominantSideMap[tIdx] === si;
+					if (captured) {
+						plan.phase = "CONSOLIDATION";
+						plan.progress = 1.0;
+						// After consolidation period, generate next plan
+						if (ticksSinceProgress > 600) {
+							_planReassessNeeded[si] = true;
+						}
+						continue;
+					}
+				}
+
+				// PREPARATION → EXECUTION: advance when enough units rally at staging cells
+				if (plan.phase === "PREPARATION" && plan.stagingCells?.length > 0) {
+					let gathered = 0;
+					for (const u of _tickUnitsBySide[si] || []) {
+						if (u.deployTicks > 0) continue;
+						const sc =
+							plan.stagingCells[
+								Math.floor(Math.abs(u.id * 1000000) % plan.stagingCells.length)
+							];
+						if (!sc) continue;
+						const sdLat = sc.lat - u.lat;
+						let sdLng = sc.lng - u.lng;
+						if (sdLng > 180) sdLng -= 360;
+						else if (sdLng < -180) sdLng += 360;
+						if (sdLat * sdLat + sdLng * sdLng < 2.0) gathered++;
+					}
+					if (gathered >= Math.min(plan.maxAssignedUnits || 5, 5)) {
+						plan.phase = "EXECUTION";
+						plan.lastProgressTick = simFrameCount;
+					}
+				}
+
+				// Check for stall
+				if (ticksSinceProgress > 600 && ticksSinceStart > 600) {
+					_planReassessNeeded[si] = true; // Failed — reassess
+					continue;
+				}
+
+				// Counter-offensive interrupt: if enemy pushes back significantly, abort
+				const sideCountries = sides[si] || [];
+				if (sideCountries.length > 0) {
+					const firstCountry = sideCountries[0];
+					const stats = latestCountryStats.get(firstCountry.id);
+					if (stats && plan._territoryAtStart !== undefined) {
+						const territoryLoss =
+							plan._territoryAtStart - (stats.controlled || 0);
+						if (territoryLoss > 50) {
+							_planReassessNeeded[si] = true; // Enemy counter-offensive → reassess
+							continue;
+						}
+					}
+					// Track territory at plan start for interrupt detection
+					if (stats && plan._territoryAtStart === undefined) {
+						plan._territoryAtStart = stats.controlled || 0;
+					}
+				}
 			}
 
-			// PREPARATION → EXECUTION: advance when enough units rally at staging cells
-			if (plan.phase === "PREPARATION" && plan.stagingCells?.length > 0) {
-				let gathered = 0;
-				for (const u of (_tickUnitsBySide[si] || [])) {
-					if (u.deployTicks > 0) continue;
-					const sc =
-						plan.stagingCells[
-							Math.floor(Math.abs(u.id * 1000000) % plan.stagingCells.length)
-						];
-					if (!sc) continue;
-					const sdLat = sc.lat - u.lat;
-					let sdLng = sc.lng - u.lng;
-					if (sdLng > 180) sdLng -= 360;
-					else if (sdLng < -180) sdLng += 360;
-					if (sdLat * sdLat + sdLng * sdLng < 2.0) gathered++;
+			// Refresh plan progress tracking
+			plan.lastProgressTick = simFrameCount;
+		}
+
+		// ── Land Plan Slot 2 Evaluation ──
+		for (let si = 0; si < sides.length; si++) {
+			if (!sides[si] || sides[si].length === 0) continue;
+			const lSlot2 = si + sides.length;
+			const plan2 = _warPlan[lSlot2];
+			if (!plan2) continue;
+
+			plan2.activeUnitCount = 0;
+
+			const ticksSinceStart2 =
+				simFrameCount - (plan2.startedTick || simFrameCount);
+			const ticksSinceProgress2 =
+				simFrameCount - (plan2.lastProgressTick || simFrameCount);
+
+			if (
+				plan2.type === "CAPTURE_CITY" ||
+				plan2.type === "ENCIRCLE" ||
+				plan2.type === "PUSH_FRONT" ||
+				plan2.type === "DEFEND"
+			) {
+				if (plan2.target) {
+					const tIdx2 = getGridIndex(plan2.target.lat, plan2.target.lng);
+					const captured2 = tIdx2 !== -1 && dominantSideMap[tIdx2] === si;
+					if (captured2) {
+						plan2.phase = "CONSOLIDATION";
+						plan2.progress = 1.0;
+						if (ticksSinceProgress2 > 600) {
+							_planReassessNeeded[si] = true;
+						}
+						continue;
+					}
 				}
-				if (gathered >= Math.min(plan.maxAssignedUnits || 5, 5)) {
-					plan.phase = "EXECUTION";
-					plan.lastProgressTick = simFrameCount;
+
+				if (plan2.phase === "PREPARATION" && plan2.stagingCells?.length > 0) {
+					let gathered2 = 0;
+					for (const u of _tickUnitsBySide[si] || []) {
+						if (u.deployTicks > 0) continue;
+						const sc =
+							plan2.stagingCells[
+								Math.floor(Math.abs(u.id * 1000000) % plan2.stagingCells.length)
+							];
+						if (!sc) continue;
+						const sdLat2 = sc.lat - u.lat;
+						let sdLng2 = sc.lng - u.lng;
+						if (sdLng2 > 180) sdLng2 -= 360;
+						else if (sdLng2 < -180) sdLng2 += 360;
+						if (sdLat2 * sdLat2 + sdLng2 * sdLng2 < 2.0) gathered2++;
+					}
+					if (gathered2 >= Math.min(plan2.maxAssignedUnits || 5, 5)) {
+						plan2.phase = "EXECUTION";
+						plan2.lastProgressTick = simFrameCount;
+					}
+				}
+
+				if (ticksSinceProgress2 > 1800 && ticksSinceStart2 > 600) {
+					_planReassessNeeded[si] = true;
+					continue;
+				}
+
+				const sideCountries2 = sides[si] || [];
+				if (sideCountries2.length > 0) {
+					const firstCountry2 = sideCountries2[0];
+					const stats2 = latestCountryStats.get(firstCountry2.id);
+					if (stats2 && plan2._territoryAtStart !== undefined) {
+						const territoryLoss2 =
+							plan2._territoryAtStart - (stats2.controlled || 0);
+						if (territoryLoss2 > 50) {
+							_planReassessNeeded[si] = true;
+							continue;
+						}
+					}
+					if (stats2 && plan2._territoryAtStart === undefined) {
+						plan2._territoryAtStart = stats2.controlled || 0;
+					}
 				}
 			}
 
-			// Check for stall
+			plan2.lastProgressTick = simFrameCount;
+		}
+
+		// ── Naval Plan Evaluation ──
+		for (let si = 0; si < sides.length; si++) {
+			if (!sides[si] || sides[si].length === 0) continue;
+			const np = _navalPlan[si];
+			if (!np) {
+				// Don't force reassessment — naval plans are optional; the 300-tick interval handles it
+				continue;
+			}
+
+			// Reset per-tick counter
+			np.activeUnitCount = 0;
+
+			const ticksSinceStart = simFrameCount - (np.startedTick || simFrameCount);
+			const ticksSinceProgress =
+				simFrameCount - (np.lastProgressTick || simFrameCount);
+
+			// Check if target is captured
+			if (np.target) {
+				const tIdx = getGridIndex(np.target.lat, np.target.lng);
+				if (tIdx !== -1 && dominantSideMap[tIdx] === si) {
+					// Target captured — clear naval plan
+					_navalPlan[si] = null;
+					continue;
+				}
+			}
+
+			// Stall detection: if stalled for 30s, cancel naval plan
 			if (ticksSinceProgress > 600 && ticksSinceStart > 600) {
-				_planReassessNeeded[si] = true; // Failed — reassess
-				continue;
-			}
-
-			// Counter-offensive interrupt: if enemy pushes back significantly, abort
-			const sideCountries = sides[si] || [];
-			if (sideCountries.length > 0) {
-				const firstCountry = sideCountries[0];
-				const stats = latestCountryStats.get(firstCountry.id);
-				if (stats && plan._territoryAtStart !== undefined) {
-					const territoryLoss =
-						plan._territoryAtStart - (stats.controlled || 0);
-					if (territoryLoss > 50) {
-						_planReassessNeeded[si] = true; // Enemy counter-offensive → reassess
-						continue;
-					}
-				}
-				// Track territory at plan start for interrupt detection
-				if (stats && plan._territoryAtStart === undefined) {
-					plan._territoryAtStart = stats.controlled || 0;
-				}
-			}
-		}
-
-		// Refresh plan progress tracking
-		plan.lastProgressTick = simFrameCount;
-	}
-
-	// ── Land Plan Slot 2 Evaluation ──
-	for (let si = 0; si < sides.length; si++) {
-		if (!sides[si] || sides[si].length === 0) continue;
-		const lSlot2 = si + sides.length;
-		const plan2 = _warPlan[lSlot2];
-		if (!plan2) continue;
-
-		plan2.activeUnitCount = 0;
-
-		const ticksSinceStart2 =
-			simFrameCount - (plan2.startedTick || simFrameCount);
-		const ticksSinceProgress2 =
-			simFrameCount - (plan2.lastProgressTick || simFrameCount);
-
-		if (
-			(plan2.type === "CAPTURE_CITY" || plan2.type === "ENCIRCLE" || plan2.type === "PUSH_FRONT" || plan2.type === "DEFEND")
-		) {
-			if (plan2.target) {
-			const tIdx2 = getGridIndex(plan2.target.lat, plan2.target.lng);
-			const captured2 = tIdx2 !== -1 && dominantSideMap[tIdx2] === si;
-			if (captured2) {
-				plan2.phase = "CONSOLIDATION";
-				plan2.progress = 1.0;
-				if (ticksSinceProgress2 > 600) {
-					_planReassessNeeded[si] = true;
-				}
-				continue;
-			}
-			}
-
-			if (plan2.phase === "PREPARATION" && plan2.stagingCells?.length > 0) {
-				let gathered2 = 0;
-				for (const u of (_tickUnitsBySide[si] || [])) {
-					if (u.deployTicks > 0) continue;
-					const sc =
-						plan2.stagingCells[
-							Math.floor(Math.abs(u.id * 1000000) % plan2.stagingCells.length)
-						];
-					if (!sc) continue;
-					const sdLat2 = sc.lat - u.lat;
-					let sdLng2 = sc.lng - u.lng;
-					if (sdLng2 > 180) sdLng2 -= 360;
-					else if (sdLng2 < -180) sdLng2 += 360;
-					if (sdLat2 * sdLat2 + sdLng2 * sdLng2 < 2.0) gathered2++;
-				}
-				if (gathered2 >= Math.min(plan2.maxAssignedUnits || 5, 5)) {
-					plan2.phase = "EXECUTION";
-					plan2.lastProgressTick = simFrameCount;
-				}
-			}
-
-			if (ticksSinceProgress2 > 1800 && ticksSinceStart2 > 600) {
-				_planReassessNeeded[si] = true;
-				continue;
-			}
-
-			const sideCountries2 = sides[si] || [];
-			if (sideCountries2.length > 0) {
-				const firstCountry2 = sideCountries2[0];
-				const stats2 = latestCountryStats.get(firstCountry2.id);
-				if (stats2 && plan2._territoryAtStart !== undefined) {
-					const territoryLoss2 =
-						plan2._territoryAtStart - (stats2.controlled || 0);
-					if (territoryLoss2 > 50) {
-						_planReassessNeeded[si] = true;
-						continue;
-					}
-				}
-				if (stats2 && plan2._territoryAtStart === undefined) {
-					plan2._territoryAtStart = stats2.controlled || 0;
-				}
-			}
-		}
-
-		plan2.lastProgressTick = simFrameCount;
-	}
-
-	// ── Naval Plan Evaluation ──
-	for (let si = 0; si < sides.length; si++) {
-		if (!sides[si] || sides[si].length === 0) continue;
-		const np = _navalPlan[si];
-		if (!np) {
-			// Don't force reassessment — naval plans are optional; the 300-tick interval handles it
-			continue;
-		}
-
-		// Reset per-tick counter
-		np.activeUnitCount = 0;
-
-		const ticksSinceStart = simFrameCount - (np.startedTick || simFrameCount);
-		const ticksSinceProgress =
-			simFrameCount - (np.lastProgressTick || simFrameCount);
-
-		// Check if target is captured
-		if (np.target) {
-			const tIdx = getGridIndex(np.target.lat, np.target.lng);
-			if (tIdx !== -1 && dominantSideMap[tIdx] === si) {
-				// Target captured — clear naval plan
-				_navalPlan[si] = null;
-				continue;
-			}
-		}
-
-		// Stall detection: if stalled for 30s, cancel naval plan
-		if (ticksSinceProgress > 600 && ticksSinceStart > 600) {
-			// Release all assigned units
-			for (const u of (_tickUnitsBySide[si] || [])) {
-				if (u.navalAssigned) {
-					u.navalAssigned = false;
-					u.isTransport = false;
-				}
-			}
-			_navalPlan[si] = null;
-			_planReassessNeeded[si] = true;
-			continue;
-		}
-
-		// Phase transitions
-		if (np.phase === "GATHERING") {
-			// Count how many naval units are near staging point
-			let gathered = 0;
-			for (const u of (_tickUnitsBySide[si] || [])) {
-				if (!u.navalAssigned) continue;
-				const sdLat = np.stagingPoint.lat - u.lat;
-				let sdLng = np.stagingPoint.lng - u.lng;
-				if (sdLng > 180) sdLng -= 360;
-				else if (sdLng < -180) sdLng += 360;
-				if (sdLat * sdLat + sdLng * sdLng < 0.5) gathered++;
-			}
-				// Force advance if gathering takes too long (staging point on land, ships loop)
-				if (gathered >= Math.min(np.maxAssignedUnits, 5) || ticksSinceProgress > 600) {
-				np.phase = "EMBARKATION";
-				np.lastProgressTick = simFrameCount;
-			}
-		} else if (np.phase === "EMBARKATION") {
-			// Check if most naval units are at sea
-			let atSea = 0;
-			let total = 0;
-			for (const u of (_tickUnitsBySide[si] || [])) {
-				if (!u.navalAssigned) continue;
-				total++;
-				const gi = getGridIndex(u.lat, u.lng);
-				if (gi === -1 || landMask[gi] === 0) atSea++;
-			}
-			if (total > 0 && atSea >= Math.ceil(total * 0.6)) {
-				np.phase = "TRANSIT";
-				np.lastProgressTick = simFrameCount;
-			}
-		} else if (np.phase === "TRANSIT") {
-			// Check if naval units are reaching the target coast
-			let landed = 0;
-			for (const u of (_tickUnitsBySide[si] || [])) {
-				if (!u.navalAssigned) continue;
-				const gi = getGridIndex(u.lat, u.lng);
-				if (gi !== -1 && landMask[gi] > 0) {
-					const tdLat = np.target.lat - u.lat;
-					let tdLng = np.target.lng - u.lng;
-					if (tdLng > 180) tdLng -= 360;
-					else if (tdLng < -180) tdLng += 360;
-					if (tdLat * tdLat + tdLng * tdLng < 2.0) landed++;
-				}
-			}
-			if (landed >= 3) {
-				np.phase = "LANDING";
-				np.lastProgressTick = simFrameCount;
-				// Immediately generate supply plan for the landing
-				if (!_navalSupplyPlan[si]) _planReassessNeeded[si] = true;
-			}
-		} else if (np.phase === "LANDING") {
-			// After enough time in landing, the plan completes
-			if (ticksSinceProgress > 900) {
-				// Count enemies within 5 degrees of the landing zone
-				let _nearEnemies = 0;
-				let _nearFriendlies = 0;
-				for (const u of units) {
-					if (u.deployTicks > 0) continue;
-					const dLat = np.target.lat - u.lat;
-					let dLng = np.target.lng - u.lng;
-					if (dLng > 180) dLng -= 360;
-					else if (dLng < -180) dLng += 360;
-					const dSq = dLat * dLat + dLng * dLng;
-					if (dSq < 25.0) {
-						if (u.sideIndex === si) _nearFriendlies++;
-						else _nearEnemies++;
-					}
-				}
-
-				// Release naval-assigned units so they join the new land plan
-				for (const u of (_tickUnitsBySide[si] || [])) {
+				// Release all assigned units
+				for (const u of _tickUnitsBySide[si] || []) {
 					if (u.navalAssigned) {
 						u.navalAssigned = false;
 						u.isTransport = false;
 					}
 				}
 				_navalPlan[si] = null;
-
 				_planReassessNeeded[si] = true;
+				continue;
 			}
-		}
-	}
 
-	// ── Naval Supply Plan Evaluation ──
-	for (let si = 0; si < sides.length; si++) {
-		if (!sides[si] || sides[si].length === 0) continue;
-		const sp = _navalSupplyPlan[si];
+			// Phase transitions
+			if (np.phase === "GATHERING") {
+				// Count how many naval units are near staging point
+				let gathered = 0;
+				for (const u of _tickUnitsBySide[si] || []) {
+					if (!u.navalAssigned) continue;
+					const sdLat = np.stagingPoint.lat - u.lat;
+					let sdLng = np.stagingPoint.lng - u.lng;
+					if (sdLng > 180) sdLng -= 360;
+					else if (sdLng < -180) sdLng += 360;
+					if (sdLat * sdLat + sdLng * sdLng < 0.5) gathered++;
+				}
+				// Force advance if gathering takes too long (staging point on land, ships loop)
+				if (
+					gathered >= Math.min(np.maxAssignedUnits, 5) ||
+					ticksSinceProgress > 600
+				) {
+					np.phase = "EMBARKATION";
+					np.lastProgressTick = simFrameCount;
+				}
+			} else if (np.phase === "EMBARKATION") {
+				// Check if most naval units are at sea
+				let atSea = 0;
+				let total = 0;
+				for (const u of _tickUnitsBySide[si] || []) {
+					if (!u.navalAssigned) continue;
+					total++;
+					const gi = getGridIndex(u.lat, u.lng);
+					if (gi === -1 || landMask[gi] === 0) atSea++;
+				}
+				if (total > 0 && atSea >= Math.ceil(total * 0.6)) {
+					np.phase = "TRANSIT";
+					np.lastProgressTick = simFrameCount;
+				}
+			} else if (np.phase === "TRANSIT") {
+				// Check if naval units are reaching the target coast
+				let landed = 0;
+				for (const u of _tickUnitsBySide[si] || []) {
+					if (!u.navalAssigned) continue;
+					const gi = getGridIndex(u.lat, u.lng);
+					if (gi !== -1 && landMask[gi] > 0) {
+						const tdLat = np.target.lat - u.lat;
+						let tdLng = np.target.lng - u.lng;
+						if (tdLng > 180) tdLng -= 360;
+						else if (tdLng < -180) tdLng += 360;
+						if (tdLat * tdLat + tdLng * tdLng < 2.0) landed++;
+					}
+				}
+				if (landed >= 3) {
+					np.phase = "LANDING";
+					np.lastProgressTick = simFrameCount;
+					// Immediately generate supply plan for the landing
+					if (!_navalSupplyPlan[si]) _planReassessNeeded[si] = true;
+				}
+			} else if (np.phase === "LANDING") {
+				// After enough time in landing, the plan completes
+				if (ticksSinceProgress > 900) {
+					// Count enemies within 5 degrees of the landing zone
+					let _nearEnemies = 0;
+					let _nearFriendlies = 0;
+					for (const u of units) {
+						if (u.deployTicks > 0) continue;
+						const dLat = np.target.lat - u.lat;
+						let dLng = np.target.lng - u.lng;
+						if (dLng > 180) dLng -= 360;
+						else if (dLng < -180) dLng += 360;
+						const dSq = dLat * dLat + dLng * dLng;
+						if (dSq < 25.0) {
+							if (u.sideIndex === si) _nearFriendlies++;
+							else _nearEnemies++;
+						}
+					}
 
-		if (!sp) {
-			// Don't force reassessment — naval supply plans are optional; the 300-tick interval handles it
-			continue;
-		}
+					// Release naval-assigned units so they join the new land plan
+					for (const u of _tickUnitsBySide[si] || []) {
+						if (u.navalAssigned) {
+							u.navalAssigned = false;
+							u.isTransport = false;
+						}
+					}
+					_navalPlan[si] = null;
 
-		sp.activeUnitCount = 0;
-
-		// If the parent naval plan is gone, let supply finish independently
-
-		const ticksSinceProgress =
-			simFrameCount - (sp.lastProgressTick || simFrameCount);
-
-		// Stall detection
-		if (ticksSinceProgress > 600) {
-			for (const u of (_tickUnitsBySide[si] || [])) {
-				if (u.supplyAssigned) {
-					u.supplyAssigned = false;
-					u.isTransport = false;
+					_planReassessNeeded[si] = true;
 				}
 			}
-			_navalSupplyPlan[si] = null;
-			_planReassessNeeded[si] = true;
-			continue;
 		}
 
-		// Phase transitions (mirrors naval invasion: GATHERING -> EMBARKATION -> TRANSIT -> DELIVERED)
-		if (sp.phase === "GATHERING") {
-			let gathered = 0;
-			for (const u of (_tickUnitsBySide[si] || [])) {
-				if (!u.supplyAssigned) continue;
-				const sdLat = sp.stagingPoint.lat - u.lat;
-				let sdLng = sp.stagingPoint.lng - u.lng;
-				if (sdLng > 180) sdLng -= 360;
-				else if (sdLng < -180) sdLng += 360;
-				if (sdLat * sdLat + sdLng * sdLng < 0.5) gathered++;
+		// ── Naval Supply Plan Evaluation ──
+		for (let si = 0; si < sides.length; si++) {
+			if (!sides[si] || sides[si].length === 0) continue;
+			const sp = _navalSupplyPlan[si];
+
+			if (!sp) {
+				// Don't force reassessment — naval supply plans are optional; the 300-tick interval handles it
+				continue;
 			}
-				if (gathered >= Math.min(sp.maxAssignedUnits, 3) || ticksSinceProgress > 600) {
-				sp.phase = "EMBARKATION";
-				sp.lastProgressTick = simFrameCount;
-			}
-		} else if (sp.phase === "EMBARKATION") {
-			let atSea = 0;
-			let total = 0;
-			for (const u of (_tickUnitsBySide[si] || [])) {
-				if (!u.supplyAssigned) continue;
-				total++;
-				const gi = getGridIndex(u.lat, u.lng);
-				if (gi === -1 || landMask[gi] === 0) atSea++;
-			}
-			if (total > 0 && atSea >= Math.ceil(total * 0.6)) {
-				sp.phase = "TRANSIT";
-				sp.lastProgressTick = simFrameCount;
-			}
-		} else if (sp.phase === "TRANSIT") {
-			let landed = 0;
-			for (const u of (_tickUnitsBySide[si] || [])) {
-				if (!u.supplyAssigned) continue;
-				const gi = getGridIndex(u.lat, u.lng);
-				if (gi !== -1 && landMask[gi] > 0) {
-					const tdLat = sp.target.lat - u.lat;
-					let tdLng = sp.target.lng - u.lng;
-					if (tdLng > 180) tdLng -= 360;
-					else if (tdLng < -180) tdLng += 360;
-					if (tdLat * tdLat + tdLng * tdLng < 2.0) landed++;
-				}
-			}
-			if (landed >= 2) {
-				sp.phase = "DELIVERED";
-				sp.lastProgressTick = simFrameCount;
-			}
-		} else if (sp.phase === "DELIVERED") {
+
+			sp.activeUnitCount = 0;
+
+			// If the parent naval plan is gone, let supply finish independently
+
+			const ticksSinceProgress =
+				simFrameCount - (sp.lastProgressTick || simFrameCount);
+
+			// Stall detection
 			if (ticksSinceProgress > 600) {
-				for (const u of (_tickUnitsBySide[si] || [])) {
+				for (const u of _tickUnitsBySide[si] || []) {
 					if (u.supplyAssigned) {
 						u.supplyAssigned = false;
 						u.isTransport = false;
 					}
 				}
 				_navalSupplyPlan[si] = null;
+				_planReassessNeeded[si] = true;
+				continue;
 			}
-		}
 
-		if (sp) sp.lastProgressTick = simFrameCount;
-	}
-
-	// ── Enemy Offensive Detection ──
-	for (let si = 0; si < sides.length; si++) {
-		if (!sides[si] || sides[si].length === 0) continue;
-		for (let ei = 0; ei < sides.length; ei++) {
-			if (ei === si) continue;
-			if (!sides[ei] || sides[ei].length === 0) continue;
-			for (const enemyPlan of [_warPlan[ei], _warPlan[ei + sides.length]]) {
-				if (!enemyPlan?.target) continue;
-				if (enemyPlan.type !== "CAPTURE_CITY" && enemyPlan.type !== "ENCIRCLE")
-					continue;
-				const tIdx = getGridIndex(enemyPlan.target.lat, enemyPlan.target.lng);
-				if (tIdx !== -1 && dominantSideMap[tIdx] === si) {
-					// Don't force reassessment — territory change detection (line 7903)
-					// handles this via the standard path. Setting the flag here caused
-					// ALL reassessments to be forced (30/30) because it fires every 5 ticks.
-					break;
+			// Phase transitions (mirrors naval invasion: GATHERING -> EMBARKATION -> TRANSIT -> DELIVERED)
+			if (sp.phase === "GATHERING") {
+				let gathered = 0;
+				for (const u of _tickUnitsBySide[si] || []) {
+					if (!u.supplyAssigned) continue;
+					const sdLat = sp.stagingPoint.lat - u.lat;
+					let sdLng = sp.stagingPoint.lng - u.lng;
+					if (sdLng > 180) sdLng -= 360;
+					else if (sdLng < -180) sdLng += 360;
+					if (sdLat * sdLat + sdLng * sdLng < 0.5) gathered++;
 				}
-			}
-		}
-	}
-
-	// ── Coastal Defense Plan Evaluation ──
-	for (let si = 0; si < sides.length; si++) {
-		for (let ci = 0; ci < 10; ci++) {
-			const slot = si * 10 + ci;
-			const cp = _coastalDefensePlan[slot];
-			if (!cp) continue;
-			cp.activeUnitCount = 0;
-			if (cp.target) {
-				const tIdx = getGridIndex(cp.target.lat, cp.target.lng);
-				if (tIdx !== -1 && dominantSideMap[tIdx] !== si) {
-					for (const u of (_tickUnitsBySide[si] || [])) {
-						if (u.coastalAssigned)
-							u.coastalAssigned = false;
+				if (
+					gathered >= Math.min(sp.maxAssignedUnits, 3) ||
+					ticksSinceProgress > 600
+				) {
+					sp.phase = "EMBARKATION";
+					sp.lastProgressTick = simFrameCount;
+				}
+			} else if (sp.phase === "EMBARKATION") {
+				let atSea = 0;
+				let total = 0;
+				for (const u of _tickUnitsBySide[si] || []) {
+					if (!u.supplyAssigned) continue;
+					total++;
+					const gi = getGridIndex(u.lat, u.lng);
+					if (gi === -1 || landMask[gi] === 0) atSea++;
+				}
+				if (total > 0 && atSea >= Math.ceil(total * 0.6)) {
+					sp.phase = "TRANSIT";
+					sp.lastProgressTick = simFrameCount;
+				}
+			} else if (sp.phase === "TRANSIT") {
+				let landed = 0;
+				for (const u of _tickUnitsBySide[si] || []) {
+					if (!u.supplyAssigned) continue;
+					const gi = getGridIndex(u.lat, u.lng);
+					if (gi !== -1 && landMask[gi] > 0) {
+						const tdLat = sp.target.lat - u.lat;
+						let tdLng = sp.target.lng - u.lng;
+						if (tdLng > 180) tdLng -= 360;
+						else if (tdLng < -180) tdLng += 360;
+						if (tdLat * tdLat + tdLng * tdLng < 2.0) landed++;
 					}
-					_coastalDefensePlan[slot] = null;
-					continue;
+				}
+				if (landed >= 2) {
+					sp.phase = "DELIVERED";
+					sp.lastProgressTick = simFrameCount;
+				}
+			} else if (sp.phase === "DELIVERED") {
+				if (ticksSinceProgress > 600) {
+					for (const u of _tickUnitsBySide[si] || []) {
+						if (u.supplyAssigned) {
+							u.supplyAssigned = false;
+							u.isTransport = false;
+						}
+					}
+					_navalSupplyPlan[si] = null;
 				}
 			}
-			// Decay threat flags after 900 ticks (~15s)
-			if (cp.threatenedTick && simFrameCount - cp.threatenedTick > 900) {
-				cp.threatenedByTransit = false;
-				cp.threatenedByGathering = false;
-				delete cp.threatContact;
-				delete cp.threatenedTick;
-			}
-		}
-	}
 
-	// ── Neutral Garrison Plan Evaluation ──
-	for (let si = 0; si < sides.length; si++) {
-		for (let gi = 0; gi < 10; gi++) {
-			const slot = si * 10 + gi;
-			const gp = _neutralGarrisonPlan[slot];
-			if (!gp) continue;
-			gp.activeUnitCount = 0;
-			// Cancel if the neutral country has joined a side (became combatant)
-			if (
-				gp.neutralCountryId != null &&
-				_tickCountryToSideMap.get(gp.neutralCountryId) !== undefined
-			) {
-				for (const u of (_tickUnitsBySide[si] || [])) {
-					if (u.garrisonAssigned)
-						u.garrisonAssigned = false;
+			if (sp) sp.lastProgressTick = simFrameCount;
+		}
+
+		// ── Enemy Offensive Detection ──
+		for (let si = 0; si < sides.length; si++) {
+			if (!sides[si] || sides[si].length === 0) continue;
+			for (let ei = 0; ei < sides.length; ei++) {
+				if (ei === si) continue;
+				if (!sides[ei] || sides[ei].length === 0) continue;
+				for (const enemyPlan of [_warPlan[ei], _warPlan[ei + sides.length]]) {
+					if (!enemyPlan?.target) continue;
+					if (
+						enemyPlan.type !== "CAPTURE_CITY" &&
+						enemyPlan.type !== "ENCIRCLE"
+					)
+						continue;
+					const tIdx = getGridIndex(enemyPlan.target.lat, enemyPlan.target.lng);
+					if (tIdx !== -1 && dominantSideMap[tIdx] === si) {
+						// Don't force reassessment — territory change detection (line 7903)
+						// handles this via the standard path. Setting the flag here caused
+						// ALL reassessments to be forced (30/30) because it fires every 5 ticks.
+						break;
+					}
 				}
-				_neutralGarrisonPlan[slot] = null;
 			}
 		}
-	}
 
-	// ── Proactive Detection: Enemy TRANSIT & GATHERING near our coast ──
-	for (let si = 0; si < sides.length; si++) {
-		if (!sides[si] || sides[si].length === 0) continue;
-		for (let ei = 0; ei < sides.length; ei++) {
-			if (ei === si) continue;
-			if (!sides[ei] || sides[ei].length === 0) continue;
-			const enemyNP = _navalPlan[ei];
-			if (!enemyNP?.target) continue;
+		// ── Coastal Defense Plan Evaluation ──
+		for (let si = 0; si < sides.length; si++) {
+			for (let ci = 0; ci < 10; ci++) {
+				const slot = si * 10 + ci;
+				const cp = _coastalDefensePlan[slot];
+				if (!cp) continue;
+				cp.activeUnitCount = 0;
+				if (cp.target) {
+					const tIdx = getGridIndex(cp.target.lat, cp.target.lng);
+					if (tIdx !== -1 && dominantSideMap[tIdx] !== si) {
+						for (const u of _tickUnitsBySide[si] || []) {
+							if (u.coastalAssigned) u.coastalAssigned = false;
+						}
+						_coastalDefensePlan[slot] = null;
+						continue;
+					}
+				}
+				// Decay threat flags after 900 ticks (~15s)
+				if (cp.threatenedTick && simFrameCount - cp.threatenedTick > 900) {
+					cp.threatenedByTransit = false;
+					cp.threatenedByGathering = false;
+					delete cp.threatContact;
+					delete cp.threatenedTick;
+				}
+			}
+		}
 
-			if (enemyNP.phase === "TRANSIT") {
-				for (const u of (_tickUnitsBySide[ei] || [])) {
-					if (!u.navalAssigned) continue;
+		// ── Neutral Garrison Plan Evaluation ──
+		for (let si = 0; si < sides.length; si++) {
+			for (let gi = 0; gi < 10; gi++) {
+				const slot = si * 10 + gi;
+				const gp = _neutralGarrisonPlan[slot];
+				if (!gp) continue;
+				gp.activeUnitCount = 0;
+				// Cancel if the neutral country has joined a side (became combatant)
+				if (
+					gp.neutralCountryId != null &&
+					_tickCountryToSideMap.get(gp.neutralCountryId) !== undefined
+				) {
+					for (const u of _tickUnitsBySide[si] || []) {
+						if (u.garrisonAssigned) u.garrisonAssigned = false;
+					}
+					_neutralGarrisonPlan[slot] = null;
+				}
+			}
+		}
+
+		// ── Proactive Detection: Enemy TRANSIT & GATHERING near our coast ──
+		for (let si = 0; si < sides.length; si++) {
+			if (!sides[si] || sides[si].length === 0) continue;
+			for (let ei = 0; ei < sides.length; ei++) {
+				if (ei === si) continue;
+				if (!sides[ei] || sides[ei].length === 0) continue;
+				const enemyNP = _navalPlan[ei];
+				if (!enemyNP?.target) continue;
+
+				if (enemyNP.phase === "TRANSIT") {
+					for (const u of _tickUnitsBySide[ei] || []) {
+						if (!u.navalAssigned) continue;
+						for (let csi = si * 10; csi < si * 10 + 10; csi++) {
+							const cp = _coastalDefensePlan[csi];
+							if (!cp?.target) continue;
+							const dLat = u.lat - cp.target.lat;
+							let dLng = u.lng - cp.target.lng;
+							if (dLng > 180) dLng -= 360;
+							else if (dLng < -180) dLng += 360;
+							if (dLat * dLat + dLng * dLng < 25.0) {
+								cp.threatenedByTransit = true;
+								cp.threatContact = {
+									lat: u.lat,
+									lng: u.lng,
+								};
+								cp.threatenedTick = simFrameCount;
+							}
+						}
+					}
+				} else if (enemyNP.phase === "GATHERING" && enemyNP.stagingPoint) {
 					for (let csi = si * 10; csi < si * 10 + 10; csi++) {
 						const cp = _coastalDefensePlan[csi];
 						if (!cp?.target) continue;
-						const dLat = u.lat - cp.target.lat;
-						let dLng = u.lng - cp.target.lng;
+						const dLat = enemyNP.stagingPoint.lat - cp.target.lat;
+						let dLng = enemyNP.stagingPoint.lng - cp.target.lng;
 						if (dLng > 180) dLng -= 360;
 						else if (dLng < -180) dLng += 360;
-						if (dLat * dLat + dLng * dLng < 25.0) {
-							cp.threatenedByTransit = true;
+						if (dLat * dLat + dLng * dLng < 100.0) {
+							cp.threatenedByGathering = true;
 							cp.threatContact = {
-								lat: u.lat,
-								lng: u.lng,
+								lat: enemyNP.stagingPoint.lat,
+								lng: enemyNP.stagingPoint.lng,
 							};
 							cp.threatenedTick = simFrameCount;
 						}
 					}
 				}
-			} else if (enemyNP.phase === "GATHERING" && enemyNP.stagingPoint) {
-				for (let csi = si * 10; csi < si * 10 + 10; csi++) {
-					const cp = _coastalDefensePlan[csi];
-					if (!cp?.target) continue;
-					const dLat = enemyNP.stagingPoint.lat - cp.target.lat;
-					let dLng = enemyNP.stagingPoint.lng - cp.target.lng;
-					if (dLng > 180) dLng -= 360;
-					else if (dLng < -180) dLng += 360;
-					if (dLat * dLat + dLng * dLng < 100.0) {
-						cp.threatenedByGathering = true;
-						cp.threatContact = {
-							lat: enemyNP.stagingPoint.lat,
-							lng: enemyNP.stagingPoint.lng,
-						};
-						cp.threatenedTick = simFrameCount;
+			}
+		}
+
+		// ── Defender Reaction (Structured) ──
+		for (let si = 0; si < sides.length; si++) {
+			if (!sides[si] || sides[si].length === 0) continue;
+			const rp = _defenderReactionPlan[si];
+
+			// ---- Cancel stale / obsolete reaction plans ----
+			if (rp) {
+				const enemyNP =
+					rp.enemySideIdx != null ? _navalPlan[rp.enemySideIdx] : null;
+				const enemySideDead =
+					rp.enemySideIdx != null &&
+					(!sides[rp.enemySideIdx] || sides[rp.enemySideIdx].length === 0);
+
+				let shouldCancel = false;
+				if (enemySideDead || !enemyNP) {
+					shouldCancel = true;
+				} else if (rp._landingDefeatedTick) {
+					if (simFrameCount - rp._landingDefeatedTick > 600)
+						shouldCancel = true;
+				}
+
+				if (!shouldCancel && simFrameCount - rp.lastProgressTick > 1800) {
+					shouldCancel = true;
+				}
+
+				if (shouldCancel) {
+					for (const u of _tickUnitsBySide[si] || []) {
+						u._defenderReactTarget = null;
+					}
+					_defenderReactionPlan[si] = null;
+				}
+			}
+
+			// Track arrivals: units within 1° of target clear their flag
+			if (_defenderReactionPlan[si]) {
+				_defenderReactionPlan[si].activeUnitCount = 0;
+				let anyArrived = false;
+				for (const u of _tickUnitsBySide[si] || []) {
+					if (!u._defenderReactTarget) continue;
+					_defenderReactionPlan[si].activeUnitCount++;
+					const rdLat = u._defenderReactTarget.lat - u.lat;
+					let rdLng = u._defenderReactTarget.lng - u.lng;
+					if (rdLng > 180) rdLng -= 360;
+					else if (rdLng < -180) rdLng += 360;
+					if (rdLat * rdLat + rdLng * rdLng < 1.0) {
+						u._defenderReactTarget = null;
+						anyArrived = true;
 					}
 				}
-			}
-		}
-	}
-
-	// ── Defender Reaction (Structured) ──
-	for (let si = 0; si < sides.length; si++) {
-		if (!sides[si] || sides[si].length === 0) continue;
-		const rp = _defenderReactionPlan[si];
-
-		// ---- Cancel stale / obsolete reaction plans ----
-		if (rp) {
-			const enemyNP =
-				rp.enemySideIdx != null ? _navalPlan[rp.enemySideIdx] : null;
-			const enemySideDead =
-				rp.enemySideIdx != null &&
-				(!sides[rp.enemySideIdx] || sides[rp.enemySideIdx].length === 0);
-
-			let shouldCancel = false;
-			if (enemySideDead || !enemyNP) {
-				shouldCancel = true;
-			} else if (rp._landingDefeatedTick) {
-				if (simFrameCount - rp._landingDefeatedTick > 600) shouldCancel = true;
-			}
-
-			if (!shouldCancel && simFrameCount - rp.lastProgressTick > 1800) {
-				shouldCancel = true;
-			}
-
-			if (shouldCancel) {
-				for (const u of (_tickUnitsBySide[si] || [])) {
-					u._defenderReactTarget = null;
-				}
-				_defenderReactionPlan[si] = null;
-			}
-		}
-
-		// Track arrivals: units within 1° of target clear their flag
-		if (_defenderReactionPlan[si]) {
-			_defenderReactionPlan[si].activeUnitCount = 0;
-			let anyArrived = false;
-			for (const u of (_tickUnitsBySide[si] || [])) {
-				if (!u._defenderReactTarget) continue;
-				_defenderReactionPlan[si].activeUnitCount++;
-				const rdLat = u._defenderReactTarget.lat - u.lat;
-				let rdLng = u._defenderReactTarget.lng - u.lng;
-				if (rdLng > 180) rdLng -= 360;
-				else if (rdLng < -180) rdLng += 360;
-				if (rdLat * rdLat + rdLng * rdLng < 1.0) {
-					u._defenderReactTarget = null;
-					anyArrived = true;
+				if (anyArrived) {
+					_defenderReactionPlan[si].lastProgressTick = simFrameCount;
 				}
 			}
-			if (anyArrived) {
-				_defenderReactionPlan[si].lastProgressTick = simFrameCount;
-			}
-		}
 
-		// ---- Detect threats & manage reaction plan ----
-		// Check both naval and land threats from enemies
-		for (let ei = 0; ei < sides.length; ei++) {
-			if (ei === si) continue;
-			if (!sides[ei] || sides[ei].length === 0) continue;
-			const enemyNP = _navalPlan[ei];
-			const enemyLand1 = _warPlan[ei];
-			const enemyLand2 = _warPlan[ei + sides.length];
+			// ---- Detect threats & manage reaction plan ----
+			// Check both naval and land threats from enemies
+			for (let ei = 0; ei < sides.length; ei++) {
+				if (ei === si) continue;
+				if (!sides[ei] || sides[ei].length === 0) continue;
+				const enemyNP = _navalPlan[ei];
+				const enemyLand1 = _warPlan[ei];
+				const enemyLand2 = _warPlan[ei + sides.length];
 
-			// Check naval plan
-			let threatTarget = null;
-			let onOurTerritory = false;
-			if (enemyNP?.target) {
-				const tIdx = getGridIndex(enemyNP.target.lat, enemyNP.target.lng);
-				if (tIdx !== -1 && dominantSideMap[tIdx] === si) {
-					threatTarget = enemyNP.target;
-					onOurTerritory = true;
-				}
-			}
-			// Check land plans targeting our territory
-			if (!threatTarget) {
-				for (const lp of [enemyLand1, enemyLand2]) {
-					if (!lp?.target || lp.phase !== "EXECUTION") continue;
-					const tIdx = getGridIndex(lp.target.lat, lp.target.lng);
+				// Check naval plan
+				let threatTarget = null;
+				let onOurTerritory = false;
+				if (enemyNP?.target) {
+					const tIdx = getGridIndex(enemyNP.target.lat, enemyNP.target.lng);
 					if (tIdx !== -1 && dominantSideMap[tIdx] === si) {
-						threatTarget = lp.target;
+						threatTarget = enemyNP.target;
 						onOurTerritory = true;
-						break;
 					}
 				}
-			}
-			if (!threatTarget) continue;
+				// Check land plans targeting our territory
+				if (!threatTarget) {
+					for (const lp of [enemyLand1, enemyLand2]) {
+						if (!lp?.target || lp.phase !== "EXECUTION") continue;
+						const tIdx = getGridIndex(lp.target.lat, lp.target.lng);
+						if (tIdx !== -1 && dominantSideMap[tIdx] === si) {
+							threatTarget = lp.target;
+							onOurTerritory = true;
+							break;
+						}
+					}
+				}
+				if (!threatTarget) continue;
 
-			const rpCur = _defenderReactionPlan[si];
-			if (rpCur && rpCur.enemySideIdx !== ei) continue;
+				const rpCur = _defenderReactionPlan[si];
+				if (rpCur && rpCur.enemySideIdx !== ei) continue;
 
-			// TRANSIT: pre-emptive reaction if heading to our territory
-			if (enemyNP && enemyNP.phase === "TRANSIT" && onOurTerritory) {
-				let rpCur2 = _defenderReactionPlan[si];
-				if (!rpCur2) {
-					const preActive = Math.min(
-						10,
-						Math.floor((_tickUnitsBySide[si]?.length || 0) * 0.15),
-					);
-					if (preActive >= 3) {
+				// TRANSIT: pre-emptive reaction if heading to our territory
+				if (enemyNP && enemyNP.phase === "TRANSIT" && onOurTerritory) {
+					let rpCur2 = _defenderReactionPlan[si];
+					if (!rpCur2) {
+						const preActive = Math.min(
+							10,
+							Math.floor((_tickUnitsBySide[si]?.length || 0) * 0.15),
+						);
+						if (preActive >= 3) {
+							_defenderReactionPlan[si] = {
+								type: "DEFEND",
+								target: {
+									lat: enemyNP.target.lat,
+									lng: enemyNP.target.lng,
+								},
+								enemySideIdx: ei,
+								phase: "EXECUTION",
+								maxUnits: preActive,
+								activeUnitCount: 0,
+								startedTick: simFrameCount,
+								lastProgressTick: simFrameCount,
+							};
+							rpCur2 = _defenderReactionPlan[si];
+						}
+					}
+					if (!rpCur2 || rpCur2.activeUnitCount >= rpCur2.maxUnits) continue;
+
+					const slotsOpen = rpCur2.maxUnits - rpCur2.activeUnitCount;
+					let recruited = 0;
+					for (const u of _tickUnitsBySide[si] || []) {
+						// side-filtered via _tickUnitsBySide
+						if (u.deployTicks > 0) continue;
+						if (u.navalAssigned || u.supplyAssigned) continue;
+						if (u.coastalAssigned || u.garrisonAssigned) continue;
+						if (u._defenderReactTarget) continue;
+
+						const dLat = rpCur2.target.lat - u.lat;
+						let dLng = rpCur2.target.lng - u.lng;
+						if (dLng > 180) dLng -= 360;
+						else if (dLng < -180) dLng += 360;
+						const dSq = dLat * dLat + dLng * dLng;
+
+						if (dSq < 9.0 || dSq > 100.0) continue;
+
+						u._defenderReactTarget = {
+							lat: rpCur2.target.lat,
+							lng: rpCur2.target.lng,
+						};
+						recruited++;
+						if (recruited >= slotsOpen) break;
+					}
+					rpCur2.activeUnitCount += recruited;
+				}
+
+				// ---- Land threat response (enemy land plan targeting our territory) ----
+				if (!enemyNP && onOurTerritory) {
+					let rpCur = _defenderReactionPlan[si];
+					if (rpCur && rpCur.enemySideIdx !== ei) continue;
+					// Count enemy units near the threatened area
+					let enemyForceNear = 0;
+					for (const eu of _tickUnitsBySide[ei] || []) {
+						const dLat = threatTarget.lat - eu.lat;
+						let dLng = threatTarget.lng - eu.lng;
+						if (dLng > 180) dLng -= 360;
+						else if (dLng < -180) dLng += 360;
+						if (dLat * dLat + dLng * dLng < 9.0) enemyForceNear++;
+					}
+					if (enemyForceNear < 3) continue;
+					if (!rpCur) {
+						const reactForce = Math.min(
+							Math.ceil(enemyForceNear * 1.5),
+							Math.floor((_tickUnitsBySide[si]?.length || 0) * 0.3),
+						);
+						if (reactForce >= 3) {
+							_defenderReactionPlan[si] = {
+								type: "DEFEND",
+								target: {
+									lat: threatTarget.lat,
+									lng: threatTarget.lng,
+								},
+								enemySideIdx: ei,
+								phase: "EXECUTION",
+								maxUnits: reactForce,
+								activeUnitCount: 0,
+								startedTick: simFrameCount,
+								lastProgressTick: simFrameCount,
+							};
+							rpCur = _defenderReactionPlan[si];
+						}
+					}
+					if (!rpCur || rpCur.activeUnitCount >= rpCur.maxUnits) continue;
+					const slotsOpen = rpCur.maxUnits - rpCur.activeUnitCount;
+					let recruited = 0;
+					for (const u of _tickUnitsBySide[si] || []) {
+						if (u.deployTicks > 0) continue;
+						if (u.navalAssigned || u.supplyAssigned) continue;
+						if (u.coastalAssigned || u.garrisonAssigned) continue;
+						if (u._defenderReactTarget) continue;
+						const dLat = rpCur.target.lat - u.lat;
+						let dLng = rpCur.target.lng - u.lng;
+						if (dLng > 180) dLng -= 360;
+						else if (dLng < -180) dLng += 360;
+						const dSq = dLat * dLat + dLng * dLng;
+						if (dSq < 9.0 || dSq > 100.0) continue;
+						u._defenderReactTarget = {
+							lat: rpCur.target.lat,
+							lng: rpCur.target.lng,
+						};
+						recruited++;
+						if (recruited >= slotsOpen) break;
+					}
+					rpCur.activeUnitCount += recruited;
+				}
+
+				// LANDING: full reactive response
+				if (enemyNP && enemyNP.phase === "LANDING" && onOurTerritory) {
+					let enemyLandingForce = 0;
+					for (const u of _tickUnitsBySide[ei] || []) {
+						// side-filtered via _tickUnitsBySide
+						const dLat = enemyNP.target.lat - u.lat;
+						let dLng = enemyNP.target.lng - u.lng;
+						if (dLng > 180) dLng -= 360;
+						else if (dLng < -180) dLng += 360;
+						if (dLat * dLat + dLng * dLng < 4.0) enemyLandingForce++;
+					}
+
+					let rpCur2 = _defenderReactionPlan[si];
+					if (!rpCur2 && enemyLandingForce >= 3) {
 						_defenderReactionPlan[si] = {
 							type: "DEFEND",
 							target: {
@@ -8787,189 +9041,70 @@ export function evaluateAllPlans() {
 							},
 							enemySideIdx: ei,
 							phase: "EXECUTION",
-							maxUnits: preActive,
+							maxUnits: 0,
 							activeUnitCount: 0,
 							startedTick: simFrameCount,
 							lastProgressTick: simFrameCount,
 						};
 						rpCur2 = _defenderReactionPlan[si];
 					}
-				}
-				if (!rpCur2 || rpCur2.activeUnitCount >= rpCur2.maxUnits) continue;
 
-				const slotsOpen = rpCur2.maxUnits - rpCur2.activeUnitCount;
-				let recruited = 0;
-				for (const u of (_tickUnitsBySide[si] || [])) {
-					// side-filtered via _tickUnitsBySide
-					if (u.deployTicks > 0) continue;
-					if (u.navalAssigned || u.supplyAssigned) continue;
-					if (u.coastalAssigned || u.garrisonAssigned) continue;
-					if (u._defenderReactTarget) continue;
+					if (!rpCur2) continue;
 
-					const dLat = rpCur2.target.lat - u.lat;
-					let dLng = rpCur2.target.lng - u.lng;
-					if (dLng > 180) dLng -= 360;
-					else if (dLng < -180) dLng += 360;
-					const dSq = dLat * dLat + dLng * dLng;
-
-					if (dSq < 9.0 || dSq > 100.0) continue;
-
-					u._defenderReactTarget = {
-						lat: rpCur2.target.lat,
-						lng: rpCur2.target.lng,
-					};
-					recruited++;
-					if (recruited >= slotsOpen) break;
-				}
-				rpCur2.activeUnitCount += recruited;
-			}
-
-			// ---- Land threat response (enemy land plan targeting our territory) ----
-			if (!enemyNP && onOurTerritory) {
-				let rpCur = _defenderReactionPlan[si];
-				if (rpCur && rpCur.enemySideIdx !== ei) continue;
-				// Count enemy units near the threatened area
-				let enemyForceNear = 0;
-				for (const eu of (_tickUnitsBySide[ei] || [])) {
-					const dLat = threatTarget.lat - eu.lat;
-					let dLng = threatTarget.lng - eu.lng;
-					if (dLng > 180) dLng -= 360;
-					else if (dLng < -180) dLng += 360;
-					if (dLat * dLat + dLng * dLng < 9.0) enemyForceNear++;
-				}
-				if (enemyForceNear < 3) continue;
-				if (!rpCur) {
-					const reactForce = Math.min(
-						Math.ceil(enemyForceNear * 1.5),
-						Math.floor((_tickUnitsBySide[si]?.length || 0) * 0.3),
-					);
-					if (reactForce >= 3) {
-						_defenderReactionPlan[si] = {
-							type: "DEFEND",
-							target: {
-								lat: threatTarget.lat,
-								lng: threatTarget.lng,
-							},
-							enemySideIdx: ei,
-							phase: "EXECUTION",
-							maxUnits: reactForce,
-							activeUnitCount: 0,
-							startedTick: simFrameCount,
-							lastProgressTick: simFrameCount,
-						};
-						rpCur = _defenderReactionPlan[si];
+					if (enemyLandingForce < 3) {
+						if (!rpCur2._landingDefeatedTick)
+							rpCur2._landingDefeatedTick = simFrameCount;
+						continue;
 					}
+					rpCur2._landingDefeatedTick = 0;
+
+					let localDefenders = 0;
+					for (const u of _tickUnitsBySide[si] || []) {
+						// side-filtered via _tickUnitsBySide
+						if (u.deployTicks > 0) continue;
+						const dLat = enemyNP.target.lat - u.lat;
+						let dLng = enemyNP.target.lng - u.lng;
+						if (dLng > 180) dLng -= 360;
+						else if (dLng < -180) dLng += 360;
+						if (dLat * dLat + dLng * dLng < 9.0) localDefenders++;
+					}
+
+					const ratio = localDefenders / Math.max(1, enemyLandingForce);
+					if (ratio < 1.5) {
+						const needed = Math.ceil(enemyLandingForce * 1.5 - localDefenders);
+						rpCur2.maxUnits = Math.max(rpCur2.maxUnits, needed);
+					}
+
+					if (rpCur2.activeUnitCount >= rpCur2.maxUnits) continue;
+
+					const slotsOpen = rpCur2.maxUnits - rpCur2.activeUnitCount;
+					let recruited = 0;
+					for (const u of _tickUnitsBySide[si] || []) {
+						// side-filtered via _tickUnitsBySide
+						if (u.deployTicks > 0) continue;
+						if (u.navalAssigned || u.supplyAssigned) continue;
+						if (u.coastalAssigned || u.garrisonAssigned) continue;
+						if (u._defenderReactTarget) continue;
+
+						const dLat = rpCur2.target.lat - u.lat;
+						let dLng = rpCur2.target.lng - u.lng;
+						if (dLng > 180) dLng -= 360;
+						else if (dLng < -180) dLng += 360;
+						const dSq = dLat * dLat + dLng * dLng;
+
+						if (dSq < 9.0 || dSq > 100.0) continue;
+
+						u._defenderReactTarget = {
+							lat: rpCur2.target.lat,
+							lng: rpCur2.target.lng,
+						};
+						recruited++;
+						if (recruited >= slotsOpen) break;
+					}
+					rpCur2.activeUnitCount += recruited;
 				}
-				if (!rpCur || rpCur.activeUnitCount >= rpCur.maxUnits) continue;
-				const slotsOpen = rpCur.maxUnits - rpCur.activeUnitCount;
-				let recruited = 0;
-				for (const u of (_tickUnitsBySide[si] || [])) {
-					if (u.deployTicks > 0) continue;
-					if (u.navalAssigned || u.supplyAssigned) continue;
-					if (u.coastalAssigned || u.garrisonAssigned) continue;
-					if (u._defenderReactTarget) continue;
-					const dLat = rpCur.target.lat - u.lat;
-					let dLng = rpCur.target.lng - u.lng;
-					if (dLng > 180) dLng -= 360;
-					else if (dLng < -180) dLng += 360;
-					const dSq = dLat * dLat + dLng * dLng;
-					if (dSq < 9.0 || dSq > 100.0) continue;
-					u._defenderReactTarget = {
-						lat: rpCur.target.lat,
-						lng: rpCur.target.lng,
-					};
-					recruited++;
-					if (recruited >= slotsOpen) break;
-				}
-				rpCur.activeUnitCount += recruited;
-			}
-
-			// LANDING: full reactive response
-			if (enemyNP && enemyNP.phase === "LANDING" && onOurTerritory) {
-				let enemyLandingForce = 0;
-				for (const u of (_tickUnitsBySide[ei] || [])) {
-					// side-filtered via _tickUnitsBySide
-					const dLat = enemyNP.target.lat - u.lat;
-					let dLng = enemyNP.target.lng - u.lng;
-					if (dLng > 180) dLng -= 360;
-					else if (dLng < -180) dLng += 360;
-					if (dLat * dLat + dLng * dLng < 4.0) enemyLandingForce++;
-				}
-
-				let rpCur2 = _defenderReactionPlan[si];
-				if (!rpCur2 && enemyLandingForce >= 3) {
-					_defenderReactionPlan[si] = {
-						type: "DEFEND",
-						target: {
-							lat: enemyNP.target.lat,
-							lng: enemyNP.target.lng,
-						},
-						enemySideIdx: ei,
-						phase: "EXECUTION",
-						maxUnits: 0,
-						activeUnitCount: 0,
-						startedTick: simFrameCount,
-						lastProgressTick: simFrameCount,
-					};
-					rpCur2 = _defenderReactionPlan[si];
-				}
-
-				if (!rpCur2) continue;
-
-				if (enemyLandingForce < 3) {
-					if (!rpCur2._landingDefeatedTick)
-						rpCur2._landingDefeatedTick = simFrameCount;
-					continue;
-				}
-				rpCur2._landingDefeatedTick = 0;
-
-				let localDefenders = 0;
-				for (const u of (_tickUnitsBySide[si] || [])) {
-					// side-filtered via _tickUnitsBySide
-					if (u.deployTicks > 0) continue;
-					const dLat = enemyNP.target.lat - u.lat;
-					let dLng = enemyNP.target.lng - u.lng;
-					if (dLng > 180) dLng -= 360;
-					else if (dLng < -180) dLng += 360;
-					if (dLat * dLat + dLng * dLng < 9.0) localDefenders++;
-				}
-
-				const ratio = localDefenders / Math.max(1, enemyLandingForce);
-				if (ratio < 1.5) {
-					const needed = Math.ceil(enemyLandingForce * 1.5 - localDefenders);
-					rpCur2.maxUnits = Math.max(rpCur2.maxUnits, needed);
-				}
-
-				if (rpCur2.activeUnitCount >= rpCur2.maxUnits) continue;
-
-				const slotsOpen = rpCur2.maxUnits - rpCur2.activeUnitCount;
-				let recruited = 0;
-				for (const u of (_tickUnitsBySide[si] || [])) {
-					// side-filtered via _tickUnitsBySide
-					if (u.deployTicks > 0) continue;
-					if (u.navalAssigned || u.supplyAssigned) continue;
-					if (u.coastalAssigned || u.garrisonAssigned) continue;
-					if (u._defenderReactTarget) continue;
-
-					const dLat = rpCur2.target.lat - u.lat;
-					let dLng = rpCur2.target.lng - u.lng;
-					if (dLng > 180) dLng -= 360;
-					else if (dLng < -180) dLng += 360;
-					const dSq = dLat * dLat + dLng * dLng;
-
-					if (dSq < 9.0 || dSq > 100.0) continue;
-
-					u._defenderReactTarget = {
-						lat: rpCur2.target.lat,
-						lng: rpCur2.target.lng,
-					};
-					recruited++;
-					if (recruited >= slotsOpen) break;
-				}
-				rpCur2.activeUnitCount += recruited;
 			}
 		}
-	}
 	}
 
 	// ── Orphan _defenderReactTarget Cleanup ──
@@ -9014,13 +9149,13 @@ export function evaluateAllPlans() {
 		_coastalDefensePlan[si] = null;
 	}
 	for (let si = sides.length * 10; si < _neutralGarrisonPlan.length; si++) {
-		for (const u of (_tickUnitsBySide[si] || [])) {
+		for (const u of _tickUnitsBySide[si] || []) {
 			if (u.garrisonAssigned) u.garrisonAssigned = false;
 		}
 		_neutralGarrisonPlan[si] = null;
 	}
 	for (let si = sides.length; si < _defenderReactionPlan.length; si++) {
-		for (const u of (_tickUnitsBySide[si] || [])) {
+		for (const u of _tickUnitsBySide[si] || []) {
 			u._defenderReactTarget = null;
 		}
 		_defenderReactionPlan[si] = null;
@@ -9030,36 +9165,104 @@ export function evaluateAllPlans() {
 
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
-	if (!window.__perf) window.__perf = {
-		_version: "V0.26.1",
-		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
-		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
-		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
-		spatialHash: 0, frontline: 0, consolidate: 0, caches: 0,
-		victory: 0, aiPosture: 0, posture: 0, render: 0,
-		tickTotal: 0, maxTick: 0, ticks: 0,
-		proposalRuns: 0, proposalFailed: 0,
-		reassess_noPlan: 0, reassess_interval: 0, reassess_forced: 0,
-		reassess_territory: 0, reassess_posture: 0, reassess_ratio: 0,
-		// unitLoop sub-timers
-		unitSetupTerrain: 0, unitSpatialHash: 0, unitEnemyScan: 0, unitAllyScan: 0,
-		unitRetreatMopUp: 0, unitCombatMove: 0,
-		// Water avoidance debug counters
-		coastDeflectHalved: 0, knockbackBlocked: 0,
-		waterPathPenalized: 0, coastStuckAbandoned: 0,
-	};
+	if (!window.__perf)
+		window.__perf = {
+			_version: "V0.26.1",
+			plans: 0,
+			proposals: 0,
+			eval: 0,
+			neutralBorder: 0,
+			recruit: 0,
+			unitLoop: 0,
+			post: 0,
+			prePlans: 0,
+			influence: 0,
+			smoothing: 0,
+			phase0: 0,
+			phase67: 0,
+			phase133: 0,
+			spatialHash: 0,
+			frontline: 0,
+			consolidate: 0,
+			caches: 0,
+			victory: 0,
+			aiPosture: 0,
+			posture: 0,
+			render: 0,
+			tickTotal: 0,
+			maxTick: 0,
+			ticks: 0,
+			proposalRuns: 0,
+			proposalFailed: 0,
+			reassess_noPlan: 0,
+			reassess_interval: 0,
+			reassess_forced: 0,
+			reassess_territory: 0,
+			reassess_posture: 0,
+			reassess_ratio: 0,
+			// unitLoop sub-timers
+			unitSetupTerrain: 0,
+			unitSpatialHash: 0,
+			unitEnemyScan: 0,
+			unitAllyScan: 0,
+			unitRetreatMopUp: 0,
+			unitCombatMove: 0,
+			// Water avoidance debug counters
+			coastDeflectHalved: 0,
+			knockbackBlocked: 0,
+			waterPathPenalized: 0,
+			coastStuckAbandoned: 0,
+		};
 	window.__perf.ticks++;
 	// ── Perf snapshot for per-tick delta computation ──
 	const _perfSnap = {};
-	const _perfKeys = ['plans','proposals','eval','neutralBorder','recruit','unitLoop','post',
-		'prePlans','influence','smoothing','phase0','phase67','phase133',
-		'spatialHash','frontline','consolidate','caches','victory','aiPosture','posture','render',
-		'unitSetupTerrain','unitSpatialHash','unitEnemyScan','unitAllyScan',
-		'unitRetreatMopUp','unitCombatMove'];
+	const _perfKeys = [
+		"plans",
+		"proposals",
+		"eval",
+		"neutralBorder",
+		"recruit",
+		"unitLoop",
+		"post",
+		"prePlans",
+		"influence",
+		"smoothing",
+		"phase0",
+		"phase67",
+		"phase133",
+		"spatialHash",
+		"frontline",
+		"consolidate",
+		"caches",
+		"victory",
+		"aiPosture",
+		"posture",
+		"render",
+		"unitSetupTerrain",
+		"unitSpatialHash",
+		"unitEnemyScan",
+		"unitAllyScan",
+		"unitRetreatMopUp",
+		"unitCombatMove",
+	];
 	for (const k of _perfKeys) _perfSnap[k] = window.__perf[k] || 0;
-	for (const k of ['proposalRuns','proposalFailed','reassess_noPlan','reassess_interval','reassess_forced','reassess_territory','reassess_posture','reassess_ratio'])
+	for (const k of [
+		"proposalRuns",
+		"proposalFailed",
+		"reassess_noPlan",
+		"reassess_interval",
+		"reassess_forced",
+		"reassess_territory",
+		"reassess_posture",
+		"reassess_ratio",
+	])
 		_perfSnap[k] = window.__perf[k] || 0;
-	for (const k of ['coastDeflectHalved','knockbackBlocked','waterPathPenalized','coastStuckAbandoned'])
+	for (const k of [
+		"coastDeflectHalved",
+		"knockbackBlocked",
+		"waterPathPenalized",
+		"coastStuckAbandoned",
+	])
 		_perfSnap[k] = window.__perf[k] || 0;
 	_simTickCount++;
 	let _dbgLogCount = 999999; // DEBUG: throttled out (was 0)
@@ -9080,14 +9283,23 @@ export function performSimulationTick() {
 			targetUnit.health <= 0
 		) {
 			if (simFrameCount > 100 && simFrameCount < 500 && _dbgLogCount++ < 200) {
-				console.warn('[RECD-DBG] recordDamage REJECTED:',
-					'isNaN(dmg)=', Number.isNaN(dmg),
-					'dmg=', dmg,
-					'dmg<=0=', dmg <= 0,
-					'isNaN(health)=', Number.isNaN(targetUnit.health),
-					'health<=0=', targetUnit.health <= 0,
-					'targetSideIdx=', targetUnit.sideIndex,
-					'attackerSideIdx=', attackerUnit?.sideIndex);
+				console.warn(
+					"[RECD-DBG] recordDamage REJECTED:",
+					"isNaN(dmg)=",
+					Number.isNaN(dmg),
+					"dmg=",
+					dmg,
+					"dmg<=0=",
+					dmg <= 0,
+					"isNaN(health)=",
+					Number.isNaN(targetUnit.health),
+					"health<=0=",
+					targetUnit.health <= 0,
+					"targetSideIdx=",
+					targetUnit.sideIndex,
+					"attackerSideIdx=",
+					attackerUnit?.sideIndex,
+				);
 			}
 			return;
 		}
@@ -9099,7 +9311,6 @@ export function performSimulationTick() {
 				? soldiersPerUnit[sIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO
 				: CONFIG.UNIT_TO_SOLDIER_RATIO;
 		const loss = (effectiveDmg / CONFIG.UNIT_HEALTH) * ratio;
-
 
 		const currentTotal = countryCasualties.get(targetUnit.sovereignId) || 0;
 		countryCasualties.set(targetUnit.sovereignId, currentTotal + loss);
@@ -9119,7 +9330,8 @@ export function performSimulationTick() {
 	// Random wars can still be started manually from the setup screen via the Random War button.
 
 	// 0. Initialize Tick Caches early to avoid access-before-initialization errors
-	activeBattles = []; _battleHash.clear();
+	activeBattles = [];
+	_battleHash.clear();
 	latestCountryStats.clear();
 	const countryStats = latestCountryStats;
 	_tickCombatantIds.clear();
@@ -9153,7 +9365,8 @@ export function performSimulationTick() {
 
 	// 1. Update territory
 	updatePersistentInfluence(p1UnitsCount, p2UnitsCount, countryToSideMap);
-	window.__perf.influence = (window.__perf.influence || 0) + performance.now() - _tInfluence;
+	window.__perf.influence =
+		(window.__perf.influence || 0) + performance.now() - _tInfluence;
 
 	// 1a. Occupancy Smoothing: Occasionally clean up primaryOccupierMap during war to prevent speckling
 	const _tSmooth = performance.now();
@@ -9206,7 +9419,8 @@ export function performSimulationTick() {
 			primaryOccupierMap[modified[i].idx] = modified[i].dominantAlly;
 		}
 	}
-	window.__perf.smoothing = (window.__perf.smoothing || 0) + performance.now() - _tSmooth;
+	window.__perf.smoothing =
+		(window.__perf.smoothing || 0) + performance.now() - _tSmooth;
 
 	// 1b. Territorial Integrity: Collapse deep pockets and isolated protrusions (Enclaves/Exclaves)
 	// We sample the grid to find territory that is surrounded by the enemy.
@@ -9269,7 +9483,8 @@ export function performSimulationTick() {
 				syncOccupationFromSideInfluence(idx);
 			}
 		}
-		window.__perf.phase0 = (window.__perf.phase0 || 0) + performance.now() - _tP0;
+		window.__perf.phase0 =
+			(window.__perf.phase0 || 0) + performance.now() - _tP0;
 	} // end territorial integrity
 
 	// 2. Statistics & Soldiers (Dynamic based on units)
@@ -9287,7 +9502,8 @@ export function performSimulationTick() {
 		}
 		_cachedP1T = p1Tmp;
 		_cachedP2T = p2Tmp;
-		window.__perf.phase67 = (window.__perf.phase67 || 0) + performance.now() - _tP67;
+		window.__perf.phase67 =
+			(window.__perf.phase67 || 0) + performance.now() - _tP67;
 	}
 	const p1T = _cachedP1T,
 		p2T = _cachedP2T;
@@ -9334,7 +9550,8 @@ export function performSimulationTick() {
 			sArr.push(u);
 		}
 	}
-	window.__perf.spatialHash = (window.__perf.spatialHash || 0) + performance.now() - _tsh;
+	window.__perf.spatialHash =
+		(window.__perf.spatialHash || 0) + performance.now() - _tsh;
 
 	const _tFrontline = performance.now();
 	// OPT-1: Rebuild frontline direction field every N ticks via Web Worker.
@@ -9366,7 +9583,8 @@ export function performSimulationTick() {
 		_frontlinePolyTick = simFrameCount;
 		assignFrontlineSlots();
 	}
-	window.__perf.frontline = (window.__perf.frontline || 0) + performance.now() - _tFrontline;
+	window.__perf.frontline =
+		(window.__perf.frontline || 0) + performance.now() - _tFrontline;
 
 	const _tConsolidate = performance.now();
 	// --- UNIT CONSOLIDATION (Merge Stacks) ---
@@ -9405,7 +9623,9 @@ export function performSimulationTick() {
 				if (
 					other === u ||
 					unitsToRemove.has(other) ||
-					(CONFIG.ENABLE_SIDE_HASH_COMBAT ? false : other.sideIndex === u.sideIndex) ||
+					(CONFIG.ENABLE_SIDE_HASH_COMBAT
+						? false
+						: other.sideIndex === u.sideIndex) ||
 					other.sovereignId !== u.sovereignId ||
 					other.deployTicks > 0
 				)
@@ -9441,7 +9661,8 @@ export function performSimulationTick() {
 			// No action needed here as personnel display derives from live unit health.
 		}
 	}
-	window.__perf.consolidate = (window.__perf.consolidate || 0) + performance.now() - _tConsolidate;
+	window.__perf.consolidate =
+		(window.__perf.consolidate || 0) + performance.now() - _tConsolidate;
 	if (shouldScanFrontier) {
 		const _tP133 = performance.now();
 		recalculateAllBounds();
@@ -9513,7 +9734,8 @@ export function performSimulationTick() {
 				}
 			}
 		});
-		window.__perf.phase133 = (window.__perf.phase133 || 0) + performance.now() - _tP133;
+		window.__perf.phase133 =
+			(window.__perf.phase133 || 0) + performance.now() - _tP133;
 	} else {
 		// Carry over stats from the last "counting" frame.
 		// For unitless countries, never inflate controlled/owned to initialCells —
@@ -9704,7 +9926,8 @@ export function performSimulationTick() {
 	// --- COUNTRY AI POSTURE (Desperation + realism tuning) ---
 	// Recomputed on counting frames and reused between them.
 	const _tAiPosture = performance.now();
-	window.__perf.victory = (window.__perf.victory || 0) + performance.now() - _tVictory;
+	window.__perf.victory =
+		(window.__perf.victory || 0) + performance.now() - _tVictory;
 	if (shouldCountLand) {
 		sides.flat().forEach((country) => {
 			if (!country) return;
@@ -9750,7 +9973,8 @@ export function performSimulationTick() {
 			// UNDER_MOBILIZED: safe territory but severely under‑armied relative to manpower pool
 			const countrySideIdx = countryToSideMap.get(country.id);
 			const deployedPersonnel =
-				stats.units * (soldiersPerUnit[countrySideIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO);
+				stats.units *
+				(soldiersPerUnit[countrySideIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO);
 			const mobilizationRatio =
 				deployedPersonnel / Math.max(1, initialSideSoldiers[countrySideIdx]);
 			const canUseUnderMobilized = mobilizationRatio < 0.75;
@@ -9837,10 +10061,7 @@ export function performSimulationTick() {
 
 			// Total war strategies (TURTLE, BLITZ): all-in mobilization
 			// 4x unit cap, 6x recruitment speed — meat grinder that sustains itself
-			if (
-				country.strategy === "TURTLE" ||
-				country.strategy === "BLITZ"
-			) {
+			if (country.strategy === "TURTLE" || country.strategy === "BLITZ") {
 				profile.recruitCapMult *= 4.0;
 				profile.recruitChanceMult *= 6.0;
 			}
@@ -9848,7 +10069,8 @@ export function performSimulationTick() {
 			aiCountryState.set(country.id, profile);
 		});
 	}
-	window.__perf.aiPosture = (window.__perf.aiPosture || 0) + performance.now() - _tAiPosture;
+	window.__perf.aiPosture =
+		(window.__perf.aiPosture || 0) + performance.now() - _tAiPosture;
 
 	// ── Auto Posture: per-side strength ratio → OFFENSIVE/BALANCED/DEFENSIVE ──
 	const _tpo = performance.now();
@@ -9922,11 +10144,16 @@ export function performSimulationTick() {
 				if (prof) {
 					prof.forceDefensive = true;
 					// Scale defensive severity by manpower: lower MP = tighter defense
-					const mpRatio = initialSideSoldiers[si] > 0
-						? Math.max(0, sideSoldiers[si] / initialSideSoldiers[si])
-						: 0;
-					const defensiveScale = mpRatio < 0.25 ? 0.6 : mpRatio < 0.5 ? 0.8 : 1.0;
-					prof.frontlineBlend = Math.min(prof.frontlineBlend, 0.3 * defensiveScale);
+					const mpRatio =
+						initialSideSoldiers[si] > 0
+							? Math.max(0, sideSoldiers[si] / initialSideSoldiers[si])
+							: 0;
+					const defensiveScale =
+						mpRatio < 0.25 ? 0.6 : mpRatio < 0.5 ? 0.8 : 1.0;
+					prof.frontlineBlend = Math.min(
+						prof.frontlineBlend,
+						0.3 * defensiveScale,
+					);
 					prof.speedMult = Math.min(prof.speedMult, 0.96 * defensiveScale);
 				}
 			});
@@ -9942,9 +10169,11 @@ export function performSimulationTick() {
 	}
 
 	// Evaluate war plans — check completion/failure, regenerate if needed
-	window.__perf.posture = (window.__perf.posture || 0) + performance.now() - _tpo;
+	window.__perf.posture =
+		(window.__perf.posture || 0) + performance.now() - _tpo;
 	// Cumulative pre-plans profiler: everything from tick start (_t0) to here
-	window.__perf.prePlans = (window.__perf.prePlans || 0) + performance.now() - _t0;
+	window.__perf.prePlans =
+		(window.__perf.prePlans || 0) + performance.now() - _t0;
 	const _t1 = performance.now();
 	evaluateAllPlans();
 	window.__perf.plans += performance.now() - _t1;
@@ -9952,7 +10181,11 @@ export function performSimulationTick() {
 	// ── Compute neutral border polylines (throttled to every 60 ticks) ──
 	const _tn = performance.now();
 	const NEUTRAL_BORDER_INTERVAL = 60;
-	if (adjacencyCache && (simFrameCount % NEUTRAL_BORDER_INTERVAL === 0 || Object.keys(_neutralBorderPolys).length === 0)) {
+	if (
+		adjacencyCache &&
+		(simFrameCount % NEUTRAL_BORDER_INTERVAL === 0 ||
+			Object.keys(_neutralBorderPolys).length === 0)
+	) {
 		_neutralBorderPolys = {};
 
 		// Identify combatant countries with neutral neighbors
@@ -10074,17 +10307,24 @@ export function performSimulationTick() {
 				absoluteCap = Math.min(absoluteCap, 5);
 			}
 			// MANPOWER: hard cap based on remaining side manpower
-			const mpCap = sideSoldiers[sIdx] > 0
-				? Math.ceil(sideSoldiers[sIdx] / (soldiersPerUnit[sIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO))
-				: 0;
+			const mpCap =
+				sideSoldiers[sIdx] > 0
+					? Math.ceil(
+							sideSoldiers[sIdx] /
+								(soldiersPerUnit[sIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO),
+						)
+					: 0;
 			if (mpCap === 0 && sideSoldiers[sIdx] <= 0) {
 				absoluteCap = 0; // no manpower = no more troops
 			} else if (mpCap > 0) {
 				absoluteCap = Math.min(absoluteCap, mpCap);
 			}
 
-			const isTotalWar = country.strategy === "TURTLE" || country.strategy === "BLITZ";
-			const overcapLimit = isTotalWar ? Math.floor(absoluteCap * 1.2) : absoluteCap;
+			const isTotalWar =
+				country.strategy === "TURTLE" || country.strategy === "BLITZ";
+			const overcapLimit = isTotalWar
+				? Math.floor(absoluteCap * 1.2)
+				: absoluteCap;
 			if (currentUnits < overcapLimit) {
 				const controlRatio = currentLand / initialLand;
 				const cityCountLocal = countryToCityCount.get(country.id) || 0;
@@ -10130,21 +10370,26 @@ export function performSimulationTick() {
 				// If the capital is lost, recruitment almost collapses
 				if (supplyFailed) {
 					recruitmentChance *= 0.1; // 90% reduction in new troops
-				// MANPOWER: scale recruitment chance by remaining manpower ratio
-				// At 50% manpower: 70% chance. At 25%: 35%. At 0%: no recruits.
-				if (initialSideSoldiers[sIdx] > 0) {
-					const mpRatio = Math.max(0, sideSoldiers[sIdx] / initialSideSoldiers[sIdx]);
-					if (mpRatio <= 0) {
-						recruitmentChance = 0; // no manpower = no new units
-					} else {
-						recruitmentChance *= Math.min(1, mpRatio * 2); // linear scale, capped at 100%
+					// MANPOWER: scale recruitment chance by remaining manpower ratio
+					// At 50% manpower: 70% chance. At 25%: 35%. At 0%: no recruits.
+					if (initialSideSoldiers[sIdx] > 0) {
+						const mpRatio = Math.max(
+							0,
+							sideSoldiers[sIdx] / initialSideSoldiers[sIdx],
+						);
+						if (mpRatio <= 0) {
+							recruitmentChance = 0; // no manpower = no new units
+						} else {
+							recruitmentChance *= Math.min(1, mpRatio * 2); // linear scale, capped at 100%
+						}
 					}
 				}
 
-				}
-
 				// Cap-fill urgency: the more empty the army, the harder they draft
-				const capFillRatio = Math.min(1, currentUnits / Math.max(1, absoluteCap));
+				const capFillRatio = Math.min(
+					1,
+					currentUnits / Math.max(1, absoluteCap),
+				);
 				const capFillMult = 1.0 + (1 - capFillRatio) * 3.0; // 1× at full → 4× at empty
 				recruitmentChance *= capFillMult;
 				// Total war double-dip: extra recruitment pressure when losses mount
@@ -10197,7 +10442,10 @@ export function performSimulationTick() {
 	// Pre-build city grid index Set once per tick (not per unit)
 	const _cityIdxSetTick = new Set();
 	for (let _cci = 0; _cci < activeTheaterCities.length; _cci++) {
-		const _cIdx = getGridIndex(activeTheaterCities[_cci].lat, activeTheaterCities[_cci].lng);
+		const _cIdx = getGridIndex(
+			activeTheaterCities[_cci].lat,
+			activeTheaterCities[_cci].lng,
+		);
 		if (_cIdx !== -1) _cityIdxSetTick.add(_cIdx);
 	}
 	// Pre-build city-by-sovereign Map for O(1) lookup in combat (replaces O(C) activeTheaterCities.find)
@@ -10206,7 +10454,10 @@ export function performSimulationTick() {
 		const city = activeTheaterCities[_cci];
 		if (!city.sovereignId) continue;
 		let arr = _theaterCitiesBySovereign.get(city.sovereignId);
-		if (!arr) { arr = []; _theaterCitiesBySovereign.set(city.sovereignId, arr); }
+		if (!arr) {
+			arr = [];
+			_theaterCitiesBySovereign.set(city.sovereignId, arr);
+		}
 		arr.push(city);
 	}
 	for (let i = units.length - 1; i >= 0; i--) {
@@ -10438,9 +10689,19 @@ export function performSimulationTick() {
 		}
 		const isEncircled = encirclementFactor > 0.875;
 
+		// Track encirclement duration for escalating pressure
+		if (isEncircled) {
+			u.encircledTicks = (u.encircledTicks || 0) + 1;
+		} else {
+			u.encircledTicks = 0;
+		}
+
 		if (isEncircled && !isMega && !isSuper) {
-			damageDealtMult *= 0.25; // Massive reduction in combat effectiveness
-			damageTakenMult *= 4.0; // Extremely vulnerable to attacks
+			// Escalating penalty: longer encirclement = worse combat effectiveness
+			const encircleDuration =
+				u.encircledTicks > 180 ? 0.15 : u.encircledTicks > 60 ? 0.2 : 0.25;
+			damageDealtMult *= encircleDuration;
+			damageTakenMult *= 4.0;
 		}
 
 		// Attrition logic: logistics strain increases the further you push into large nations
@@ -10478,7 +10739,18 @@ export function performSimulationTick() {
 				logisticsPenalty *
 				warFatigueFactor;
 
-			if (isEncircled) dmg *= CONFIG.ENCIRCLEMENT_DAMAGE_MULT;
+			if (isEncircled) {
+				// Escalating attrition: longer encirclement = faster death
+				const encircleTickScale =
+					u.encircledTicks > 360
+						? 4.0
+						: u.encircledTicks > 180
+							? 2.5
+							: u.encircledTicks > 60
+								? 1.5
+								: 1.0;
+				dmg *= CONFIG.ENCIRCLEMENT_DAMAGE_MULT * encircleTickScale;
+			}
 			// SUPPLY CUT-OFF: units deep in enemy territory with no friendly tiles nearby
 			// take extreme damage — they're completely isolated from logistics.
 			if (inEnemyTerritory && !isEncircled && !isAtSea) {
@@ -10490,8 +10762,10 @@ export function performSimulationTick() {
 				for (let dr = -cutoffRadius; dr <= cutoffRadius; dr++) {
 					for (let dc = -cutoffRadius; dc <= cutoffRadius; dc++) {
 						if (dr === 0 && dc === 0) continue;
-						const nr = cRow + dr, nc = cCol + dc;
-						if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
+						const nr = cRow + dr,
+							nc = cCol + dc;
+						if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth)
+							continue;
 						const ni = nr * gr + nc;
 						if (landMask[ni] > 0 && dominantSideMap[ni] === u.sideIndex) {
 							friendlyTilesNearby++;
@@ -10563,7 +10837,8 @@ export function performSimulationTick() {
 		}
 
 		// ── unitLoop sub-timer checkpoint: end setupTerrain, start unitSpatialHash ──
-		const _u2 = performance.now(); window.__perf.unitSetupTerrain += _u2 - _u1;
+		const _u2 = performance.now();
+		window.__perf.unitSetupTerrain += _u2 - _u1;
 
 		// Tactical Awareness: Identify enemies and local balance of power using O(1) Spatial Hash
 		let target = null;
@@ -10602,23 +10877,34 @@ export function performSimulationTick() {
 
 		// War-plan movement variables — declared here so both scan paths can use them
 		let planSpeedMult = 1.0;
-		let planDirLat = 0, planDirLng = 0, isPlanUnit = false;
+		let planDirLat = 0,
+			planDirLng = 0,
+			isPlanUnit = false;
 
 		// Active units search adjacent 3×3 hash cells; idle units widen to 5×5
 		const fullScan = !isTacticallyIdle;
-		const skipAllyScan = u.navalAssigned || u.supplyAssigned || u.coastalAssigned;
+		const skipAllyScan =
+			u.navalAssigned || u.supplyAssigned || u.coastalAssigned;
 		if (CONFIG.ENABLE_SIDE_HASH_COMBAT) {
 			// ═══ Phase 1: side-separated spatial hash scan ═══
 			if (!window.__perf._sideHashLogged) {
 				window.__perf._sideHashLogged = true;
-				console.info('%c⚡ Phase 1 active: side-separated spatial hash scan','color:#0f0;font-size:14px');
+				console.info(
+					"%c⚡ Phase 1 active: side-separated spatial hash scan",
+					"color:#0f0;font-size:14px",
+				);
 			}
 
 			// ── Phase 3: stale-target skip ──
 			let didStaleSkip = false;
-			if (CONFIG.ENABLE_STALE_TARGET_SKIP && u._cachedTarget && u._cachedTarget.health > 0) {
+			if (
+				CONFIG.ENABLE_STALE_TARGET_SKIP &&
+				u._cachedTarget &&
+				u._cachedTarget.health > 0
+			) {
 				const movedCell = u._cachedScanKx !== kx || u._cachedScanKy !== ky;
-				const staggerSkip = (simFrameCount + u.id * 7) % CONFIG.STALE_TARGET_SCAN_INTERVAL !== 0;
+				const staggerSkip =
+					(simFrameCount + u.id * 7) % CONFIG.STALE_TARGET_SCAN_INTERVAL !== 0;
 				if (!movedCell && staggerSkip) {
 					const cached = u._cachedTarget;
 					let deLng = cached.lng - u.lng;
@@ -10640,25 +10926,35 @@ export function performSimulationTick() {
 									damageDealtMult *
 									(1.0 - Math.sqrt(cdSq) / 0.3);
 								if (isAtSea && eAtSea) proximityDamage *= 2.2;
-								if (cached.isTransport && !u.isTransport) proximityDamage *= 1.05;
+								if (cached.isTransport && !u.isTransport)
+									proximityDamage *= 1.05;
 								if (u.isTransport && !cached.isTransport) {
-									recordDamage(u, proximityDamage * 1.05 * damageTakenMult, cached);
+									recordDamage(
+										u,
+										proximityDamage * 1.05 * damageTakenMult,
+										cached,
+									);
 									proximityDamage *= 0.85;
 								}
 								recordDamage(cached, proximityDamage, u);
-								recordDamage(u, proximityDamage * 0.8 * damageTakenMult, cached);
+								recordDamage(
+									u,
+									proximityDamage * 0.8 * damageTakenMult,
+									cached,
+								);
 								u.lastCombatTick = simFrameCount;
 								cached.lastCombatTick = simFrameCount;
 								if (cached.health <= 0) u.victoryBoostTicks = 240;
 								const battleLat = (u.lat + cached.lat) / 2;
 								const battleLng = (u.lng + cached.lng) / 2;
-								const bKey = Math.round(battleLat * 10) + ',' + Math.round(battleLng * 10);
+								const bKey = `${Math.round(battleLat * 10)},${Math.round(battleLng * 10)}`;
 								let existing = null;
 								for (let bk = -1; bk <= 1 && !existing; bk++) {
 									for (let bl = -1; bl <= 1 && !existing; bl++) {
-										const nk = Math.round(battleLat * 10) + bk + ',' + (Math.round(battleLng * 10) + bl);
+										const nk = `${Math.round(battleLat * 10) + bk},${Math.round(battleLng * 10) + bl}`;
 										const b = _battleHash.get(nk);
-										if (b && (u.lat - b.lat) ** 2 + (u.lng - b.lng) ** 2 < 0.16) existing = b;
+										if (b && (u.lat - b.lat) ** 2 + (u.lng - b.lng) ** 2 < 0.16)
+											existing = b;
 									}
 								}
 								if (existing) {
@@ -10669,10 +10965,14 @@ export function performSimulationTick() {
 									existing.lng =
 										(existing.lng * (existing.participants - 1) + battleLng) /
 										existing.participants;
-									const newKey = Math.round(existing.lat * 10) + ',' + Math.round(existing.lng * 10);
+									const newKey = `${Math.round(existing.lat * 10)},${Math.round(existing.lng * 10)}`;
 									if (newKey !== bKey) _battleHash.set(newKey, existing);
 								} else {
-									const battle = { lat: battleLat, lng: battleLng, participants: 2 };
+									const battle = {
+										lat: battleLat,
+										lng: battleLng,
+										participants: 2,
+									};
 									activeBattles.push(battle);
 									_battleHash.set(bKey, battle);
 								}
@@ -10684,137 +10984,161 @@ export function performSimulationTick() {
 
 			// ── Enemy pass: iterate each enemy side's hash cells ──
 			if (!didStaleSkip) {
-			for (let ei = 0; ei < sides.length; ei++) {
-				if (ei === sideIndex) continue;
-				const eHash = unitHashBySide[ei];
-				for (let dy = -2; dy <= 2; dy++) {
-					for (let dx = -2; dx <= 2; dx++) {
-						if (fullScan && (dx < -1 || dx > 1 || dy < -1 || dy > 1)) continue;
-						let cx = kx + dx;
-						const cy = ky + dy;
-						if (cx < 0) cx += maxKx;
-						else if (cx >= maxKx) cx -= maxKx;
-						const arr = eHash.get(cx * 100 + cy);
-						if (!arr) continue;
-						for (let j = 0; j < arr.length; j++) {
-							const e = arr[j];
-							let deLng = e.lng - u.lng;
-							if (deLng > 180) deLng -= 360;
-							else if (deLng < -180) deLng += 360;
-							const dSq = (u.lat - e.lat) ** 2 + deLng ** 2;
-							// (enemy — no isEnemy check; bucket is enemy-only)
-							const eIdx = _unitGridIdx.get(e) ?? -1;
-							const eAtSea = eIdx === -1 || landMask[eIdx] === 0;
-							if ((effectiveDefensive || isRebelUnit) && !isAtSea) {
-								const isEnemyInMyMandatedLand =
-									eIdx !== -1 &&
-									(isRebelUnit
-										? deJureMap[eIdx] === u.sovereignId
-										: worldControlMap[eIdx] === u.sovereignId);
-								if (!isEnemyInMyMandatedLand && dSq > 0.25) continue;
-							}
-							const distMult = eAtSea && !isAtSea ? 50.0 : 1.0;
-							const noisyDSq = dSq * distMult;
-							const healthModifier = Math.max(0, 1.0 - (e.health || 100) / 100) * 0.02;
-							const eCountry = _countryById.get(e.sovereignId);
-							let eBuff = eCountry?.buffState || "none";
-							const superPenalty = (!isMega && !isSuper && (eBuff === "super" || eBuff === "godly")) ? 5.0 : 0;
-							let targetScore = noisyDSq - healthModifier + superPenalty;
-							if (targetScore < minDist) {
-								// Water-path check: penalize land enemies unreachable by land
-								if (!isAtSea && !eAtSea && dSq > 4.0) {
-									const lineLen = Math.sqrt(dSq);
-									const steps = Math.min(12, Math.ceil(lineLen / 0.4));
-									let waterSamples = 0;
-									for (let s = 1; s < steps; s++) {
-										const t = s / steps;
-										const wIdx = getGridIndex(
-											u.lat + (e.lat - u.lat) * t,
-											u.lng + deLng * t,
-										);
-										if (wIdx !== -1 && landMask[wIdx] === 0) waterSamples++;
-									}
-									if (waterSamples > steps * 0.3) {
-										targetScore += 10000;
-										window.__perf.waterPathPenalized = (window.__perf.waterPathPenalized || 0) + 1;
-									}
+				for (let ei = 0; ei < sides.length; ei++) {
+					if (ei === sideIndex) continue;
+					const eHash = unitHashBySide[ei];
+					for (let dy = -2; dy <= 2; dy++) {
+						for (let dx = -2; dx <= 2; dx++) {
+							if (fullScan && (dx < -1 || dx > 1 || dy < -1 || dy > 1))
+								continue;
+							let cx = kx + dx;
+							const cy = ky + dy;
+							if (cx < 0) cx += maxKx;
+							else if (cx >= maxKx) cx -= maxKx;
+							const arr = eHash.get(cx * 100 + cy);
+							if (!arr) continue;
+							for (let j = 0; j < arr.length; j++) {
+								const e = arr[j];
+								let deLng = e.lng - u.lng;
+								if (deLng > 180) deLng -= 360;
+								else if (deLng < -180) deLng += 360;
+								const dSq = (u.lat - e.lat) ** 2 + deLng ** 2;
+								// (enemy — no isEnemy check; bucket is enemy-only)
+								const eIdx = _unitGridIdx.get(e) ?? -1;
+								const eAtSea = eIdx === -1 || landMask[eIdx] === 0;
+								if ((effectiveDefensive || isRebelUnit) && !isAtSea) {
+									const isEnemyInMyMandatedLand =
+										eIdx !== -1 &&
+										(isRebelUnit
+											? deJureMap[eIdx] === u.sovereignId
+											: worldControlMap[eIdx] === u.sovereignId);
+									if (!isEnemyInMyMandatedLand && dSq > 0.25) continue;
 								}
+								const distMult = eAtSea && !isAtSea ? 50.0 : 1.0;
+								const noisyDSq = dSq * distMult;
+								const healthModifier =
+									Math.max(0, 1.0 - (e.health || 100) / 100) * 0.02;
+								const eCountry = _countryById.get(e.sovereignId);
+								const eBuff = eCountry?.buffState || "none";
+								const superPenalty =
+									!isMega &&
+									!isSuper &&
+									(eBuff === "super" || eBuff === "godly")
+										? 5.0
+										: 0;
+								let targetScore = noisyDSq - healthModifier + superPenalty;
 								if (targetScore < minDist) {
-									minDist = targetScore;
-									target = e;
-								}
-							}
-							if (dSq < tacticalRadiusSq) {
-								let eWeight = 1;
-								if (eAtSea) eWeight *= isAtSea ? 0.6 : 0.2;
-								if (eBuff === "super") eWeight *= 200;
-								else if (eBuff === "buff") eWeight *= 50;
-								localEnemyCount += eWeight;
-								enemyCentroidLat += e.lat * eWeight;
-								enemyCentroidLng += e.lng * eWeight;
-								if (dSq < 0.09) {
-									const inWarGrace = simFrameCount < warGraceEndTick;
-									if (inWarGrace) continue;
-									let proximityDamage =
-										CONFIG.COMBAT_DAMAGE *
-										0.45 *
-										damageDealtMult *
-										(1.0 - Math.sqrt(dSq) / 0.3);
-									if (isAtSea && eAtSea) proximityDamage *= 2.2;
-									if (e.isTransport && !u.isTransport) proximityDamage *= 1.05;
-									if (u.isTransport && !e.isTransport) {
-										recordDamage(u, proximityDamage * 1.05 * damageTakenMult, e);
-										proximityDamage *= 0.85;
-									}
-									recordDamage(e, proximityDamage, u);
-									recordDamage(u, proximityDamage * 0.8 * damageTakenMult, e);
-									u.lastCombatTick = simFrameCount;
-									e.lastCombatTick = simFrameCount;
-									if (e.health <= 0) u.victoryBoostTicks = 240;
-									const battleLat = (u.lat + e.lat) / 2;
-									const battleLng = (u.lng + e.lng) / 2;
-									const bKey = Math.round(battleLat * 10) + ',' + Math.round(battleLng * 10);
-									let existing = null;
-									for (let bk = -1; bk <= 1 && !existing; bk++) {
-										for (let bl = -1; bl <= 1 && !existing; bl++) {
-											const nk = Math.round(battleLat * 10) + bk + ',' + (Math.round(battleLng * 10) + bl);
-											const b = _battleHash.get(nk);
-											if (b && (u.lat - b.lat) ** 2 + (u.lng - b.lng) ** 2 < 0.16) existing = b;
+									// Water-path check: penalize land enemies unreachable by land
+									if (!isAtSea && !eAtSea && dSq > 4.0) {
+										const lineLen = Math.sqrt(dSq);
+										const steps = Math.min(12, Math.ceil(lineLen / 0.4));
+										let waterSamples = 0;
+										for (let s = 1; s < steps; s++) {
+											const t = s / steps;
+											const wIdx = getGridIndex(
+												u.lat + (e.lat - u.lat) * t,
+												u.lng + deLng * t,
+											);
+											if (wIdx !== -1 && landMask[wIdx] === 0) waterSamples++;
+										}
+										if (waterSamples > steps * 0.3) {
+											targetScore += 10000;
+											window.__perf.waterPathPenalized =
+												(window.__perf.waterPathPenalized || 0) + 1;
 										}
 									}
-									if (existing) {
-										existing.participants++;
-										existing.lat =
-											(existing.lat * (existing.participants - 1) + battleLat) /
-											existing.participants;
-										existing.lng =
-											(existing.lng * (existing.participants - 1) + battleLng) /
-											existing.participants;
-										const newKey = Math.round(existing.lat * 10) + ',' + Math.round(existing.lng * 10);
-										if (newKey !== bKey) _battleHash.set(newKey, existing);
-									} else {
-										const battle = { lat: battleLat, lng: battleLng, participants: 2 };
-										activeBattles.push(battle);
-										_battleHash.set(bKey, battle);
+									if (targetScore < minDist) {
+										minDist = targetScore;
+										target = e;
+									}
+								}
+								if (dSq < tacticalRadiusSq) {
+									let eWeight = 1;
+									if (eAtSea) eWeight *= isAtSea ? 0.6 : 0.2;
+									if (eBuff === "super") eWeight *= 200;
+									else if (eBuff === "buff") eWeight *= 50;
+									localEnemyCount += eWeight;
+									enemyCentroidLat += e.lat * eWeight;
+									enemyCentroidLng += e.lng * eWeight;
+									if (dSq < 0.09) {
+										const inWarGrace = simFrameCount < warGraceEndTick;
+										if (inWarGrace) continue;
+										let proximityDamage =
+											CONFIG.COMBAT_DAMAGE *
+											0.45 *
+											damageDealtMult *
+											(1.0 - Math.sqrt(dSq) / 0.3);
+										if (isAtSea && eAtSea) proximityDamage *= 2.2;
+										if (e.isTransport && !u.isTransport)
+											proximityDamage *= 1.05;
+										if (u.isTransport && !e.isTransport) {
+											recordDamage(
+												u,
+												proximityDamage * 1.05 * damageTakenMult,
+												e,
+											);
+											proximityDamage *= 0.85;
+										}
+										recordDamage(e, proximityDamage, u);
+										recordDamage(u, proximityDamage * 0.8 * damageTakenMult, e);
+										u.lastCombatTick = simFrameCount;
+										e.lastCombatTick = simFrameCount;
+										if (e.health <= 0) u.victoryBoostTicks = 240;
+										const battleLat = (u.lat + e.lat) / 2;
+										const battleLng = (u.lng + e.lng) / 2;
+										const bKey = `${Math.round(battleLat * 10)},${Math.round(battleLng * 10)}`;
+										let existing = null;
+										for (let bk = -1; bk <= 1 && !existing; bk++) {
+											for (let bl = -1; bl <= 1 && !existing; bl++) {
+												const nk = `${Math.round(battleLat * 10) + bk},${Math.round(battleLng * 10) + bl}`;
+												const b = _battleHash.get(nk);
+												if (
+													b &&
+													(u.lat - b.lat) ** 2 + (u.lng - b.lng) ** 2 < 0.16
+												)
+													existing = b;
+											}
+										}
+										if (existing) {
+											existing.participants++;
+											existing.lat =
+												(existing.lat * (existing.participants - 1) +
+													battleLat) /
+												existing.participants;
+											existing.lng =
+												(existing.lng * (existing.participants - 1) +
+													battleLng) /
+												existing.participants;
+											const newKey = `${Math.round(existing.lat * 10)},${Math.round(existing.lng * 10)}`;
+											if (newKey !== bKey) _battleHash.set(newKey, existing);
+										} else {
+											const battle = {
+												lat: battleLat,
+												lng: battleLng,
+												participants: 2,
+											};
+											activeBattles.push(battle);
+											_battleHash.set(bKey, battle);
+										}
 									}
 								}
 							}
 						}
 					}
 				}
-			}
-			// ── Phase 3: update stale-target cache after full scan ──
-			if (CONFIG.ENABLE_STALE_TARGET_SKIP && target) {
-				u._cachedTarget = target;
-				u._cachedScanKx = kx;
-				u._cachedScanKy = ky;
-				u._lastFullScanTick = simFrameCount;
-			}
+				// ── Phase 3: update stale-target cache after full scan ──
+				if (CONFIG.ENABLE_STALE_TARGET_SKIP && target) {
+					u._cachedTarget = target;
+					u._cachedScanKx = kx;
+					u._cachedScanKy = ky;
+					u._lastFullScanTick = simFrameCount;
+				}
 			}
 			// ── End stale-skip guard ──
 
 			const _tEnemyDone = performance.now();
-			window.__perf.unitEnemyScan = (window.__perf.unitEnemyScan || 0) + _tEnemyDone - _u2;
+			window.__perf.unitEnemyScan =
+				(window.__perf.unitEnemyScan || 0) + _tEnemyDone - _u2;
 
 			// ── Garrison (moved out of neighbor loop — runs once per unit) ──
 			if (!u.navalAssigned && !u.supplyAssigned && !u.coastalAssigned) {
@@ -10839,7 +11163,13 @@ export function performSimulationTick() {
 					let foundGP = false;
 					for (let gsi = _uSideIdx * 10; gsi < _uSideIdx * 10 + 10; gsi++) {
 						const gp = _neutralGarrisonPlan[gsi];
-						if (!gp || gp.type !== "NEUTRAL_GARRISON" || !gp.borderPolyline || gp.borderPolyline.length === 0) continue;
+						if (
+							!gp ||
+							gp.type !== "NEUTRAL_GARRISON" ||
+							!gp.borderPolyline ||
+							gp.borderPolyline.length === 0
+						)
+							continue;
 						const dLat = gp.target.lat - u.lat;
 						let dLng = gp.target.lng - u.lng;
 						if (dLng > 180) dLng -= 360;
@@ -10848,7 +11178,10 @@ export function performSimulationTick() {
 							foundGP = true;
 							isPlanUnit = true;
 							gp.activeUnitCount = (gp.activeUnitCount || 0) + 1;
-							const slot = gp.borderPolyline[Math.floor(Math.abs(u.id * 777) % gp.borderPolyline.length)];
+							const slot =
+								gp.borderPolyline[
+									Math.floor(Math.abs(u.id * 777) % gp.borderPolyline.length)
+								];
 							const sLat = slot.lat - u.lat;
 							let sLng = slot.lng - u.lng;
 							if (sLng > 180) sLng -= 360;
@@ -10864,8 +11197,12 @@ export function performSimulationTick() {
 							break;
 						}
 					}
-					if (!foundGP) { u.garrisonAssigned = false; }
-				} else if (bestGP) { u.garrisonAssigned = true; }
+					if (!foundGP) {
+						u.garrisonAssigned = false;
+					}
+				} else if (bestGP) {
+					u.garrisonAssigned = true;
+				}
 			}
 
 			// ── Coastal defense (moved out of neighbor loop — runs once per unit) ──
@@ -10893,7 +11230,13 @@ export function performSimulationTick() {
 					let foundCD = false;
 					for (let csi = _uSideIdx * 10; csi < _uSideIdx * 10 + 10; csi++) {
 						const cp = _coastalDefensePlan[csi];
-						if (!cp || cp.type !== "COASTAL_DEFENSE" || !cp.zonePolyline || cp.zonePolyline.length === 0) continue;
+						if (
+							!cp ||
+							cp.type !== "COASTAL_DEFENSE" ||
+							!cp.zonePolyline ||
+							cp.zonePolyline.length === 0
+						)
+							continue;
 						const sdLat = cp.target.lat - u.lat;
 						let sdLng = cp.target.lng - u.lng;
 						if (sdLng > 180) sdLng -= 360;
@@ -10902,7 +11245,9 @@ export function performSimulationTick() {
 							foundCD = true;
 							isPlanUnit = true;
 							cp.activeUnitCount = (cp.activeUnitCount || 0) + 1;
-							const threatActive = cp.threatContact && simFrameCount - (cp.threatenedTick || 0) < 900;
+							const threatActive =
+								cp.threatContact &&
+								simFrameCount - (cp.threatenedTick || 0) < 900;
 							if (threatActive) {
 								const tLat = cp.threatContact.lat - u.lat;
 								let tLng = cp.threatContact.lng - u.lng;
@@ -10915,7 +11260,10 @@ export function performSimulationTick() {
 								}
 								planSpeedMult = 1.5;
 							} else {
-								const slot = cp.zonePolyline[Math.floor(Math.abs(u.id * 777) % cp.zonePolyline.length)];
+								const slot =
+									cp.zonePolyline[
+										Math.floor(Math.abs(u.id * 777) % cp.zonePolyline.length)
+									];
 								const sLat = slot.lat - u.lat;
 								let sLng = slot.lng - u.lng;
 								if (sLng > 180) sLng -= 360;
@@ -10932,7 +11280,9 @@ export function performSimulationTick() {
 							break;
 						}
 					}
-					if (!foundCD) { u.coastalAssigned = false; }
+					if (!foundCD) {
+						u.coastalAssigned = false;
+					}
 				} else if (bestCDPlan) {
 					u.coastalAssigned = true;
 					_coastalDefensePlan[bestCDSlot]._slotIdx = bestCDSlot;
@@ -10961,13 +11311,17 @@ export function performSimulationTick() {
 							if (dSq < tacticalRadiusSq) {
 								let aWeight = 1;
 								const aSideIdx = countryToSideMap.get(e.sovereignId);
-								const aCountry = aSideIdx !== undefined ? _countryById.get(e.sovereignId) : null;
+								const aCountry =
+									aSideIdx !== undefined
+										? _countryById.get(e.sovereignId)
+										: null;
 								if (aCountry?.buffState === "super") aWeight *= 200;
 								else if (aCountry?.buffState === "buff") aWeight *= 50;
 								localAllyCount += aWeight;
 								if (dSq < repulsionRadiusSq && dSq > 0.00001) {
 									const d = Math.sqrt(dSq);
-									if (!u.repulsionVector) u.repulsionVector = { lat: 0, lng: 0 };
+									if (!u.repulsionVector)
+										u.repulsionVector = { lat: 0, lng: 0 };
 									u.repulsionVector.lat += (u.lat - e.lat) / d;
 									u.repulsionVector.lng += (u.lng - e.lng) / d;
 								}
@@ -10977,7 +11331,8 @@ export function performSimulationTick() {
 				}
 			}
 			const _tAllyDone = performance.now();
-			window.__perf.unitAllyScan = (window.__perf.unitAllyScan || 0) + _tAllyDone - _tEnemyDone;
+			window.__perf.unitAllyScan =
+				(window.__perf.unitAllyScan || 0) + _tAllyDone - _tEnemyDone;
 		} else {
 			// ═══ Legacy scan (flag off): iterates global unitSpatialHash ═══
 			for (let dy = -2; dy <= 2; dy++) {
@@ -11021,10 +11376,14 @@ export function performSimulationTick() {
 							const distMult = eAtSea && !isAtSea ? 50.0 : 1.0;
 							const noisyDSq = dSq * distMult;
 
-							const healthModifier = Math.max(0, 1.0 - (e.health || 100) / 100) * 0.02;
+							const healthModifier =
+								Math.max(0, 1.0 - (e.health || 100) / 100) * 0.02;
 							const eCountry = _countryById.get(e.sovereignId);
-							let eBuff = eCountry?.buffState || "none";
-							const superPenalty = (!isMega && !isSuper && (eBuff === "super" || eBuff === "godly")) ? 5.0 : 0;
+							const eBuff = eCountry?.buffState || "none";
+							const superPenalty =
+								!isMega && !isSuper && (eBuff === "super" || eBuff === "godly")
+									? 5.0
+									: 0;
 							let targetScore = noisyDSq - healthModifier + superPenalty;
 							if (targetScore < minDist) {
 								// Water-path check: penalize land enemies unreachable by land
@@ -11042,7 +11401,8 @@ export function performSimulationTick() {
 									}
 									if (waterSamples > steps * 0.3) {
 										targetScore += 10000;
-										window.__perf.waterPathPenalized = (window.__perf.waterPathPenalized || 0) + 1;
+										window.__perf.waterPathPenalized =
+											(window.__perf.waterPathPenalized || 0) + 1;
 									}
 								}
 								if (targetScore < minDist) {
@@ -11074,7 +11434,11 @@ export function performSimulationTick() {
 									// Transports take extra damage at sea from non-transport enemies
 									if (e.isTransport && !u.isTransport) proximityDamage *= 1.05;
 									if (u.isTransport && !e.isTransport) {
-										recordDamage(u, proximityDamage * 1.05 * damageTakenMult, e);
+										recordDamage(
+											u,
+											proximityDamage * 1.05 * damageTakenMult,
+											e,
+										);
 										proximityDamage *= 0.85;
 									}
 
@@ -11087,13 +11451,17 @@ export function performSimulationTick() {
 
 									const battleLat = (u.lat + e.lat) / 2;
 									const battleLng = (u.lng + e.lng) / 2;
-									const bKey = Math.round(battleLat * 10) + ',' + Math.round(battleLng * 10);
+									const bKey = `${Math.round(battleLat * 10)},${Math.round(battleLng * 10)}`;
 									let existing = null;
 									for (let bk = -1; bk <= 1 && !existing; bk++) {
 										for (let bl = -1; bl <= 1 && !existing; bl++) {
-											const nk = Math.round(battleLat * 10) + bk + ',' + (Math.round(battleLng * 10) + bl);
+											const nk = `${Math.round(battleLat * 10) + bk},${Math.round(battleLng * 10) + bl}`;
 											const b = _battleHash.get(nk);
-											if (b && (u.lat - b.lat) ** 2 + (u.lng - b.lng) ** 2 < 0.16) existing = b;
+											if (
+												b &&
+												(u.lat - b.lat) ** 2 + (u.lng - b.lng) ** 2 < 0.16
+											)
+												existing = b;
 										}
 									}
 									if (existing) {
@@ -11104,10 +11472,14 @@ export function performSimulationTick() {
 										existing.lng =
 											(existing.lng * (existing.participants - 1) + battleLng) /
 											existing.participants;
-										const newKey = Math.round(existing.lat * 10) + ',' + Math.round(existing.lng * 10);
+										const newKey = `${Math.round(existing.lat * 10)},${Math.round(existing.lng * 10)}`;
 										if (newKey !== bKey) _battleHash.set(newKey, existing);
 									} else {
-										const battle = { lat: battleLat, lng: battleLng, participants: 2 };
+										const battle = {
+											lat: battleLat,
+											lng: battleLng,
+											participants: 2,
+										};
 										activeBattles.push(battle);
 										_battleHash.set(bKey, battle);
 									}
@@ -11137,7 +11509,11 @@ export function performSimulationTick() {
 
 							if (u.garrisonAssigned) {
 								let foundGP = false;
-								for (let gsi = _uSideIdx * 10; gsi < _uSideIdx * 10 + 10; gsi++) {
+								for (
+									let gsi = _uSideIdx * 10;
+									gsi < _uSideIdx * 10 + 10;
+									gsi++
+								) {
 									const gp = _neutralGarrisonPlan[gsi];
 									if (
 										!gp ||
@@ -11206,7 +11582,11 @@ export function performSimulationTick() {
 
 							if (u.coastalAssigned) {
 								let foundCD = false;
-								for (let csi = _uSideIdx * 10; csi < _uSideIdx * 10 + 10; csi++) {
+								for (
+									let csi = _uSideIdx * 10;
+									csi < _uSideIdx * 10 + 10;
+									csi++
+								) {
 									const cp = _coastalDefensePlan[csi];
 									if (
 										!cp ||
@@ -11297,19 +11677,34 @@ export function performSimulationTick() {
 
 		u.lastAllyCount = localAllyCount;
 
-		if (simFrameCount > 100 && simFrameCount < 500 && _dbgLogCount++ < 200 && simFrameCount % 10 === 0) {
-			console.warn('[HASH-DBG] unit summary:',
-				'sideIdx=', u.sideIndex,
-				'enemiesFound=', localEnemyCount,
-				'alliesFound=', localAllyCount,
-				'targetSet=', !!target,
-				'targetIsUnit=', target && typeof target.health !== 'undefined',
-				'isTacticallyIdle=', isTacticallyIdle,
-				'idleTicks=', idleTicks);
+		if (
+			simFrameCount > 100 &&
+			simFrameCount < 500 &&
+			_dbgLogCount++ < 200 &&
+			simFrameCount % 10 === 0
+		) {
+			console.warn(
+				"[HASH-DBG] unit summary:",
+				"sideIdx=",
+				u.sideIndex,
+				"enemiesFound=",
+				localEnemyCount,
+				"alliesFound=",
+				localAllyCount,
+				"targetSet=",
+				!!target,
+				"targetIsUnit=",
+				target && typeof target.health !== "undefined",
+				"isTacticallyIdle=",
+				isTacticallyIdle,
+				"idleTicks=",
+				idleTicks,
+			);
 		}
 
 		// ── unitLoop sub-timer checkpoint: end unitSpatialHash, start retreatMopUp ──
-		const _u3 = performance.now(); window.__perf.unitSpatialHash += _u3 - _u2;
+		const _u3 = performance.now();
+		window.__perf.unitSpatialHash += _u3 - _u2;
 
 		// Retreat logic: If enemy force is > 5x ally force (increased threshold to prevent premature dodging)
 		if (
@@ -11537,22 +11932,22 @@ export function performSimulationTick() {
 				const _relLng = groupCentroid ? u.lng - groupCentroid.lng : 0;
 
 				for (let j = 0; j < 100; j++) {
-						const randIdx = Math.floor(Math.random() * worldControlMap.length);
-						const ownerAtIdx = worldControlMap[randIdx];
-						const deJureAtIdx = deJureMap[randIdx];
+					const randIdx = Math.floor(Math.random() * worldControlMap.length);
+					const ownerAtIdx = worldControlMap[randIdx];
+					const deJureAtIdx = deJureMap[randIdx];
 
-						let isCandidate = false;
-						if (isRebel) {
-							if (deJureAtIdx === activeRebellion.rebelId) {
-								if (dominantSideMap[randIdx] !== u.sideIndex) isCandidate = true;
-							}
-						} else if (ownerAtIdx === targetId) {
-							if (effectiveDefensive) {
-								if (dominantSideMap[randIdx] !== u.sideIndex) isCandidate = true;
-							} else {
-								if (dominantSideMap[randIdx] !== u.sideIndex) isCandidate = true;
-							}
+					let isCandidate = false;
+					if (isRebel) {
+						if (deJureAtIdx === activeRebellion.rebelId) {
+							if (dominantSideMap[randIdx] !== u.sideIndex) isCandidate = true;
 						}
+					} else if (ownerAtIdx === targetId) {
+						if (effectiveDefensive) {
+							if (dominantSideMap[randIdx] !== u.sideIndex) isCandidate = true;
+						} else {
+							if (dominantSideMap[randIdx] !== u.sideIndex) isCandidate = true;
+						}
+					}
 
 					if (isCandidate) {
 						const cy = Math.floor(randIdx / gridWidth);
@@ -11687,7 +12082,11 @@ export function performSimulationTick() {
 				// destroys the .health property needed for direct combat
 				if (target && target.health !== undefined) {
 					// Keep the enemy unit target; city is secondary objective
-				} else if (target && target.lat !== undefined && target.lng !== undefined) {
+				} else if (
+					target &&
+					target.lat !== undefined &&
+					target.lng !== undefined
+				) {
 					const w = aiProfile.targetCityWeight;
 					target = {
 						lat: target.lat * (1 - w) + bestCity.lat * w,
@@ -11727,20 +12126,31 @@ export function performSimulationTick() {
 				u.lastCombatTick && simFrameCount - u.lastCombatTick < 15;
 
 			if (simFrameCount > 100 && simFrameCount < 500 && _dbgLogCount++ < 200) {
-				const hasHealth = target && typeof target.health !== 'undefined';
-				console.warn('[GATE-DBG] dist gate:',
-					'side', u.sideIndex,
-					'dist=', dist.toFixed(4),
-					'dist>0.05=', dist > 0.05,
-					'isEngaged=', isEngaged,
-					'hasTarget=', !!target,
-					'targetHasHealth=', hasHealth,
-					'localEnemyCount=', localEnemyCount,
-					'going=', dist > 0.05 ? 'MOVE' : (hasHealth ? 'COMBAT' : 'ELSE'));
+				const hasHealth = target && typeof target.health !== "undefined";
+				console.warn(
+					"[GATE-DBG] dist gate:",
+					"side",
+					u.sideIndex,
+					"dist=",
+					dist.toFixed(4),
+					"dist>0.05=",
+					dist > 0.05,
+					"isEngaged=",
+					isEngaged,
+					"hasTarget=",
+					!!target,
+					"targetHasHealth=",
+					hasHealth,
+					"localEnemyCount=",
+					localEnemyCount,
+					"going=",
+					dist > 0.05 ? "MOVE" : hasHealth ? "COMBAT" : "ELSE",
+				);
 			}
 
-		// ── unitLoop sub-timer checkpoint: end retreatMopUp, start combatMove ──
-			_u4 = performance.now(); window.__perf.unitRetreatMopUp += _u4 - _u3;
+			// ── unitLoop sub-timer checkpoint: end retreatMopUp, start combatMove ──
+			_u4 = performance.now();
+			window.__perf.unitRetreatMopUp += _u4 - _u3;
 
 			if (dist > 0.05) {
 				// Movement logic
@@ -11960,7 +12370,9 @@ export function performSimulationTick() {
 					!isEngaged &&
 					!u.garrisonAssigned &&
 					!u.navalAssigned &&
-					((supplyPlan.activeUnitCount || 0) < (supplyPlan.maxAssignedUnits || 0) || (navalPlan && navalPlan.phase === "LANDING"))
+					((supplyPlan.activeUnitCount || 0) <
+						(supplyPlan.maxAssignedUnits || 0) ||
+						(navalPlan && navalPlan.phase === "LANDING"))
 				) {
 					// Supply plan assignment
 					let isSupplyUnit = false;
@@ -12146,7 +12558,8 @@ export function performSimulationTick() {
 						// Exit transport when within 1.5 degrees of frontline
 						if (tdSq > 2.25) {
 							isPlanUnit = true;
-							transportPlan.activeUnitCount = (transportPlan.activeUnitCount || 0) + 1;
+							transportPlan.activeUnitCount =
+								(transportPlan.activeUnitCount || 0) + 1;
 							u.isTransport = true;
 							const td = Math.sqrt(tdSq);
 							planDirLat = tdLat / td;
@@ -12159,250 +12572,257 @@ export function performSimulationTick() {
 
 					// DEFEND plan and land plan execution — skip if unit is in transport mode
 					if (!u.isTransport) {
-					// DEFEND plan: hold the frontline, do not advance
-					if (
-						activePlan &&
-						activePlan.type === "DEFEND" &&
-						!isEngaged &&
-						!shouldMopUp &&
-						!retreatVector
-					) {
-						isPlanUnit = true;
-						activePlan.activeUnitCount = (activePlan.activeUnitCount || 0) + 1;
-						// Check if unit is behind or at the frontline (on our side)
-						const unitIdx = gridIdxNow;
-						const onOurSide =
-							unitIdx !== -1 && dominantSideMap[unitIdx] === u.sideIndex;
-						const nearFrontline =
-							borderDir &&
-							Math.sqrt(
-								borderDir.lat * borderDir.lat + borderDir.lng * borderDir.lng,
-							) > 0;
-						if (onOurSide && nearFrontline) {
-							// Hold position near the frontline, don't advance
-							moveDirLat = 0;
-							moveDirLng = 0;
-						} else if (!onOurSide) {
-							// Unit drifted past the frontline — pull it back
-							// Move toward nearest friendly territory
-							let bestFRDist = Infinity;
-							let bestFRLat = 0;
-							let bestFRLng = 0;
-							const r = Math.floor((u.lat + 90) / CONFIG.GRID_RES);
-							const c = Math.floor((u.lng + 180) / CONFIG.GRID_RES);
-							for (let dr = -5; dr <= 5; dr++) {
-								for (let dc = -5; dc <= 5; dc++) {
-									const nr = r + dr;
-									const nc = c + dc;
-									if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth)
-										continue;
-									const ni = nr * gridWidth + nc;
-									if (dominantSideMap[ni] !== u.sideIndex) continue;
-									const flat = nr * CONFIG.GRID_RES - 90;
-									const flng = nc * CONFIG.GRID_RES - 180;
-									let fdLng = flng - u.lng;
-									if (fdLng > 180) fdLng -= 360;
-									else if (fdLng < -180) fdLng += 360;
-									const fd = (u.lat - flat) ** 2 + fdLng ** 2;
-									if (fd < bestFRDist) {
-										bestFRDist = fd;
-										bestFRLat = flat;
-										bestFRLng = flng;
-									}
-								}
-							}
-							if (bestFRDist < Infinity) {
-								const d = Math.sqrt(bestFRDist);
-								moveDirLat = (bestFRLat - u.lat) / d;
-								let fdLng = bestFRLng - u.lng;
-								if (fdLng > 180) fdLng -= 360;
-								else if (fdLng < -180) fdLng += 360;
-								moveDirLng = fdLng / d;
-							}
-						}
-					}
-
-					// Defender reaction: move toward enemy landing if assigned
-					if (
-						u._defenderReactTarget &&
-						!shouldMopUp &&
-						!retreatVector &&
-						!isEngaged
-					) {
-						isPlanUnit = true;
-						const rdLat = u._defenderReactTarget.lat - u.lat;
-						let rdLng = u._defenderReactTarget.lng - u.lng;
-						if (rdLng > 180) rdLng -= 360;
-						else if (rdLng < -180) rdLng += 360;
-						const rd = Math.sqrt(rdLat * rdLat + rdLng * rdLng);
-						if (rd < 1.0) {
-							u._defenderReactTarget = null;
-						} else {
-							planDirLat = rdLat / rd;
-							planDirLng = rdLng / rd;
-							planSpeedMult = 2.0;
-						}
-						moveDirLat = 0;
-						moveDirLng = 0;
-					}
-
-					// Only apply plan when safe: no nearby enemies, not engaged, not retreating
-					if (
-						!shouldMopUp &&
-						!retreatVector &&
-						!isEngaged &&
-						(localEnemyCount < 2 || pocketContained) &&
-						activePlan &&
-						activePlan.type !== "DEFEND"
-					) {
-						const planFull = false;
-						if (!planFull) {
+						// DEFEND plan: hold the frontline, do not advance
+						if (
+							activePlan &&
+							activePlan.type === "DEFEND" &&
+							!isEngaged &&
+							!shouldMopUp &&
+							!retreatVector
+						) {
 							isPlanUnit = true;
-							if (activePlan.activeUnitCount !== undefined) {
-								activePlan.activeUnitCount++;
-							}
-
-							if (
-								activePlan.phase === "PREPARATION" &&
-								activePlan.stagingCells?.length > 0
-							) {
-								// Rally to staging cells at 2× speed
-								const staging = activePlan.stagingCells;
-								const sc =
-									staging[
-										Math.floor(Math.abs(u.id * 1000000) % staging.length)
-									];
-								if (sc) {
-									const pdLat = sc.lat - u.lat;
-									let pdLng = sc.lng - u.lng;
-									if (pdLng > 180) pdLng -= 360;
-									else if (pdLng < -180) pdLng += 360;
-									const pd = Math.sqrt(pdLat * pdLat + pdLng * pdLng);
-									if (pd > 0.01) {
-										planDirLat = pdLat / pd;
-										planDirLng = pdLng / pd;
-									}
-									planSpeedMult = 2.0;
-								}
-								// Zero out target direction so plan dominates; skip combat engagement
+							activePlan.activeUnitCount =
+								(activePlan.activeUnitCount || 0) + 1;
+							// Check if unit is behind or at the frontline (on our side)
+							const unitIdx = gridIdxNow;
+							const onOurSide =
+								unitIdx !== -1 && dominantSideMap[unitIdx] === u.sideIndex;
+							const nearFrontline =
+								borderDir &&
+								Math.sqrt(
+									borderDir.lat * borderDir.lat + borderDir.lng * borderDir.lng,
+								) > 0;
+							if (onOurSide && nearFrontline) {
+								// Hold position near the frontline, don't advance
 								moveDirLat = 0;
 								moveDirLng = 0;
-							} else if (
-								activePlan.phase === "EXECUTION" &&
-								activePlan.target
-							) {
-							// Waypoint routing: steer toward friendly waypoints around neutral blocks
-							let useWaypoint = false;
-							if (activePlan._waypoints && activePlan._waypoints.length > 0) {
-								const wp = activePlan._waypoints[0];
-								const wLat = wp.lat - u.lat;
-								let wLng = wp.lng - u.lng;
-								if (wLng > 180) wLng -= 360;
-								else if (wLng < -180) wLng += 360;
-								const wDistSq = wLat * wLat + wLng * wLng;
-								if (wDistSq < 1.0) {
-									activePlan._waypoints.shift();
-								} else {
-									const wDist = Math.sqrt(wDistSq);
-									planDirLat = wLat / wDist;
-									planDirLng = wLng / wDist;
-									planSpeedMult = 2.0;
-									useWaypoint = true;
+							} else if (!onOurSide) {
+								// Unit drifted past the frontline — pull it back
+								// Move toward nearest friendly territory
+								let bestFRDist = Infinity;
+								let bestFRLat = 0;
+								let bestFRLng = 0;
+								const r = Math.floor((u.lat + 90) / CONFIG.GRID_RES);
+								const c = Math.floor((u.lng + 180) / CONFIG.GRID_RES);
+								for (let dr = -5; dr <= 5; dr++) {
+									for (let dc = -5; dc <= 5; dc++) {
+										const nr = r + dr;
+										const nc = c + dc;
+										if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth)
+											continue;
+										const ni = nr * gridWidth + nc;
+										if (dominantSideMap[ni] !== u.sideIndex) continue;
+										const flat = nr * CONFIG.GRID_RES - 90;
+										const flng = nc * CONFIG.GRID_RES - 180;
+										let fdLng = flng - u.lng;
+										if (fdLng > 180) fdLng -= 360;
+										else if (fdLng < -180) fdLng += 360;
+										const fd = (u.lat - flat) ** 2 + fdLng ** 2;
+										if (fd < bestFRDist) {
+											bestFRDist = fd;
+											bestFRLat = flat;
+											bestFRLng = flng;
+										}
+									}
+								}
+								if (bestFRDist < Infinity) {
+									const d = Math.sqrt(bestFRDist);
+									moveDirLat = (bestFRLat - u.lat) / d;
+									let fdLng = bestFRLng - u.lng;
+									if (fdLng > 180) fdLng -= 360;
+									else if (fdLng < -180) fdLng += 360;
+									moveDirLng = fdLng / d;
 								}
 							}
-							if (!useWaypoint) {
-								const pdLat = activePlan.target.lat - u.lat;
-								let pdLng = activePlan.target.lng - u.lng;
-								if (pdLng > 180) pdLng -= 360;
-								else if (pdLng < -180) pdLng += 360;
-								const pd = Math.sqrt(pdLat * pdLat + pdLng * pdLng);
+						}
 
-								if (activePlan.type === "ENCIRCLE") {
-									const role = u.id % 3;
-									if (role === 0) {
-										// Pin: hold position, minimal advance
+						// Defender reaction: move toward enemy landing if assigned
+						if (
+							u._defenderReactTarget &&
+							!shouldMopUp &&
+							!retreatVector &&
+							!isEngaged
+						) {
+							isPlanUnit = true;
+							const rdLat = u._defenderReactTarget.lat - u.lat;
+							let rdLng = u._defenderReactTarget.lng - u.lng;
+							if (rdLng > 180) rdLng -= 360;
+							else if (rdLng < -180) rdLng += 360;
+							const rd = Math.sqrt(rdLat * rdLat + rdLng * rdLng);
+							if (rd < 1.0) {
+								u._defenderReactTarget = null;
+							} else {
+								planDirLat = rdLat / rd;
+								planDirLng = rdLng / rd;
+								planSpeedMult = 2.0;
+							}
+							moveDirLat = 0;
+							moveDirLng = 0;
+						}
+
+						// Only apply plan when safe: no nearby enemies, not engaged, not retreating
+						if (
+							!shouldMopUp &&
+							!retreatVector &&
+							!isEngaged &&
+							(localEnemyCount < 2 || pocketContained) &&
+							activePlan &&
+							activePlan.type !== "DEFEND"
+						) {
+							const planFull = false;
+							if (!planFull) {
+								isPlanUnit = true;
+								if (activePlan.activeUnitCount !== undefined) {
+									activePlan.activeUnitCount++;
+								}
+
+								if (
+									activePlan.phase === "PREPARATION" &&
+									activePlan.stagingCells?.length > 0
+								) {
+									// Rally to staging cells at 2× speed
+									const staging = activePlan.stagingCells;
+									const sc =
+										staging[
+											Math.floor(Math.abs(u.id * 1000000) % staging.length)
+										];
+									if (sc) {
+										const pdLat = sc.lat - u.lat;
+										let pdLng = sc.lng - u.lng;
+										if (pdLng > 180) pdLng -= 360;
+										else if (pdLng < -180) pdLng += 360;
+										const pd = Math.sqrt(pdLat * pdLat + pdLng * pdLng);
 										if (pd > 0.01) {
 											planDirLat = pdLat / pd;
 											planDirLng = pdLng / pd;
 										}
-										planSpeedMult = 0.4;
-									} else {
-										// Flank: curve around pocket at breakthrough speed
-										const flankAngle = role === 1 ? -70 : 70;
-										const rad = (flankAngle * Math.PI) / 180;
-										if (pd > 0.01) {
-											const nx = pdLat / pd,
-												ny = pdLng / pd;
-											planDirLat = nx * Math.cos(rad) - ny * Math.sin(rad);
-											planDirLng = nx * Math.sin(rad) + ny * Math.cos(rad);
-										}
 										planSpeedMult = 2.0;
 									}
-								} else {
-									// CAPTURE_CITY / PUSH_FRONT: breakthrough push with spearhead variation
-									if (pd > 0.01) {
-										planDirLat = pdLat / pd;
-										planDirLng = pdLng / pd;
+									// Zero out target direction so plan dominates; skip combat engagement
+									moveDirLat = 0;
+									moveDirLng = 0;
+								} else if (
+									activePlan.phase === "EXECUTION" &&
+									activePlan.target
+								) {
+									// Waypoint routing: steer toward friendly waypoints around neutral blocks
+									let useWaypoint = false;
+									if (
+										activePlan._waypoints &&
+										activePlan._waypoints.length > 0
+									) {
+										const wp = activePlan._waypoints[0];
+										const wLat = wp.lat - u.lat;
+										let wLng = wp.lng - u.lng;
+										if (wLng > 180) wLng -= 360;
+										else if (wLng < -180) wLng += 360;
+										const wDistSq = wLat * wLat + wLng * wLng;
+										if (wDistSq < 1.0) {
+											activePlan._waypoints.shift();
+										} else {
+											const wDist = Math.sqrt(wDistSq);
+											planDirLat = wLat / wDist;
+											planDirLng = wLng / wDist;
+											planSpeedMult = 2.0;
+											useWaypoint = true;
+										}
 									}
-									const spearhead =
-										0.8 + (Math.sin(u.id * 777) * 0.5 + 0.5) * 0.8;
-									planSpeedMult = 2.0 * spearhead;
-								}
-								activePlan.progress = Math.min(
-									1.0,
-									Math.max(0, 1.0 - pd / 5.0),
-								);
-								// Zero out target direction so plan dominates; units follow the plan
-								moveDirLat = 0;
-								moveDirLng = 0;
-							}
-							} else if (
-								activePlan.phase === "CONSOLIDATION" &&
-								activePlan.target
-							) {
-								// Spread outward from captured objective toward new frontline
-								let bestDist = Infinity;
-								let bestLat = 0,
-									bestLng = 0;
-								for (const fk of Object.keys(_frontlinePolys || {})) {
-									const [fa, fb] = fk.split("_").map(Number);
-									if (fa !== u.sideIndex && fb !== u.sideIndex) continue;
-									const poly = _frontlinePolys[fk];
-									if (!poly) continue;
-									const idx = Math.floor(
-										Math.abs(u.id * 777 + simFrameCount) % poly.length,
-									);
-									const fc = poly[idx];
-									let fLng = fc.lng - u.lng;
-									if (fLng > 180) fLng -= 360;
-									else if (fLng < -180) fLng += 360;
-									const dSq = (fc.lat - u.lat) ** 2 + fLng ** 2;
-									if (dSq < bestDist) {
-										bestDist = dSq;
-										bestLat = fc.lat;
-										bestLng = fc.lng;
+									if (!useWaypoint) {
+										const pdLat = activePlan.target.lat - u.lat;
+										let pdLng = activePlan.target.lng - u.lng;
+										if (pdLng > 180) pdLng -= 360;
+										else if (pdLng < -180) pdLng += 360;
+										const pd = Math.sqrt(pdLat * pdLat + pdLng * pdLng);
+
+										if (activePlan.type === "ENCIRCLE") {
+											const role = u.id % 3;
+											if (role === 0) {
+												// Pin: hold position, minimal advance
+												if (pd > 0.01) {
+													planDirLat = pdLat / pd;
+													planDirLng = pdLng / pd;
+												}
+												planSpeedMult = 0.4;
+											} else {
+												// Flank: curve around pocket at breakthrough speed
+												const flankAngle = role === 1 ? -70 : 70;
+												const rad = (flankAngle * Math.PI) / 180;
+												if (pd > 0.01) {
+													const nx = pdLat / pd,
+														ny = pdLng / pd;
+													planDirLat = nx * Math.cos(rad) - ny * Math.sin(rad);
+													planDirLng = nx * Math.sin(rad) + ny * Math.cos(rad);
+												}
+												planSpeedMult = 2.0;
+											}
+										} else {
+											// CAPTURE_CITY / PUSH_FRONT: breakthrough push with spearhead variation
+											if (pd > 0.01) {
+												planDirLat = pdLat / pd;
+												planDirLng = pdLng / pd;
+											}
+											const spearhead =
+												0.8 + (Math.sin(u.id * 777) * 0.5 + 0.5) * 0.8;
+											planSpeedMult = 2.0 * spearhead;
+										}
+										activePlan.progress = Math.min(
+											1.0,
+											Math.max(0, 1.0 - pd / 5.0),
+										);
+										// Zero out target direction so plan dominates; units follow the plan
+										moveDirLat = 0;
+										moveDirLng = 0;
 									}
+								} else if (
+									activePlan.phase === "CONSOLIDATION" &&
+									activePlan.target
+								) {
+									// Spread outward from captured objective toward new frontline
+									let bestDist = Infinity;
+									let bestLat = 0,
+										bestLng = 0;
+									for (const fk of Object.keys(_frontlinePolys || {})) {
+										const [fa, fb] = fk.split("_").map(Number);
+										if (fa !== u.sideIndex && fb !== u.sideIndex) continue;
+										const poly = _frontlinePolys[fk];
+										if (!poly) continue;
+										const idx = Math.floor(
+											Math.abs(u.id * 777 + simFrameCount) % poly.length,
+										);
+										const fc = poly[idx];
+										let fLng = fc.lng - u.lng;
+										if (fLng > 180) fLng -= 360;
+										else if (fLng < -180) fLng += 360;
+										const dSq = (fc.lat - u.lat) ** 2 + fLng ** 2;
+										if (dSq < bestDist) {
+											bestDist = dSq;
+											bestLat = fc.lat;
+											bestLng = fc.lng;
+										}
+									}
+									if (bestDist < Infinity && bestDist > 0.0001) {
+										const d = Math.sqrt(bestDist);
+										planDirLat = (bestLat - u.lat) / d;
+										planDirLng = (bestLng - u.lng) / d;
+										planSpeedMult = 1.5;
+									}
+									// During consolidation, zero out target direction so plan dominates
+									moveDirLat = 0;
+									moveDirLng = 0;
 								}
-								if (bestDist < Infinity && bestDist > 0.0001) {
-									const d = Math.sqrt(bestDist);
-									planDirLat = (bestLat - u.lat) / d;
-									planDirLng = (bestLng - u.lng) / d;
-									planSpeedMult = 1.5;
-								}
-								// During consolidation, zero out target direction so plan dominates
-								moveDirLat = 0;
-								moveDirLng = 0;
 							}
 						}
-					}
-				} // end else (non-naval land plan)
+					} // end else (non-naval land plan)
 				} // end if (!u.isTransport)
 
 				// Blend plan direction into movement
 				if (isPlanUnit && (planDirLat !== 0 || planDirLng !== 0)) {
-					const planBlend = (isEngaged || localEnemyCount > 0)
-						? 0.3
-						: (aiProfile.frontlineBlend > 0 ? 0.85 : 0.65);
+					const planBlend =
+						isEngaged || localEnemyCount > 0
+							? 0.3
+							: aiProfile.frontlineBlend > 0
+								? 0.85
+								: 0.65;
 					moveDirLat = moveDirLat * (1 - planBlend) + planDirLat * planBlend;
 					moveDirLng = moveDirLng * (1 - planBlend) + planDirLng * planBlend;
 					const magP = Math.sqrt(
@@ -12415,19 +12835,27 @@ export function performSimulationTick() {
 				}
 
 				// When enemies are nearby, push toward local enemy centroid
-				if (localEnemyCount > 0 && !isAtSea && (enemyCentroidLat !== 0 || enemyCentroidLng !== 0)) {
+				if (
+					localEnemyCount > 0 &&
+					!isAtSea &&
+					(enemyCentroidLat !== 0 || enemyCentroidLng !== 0)
+				) {
 					enemyCentroidLat /= localEnemyCount;
 					enemyCentroidLng /= localEnemyCount;
-					let cLat = enemyCentroidLat - u.lat;
+					const cLat = enemyCentroidLat - u.lat;
 					let cLng = enemyCentroidLng - u.lng;
 					if (cLng > 180) cLng -= 360;
 					else if (cLng < -180) cLng += 360;
 					const cDist = Math.sqrt(cLat * cLat + cLng * cLng);
 					if (cDist > 0.0001) {
 						const combatWeight = 0.7;
-						moveDirLat = (cLat / cDist) * combatWeight + moveDirLat * (1 - combatWeight);
-						moveDirLng = (cLng / cDist) * combatWeight + moveDirLng * (1 - combatWeight);
-						const magC = Math.sqrt(moveDirLat * moveDirLat + moveDirLng * moveDirLng);
+						moveDirLat =
+							(cLat / cDist) * combatWeight + moveDirLat * (1 - combatWeight);
+						moveDirLng =
+							(cLng / cDist) * combatWeight + moveDirLng * (1 - combatWeight);
+						const magC = Math.sqrt(
+							moveDirLat * moveDirLat + moveDirLng * moveDirLng,
+						);
 						if (magC > 0) {
 							moveDirLat /= magC;
 							moveDirLng /= magC;
@@ -12788,7 +13216,7 @@ export function performSimulationTick() {
 					u._neutralBlocked = undefined;
 				}
 
-					// Neutral / protected territory: heavy penalty to discourage traversal.
+				// Neutral / protected territory: heavy penalty to discourage traversal.
 				// Units should path around neutral countries, not through them.
 				let neutralPenalty = 1.0;
 				let touchingNeutralForNaval = false;
@@ -12939,7 +13367,8 @@ export function performSimulationTick() {
 							target = null;
 							u._cachedTarget = null;
 							u._coastStuckTicks = 0;
-							window.__perf.coastStuckAbandoned = (window.__perf.coastStuckAbandoned || 0) + 1;
+							window.__perf.coastStuckAbandoned =
+								(window.__perf.coastStuckAbandoned || 0) + 1;
 						}
 					} else {
 						u._coastStuckTicks = 0;
@@ -12982,7 +13411,10 @@ export function performSimulationTick() {
 					if (_myCities) {
 						for (let ci = 0; ci < _myCities.length; ci++) {
 							const c = _myCities[ci];
-							if ((u.lat - c.lat) ** 2 + (u.lng - c.lng) ** 2 < 0.04) { nearbyCity = c; break; }
+							if ((u.lat - c.lat) ** 2 + (u.lng - c.lng) ** 2 < 0.04) {
+								nearbyCity = c;
+								break;
+							}
 						}
 					}
 					if (nearbyCity) {
@@ -13002,18 +13434,36 @@ export function performSimulationTick() {
 					defenseBonus *
 					longWarDefense;
 
-				if (simFrameCount > 100 && simFrameCount < 500 && _dbgLogCount++ < 200) {
-					console.warn('[CMBT-DBG] combat:',
-						'side', u.sideIndex, 'vs', target.sideIndex,
-						'tDmg=', tDmg.toFixed(3),
-						'uDmg=', uDmg.toFixed(3),
-						'targetHealth=', target.health?.toFixed(2),
-						'myHealth=', u.health?.toFixed(2),
-						'dmgDealtMult=', damageDealtMult.toFixed(3),
-						'dmgTakenMult=', damageTakenMult.toFixed(3),
-						'defBonus=', defenseBonus.toFixed(3),
-						'longWarDef=', longWarDefense.toFixed(3),
-						'dist=', dist.toFixed(4));
+				if (
+					simFrameCount > 100 &&
+					simFrameCount < 500 &&
+					_dbgLogCount++ < 200
+				) {
+					console.warn(
+						"[CMBT-DBG] combat:",
+						"side",
+						u.sideIndex,
+						"vs",
+						target.sideIndex,
+						"tDmg=",
+						tDmg.toFixed(3),
+						"uDmg=",
+						uDmg.toFixed(3),
+						"targetHealth=",
+						target.health?.toFixed(2),
+						"myHealth=",
+						u.health?.toFixed(2),
+						"dmgDealtMult=",
+						damageDealtMult.toFixed(3),
+						"dmgTakenMult=",
+						damageTakenMult.toFixed(3),
+						"defBonus=",
+						defenseBonus.toFixed(3),
+						"longWarDef=",
+						longWarDefense.toFixed(3),
+						"dist=",
+						dist.toFixed(4),
+					);
 				}
 
 				// Casualties increase while battling (direct engagement)
@@ -13081,10 +13531,19 @@ export function performSimulationTick() {
 			}
 		} else {
 			if (simFrameCount > 100 && simFrameCount < 500 && _dbgLogCount++ < 200) {
-				console.warn('[ELSE-DBG] fell to empty else:',
-					'side', u.sideIndex,
-					'hasTarget=', !!target,
-					'targetType=', target ? (typeof target.health !== 'undefined' ? 'unit' : 'coord') : 'null');
+				console.warn(
+					"[ELSE-DBG] fell to empty else:",
+					"side",
+					u.sideIndex,
+					"hasTarget=",
+					!!target,
+					"targetType=",
+					target
+						? typeof target.health !== "undefined"
+							? "unit"
+							: "coord"
+						: "null",
+				);
 			}
 			u.lastCombatTick = 0;
 		}
@@ -13096,7 +13555,8 @@ export function performSimulationTick() {
 		}
 
 		// ── unitLoop sub-timer: end combatMove ──
-		if (_u4 !== undefined) window.__perf.unitCombatMove += performance.now() - _u4;
+		if (_u4 !== undefined)
+			window.__perf.unitCombatMove += performance.now() - _u4;
 	}
 
 	// NOTE: even if sideSoldiers reach 0, sides remain on the field and can still recruit.
@@ -13133,12 +13593,12 @@ export function performSimulationTick() {
 			let liveOwnedWarTiles = stats.owned || 0;
 			let exactOwned = 0;
 			if (stats.units === 0) {
-					// Throttle expensive grid scan to every 60 ticks (staggered offset 1)
-					if (simFrameCount % 60 === 1) {
+				// Throttle expensive grid scan to every 60 ticks (staggered offset 1)
+				if (simFrameCount % 60 === 1) {
 					exactOwned = 0;
-				for (let idx = 0; idx < worldControlMap.length; idx++) {
-					if (landMask[idx] === 2 && worldControlMap[idx] === country.id)
-						exactOwned++;
+					for (let idx = 0; idx < worldControlMap.length; idx++) {
+						if (landMask[idx] === 2 && worldControlMap[idx] === country.id)
+							exactOwned++;
 					}
 				}
 				liveOwnedWarTiles = exactOwned;
@@ -13156,14 +13616,14 @@ export function performSimulationTick() {
 			if (stats.units === 0) {
 				directControlled = 0;
 				const scanSIdx = countryToSideMap.get(country.id);
-						if (simFrameCount % 60 === 2) {
-				for (let di = 0; di < worldControlMap.length; di++) {
-					if (
-						landMask[di] === 2 &&
-						worldControlMap[di] === country.id &&
-						dominantSideMap[di] === scanSIdx
-					) {
-						directControlled++;
+				if (simFrameCount % 60 === 2) {
+					for (let di = 0; di < worldControlMap.length; di++) {
+						if (
+							landMask[di] === 2 &&
+							worldControlMap[di] === country.id &&
+							dominantSideMap[di] === scanSIdx
+						) {
+							directControlled++;
 						}
 					}
 				}
@@ -13186,11 +13646,16 @@ export function performSimulationTick() {
 				console.warn(
 					"[MW] CAPITULATION:",
 					country.name,
-					"units:", stats.units,
-					"controlled%:", controlPct.toFixed(2),
-					"owned:", stats.owned,
-					"initialCells:", country.initialCells,
-					"triggers:", {
+					"units:",
+					stats.units,
+					"controlled%:",
+					controlPct.toFixed(2),
+					"owned:",
+					stats.owned,
+					"initialCells:",
+					country.initialCells,
+					"triggers:",
+					{
 						hasNoOwnedWarTiles,
 						nearlyErasedNoUnits,
 						noForcesNoCities,
@@ -13505,11 +13970,33 @@ export function performSimulationTick() {
 	if (_tickMs > window.__perf.maxTick) window.__perf.maxTick = _tickMs;
 
 	// ── Per-tick perf history ring buffer ──
-	const _tickEntry = { tick: window.__perf.ticks, ms: _tickMs, units: units.length, cats: {}, reassess: {}, water: {} };
-	for (const k of _perfKeys) _tickEntry.cats[k] = (window.__perf[k] || 0) - _perfSnap[k];
-	for (const k of ['proposalRuns','proposalFailed','reassess_noPlan','reassess_interval','reassess_forced','reassess_territory','reassess_posture','reassess_ratio'])
+	const _tickEntry = {
+		tick: window.__perf.ticks,
+		ms: _tickMs,
+		units: units.length,
+		cats: {},
+		reassess: {},
+		water: {},
+	};
+	for (const k of _perfKeys)
+		_tickEntry.cats[k] = (window.__perf[k] || 0) - _perfSnap[k];
+	for (const k of [
+		"proposalRuns",
+		"proposalFailed",
+		"reassess_noPlan",
+		"reassess_interval",
+		"reassess_forced",
+		"reassess_territory",
+		"reassess_posture",
+		"reassess_ratio",
+	])
 		_tickEntry.reassess[k] = (window.__perf[k] || 0) - (_perfSnap[k] || 0);
-	for (const k of ['coastDeflectHalved','knockbackBlocked','waterPathPenalized','coastStuckAbandoned'])
+	for (const k of [
+		"coastDeflectHalved",
+		"knockbackBlocked",
+		"waterPathPenalized",
+		"coastStuckAbandoned",
+	])
 		_tickEntry.water[k] = (window.__perf[k] || 0) - (_perfSnap[k] || 0);
 	if (!window.__perf._history) window.__perf._history = [];
 	window.__perf._history.push(_tickEntry);
@@ -13519,24 +14006,25 @@ export function performSimulationTick() {
 }
 
 // ── Perf Report: type window.perfReport() in console ──
-window.perfReport = function() {
+window.perfReport = () => {
 	const h = window.__perf?._history;
-	if (!h || !h.length) {
-		const msg = 'no perf history yet — let the sim run a few ticks';
+	if (!h?.length) {
+		const msg = "no perf history yet — let the sim run a few ticks";
 		return msg;
 	}
 	const n = h.length;
-	const allMs = h.map(e => e.ms).sort((a, b) => a - b);
+	const allMs = h.map((e) => e.ms).sort((a, b) => a - b);
 	const avgMs = allMs.reduce((s, v) => s + v, 0) / n;
 	const p50 = allMs[Math.floor(n * 0.5)];
 	const p95 = allMs[Math.floor(n * 0.95)];
 	const p99 = allMs[Math.floor(n * 0.99)];
 	const maxMs = allMs[n - 1];
 	const minMs = allMs[0];
-	const fps = avgMs > 0 && Number.isFinite(avgMs) ? (1000 / avgMs).toFixed(0) : '—';
+	const fps =
+		avgMs > 0 && Number.isFinite(avgMs) ? (1000 / avgMs).toFixed(0) : "—";
 
 	// Unit stats
-	const unitCounts = h.map(e => e.units || 0);
+	const unitCounts = h.map((e) => e.units || 0);
 	const avgUnits = unitCounts.reduce((s, v) => s + v, 0) / n;
 	const maxUnits = Math.max(...unitCounts);
 
@@ -13555,12 +14043,21 @@ window.perfReport = function() {
 	for (const k of catKeys) catSamples[k].sort((a, b) => a - b);
 
 	// Reassessment totals from history
-	const reassessKeys = ['proposalRuns','proposalFailed','reassess_noPlan','reassess_interval','reassess_forced','reassess_territory','reassess_posture','reassess_ratio'];
+	const reassessKeys = [
+		"proposalRuns",
+		"proposalFailed",
+		"reassess_noPlan",
+		"reassess_interval",
+		"reassess_forced",
+		"reassess_territory",
+		"reassess_posture",
+		"reassess_ratio",
+	];
 	const reassessTotals = {};
 	for (const k of reassessKeys) reassessTotals[k] = 0;
 	for (const e of h) {
 		if (e.reassess) {
-			for (const k of reassessKeys) reassessTotals[k] += (e.reassess[k] || 0);
+			for (const k of reassessKeys) reassessTotals[k] += e.reassess[k] || 0;
 		}
 	}
 
@@ -13573,44 +14070,65 @@ window.perfReport = function() {
 	window.__perf._lastReportAvgs = { ...avgs };
 
 	const lines = [];
-	lines.push(`=== PERF REPORT (${n} ticks, avg ${avgMs.toFixed(1)}ms, ~${fps} fps) ===`);
-	lines.push(`  min: ${minMs.toFixed(1)}ms | p50: ${p50.toFixed(1)}ms | p95: ${p95.toFixed(1)}ms | p99: ${p99.toFixed(1)}ms | max: ${maxMs.toFixed(1)}ms`);
+	lines.push(
+		`=== PERF REPORT (${n} ticks, avg ${avgMs.toFixed(1)}ms, ~${fps} fps) ===`,
+	);
+	lines.push(
+		`  min: ${minMs.toFixed(1)}ms | p50: ${p50.toFixed(1)}ms | p95: ${p95.toFixed(1)}ms | p99: ${p99.toFixed(1)}ms | max: ${maxMs.toFixed(1)}ms`,
+	);
 	lines.push(`  units: avg ${avgUnits.toFixed(0)} | max ${maxUnits}`);
-	lines.push('  ─────────────────────────────────────────────');
+	lines.push("  ─────────────────────────────────────────────");
 
 	const sorted = Object.entries(avgs).sort((a, b) => b[1] - a[1]);
 	for (const [k, v] of sorted) {
 		if (v < 0.05 || Number.isNaN(v)) continue;
 		const rawPct = avgMs > 0 ? v / avgMs : 0;
-		const pct = Number.isFinite(rawPct) ? (rawPct * 100).toFixed(0) : '—';
-		const barCount = Number.isFinite(rawPct) ? Math.min(20, Math.round(rawPct * 20)) : 0;
-		const bar = '█'.repeat(Math.max(0, barCount));
+		const pct = Number.isFinite(rawPct) ? (rawPct * 100).toFixed(0) : "—";
+		const barCount = Number.isFinite(rawPct)
+			? Math.min(20, Math.round(rawPct * 20))
+			: 0;
+		const bar = "█".repeat(Math.max(0, barCount));
 		const samples = catSamples[k];
 		const catP95 = samples[Math.floor(samples.length * 0.95)];
-		const deltaStr = prevAvgs ? `  Δ${(delta[k] || 0) >= 0 ? '+' : ''}${(delta[k] || 0).toFixed(2)}ms` : '';
-		lines.push(`  ${k.padEnd(14)} ${v.toFixed(1).padStart(6)}ms (${pct.padStart(2)}%) ${bar.padEnd(20)} p95:${catP95.toFixed(1).padStart(5)}ms${deltaStr}`);
+		const deltaStr = prevAvgs
+			? `  Δ${(delta[k] || 0) >= 0 ? "+" : ""}${(delta[k] || 0).toFixed(2)}ms`
+			: "";
+		lines.push(
+			`  ${k.padEnd(14)} ${v.toFixed(1).padStart(6)}ms (${pct.padStart(2)}%) ${bar.padEnd(20)} p95:${catP95.toFixed(1).padStart(5)}ms${deltaStr}`,
+		);
 	}
 
-	lines.push('  ─────────────────────────────────────────────');
-	lines.push(`  reassess: ${reassessTotals.proposalRuns} runs | forced: ${reassessTotals.reassess_forced} | failed: ${reassessTotals.proposalFailed}`);
-	lines.push(`    noPlan:${reassessTotals.reassess_noPlan}  interval:${reassessTotals.reassess_interval}  forced:${reassessTotals.reassess_forced}  territory:${reassessTotals.reassess_territory}  posture:${reassessTotals.reassess_posture}  ratio:${reassessTotals.reassess_ratio}`);
+	lines.push("  ─────────────────────────────────────────────");
+	lines.push(
+		`  reassess: ${reassessTotals.proposalRuns} runs | forced: ${reassessTotals.reassess_forced} | failed: ${reassessTotals.proposalFailed}`,
+	);
+	lines.push(
+		`    noPlan:${reassessTotals.reassess_noPlan}  interval:${reassessTotals.reassess_interval}  forced:${reassessTotals.reassess_forced}  territory:${reassessTotals.reassess_territory}  posture:${reassessTotals.reassess_posture}  ratio:${reassessTotals.reassess_ratio}`,
+	);
 
 	// Water avoidance debug counters from history
-	const waterKeys = ['coastDeflectHalved','knockbackBlocked','waterPathPenalized','coastStuckAbandoned'];
+	const waterKeys = [
+		"coastDeflectHalved",
+		"knockbackBlocked",
+		"waterPathPenalized",
+		"coastStuckAbandoned",
+	];
 	const waterTotals = {};
 	for (const k of waterKeys) waterTotals[k] = 0;
 	for (const e of h) {
 		if (e.water) {
-			for (const k of waterKeys) waterTotals[k] += (e.water[k] || 0);
+			for (const k of waterKeys) waterTotals[k] += e.water[k] || 0;
 		}
 	}
 	const waterTotal = Object.values(waterTotals).reduce((s, v) => s + v, 0);
 	if (waterTotal > 0) {
 		lines.push(`  water avoidance: ${waterTotal} events`);
-		lines.push(`    pathPenalized:${waterTotals.waterPathPenalized}  coastDeflectHalved:${waterTotals.coastDeflectHalved}  knockbackBlocked:${waterTotals.knockbackBlocked}  coastStuckAbandoned:${waterTotals.coastStuckAbandoned}`);
+		lines.push(
+			`    pathPenalized:${waterTotals.waterPathPenalized}  coastDeflectHalved:${waterTotals.coastDeflectHalved}  knockbackBlocked:${waterTotals.knockbackBlocked}  coastStuckAbandoned:${waterTotals.coastStuckAbandoned}`,
+		);
 	}
 
-	return lines.join('\n');
+	return lines.join("\n");
 };
 
 export function updateLoop(now) {
@@ -14466,7 +14984,8 @@ export function applyTreaty(type, winnerPoleOverride = null) {
 	for (let si = 0; si < unitHashBySide.length; si++) unitHashBySide[si].clear();
 	aiCountryState.clear();
 	_warPlan = [];
-	activeBattles = []; _battleHash.clear();
+	activeBattles = [];
+	_battleHash.clear();
 	bombs = [];
 	explosions = [];
 	bases = [];
@@ -14598,7 +15117,8 @@ export function resetToSelection() {
 	units = [];
 	unitSpatialHash.clear();
 	for (let si = 0; si < unitHashBySide.length; si++) unitHashBySide[si].clear();
-	activeBattles = []; _battleHash.clear();
+	activeBattles = [];
+	_battleHash.clear();
 	bombs = [];
 	explosions = [];
 	bases = [];
@@ -14876,7 +15396,8 @@ if (showWarplansCheckbox) {
 	showWarplansCheckbox.checked = showWarPlans;
 	showWarplansCheckbox.addEventListener("change", (e) => {
 		showWarPlans = e.target.checked;
-		if (warplansToggleBtn) warplansToggleBtn.classList.toggle("active", showWarPlans);
+		if (warplansToggleBtn)
+			warplansToggleBtn.classList.toggle("active", showWarPlans);
 		setCookie("mw_show_warplans", e.target.checked ? "true" : "false");
 		if (influenceLayer) influenceLayer.render();
 	});
@@ -14886,11 +15407,13 @@ if (showLabelsCheckbox) {
 	showLabelsCheckbox.addEventListener("change", (e) => {
 		showCountryLabels = e.target.checked;
 		countryLabelAnchors.clear();
-		if (labelsToggleBtn) labelsToggleBtn.classList.toggle("active", showCountryLabels);
+		if (labelsToggleBtn)
+			labelsToggleBtn.classList.toggle("active", showCountryLabels);
 		setCookie("mw_show_labels", e.target.checked ? "true" : "false");
 		if (influenceLayer) {
 			influenceLayer._forceRender = true;
-			if (typeof influenceLayer._update === "function") influenceLayer._update();
+			if (typeof influenceLayer._update === "function")
+				influenceLayer._update();
 			else influenceLayer.render();
 		}
 	});
@@ -14899,7 +15422,8 @@ if (showCitiesCheckbox) {
 	showCitiesCheckbox.checked = showNonCapitalCities;
 	showCitiesCheckbox.addEventListener("change", (e) => {
 		showNonCapitalCities = e.target.checked;
-		if (citiesToggleBtn) citiesToggleBtn.classList.toggle("active", showNonCapitalCities);
+		if (citiesToggleBtn)
+			citiesToggleBtn.classList.toggle("active", showNonCapitalCities);
 		setCookie("mw_show_cities", e.target.checked ? "true" : "false");
 		if (influenceLayer) influenceLayer.render();
 	});
@@ -14908,7 +15432,8 @@ if (showBattlesCheckbox) {
 	showBattlesCheckbox.checked = showBattleIndicators;
 	showBattlesCheckbox.addEventListener("change", (e) => {
 		showBattleIndicators = e.target.checked;
-		if (battlesToggleBtn) battlesToggleBtn.classList.toggle("active", showBattleIndicators);
+		if (battlesToggleBtn)
+			battlesToggleBtn.classList.toggle("active", showBattleIndicators);
 		setCookie("mw_show_battles", e.target.checked ? "true" : "false");
 		if (influenceLayer) influenceLayer.render();
 	});
@@ -14917,7 +15442,8 @@ if (showAllianceCheckbox) {
 	showAllianceCheckbox.checked = allianceViewEnabled;
 	showAllianceCheckbox.addEventListener("change", (e) => {
 		allianceViewEnabled = e.target.checked;
-		if (allianceViewCheckbox) allianceViewCheckbox.checked = allianceViewEnabled;
+		if (allianceViewCheckbox)
+			allianceViewCheckbox.checked = allianceViewEnabled;
 		setCookie("mw_show_alliance", e.target.checked ? "true" : "false");
 		if (influenceLayer) influenceLayer.render();
 	});
@@ -14937,7 +15463,9 @@ if (cityFocusCheckbox) {
 }
 
 // Secret Sounds checkbox
-const useSecretSoundsCheckbox = document.getElementById("use-secret-sounds-checkbox");
+const useSecretSoundsCheckbox = document.getElementById(
+	"use-secret-sounds-checkbox",
+);
 
 if (useSecretSoundsCheckbox) {
 	useSecretSoundsCheckbox.checked = useSecretSounds;
@@ -15066,7 +15594,8 @@ if (quickRestartBtn) {
 		bombs = [];
 		explosions = [];
 		bases = [];
-		activeBattles = []; _battleHash.clear();
+		activeBattles = [];
+		_battleHash.clear();
 		capitalLostCountries = new Set();
 		activeRebellion = null;
 		countryCasualties.clear();
@@ -15506,7 +16035,8 @@ export function _signSelectiveSideExit(sideIdx) {
 	if (sideIdx < _navalPlan.length) _navalPlan[sideIdx] = null;
 	if (sideIdx < _navalSupplyPlan.length) _navalSupplyPlan[sideIdx] = null;
 	if (sideIdx < _transportPlan.length) _transportPlan[sideIdx] = null;
-	if (sideIdx < _planReassessNeeded.length) _planReassessNeeded[sideIdx] = false;
+	if (sideIdx < _planReassessNeeded.length)
+		_planReassessNeeded[sideIdx] = false;
 
 	// Purge units belonging to exiting nations
 	units = units.filter((u) => !exitingIds.has(u.sovereignId));
@@ -16467,7 +16997,8 @@ export function initializeEngine() {
 		10,
 	);
 
-	recruitModel = document.getElementById("recruit-model-select")?.value || "balanced";
+	recruitModel =
+		document.getElementById("recruit-model-select")?.value || "balanced";
 
 	// Sync global toggles from both main settings and setup panel sources
 	const mtDisabled =
@@ -16871,7 +17402,6 @@ document.getElementById("back-to-nav-btn").addEventListener("click", () => {
 /**
  * DYNAMIC MENU BACKGROUND SYSTEM
  */
-
 
 export let queuedScenarioAction = null;
 export const enterScenarioBtn = document.getElementById("enter-scenario-btn");
@@ -17434,7 +17964,8 @@ export function openInspector(id) {
 				newSideBtn.style.fontWeight = "900";
 				newSideBtn.style.width = "100%";
 				newSideBtn.style.marginTop = "4px";
-				newSideBtn.title = "Declare war on ALL existing sides as an independent faction";
+				newSideBtn.title =
+					"Declare war on ALL existing sides as an independent faction";
 				newSideBtn.onclick = () => {
 					recruitNewSideMidWar(id);
 					countryInspector.style.display = "none";
@@ -17601,7 +18132,10 @@ export function _placeDivisionAt(latlng, sovereignId) {
 	});
 
 	if (sideIdx >= 0 && sideIdx < MAX_SIDES) {
-		sideSoldiers[sideIdx] = Math.max(0, sideSoldiers[sideIdx] - soldiersPerUnit[sideIdx]);
+		sideSoldiers[sideIdx] = Math.max(
+			0,
+			sideSoldiers[sideIdx] - soldiersPerUnit[sideIdx],
+		);
 	}
 
 	statusText.innerText = `MANUAL DEPLOYMENT: Division placed for ${countryMetadata[sovereignId - 1]?.name || "Nation"}`;
@@ -18857,7 +19391,8 @@ export function resetConflictSetupState() {
 	bases = [];
 	bombs = [];
 	explosions = [];
-	activeBattles = []; _battleHash.clear();
+	activeBattles = [];
+	_battleHash.clear();
 	capitalLostCountries = new Set();
 	activeRebellion = null;
 	countryCasualties.clear();
