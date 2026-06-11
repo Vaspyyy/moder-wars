@@ -1827,7 +1827,7 @@ export let disableFullscreen = getCookie("mw_disable_fullscreen") === "true";
 
 // ── Global perf profiler init (once at module load, before any tick code runs) ──
 window.__perf = {
-	_version: "V0.25.81",
+	_version: "V0.25.82",
 	plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 	recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 	influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -6268,8 +6268,37 @@ export function triggerRandomWar() {
 		buffState: "none",
 	};
 
-	// Random war from setup: start a clean two‑sided conflict using normal flow
+	// Random war from setup: start a clean conflict using normal flow
 	sides = [[countryA], [countryB]];
+	const combatantIds = new Set([idA, idB]);
+	let addProb = 0.5;
+	while (sides.length < MAX_SIDES && addProb > 0.01) {
+		if (Math.random() >= addProb) break;
+		addProb /= 2;
+		const candidates = [];
+		for (const cid of combatantIds) {
+			const neighbors = adjacencyCache.get(cid);
+			if (!neighbors) continue;
+			for (const nid of neighbors) {
+				if (nid > 0 && tileCounts.get(nid) > 0 && !combatantIds.has(nid)) {
+					candidates.push(nid);
+				}
+			}
+		}
+		if (candidates.length === 0) break;
+		const pick = candidates[Math.floor(Math.random() * candidates.length)];
+		const meta = countryMetadata[pick - 1];
+		if (!meta) break;
+		combatantIds.add(pick);
+		sides.push([{
+			id: pick,
+			name: meta.name,
+			color: meta.color,
+			role: "OFFENSE",
+			strategy: "BALANCED",
+			buffState: "none",
+		}]);
+	}
 	activeSideIndex = 0;
 	updateSidesUI();
 	startWar();
@@ -8933,7 +8962,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.81",
+		_version: "V0.25.82",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
