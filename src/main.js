@@ -1827,7 +1827,7 @@ export let disableFullscreen = getCookie("mw_disable_fullscreen") === "true";
 
 // ── Global perf profiler init (once at module load, before any tick code runs) ──
 window.__perf = {
-	_version: "V0.25.75",
+	_version: "V0.25.76",
 	plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 	recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 	influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -8888,7 +8888,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.75",
+		_version: "V0.25.76",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -10558,27 +10558,29 @@ export function performSimulationTick() {
 							let eBuff = eCountry?.buffState || "none";
 							const superPenalty = (!isMega && !isSuper && (eBuff === "super" || eBuff === "godly")) ? 5.0 : 0;
 							let targetScore = noisyDSq - healthModifier + superPenalty;
-							// Water-path check: penalize land enemies unreachable by land
-							if (!isAtSea && !eAtSea && dSq > 0.25) {
-								const lineLen = Math.sqrt(dSq);
-								const steps = Math.min(12, Math.ceil(lineLen / 0.4));
-								let waterSamples = 0;
-								for (let s = 1; s < steps; s++) {
-									const t = s / steps;
-									const wIdx = getGridIndex(
-										u.lat + (e.lat - u.lat) * t,
-										u.lng + deLng * t,
-									);
-									if (wIdx !== -1 && landMask[wIdx] === 0) waterSamples++;
-								}
-								if (waterSamples > steps * 0.3) {
-									targetScore += 10000;
-									window.__perf.waterPathPenalized = (window.__perf.waterPathPenalized || 0) + 1;
-								}
-							}
 							if (targetScore < minDist) {
-								minDist = targetScore;
-								target = e;
+								// Water-path check: penalize land enemies unreachable by land
+								if (!isAtSea && !eAtSea && dSq > 0.25) {
+									const lineLen = Math.sqrt(dSq);
+									const steps = Math.min(12, Math.ceil(lineLen / 0.4));
+									let waterSamples = 0;
+									for (let s = 1; s < steps; s++) {
+										const t = s / steps;
+										const wIdx = getGridIndex(
+											u.lat + (e.lat - u.lat) * t,
+											u.lng + deLng * t,
+										);
+										if (wIdx !== -1 && landMask[wIdx] === 0) waterSamples++;
+									}
+									if (waterSamples > steps * 0.3) {
+										targetScore += 10000;
+										window.__perf.waterPathPenalized = (window.__perf.waterPathPenalized || 0) + 1;
+									}
+								}
+								if (targetScore < minDist) {
+									minDist = targetScore;
+									target = e;
+								}
 							}
 							if (dSq < tacticalRadiusSq) {
 								let eWeight = 1;
@@ -10862,27 +10864,29 @@ export function performSimulationTick() {
 							let eBuff = eCountry?.buffState || "none";
 							const superPenalty = (!isMega && !isSuper && (eBuff === "super" || eBuff === "godly")) ? 5.0 : 0;
 							let targetScore = noisyDSq - healthModifier + superPenalty;
-							// Water-path check: penalize land enemies unreachable by land
-							if (!isAtSea && !eAtSea && dSq > 0.25) {
-								const lineLen = Math.sqrt(dSq);
-								const steps = Math.min(12, Math.ceil(lineLen / 0.4));
-								let waterSamples = 0;
-								for (let s = 1; s < steps; s++) {
-									const t = s / steps;
-									const wIdx = getGridIndex(
-										u.lat + (e.lat - u.lat) * t,
-										u.lng + deLng * t,
-									);
-									if (wIdx !== -1 && landMask[wIdx] === 0) waterSamples++;
-								}
-								if (waterSamples > steps * 0.3) {
-									targetScore += 10000;
-									window.__perf.waterPathPenalized = (window.__perf.waterPathPenalized || 0) + 1;
-								}
-							}
 							if (targetScore < minDist) {
-								minDist = targetScore;
-								target = e;
+								// Water-path check: penalize land enemies unreachable by land
+								if (!isAtSea && !eAtSea && dSq > 0.25) {
+									const lineLen = Math.sqrt(dSq);
+									const steps = Math.min(12, Math.ceil(lineLen / 0.4));
+									let waterSamples = 0;
+									for (let s = 1; s < steps; s++) {
+										const t = s / steps;
+										const wIdx = getGridIndex(
+											u.lat + (e.lat - u.lat) * t,
+											u.lng + deLng * t,
+										);
+										if (wIdx !== -1 && landMask[wIdx] === 0) waterSamples++;
+									}
+									if (waterSamples > steps * 0.3) {
+										targetScore += 10000;
+										window.__perf.waterPathPenalized = (window.__perf.waterPathPenalized || 0) + 1;
+									}
+								}
+								if (targetScore < minDist) {
+									minDist = targetScore;
+									target = e;
+								}
 							}
 
 							if (dSq < tacticalRadiusSq) {
