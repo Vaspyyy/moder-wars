@@ -1827,7 +1827,7 @@ export let disableFullscreen = getCookie("mw_disable_fullscreen") === "true";
 
 // ── Global perf profiler init (once at module load, before any tick code runs) ──
 window.__perf = {
-	_version: "V0.26.0",
+	_version: "V0.26.1",
 	plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 	recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 	influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -7718,6 +7718,9 @@ export function scoreProposal(proposal, sideIdx) {
 	}
 	if (proposal.type === "TRANSPORT") {
 		score += 25 + Math.min(30, (proposal.strandedCount || 0) * 2);
+		// Transport is logistics, not combat — immune to force ratio penalties
+		score *= 1.2; // mild universal boost
+		return Math.round(score * 100) / 100;
 	}
 
 	// ── Feasibility (0–30) ──
@@ -9028,7 +9031,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.26.0",
+		_version: "V0.26.1",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -12154,6 +12157,8 @@ export function performSimulationTick() {
 						}
 					}
 
+					// DEFEND plan and land plan execution — skip if unit is in transport mode
+					if (!u.isTransport) {
 					// DEFEND plan: hold the frontline, do not advance
 					if (
 						activePlan &&
@@ -12391,6 +12396,7 @@ export function performSimulationTick() {
 						}
 					}
 				} // end else (non-naval land plan)
+				} // end if (!u.isTransport)
 
 				// Blend plan direction into movement
 				if (isPlanUnit && (planDirLat !== 0 || planDirLng !== 0)) {
