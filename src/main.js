@@ -1810,6 +1810,7 @@ export let _cachedSideTerritoryPcts = [];
 export let _cachedCityEls = [];
 export let _cachedUnitCountSpans = [];
 export let _cachedTerritoryCtrlEls = [];
+export let _cachedMomentumEls = [];
 export let _cachedTerritorySegEls = [];
 export const _cachedManpowerSpans = [];
 export let _casualtyStructureKey = "";
@@ -3044,6 +3045,7 @@ export function rebuildStatsPanel() {
             <div class="stat-metrics">
                 <div class="metric"><span class="metric-label">PERSONNEL</span><span class="metric-value" data-sidesoldiers="${s.idx}" style="color:${color};">0</span></div>
                 <div class="metric"><span class="metric-label">CITIES</span><span class="metric-value" data-sidecities="${s.idx}">0</span></div>
+                <div class="metric"><span class="metric-label">MOMENTUM</span><span class="metric-value" data-sidemomentum="${s.idx}" style="color:#f39c12;">◆ STALEMATE</span></div>
             </div>
         </div>`;
 	});
@@ -3053,6 +3055,7 @@ export function rebuildStatsPanel() {
 	_cachedCityEls = [];
 	_cachedTerritoryCtrlEls = [];
 	_cachedTerritorySegEls = [];
+	_cachedMomentumEls = [];
 	for (const s of activeSides) {
 		_cachedSoldierEls[s.idx] = document.querySelector(
 			`[data-sidesoldiers="${s.idx}"]`,
@@ -3065,6 +3068,9 @@ export function rebuildStatsPanel() {
 		);
 		_cachedTerritorySegEls[s.idx] = document.querySelector(
 			`[data-tugsegment="${s.idx}"]`,
+		);
+		_cachedMomentumEls[s.idx] = document.querySelector(
+			`[data-sidemomentum="${s.idx}"]`,
 		);
 	}
 
@@ -14290,6 +14296,20 @@ export function updateLoop(now) {
 					? 1
 					: sideSoldierEsts[si],
 			);
+		// Update momentum indicator
+		const mel = _cachedMomentumEls[si];
+		if (mel) {
+			const phase = _sideWarPhase[si] || "STALEMATE";
+			const phaseConfig = {
+				ADVANCING: { color: "#2ecc71", symbol: "▲" },
+				STALEMATE: { color: "#f39c12", symbol: "◆" },
+				RETREATING: { color: "#e74c3c", symbol: "▼" },
+				COLLAPSING: { color: "#c0392b", symbol: "✗" },
+			};
+			const pc = phaseConfig[phase] || phaseConfig.STALEMATE;
+			mel.style.color = pc.color;
+			mel.textContent = `${pc.symbol} ${phase}`;
+		}
 	}
 
 	if (_cachedUnitCountSpans.length) {
