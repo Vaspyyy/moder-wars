@@ -1827,7 +1827,7 @@ export let disableFullscreen = getCookie("mw_disable_fullscreen") === "true";
 
 // ── Global perf profiler init (once at module load, before any tick code runs) ──
 window.__perf = {
-	_version: "V0.25.74",
+	_version: "V0.25.75",
 	plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 	recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 	influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -1842,6 +1842,7 @@ window.__perf = {
 	unitRetreatMopUp: 0, unitCombatMove: 0,
 	// Water avoidance debug counters
 	coastDeflectHalved: 0, knockbackBlocked: 0,
+	waterPathPenalized: 0, coastStuckAbandoned: 0,
 };
 
 // High-performance spatial cache for unit culling and combat
@@ -8887,7 +8888,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.74",
+		_version: "V0.25.75",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -8902,6 +8903,7 @@ export function performSimulationTick() {
 		unitRetreatMopUp: 0, unitCombatMove: 0,
 		// Water avoidance debug counters
 		coastDeflectHalved: 0, knockbackBlocked: 0,
+		waterPathPenalized: 0, coastStuckAbandoned: 0,
 	};
 	window.__perf.ticks++;
 	// ── Perf snapshot for per-tick delta computation ──
@@ -8911,7 +8913,7 @@ export function performSimulationTick() {
 		'spatialHash','frontline','consolidate','caches','victory','aiPosture','posture','render',
 		'unitSetupTerrain','unitSpatialHash','unitEnemyScan','unitAllyScan',
 		'unitRetreatMopUp','unitCombatMove',
-		'coastDeflectHalved','knockbackBlocked'];
+		'coastDeflectHalved','knockbackBlocked','waterPathPenalized','coastStuckAbandoned'];
 	for (const k of _perfKeys) _perfSnap[k] = window.__perf[k] || 0;
 	for (const k of ['proposalRuns','proposalFailed','reassess_noPlan','reassess_interval','reassess_forced','reassess_territory','reassess_posture','reassess_ratio'])
 		_perfSnap[k] = window.__perf[k] || 0;
@@ -10555,7 +10557,25 @@ export function performSimulationTick() {
 							const eCountry = _countryById.get(e.sovereignId);
 							let eBuff = eCountry?.buffState || "none";
 							const superPenalty = (!isMega && !isSuper && (eBuff === "super" || eBuff === "godly")) ? 5.0 : 0;
-							const targetScore = noisyDSq - healthModifier + superPenalty;
+							let targetScore = noisyDSq - healthModifier + superPenalty;
+							// Water-path check: penalize land enemies unreachable by land
+							if (!isAtSea && !eAtSea && dSq > 0.25) {
+								const lineLen = Math.sqrt(dSq);
+								const steps = Math.min(12, Math.ceil(lineLen / 0.4));
+								let waterSamples = 0;
+								for (let s = 1; s < steps; s++) {
+									const t = s / steps;
+									const wIdx = getGridIndex(
+										u.lat + (e.lat - u.lat) * t,
+										u.lng + deLng * t,
+									);
+									if (wIdx !== -1 && landMask[wIdx] === 0) waterSamples++;
+								}
+								if (waterSamples > steps * 0.3) {
+									targetScore += 10000;
+									window.__perf.waterPathPenalized = (window.__perf.waterPathPenalized || 0) + 1;
+								}
+							}
 							if (targetScore < minDist) {
 								minDist = targetScore;
 								target = e;
@@ -10841,7 +10861,25 @@ export function performSimulationTick() {
 							const eCountry = _countryById.get(e.sovereignId);
 							let eBuff = eCountry?.buffState || "none";
 							const superPenalty = (!isMega && !isSuper && (eBuff === "super" || eBuff === "godly")) ? 5.0 : 0;
-							const targetScore = noisyDSq - healthModifier + superPenalty;
+							let targetScore = noisyDSq - healthModifier + superPenalty;
+							// Water-path check: penalize land enemies unreachable by land
+							if (!isAtSea && !eAtSea && dSq > 0.25) {
+								const lineLen = Math.sqrt(dSq);
+								const steps = Math.min(12, Math.ceil(lineLen / 0.4));
+								let waterSamples = 0;
+								for (let s = 1; s < steps; s++) {
+									const t = s / steps;
+									const wIdx = getGridIndex(
+										u.lat + (e.lat - u.lat) * t,
+										u.lng + deLng * t,
+									);
+									if (wIdx !== -1 && landMask[wIdx] === 0) waterSamples++;
+								}
+								if (waterSamples > steps * 0.3) {
+									targetScore += 10000;
+									window.__perf.waterPathPenalized = (window.__perf.waterPathPenalized || 0) + 1;
+								}
+							}
 							if (targetScore < minDist) {
 								minDist = targetScore;
 								target = e;
@@ -12624,6 +12662,7 @@ export function performSimulationTick() {
 					!Number.isNaN(moveDist)
 				) {
 					// Naval block: non-transport units cannot enter water tiles
+					let coastBlocked = false;
 					if (!u.isTransport) {
 						const newLat = u.lat + moveDirLat * moveDist;
 						const newLng = u.lng + moveDirLng * moveDist;
@@ -12631,6 +12670,7 @@ export function performSimulationTick() {
 						if (destIdx !== -1 && landMask[destIdx] === 0) {
 							if (!isAtSea) {
 								// Would enter water — try coast deflection before stopping
+								coastBlocked = true;
 								let deflected = false;
 								const lookDist = moveDist * 3;
 								for (const ang of [-90, 90, -45, 45, -135, 135, -30, 30]) {
@@ -12675,6 +12715,19 @@ export function performSimulationTick() {
 								}
 							}
 						}
+					}
+
+					// Coast stuck detection: abandon target after 60 ticks of coast deflection
+					if (coastBlocked) {
+						u._coastStuckTicks = (u._coastStuckTicks || 0) + 1;
+						if (u._coastStuckTicks > 60) {
+							target = null;
+							u._cachedTarget = null;
+							u._coastStuckTicks = 0;
+							window.__perf.coastStuckAbandoned = (window.__perf.coastStuckAbandoned || 0) + 1;
+						}
+					} else {
+						u._coastStuckTicks = 0;
 					}
 
 					u.lat += moveDirLat * moveDist;
