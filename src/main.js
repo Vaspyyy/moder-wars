@@ -1827,7 +1827,7 @@ export let disableFullscreen = getCookie("mw_disable_fullscreen") === "true";
 
 // ── Global perf profiler init (once at module load, before any tick code runs) ──
 window.__perf = {
-	_version: "V0.25.76",
+	_version: "V0.25.77",
 	plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 	recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 	influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -8888,7 +8888,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.76",
+		_version: "V0.25.77",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -8912,10 +8912,11 @@ export function performSimulationTick() {
 		'prePlans','influence','smoothing','phase0','phase67','phase133',
 		'spatialHash','frontline','consolidate','caches','victory','aiPosture','posture','render',
 		'unitSetupTerrain','unitSpatialHash','unitEnemyScan','unitAllyScan',
-		'unitRetreatMopUp','unitCombatMove',
-		'coastDeflectHalved','knockbackBlocked','waterPathPenalized','coastStuckAbandoned'];
+		'unitRetreatMopUp','unitCombatMove'];
 	for (const k of _perfKeys) _perfSnap[k] = window.__perf[k] || 0;
 	for (const k of ['proposalRuns','proposalFailed','reassess_noPlan','reassess_interval','reassess_forced','reassess_territory','reassess_posture','reassess_ratio'])
+		_perfSnap[k] = window.__perf[k] || 0;
+	for (const k of ['coastDeflectHalved','knockbackBlocked','waterPathPenalized','coastStuckAbandoned'])
 		_perfSnap[k] = window.__perf[k] || 0;
 	_simTickCount++;
 	let _dbgLogCount = 999999; // DEBUG: throttled out (was 0)
@@ -10158,6 +10159,24 @@ export function performSimulationTick() {
 				const isGoodTarget = ds !== u.sideIndex;
 				if (!isGoodTarget) continue;
 				const dSq = (u.lat - city.lat) ** 2 + (u.lng - city.lng) ** 2;
+				// Water-path check: skip cities unreachable by land
+				if (!isAtSea && dSq > 0.25) {
+					let dcLng = city.lng - u.lng;
+					if (dcLng > 180) dcLng -= 360;
+					else if (dcLng < -180) dcLng += 360;
+					const lineLen = Math.sqrt(dSq);
+					const steps = Math.min(12, Math.ceil(lineLen / 0.4));
+					let waterSamples = 0;
+					for (let s = 1; s < steps; s++) {
+						const t = s / steps;
+						const wIdx = getGridIndex(
+							u.lat + (city.lat - u.lat) * t,
+							u.lng + dcLng * t,
+						);
+						if (wIdx !== -1 && landMask[wIdx] === 0) waterSamples++;
+					}
+					if (waterSamples > steps * 0.3) continue;
+				}
 				if (dSq < bestCityDistSq) {
 					bestCityDistSq = dSq;
 					bestCity = city;
@@ -11490,6 +11509,23 @@ export function performSimulationTick() {
 				if (dlng > 180) dlng -= 360;
 				else if (dlng < -180) dlng += 360;
 				const dSq = (u.lat - c.lat) ** 2 + dlng ** 2;
+
+				// Water-path check: skip cities unreachable by land
+				if (!isAtSea && dSq > 0.25) {
+					const lineLen = Math.sqrt(dSq);
+					const steps = Math.min(12, Math.ceil(lineLen / 0.4));
+					let waterSamples = 0;
+					for (let s = 1; s < steps; s++) {
+						const t = s / steps;
+						const wIdx = getGridIndex(
+							u.lat + (c.lat - u.lat) * t,
+							u.lng + dlng * t,
+						);
+						if (wIdx !== -1 && landMask[wIdx] === 0) waterSamples++;
+					}
+					if (waterSamples > steps * 0.3) continue;
+				}
+
 				const _occ = getControlValue(c.lat, c.lng);
 				const cityIdx = getGridIndex(c.lat, c.lng);
 				const contested = myInfluenceAt(cityIdx, u.sideIndex) < 0.35;
@@ -13294,10 +13330,12 @@ export function performSimulationTick() {
 	if (_tickMs > window.__perf.maxTick) window.__perf.maxTick = _tickMs;
 
 	// ── Per-tick perf history ring buffer ──
-	const _tickEntry = { tick: window.__perf.ticks, ms: _tickMs, units: units.length, cats: {}, reassess: {} };
+	const _tickEntry = { tick: window.__perf.ticks, ms: _tickMs, units: units.length, cats: {}, reassess: {}, water: {} };
 	for (const k of _perfKeys) _tickEntry.cats[k] = (window.__perf[k] || 0) - _perfSnap[k];
 	for (const k of ['proposalRuns','proposalFailed','reassess_noPlan','reassess_interval','reassess_forced','reassess_territory','reassess_posture','reassess_ratio'])
 		_tickEntry.reassess[k] = (window.__perf[k] || 0) - (_perfSnap[k] || 0);
+	for (const k of ['coastDeflectHalved','knockbackBlocked','waterPathPenalized','coastStuckAbandoned'])
+		_tickEntry.water[k] = (window.__perf[k] || 0) - (_perfSnap[k] || 0);
 	if (!window.__perf._history) window.__perf._history = [];
 	window.__perf._history.push(_tickEntry);
 	if (window.__perf._history.length > 300) window.__perf._history.shift();
@@ -13381,6 +13419,21 @@ window.perfReport = function() {
 	lines.push('  ─────────────────────────────────────────────');
 	lines.push(`  reassess: ${reassessTotals.proposalRuns} runs | forced: ${reassessTotals.reassess_forced} | failed: ${reassessTotals.proposalFailed}`);
 	lines.push(`    noPlan:${reassessTotals.reassess_noPlan}  interval:${reassessTotals.reassess_interval}  forced:${reassessTotals.reassess_forced}  territory:${reassessTotals.reassess_territory}  posture:${reassessTotals.reassess_posture}  ratio:${reassessTotals.reassess_ratio}`);
+
+	// Water avoidance debug counters from history
+	const waterKeys = ['coastDeflectHalved','knockbackBlocked','waterPathPenalized','coastStuckAbandoned'];
+	const waterTotals = {};
+	for (const k of waterKeys) waterTotals[k] = 0;
+	for (const e of h) {
+		if (e.water) {
+			for (const k of waterKeys) waterTotals[k] += (e.water[k] || 0);
+		}
+	}
+	const waterTotal = Object.values(waterTotals).reduce((s, v) => s + v, 0);
+	if (waterTotal > 0) {
+		lines.push(`  water avoidance: ${waterTotal} events`);
+		lines.push(`    pathPenalized:${waterTotals.waterPathPenalized}  coastDeflectHalved:${waterTotals.coastDeflectHalved}  knockbackBlocked:${waterTotals.knockbackBlocked}  coastStuckAbandoned:${waterTotals.coastStuckAbandoned}`);
+	}
 
 	return lines.join('\n');
 };
