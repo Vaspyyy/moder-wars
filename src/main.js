@@ -1827,7 +1827,7 @@ export let disableFullscreen = getCookie("mw_disable_fullscreen") === "true";
 
 // ── Global perf profiler init (once at module load, before any tick code runs) ──
 window.__perf = {
-	_version: "V0.25.79",
+	_version: "V0.25.80",
 	plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 	recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 	influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -6852,13 +6852,15 @@ export function generateAllProposals(sideIdx) {
 		else if (deLng < -180) deLng += 360;
 		const dSq = (ec.city.lat - fLat) ** 2 + deLng ** 2;
 
-		// Water-crossing check: sample line from unit centroid to city
-		// Always check — some cities can be across water even when a land
-		// frontline exists with a different enemy (e.g. Spain→Morocco while at war with France)
+		// Water-crossing check: sample line from frontline centroid to city
+		// Use frontline centroid (always on land) instead of unit centroid (could be
+		// scattered across water if side already has units on enemy territory)
 		let crossesWater = false;
-		if (uCount > 0) {
-			const ddLat = ec.city.lat - uLat;
-			let ddLng = ec.city.lng - uLng;
+		const checkLat = fCount > 0 ? fLat : uLat;
+		const checkLng = fCount > 0 ? fLng : uLng;
+		if (fCount > 0 || uCount > 0) {
+			const ddLat = ec.city.lat - checkLat;
+			let ddLng = ec.city.lng - checkLng;
 			if (ddLng > 180) ddLng -= 360;
 			else if (ddLng < -180) ddLng += 360;
 			const lineLen = Math.sqrt(ddLat * ddLat + ddLng * ddLng);
@@ -6867,8 +6869,8 @@ export function generateAllProposals(sideIdx) {
 				let waterSamples = 0;
 				for (let s = 1; s < steps; s++) {
 					const t = s / steps;
-					const slat = uLat + ddLat * t;
-					const slng = uLng + ddLng * t;
+					const slat = checkLat + ddLat * t;
+					const slng = checkLng + ddLng * t;
 					const sIdx = getGridIndex(slat, slng);
 					if (sIdx !== -1 && landMask[sIdx] === 0) waterSamples++;
 				}
@@ -8931,7 +8933,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.79",
+		_version: "V0.25.80",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
