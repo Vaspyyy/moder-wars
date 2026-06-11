@@ -1827,7 +1827,7 @@ export let disableFullscreen = getCookie("mw_disable_fullscreen") === "true";
 
 // ── Global perf profiler init (once at module load, before any tick code runs) ──
 window.__perf = {
-	_version: "V0.25.73",
+	_version: "V0.25.74",
 	plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 	recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 	influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -1840,6 +1840,8 @@ window.__perf = {
 	// unitLoop sub-timers
 	unitSetupTerrain: 0, unitSpatialHash: 0, unitEnemyScan: 0, unitAllyScan: 0,
 	unitRetreatMopUp: 0, unitCombatMove: 0,
+	// Water avoidance debug counters
+	coastDeflectHalved: 0, knockbackBlocked: 0,
 };
 
 // High-performance spatial cache for unit culling and combat
@@ -8885,7 +8887,7 @@ export function evaluateAllPlans() {
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = {
-		_version: "V0.25.73",
+		_version: "V0.25.74",
 		plans: 0, proposals: 0, eval: 0, neutralBorder: 0,
 		recruit: 0, unitLoop: 0, post: 0, prePlans: 0,
 		influence: 0, smoothing: 0, phase0: 0, phase67: 0, phase133: 0,
@@ -8898,6 +8900,8 @@ export function performSimulationTick() {
 		// unitLoop sub-timers
 		unitSetupTerrain: 0, unitSpatialHash: 0, unitEnemyScan: 0, unitAllyScan: 0,
 		unitRetreatMopUp: 0, unitCombatMove: 0,
+		// Water avoidance debug counters
+		coastDeflectHalved: 0, knockbackBlocked: 0,
 	};
 	window.__perf.ticks++;
 	// ── Perf snapshot for per-tick delta computation ──
@@ -8906,7 +8910,8 @@ export function performSimulationTick() {
 		'prePlans','influence','smoothing','phase0','phase67','phase133',
 		'spatialHash','frontline','consolidate','caches','victory','aiPosture','posture','render',
 		'unitSetupTerrain','unitSpatialHash','unitEnemyScan','unitAllyScan',
-		'unitRetreatMopUp','unitCombatMove'];
+		'unitRetreatMopUp','unitCombatMove',
+		'coastDeflectHalved','knockbackBlocked'];
 	for (const k of _perfKeys) _perfSnap[k] = window.__perf[k] || 0;
 	for (const k of ['proposalRuns','proposalFailed','reassess_noPlan','reassess_interval','reassess_forced','reassess_territory','reassess_posture','reassess_ratio'])
 		_perfSnap[k] = window.__perf[k] || 0;
@@ -12650,6 +12655,15 @@ export function performSimulationTick() {
 											moveDirLat = candLat / mag;
 											moveDirLng = candLng / mag;
 										}
+										// Re-check: does the deflected step land on land?
+										const deflDestIdx = getGridIndex(
+											u.lat + moveDirLat * moveDist,
+											u.lng + moveDirLng * moveDist,
+										);
+										if (deflDestIdx !== -1 && landMask[deflDestIdx] === 0) {
+											moveDist *= 0.5;
+											window.__perf.coastDeflectHalved++;
+										}
 										deflected = true;
 										break;
 									}
@@ -12772,6 +12786,12 @@ export function performSimulationTick() {
 						newLat = Math.max(-89.9, Math.min(89.9, newLat));
 						if (newLng > 180) newLng -= 360;
 						else if (newLng < -180) newLng += 360;
+						// Water guard: don't push land units into water
+						const pushIdx = getGridIndex(newLat, newLng);
+						if (pushIdx !== -1 && landMask[pushIdx] === 0 && !unitObj.isAtSea) {
+							window.__perf.knockbackBlocked++;
+							return;
+						}
 						unitObj.lat = newLat;
 						unitObj.lng = newLng;
 					};
