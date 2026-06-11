@@ -108,7 +108,7 @@ const ControlMapLayer = L.Layer.extend({
 
 		this._onZoomAnim = (e) => {
 			// Apply CSS transform to match Leaflet's tile zoom animation
-			const scale = Math.pow(2, e.zoom - this._zoomStartZoom);
+			const scale = 2 ** (e.zoom - this._zoomStartZoom);
 			const size = map.getSize();
 			const originX = size.x / 2;
 			const originY = size.y / 2;
@@ -1906,6 +1906,17 @@ const ControlMapLayer = L.Layer.extend({
 						ctx.restore();
 					}
 
+					// Encirclement Badge
+					if (u.encircledTicks > 30) {
+						ctx.save();
+						ctx.fillStyle = "rgba(255, 0, 0, 0.9)";
+						ctx.font = `bold ${Math.max(6, 7 * zoomScale)}px monospace`;
+						ctx.textAlign = "center";
+						ctx.textBaseline = "bottom";
+						ctx.fillText("ENCIRCLED", p.x, p.y - sh / 2 - 3);
+						ctx.restore();
+					}
+
 					if (isMountain) {
 						// Floating triangle indicator well above the unit to signify mountain traversal
 						const triSize = 5 * zoomScale;
@@ -2454,7 +2465,11 @@ const ControlMapLayer = L.Layer.extend({
 
 					ctx.font = "bold 9px monospace";
 					ctx.fillStyle = sideColor.replace(rgbaRe, "0.8)");
-					ctx.fillText(`TRANSPORT (${tp.activeUnitCount || 0})`, midX + 10, midY - 2);
+					ctx.fillText(
+						`TRANSPORT (${tp.activeUnitCount || 0})`,
+						midX + 10,
+						midY - 2,
+					);
 				}
 			}
 
@@ -2538,7 +2553,9 @@ const ControlMapLayer = L.Layer.extend({
 		}
 
 		ctx.restore();
-		if (window.__perf) window.__perf.render = (window.__perf.render || 0) + performance.now() - _r0;
+		if (window.__perf)
+			window.__perf.render =
+				(window.__perf.render || 0) + performance.now() - _r0;
 	},
 
 	drawCurvedLabel: function (ctx, sideIdx) {
