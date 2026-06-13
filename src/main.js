@@ -3580,8 +3580,7 @@ export function estimateUnitsForCountry(countryId) {
 	}
 
 	// Only apply densityScale for area-based models (it penalizes large countries)
-	const useDensityScale =
-		recruitModel === "area" || recruitModel === "balanced";
+	const useDensityScale = recruitModel === "area";
 	let count = Math.floor(
 		effectiveCount *
 			CONFIG.UNIT_DENSITY_FACTOR *
