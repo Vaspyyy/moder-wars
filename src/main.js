@@ -1912,6 +1912,7 @@ export const aiCountryState = new Map();
 export let _sidePosture = []; // per-side auto posture (OFFENSIVE/BALANCED/DEFENSIVE)
 export let _sideMomentumHistory = []; // per-side: array of {tick, controlled} entries
 export let _sideWarPhase = []; // per-side: "ADVANCING" | "STALEMATE" | "RETREATING" | "COLLAPSING"
+let _lastCapitulationTick = 0; // simFrameCount of last country capitulation (grace period for territory checks)
 export let _warPlan = []; // per-side war plan: { type, phase, target, ... }
 export const _navalPlan = []; // per-side naval invasion plan (1 per side max)
 export const _navalSupplyPlan = []; // per-side naval supply run plan (1 per side max)
@@ -13841,10 +13842,21 @@ export function performSimulationTick() {
 	const side0Pct =
 		totalTerritory > 0 ? (sideTerritoryCounts[0] / totalTerritory) * 100 : 50;
 
-	if (side0Pct >= 99.9) {
+	// Territory-based capitulation — only fire when BOTH sides still have units
+	// and allow grace period after recent capitulation to prevent cascade
+	const side0HasUnits = sides[0]?.some((c) =>
+		units.some((u) => u.sovereignId === c.id),
+	);
+	const side1HasUnits =
+		sides.length > 1 &&
+		sides[1] &&
+		sides[1].some((c) => units.some((u) => u.sovereignId === c.id));
+	const recentCapitulation = simFrameCount - (_lastCapitulationTick || 0) < 600;
+
+	if (!recentCapitulation && side0Pct >= 99.9 && side1HasUnits) {
 		applyTreaty("FULL_CAPITULATION", 0);
 		return true;
-	} else if (side0Pct <= 0.1) {
+	} else if (!recentCapitulation && side0Pct <= 0.1 && side0HasUnits) {
 		applyTreaty("FULL_CAPITULATION", sides.length > 1 ? 1 : 0);
 		return true;
 	} else if (timeSinceTreaty > 6000 && treatyAlert.style.display === "none") {
@@ -14624,6 +14636,8 @@ export function showTreatyOffer(proposerSideIdx, willAccept) {
 export function capitulateCountry(country, sideIndex) {
 	const side = sides[sideIndex];
 	if (!side) return;
+
+	_lastCapitulationTick = simFrameCount; // grace period for territory-based capitulation checks
 
 	// Announce the individual fall
 	statusText.innerText = `${country.name} HAS CAPITULATED`;
@@ -16141,6 +16155,7 @@ export function _signSelectiveSideExit(sideIdx) {
 	const side = sides[sideIdx];
 	if (!side || side.length === 0) return;
 
+	_lastCapitulationTick = simFrameCount; // grace period for territory-based capitulation checks
 	const exitingIds = new Set(side.map((c) => c.id));
 
 	// Clean up territory controlled by exiting side
