@@ -10375,7 +10375,7 @@ export function performSimulationTick() {
 
 			// If the capital has fallen, supply is failing: drastically limit total fieldable troops
 			if (supplyFailed) {
-				absoluteCap = Math.min(absoluteCap, 5);
+				absoluteCap = Math.max(15, Math.floor(absoluteCap * 0.3));
 			}
 			// MANPOWER: hard cap based on remaining side manpower
 			const mpCap =
