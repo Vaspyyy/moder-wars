@@ -3563,9 +3563,10 @@ export function estimateUnitsForCountry(countryId) {
 	const sizeFactor = Math.max(1, cellCount / 1500);
 	const densityScale = 1.0 / sizeFactor ** 0.45;
 
-	// Blend land area with urban population for modern-day realism
+	// Blend land area with population for modern-day realism
 	let effectiveCount = cellCount;
-	const pop = countryUrbanPop.get(countryId) || 0;
+	const meta = countryMetadata[countryId - 1];
+	const pop = meta?.pop || countryUrbanPop.get(countryId) || 0;
 	if (pop > 0) {
 		const popScore = Math.sqrt(pop) * 0.04;
 		if (recruitModel === "pop") {
