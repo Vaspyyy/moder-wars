@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>MW-V0.26.12</title>
+    <title>MW-V0.26.13</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
@@ -146,12 +146,12 @@
                 <div class="setting-group">
                     <label>Recruitment Model</label>
                     <select id="recruit-model-select">
-                        <option value="balanced" selected>Balanced (Pop + Area)</option>
+                        <option value="balanced" selected>Balanced (Pop + GDP)</option>
                         <option value="area">Land Area (Classic)</option>
                         <option value="pop">Population (Modern)</option>
                         <option value="gdp">GDP (Economic Power)</option>
                     </select>
-                    <small>How army size is calculated. GDP uses economic output to determine military capacity.</small>
+                    <small>How army size is calculated. Balanced uses 50% population + 50% GDP.</small>
                 </div>
             </div>
 

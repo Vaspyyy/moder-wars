@@ -3563,25 +3563,29 @@ export function estimateUnitsForCountry(countryId) {
 	const sizeFactor = Math.max(1, cellCount / 1500);
 	const densityScale = 1.0 / sizeFactor ** 0.45;
 
-	// Blend land area with population for modern-day realism
+	// Calculate army size based on recruitment model
 	let effectiveCount = cellCount;
 	const meta = countryMetadata[countryId - 1];
 	const pop = meta?.pop || countryUrbanPop.get(countryId) || 0;
 	const gdp = meta?.gdp || 0;
-	if (pop > 0 || gdp > 0) {
-		const popScore = Math.sqrt(pop) * 0.04;
-		const gdpScore = Math.sqrt(gdp) * 0.8;
-		if (recruitModel === "pop") {
-			effectiveCount = popScore;
-		} else if (recruitModel === "gdp") {
-			effectiveCount = gdpScore;
-		} else if (recruitModel === "balanced") {
-			effectiveCount = cellCount * 0.4 + popScore * 0.6;
-		}
+	const popScore = Math.sqrt(pop) * 0.04;
+	const gdpScore = Math.sqrt(gdp) * 0.8;
+
+	if (recruitModel === "pop" && pop > 0) {
+		effectiveCount = popScore;
+	} else if (recruitModel === "gdp" && gdp > 0) {
+		effectiveCount = gdpScore;
+	} else if (recruitModel === "balanced" && pop > 0 && gdp > 0) {
+		effectiveCount = popScore * 0.5 + gdpScore * 0.5;
 	}
 
+	// Only apply densityScale for area-based models (it penalizes large countries)
+	const useDensityScale =
+		recruitModel === "area" || recruitModel === "balanced";
 	let count = Math.floor(
-		effectiveCount * CONFIG.UNIT_DENSITY_FACTOR * densityScale,
+		effectiveCount *
+			CONFIG.UNIT_DENSITY_FACTOR *
+			(useDensityScale ? densityScale : 1),
 	);
 	const flatFloor = 3;
 	count = Math.max(flatFloor, Math.min(count, CONFIG.MAX_UNITS_PER_SIDE));
@@ -6134,9 +6138,24 @@ export async function _startWarInner() {
 
 	for (let sIdx = 0; sIdx < MAX_SIDES; sIdx++) {
 		const initialArmyPool = sideUnitCounts[sIdx] * CONFIG.UNIT_TO_SOLDIER_RATIO;
-		const territoryPool = Math.round(sideCellCounts[sIdx] * 200);
-		const cityPool = Math.round(sideCityCounts[sIdx] * 10000);
-		const autoPool = Math.max(initialArmyPool, territoryPool + cityPool);
+		// Use population data from metadata if available, fall back to territory-based
+		let populationPool = 0;
+		for (const [countryId, _cellArr] of countryIndices) {
+			const sIdx2 = countryToSideMap.get(countryId);
+			if (sIdx2 === sIdx) {
+				const meta = countryMetadata[countryId - 1];
+				if (meta?.pop) {
+					populationPool += meta.pop;
+				}
+			}
+		}
+		// If no population data, fall back to territory-based calculation
+		if (populationPool === 0) {
+			populationPool =
+				Math.round(sideCellCounts[sIdx] * 200) +
+				Math.round(sideCityCounts[sIdx] * 10000);
+		}
+		const autoPool = Math.max(initialArmyPool, populationPool);
 		initialSideSoldiers[sIdx] =
 			manualSideManpower[sIdx] !== null ? manualSideManpower[sIdx] : autoPool;
 		sideSoldiers[sIdx] = initialSideSoldiers[sIdx];
@@ -6465,9 +6484,13 @@ export function activateCountryMidWar(country, sideIdx) {
 	activeTheaterCities = [...activeTheaterCities, ...newCities];
 
 	// Compute manpower pool contribution from the joining country
+	const popMeta = countryMetadata.find((m) => m && m.id === countryId);
+	const populationPool = popMeta?.pop || 0;
+	// Fall back to territory-based if no population data
 	const territoryPool = Math.round(cellCount * 200);
 	const cityPool = Math.round(newCities.length * 10000);
-	const joiningPool = Math.max(0, territoryPool + cityPool);
+	const joiningPool =
+		populationPool > 0 ? populationPool : Math.max(0, territoryPool + cityPool);
 	if (initialSideSoldiers[sideIdx] <= 0) {
 		initialSideSoldiers[sideIdx] = joiningPool;
 		sideSoldiers[sideIdx] = joiningPool;
