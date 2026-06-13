@@ -3567,10 +3567,14 @@ export function estimateUnitsForCountry(countryId) {
 	let effectiveCount = cellCount;
 	const meta = countryMetadata[countryId - 1];
 	const pop = meta?.pop || countryUrbanPop.get(countryId) || 0;
-	if (pop > 0) {
+	const gdp = meta?.gdp || 0;
+	if (pop > 0 || gdp > 0) {
 		const popScore = Math.sqrt(pop) * 0.04;
+		const gdpScore = Math.sqrt(gdp) * 0.8;
 		if (recruitModel === "pop") {
 			effectiveCount = popScore;
+		} else if (recruitModel === "gdp") {
+			effectiveCount = gdpScore;
 		} else if (recruitModel === "balanced") {
 			effectiveCount = cellCount * 0.4 + popScore * 0.6;
 		}
