@@ -5879,10 +5879,7 @@ export async function _startWarInner() {
 			const densityScale = 1.0 / sizeFactor ** 0.45;
 
 			const fullDesiredCount = Math.floor(
-				theaterIndices.length *
-					CONFIG.UNIT_DENSITY_FACTOR *
-					multiplier *
-					densityScale,
+				theaterIndices.length * CONFIG.UNIT_DENSITY_FACTOR * densityScale,
 			);
 			const standingFloor = Math.max(
 				AI_MOBILIZATION.INITIAL_SPAWN_MIN,
@@ -10389,8 +10386,7 @@ export function performSimulationTick() {
 					baseRecruitmentChance *
 					scaleFactor *
 					(controlRatio + cityBonus + underdogFactor) *
-					annexationMultiplier *
-					multiplier;
+					annexationMultiplier;
 				const mobilizationMult =
 					simFrameCount < AI_MOBILIZATION.EARLY_TICKS
 						? 1 +
