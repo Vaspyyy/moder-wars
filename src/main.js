@@ -13027,19 +13027,6 @@ export function performSimulationTick() {
 						moveDirLat /= magBorder;
 						moveDirLng /= magBorder;
 					}
-
-					// Idle unit behavior: hold position when enemies near, slow advance when clear
-					if (!isEngaged && !shouldMopUp && !retreatVector) {
-						if (localEnemyCount > 0) {
-							// Enemies nearby — hold position, don't advance
-							moveDirLat *= 0.1;
-							moveDirLng *= 0.1;
-						} else {
-							// No enemies — slow advance toward frontline/enemy territory
-							moveDirLat *= 0.3;
-							moveDirLng *= 0.3;
-						}
-					}
 				}
 
 				// Apply tactical retreat/border pushback
