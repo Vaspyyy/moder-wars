@@ -10466,15 +10466,30 @@ export function performSimulationTick() {
 				if (isTotalWar && capFillRatio < 0.5) {
 					recruitmentChance *= 1.0 + (0.5 - capFillRatio) * 4.0; // up to 3× extra when half-empty
 				}
-				// Collapsing sides struggle to recruit
-				if (_sideWarPhase[sIdx] === "COLLAPSING") {
-					recruitmentChance *= 0.5;
+				// Momentum-based recruitment: panic conscription when losing
+				const warPhase = _sideWarPhase[sIdx];
+				if (warPhase === "COLLAPSING") {
+					recruitmentChance *= 5.0; // desperate mass mobilization
+				} else if (warPhase === "RETREATING") {
+					recruitmentChance *= 3.0; // accelerated recruitment
 				}
 				// Clamp per-tick chance at 80% to prevent deterministic spam
 				if (recruitmentChance > 0.8) recruitmentChance = 0.8;
 
-				if (Math.random() < recruitmentChance) {
-					spawnSingleUnit(sIdx, country.id);
+				// Panic conscription: spawn multiple units per tick when desperate
+				let spawnsThisTick = 1;
+				if (warPhase === "COLLAPSING" && currentUnits < absoluteCap * 0.3) {
+					spawnsThisTick = 5;
+				} else if (
+					warPhase === "RETREATING" &&
+					currentUnits < absoluteCap * 0.5
+				) {
+					spawnsThisTick = 3;
+				}
+				for (let sp = 0; sp < spawnsThisTick; sp++) {
+					if (Math.random() < recruitmentChance) {
+						spawnSingleUnit(sIdx, country.id);
+					}
 				}
 			}
 		});
