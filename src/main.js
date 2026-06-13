@@ -33,8 +33,6 @@ export const TRANSLATIONS = {
 		BG_SUB: "Adjusts the volume of the background music.",
 		DISABLE_MT_SUB:
 			"Removes terrain-based movement penalties and visual darkening.",
-		DISABLE_PROV_SUB:
-			"Removes the visual internal province subdivisions within countries.",
 		HIDE_UNITS: "Hide Units Visually",
 		HIDE_UNITS_SUB:
 			"Disables rendering of unit icons and flags for a significant FPS boost.",
@@ -86,11 +84,9 @@ export const TRANSLATIONS = {
 		STRATEGY: "Attack Strategy",
 		STRAT_ALL: "All Fronts (Global)",
 		STRAT_FOCUS: "Targeted Strike (Localized)",
-		DENSITY: "Force Density",
 		FIGHT_TO_DEATH: "FIGHT TO THE DEATH (NO PEACE)",
 		DISABLE_MISSILES: "DISABLE LONG-RANGE MISSILES",
 		DISABLE_MT: "DISABLE MOUNTAINS",
-		DISABLE_PROV: "DISABLE PROVINCES",
 		DISABLE_PUPPETS: "DISABLE PUPPETS (NO VASSAL CALL)",
 		INAUGURATE: "Inaugurate Conflict",
 		REBELLION: "Start Rebellion",
@@ -167,7 +163,6 @@ export const TRANSLATIONS = {
 		BG_VOLUME: "Громкость музыки",
 		BG_SUB: "Регулировка громкости фоновой музыки.",
 		DISABLE_MT_SUB: "Удаляет штрафы за передвижение по пересеченной местности.",
-		DISABLE_PROV_SUB: "Удаляет внутренние границы внутри стран.",
 		HIDE_UNITS: "Скрыть юнитов",
 		HIDE_UNITS_SUB: "Отключает отрисовку иконок юнитов для повышения FPS.",
 		SAVE_SKIP: "Запомнить и пропускать при запуске",
@@ -217,11 +212,9 @@ export const TRANSLATIONS = {
 		STRATEGY: "Стратегия атаки",
 		STRAT_ALL: "Все фронты (Глобально)",
 		STRAT_FOCUS: "Точечный удар (Локально)",
-		DENSITY: "Плотность войск",
 		FIGHT_TO_DEATH: "ВОЙНА ДО КОНЦА (БЕЗ МИРА)",
 		DISABLE_MISSILES: "ОТКЛЮЧИТЬ РАКЕТЫ",
 		DISABLE_MT: "БЕЗ ГОР",
-		DISABLE_PROV: "БЕЗ ПРОВИНЦИЙ",
 		DISABLE_PUPPETS: "БЕЗ ВАССАЛОВ",
 		INAUGURATE: "Начать конфликт",
 		REBELLION: "Восстание",
@@ -300,7 +293,6 @@ export const TRANSLATIONS = {
 		BG_VOLUME: "BGM 音量",
 		BG_SUB: "背景音楽の音量を調整します。",
 		DISABLE_MT_SUB: "地形による移動ペナルティと視覚的な暗転を除去します。",
-		DISABLE_PROV_SUB: "国境内部の州の境界線を除去します。",
 		HIDE_UNITS: "ユニットを非表示にする",
 		HIDE_UNITS_SUB: "アイコンと旗の描画を停止し、FPSを大幅に向上させます。",
 		SAVE_SKIP: "設定を保存して次回からスキップ",
@@ -351,11 +343,9 @@ export const TRANSLATIONS = {
 		STRATEGY: "攻撃戦略",
 		STRAT_ALL: "全前線 (グローバル)",
 		STRAT_FOCUS: "重点攻撃 (局地戦)",
-		DENSITY: "兵力密度",
 		FIGHT_TO_DEATH: "死闘モード (講和なし)",
 		DISABLE_MISSILES: "長距離ミサイル無効",
 		DISABLE_MT: "山岳無効",
-		DISABLE_PROV: "州の境界無効",
 		DISABLE_PUPPETS: "傀儡国無効",
 		INAUGURATE: "紛争開始",
 		REBELLION: "反乱開始",
@@ -432,7 +422,6 @@ export const TRANSLATIONS = {
 		BG_SUB: "Ajusta el volumen de la música de fondo.",
 		DISABLE_MT_SUB:
 			"Elimina penalizaciones de terreno y oscurecimiento visual.",
-		DISABLE_PROV_SUB: "Elimina subdivisiones internas de los países.",
 		HIDE_UNITS: "Ocultar Unidades",
 		HIDE_UNITS_SUB: "Desactiva iconos de unidades para ganar FPS.",
 		SAVE_SKIP: "Recordar y Omitir al Inicio",
@@ -475,11 +464,9 @@ export const TRANSLATIONS = {
 		STRATEGY: "Estrategia de ataque",
 		STRAT_ALL: "Todos los frentes",
 		STRAT_FOCUS: "Ataque focalizado",
-		DENSITY: "Densidad de fuerza",
 		FIGHT_TO_DEATH: "LUCHA HASTA LA MUERTE (SIN PAZ)",
 		DISABLE_MISSILES: "DESACTIVAR MISILES",
 		DISABLE_MT: "DESACTIVAR MONTAÑAS",
-		DISABLE_PROV: "DESACTIVAR PROVINCIAS",
 		DISABLE_PUPPETS: "DESACTIVAR PUPPETS",
 		INAUGURATE: "Inaugurar Conflicto",
 		REBELLION: "Iniciar Rebelión",
@@ -556,8 +543,6 @@ export const TRANSLATIONS = {
 		BG_SUB: "Ajuste le volume de fond.",
 		DISABLE_MT: "Désactiver Montagnes",
 		DISABLE_MT_SUB: "Supprime les malus de mouvement.",
-		DISABLE_PROV: "Désactiver Provinces",
-		DISABLE_PROV_SUB: "Supprime les subdivisions internes.",
 		HIDE_UNITS: "Cacher Unités",
 		HIDE_UNITS_SUB: "Désactive les icônes pour plus de FPS.",
 		SAVE_SKIP: "Retenir et ignorer au démarrage",
@@ -599,7 +584,6 @@ export const TRANSLATIONS = {
 		STRATEGY: "Stratégie d'attaque",
 		STRAT_ALL: "Tous les fronts",
 		STRAT_FOCUS: "Frappe ciblée",
-		DENSITY: "Densité de force",
 		FIGHT_TO_DEATH: "GUERRE À MORT (PAS DE PAIX)",
 		DISABLE_MISSILES: "DÉSACTIVER MISSILES",
 		INAUGURATE: "Inaugurer le Conflit",
@@ -677,8 +661,6 @@ export const TRANSLATIONS = {
 		BG_SUB: "Hintergrundmusik anpassen.",
 		DISABLE_MT: "Berge deaktivieren",
 		DISABLE_MT_SUB: "Entfernt Geländestrafen.",
-		DISABLE_PROV: "Provinzen aus",
-		DISABLE_PROV_SUB: "Entfernt interne Grenzen.",
 		HIDE_UNITS: "Einheiten verbergen",
 		HIDE_UNITS_SUB: "Deaktiviert Icons für FPS-Boost.",
 		SAVE_SKIP: "Einstellungen speichern & überspringen",
@@ -721,7 +703,6 @@ export const TRANSLATIONS = {
 		STRATEGY: "Strategie",
 		STRAT_ALL: "Alle Fronten",
 		STRAT_FOCUS: "Gezielter Schlag",
-		DENSITY: "Truppendichte",
 		FIGHT_TO_DEATH: "KAMPF BIS ZUM TOD (KEIN FRIEDEN)",
 		DISABLE_MISSILES: "RAKETEN DEAKTIVIEREN",
 		INAUGURATE: "Konflikt eröffnen",
@@ -799,8 +780,6 @@ export const TRANSLATIONS = {
 		BG_SUB: "Ajusta o volume da música.",
 		DISABLE_MT: "Desativar Montanhas",
 		DISABLE_MT_SUB: "Remove penalidades de movimento.",
-		DISABLE_PROV: "Desativar Províncias",
-		DISABLE_PROV_SUB: "Remove divisões internas.",
 		HIDE_UNITS: "Ocultar Unidades",
 		HIDE_UNITS_SUB: "Desativa ícones para ganho de FPS.",
 		SAVE_SKIP: "Salvar e Ignorar no Início",
@@ -842,7 +821,6 @@ export const TRANSLATIONS = {
 		STRATEGY: "Estratégia de Ataque",
 		STRAT_ALL: "Todas as frentes",
 		STRAT_FOCUS: "Ataque focado",
-		DENSITY: "Densidade de Força",
 		FIGHT_TO_DEATH: "LUTA ATÉ A MORTE (SEM PAZ)",
 		DISABLE_MISSILES: "DESATIVAR MÍSSEIS",
 		INAUGURATE: "Inaugurar Conflito",
@@ -1705,7 +1683,6 @@ export let showNonCapitalCities = true;
 export const countryLabelAnchors = new Map(); // key: `${countryId}:${regionIndex}` -> { name, points, fontSize }
 export let showBattleIndicators = true;
 export let showWarPlans = true;
-export let cityFocusMode = false;
 // High‑level commanders ("generals") for each side, used to model strong plans.
 export let generals = [];
 export const DEFAULT_SIDE_COLORS = [
@@ -1781,7 +1758,6 @@ export let peaceTreatiesDisabled = false;
 export let bombsDisabled = false;
 export let activeRebellion = null; // { rebelId, overlordId }
 export let mountainsEnabled = true;
-export let _provincesEnabled = false;
 export let showUnitsVisually = true;
 export let disableCountryGradient = false;
 // When false, hiddenBuffState is ignored and only visible buffState is used.
@@ -2941,26 +2917,18 @@ if (rebellionBtn) {
 		});
 	}
 }
-export const densitySlider = document.getElementById("density-slider");
 export const noPeaceCheckbox = document.getElementById("no-peace-checkbox");
 export const disableBombsCheckbox = document.getElementById(
 	"disable-bombs-checkbox",
 );
-export const cityFocusCheckbox = document.getElementById("city-focus-checkbox");
 export const setupDisableMountainsCheckbox = document.getElementById(
 	"setup-disable-mountains-checkbox",
-);
-export const setupDisableProvincesCheckbox = document.getElementById(
-	"setup-disable-provinces-checkbox",
 );
 export const disablePuppetsCheckbox = document.getElementById(
 	"disable-puppets-checkbox",
 );
 export const mainDisableMountainsCheckbox = document.getElementById(
 	"disable-mountains-checkbox",
-);
-export const mainDisableProvincesCheckbox = document.getElementById(
-	"disable-provinces-checkbox",
 );
 
 export const casualtyPanel = document.getElementById("casualty-panel");
@@ -3592,7 +3560,6 @@ export function estimateUnitsForCountry(countryId) {
 	}
 	if (cellCount === 0) return 0;
 
-	const multiplier = parseFloat(densitySlider.value) || 1.0;
 	const sizeFactor = Math.max(1, cellCount / 1500);
 	const densityScale = 1.0 / sizeFactor ** 0.45;
 
@@ -3609,7 +3576,7 @@ export function estimateUnitsForCountry(countryId) {
 	}
 
 	let count = Math.floor(
-		effectiveCount * CONFIG.UNIT_DENSITY_FACTOR * multiplier * densityScale,
+		effectiveCount * CONFIG.UNIT_DENSITY_FACTOR * densityScale,
 	);
 	const flatFloor = 3;
 	count = Math.max(flatFloor, Math.min(count, CONFIG.MAX_UNITS_PER_SIDE));
@@ -5621,9 +5588,8 @@ export async function _startWarInner() {
 	resetBtn.style.display = "block";
 	updateRestartVisibility();
 
-	// Final sync of mountain and province state before sim starts
+	// Final sync of mountain state before sim starts
 	mountainsEnabled = !setupDisableMountainsCheckbox.checked;
-	_provincesEnabled = !setupDisableProvincesCheckbox.checked;
 	document.getElementById("speed-controls").style.display = "flex";
 	godModeBtn.style.display = "block";
 	if (godModeActive) godBombBtn.style.display = "block";
@@ -5900,8 +5866,6 @@ export async function _startWarInner() {
 
 	// Efficient spawn based on pre-collected indices
 	sides.forEach((side, sideIdx) => {
-		const multiplier = parseFloat(densitySlider.value) || 1.0;
-
 		// Track how many units this side already has so we can enforce CONFIG.MAX_UNITS_PER_SIDE strictly.
 		let sideCurrentUnits = units.filter((u) => u.sideIndex === sideIdx).length;
 
@@ -6558,17 +6522,12 @@ export function activateCountryMidWar(country, sideIdx) {
 		}
 	});
 
-	const multiplier = parseFloat(densitySlider.value) || 1.0;
-
 	// Diminishing Density: Large countries have lower unit density to prevent overcrowding
 	const sizeFactor = Math.max(1, theaterIndices.length / 1500);
 	const densityScale = 1.0 / sizeFactor ** 0.45;
 
 	let count = Math.floor(
-		theaterIndices.length *
-			CONFIG.UNIT_DENSITY_FACTOR *
-			multiplier *
-			densityScale,
+		theaterIndices.length * CONFIG.UNIT_DENSITY_FACTOR * densityScale,
 	);
 	count = Math.max(4, Math.min(count, CONFIG.MAX_UNITS_PER_SIDE));
 
@@ -9785,6 +9744,20 @@ export function performSimulationTick() {
 	}
 	const unitsBySide = _tickUnitsBySide;
 
+	// Overwhelming force: if one side has 10x more deployed personnel, all units attack evenly
+	const _overwhelmingForce = new Array(sides.length).fill(false);
+	if (sides.length === 2) {
+		const side0Units = unitsBySide[0].length;
+		const side1Units = unitsBySide[1].length;
+		if (side0Units > 0 && side1Units > 0) {
+			if (side0Units >= side1Units * 10) {
+				_overwhelmingForce[0] = true;
+			} else if (side1Units >= side0Units * 10) {
+				_overwhelmingForce[1] = true;
+			}
+		}
+	}
+
 	// Pre-compute grid index for every unit (O(n) once, avoids O(n) getGridIndex per enemy)
 	const _unitGridIdx = new Map();
 	for (let _ugi = 0; _ugi < units.length; _ugi++) {
@@ -9802,11 +9775,6 @@ export function performSimulationTick() {
 	window.__perf.caches = (window.__perf.caches || 0) + performance.now() - _tbs;
 
 	const _tVictory = performance.now();
-	// City target list used for CITY FOCUS (URBAN renamed to TURTLE); prefer the active theater,
-	// and fall back to all known cities if no theater is defined.
-	const cityTargets = activeTheaterCities?.length
-		? activeTheaterCities
-		: cities || [];
 
 	// Calculate Victory Ratios for each side to coordinate surges
 	const sideVictoryRatios = unitsBySide.map((sideUnits, sIdx) => {
@@ -10331,7 +10299,6 @@ export function performSimulationTick() {
 
 			const supplyFailed = capitalLostCountries.has(country.id);
 			// Increased army caps to accommodate the much higher frontline saturation requirements.
-			const multiplier = parseFloat(densitySlider.value) || 1.0;
 			// Less aggressive size scaling to allow large empires to maintain thick lines.
 			const sizeFactor = Math.max(1, currentLand / 2000);
 			const densityScale = 1.0 / sizeFactor ** 0.35;
@@ -10344,7 +10311,6 @@ export function performSimulationTick() {
 					currentLand *
 						CONFIG.UNIT_DENSITY_FACTOR *
 						1.5 *
-						multiplier *
 						densityScale *
 						landCityMultiplier,
 				),
@@ -10496,7 +10462,7 @@ export function performSimulationTick() {
 		});
 	});
 
-	// Precompute city list once per tick; global city-focus both reuse this
+	// Precompute city list once per tick
 	const globalCityTargets = activeTheaterCities?.length
 		? activeTheaterCities
 		: cities;
@@ -10637,47 +10603,6 @@ export function performSimulationTick() {
 		// Cache terrain and sea states for the renderer
 		u.isAtSea = isAtSea;
 		u.mountainIntensity = mountainIntensity;
-
-		// Optional city‑focus movement target (does not affect combat logic)
-		let cityFocusTarget = null;
-		if (cityFocusMode && cityTargets?.length) {
-			const _teamPole = u.sideIndex % 2 === 0 ? 1 : -1; // legacy placeholder
-			let bestCity = null;
-			let bestCityDistSq = Infinity;
-			for (let cIdx = 0; cIdx < cityTargets.length; cIdx++) {
-				const city = cityTargets[cIdx];
-				const gIdx = getGridIndex(city.lat, city.lng);
-				const ds = dominantSideMap[gIdx];
-				const isGoodTarget = ds !== u.sideIndex;
-				if (!isGoodTarget) continue;
-				const dSq = (u.lat - city.lat) ** 2 + (u.lng - city.lng) ** 2;
-				// Water-path check: skip cities unreachable by land
-				if (!isAtSea && dSq > 4.0) {
-					let dcLng = city.lng - u.lng;
-					if (dcLng > 180) dcLng -= 360;
-					else if (dcLng < -180) dcLng += 360;
-					const lineLen = Math.sqrt(dSq);
-					const steps = Math.min(12, Math.ceil(lineLen / 0.4));
-					let waterSamples = 0;
-					for (let s = 1; s < steps; s++) {
-						const t = s / steps;
-						const wIdx = getGridIndex(
-							u.lat + (city.lat - u.lat) * t,
-							u.lng + dcLng * t,
-						);
-						if (wIdx !== -1 && landMask[wIdx] === 0) waterSamples++;
-					}
-					if (waterSamples > steps * 0.3) continue;
-				}
-				if (dSq < bestCityDistSq) {
-					bestCityDistSq = dSq;
-					bestCity = city;
-				}
-			}
-			if (bestCity) {
-				cityFocusTarget = { lat: bestCity.lat, lng: bestCity.lng };
-			}
-		}
 
 		if (countryObj) {
 			if (effectiveBuff === "buff") {
@@ -10956,18 +10881,11 @@ export function performSimulationTick() {
 		const isTacticallyIdle =
 			idleTicks > 60 &&
 			idleTicks < 600 && // force re-scan after 600 idle frames to break perpetual idle loop
-			u.mopUpTargetId === 0 &&
-			!u.cityFocusTarget;
+			u.mopUpTargetId === 0;
 
 		const isRebelUnit =
 			activeRebellion && u.sovereignId === activeRebellion.rebelId;
 		const _isAlpen = !!u.isAlpenjager;
-
-		if (cityFocusTarget) {
-			target = cityFocusTarget;
-			minDist =
-				(u.lat - cityFocusTarget.lat) ** 2 + (u.lng - cityFocusTarget.lng) ** 2;
-		}
 
 		const kx = Math.floor((u.lng + 180) / HASH_SIZE);
 		const ky = Math.floor((u.lat + 90) / HASH_SIZE);
@@ -11843,7 +11761,7 @@ export function performSimulationTick() {
 
 		// Global Target Fallback (if no enemies were found in the local 6-degree spatial hash but enemies exist somewhere)
 		// Add scatter to avoid blob: ±1° random offset
-		if (!target && !cityFocusTarget && totalEnemiesCount > 0) {
+		if (!target && totalEnemiesCount > 0) {
 			let bestCentroidDist = Infinity;
 			sideCentroids.forEach((centroids, idx) => {
 				const isEnemySide = idx !== sideIndex;
@@ -12208,12 +12126,6 @@ export function performSimulationTick() {
 		}
 
 		// CITY-FOCUS COMBAT MODE:
-		// When enabled, AI movement targeting prioritizes cities as primary objectives,
-		// using unit positions only for local combat/retreat decisions.
-		if (cityFocusMode && cityFocusTarget) {
-			target = cityFocusTarget;
-		}
-
 		let _u4;
 		if (target) {
 			// Spatial Jitter: Add a small, unit-specific offset to the target destination
@@ -13027,6 +12939,13 @@ export function performSimulationTick() {
 						moveDirLat /= magBorder;
 						moveDirLng /= magBorder;
 					}
+				}
+
+				// Overwhelming force: all units rush the frontline when 10x advantage
+				if (_overwhelmingForce[sideIndex] && borderDir && !isAtSea) {
+					moveDirLat = borderDir.lat;
+					moveDirLng = borderDir.lng;
+					isPlanUnit = false;
 				}
 
 				// Apply tactical retreat/border pushback
@@ -15604,12 +15523,6 @@ if (noPeaceCheckbox) {
 	});
 }
 
-if (cityFocusCheckbox) {
-	cityFocusCheckbox.addEventListener("change", () => {
-		cityFocusMode = cityFocusCheckbox.checked;
-	});
-}
-
 // Secret Sounds checkbox
 const useSecretSoundsCheckbox = document.getElementById(
 	"use-secret-sounds-checkbox",
@@ -15642,25 +15555,6 @@ mainDisableMountainsCheckbox.addEventListener("change", (e) => {
 	mountainsEnabled = !e.target.checked;
 	// Persist immediately
 	setCookie("mw_disable_mountains", e.target.checked ? "true" : "false");
-	influenceLayer.render();
-});
-
-// Sync province toggles
-setupDisableProvincesCheckbox.addEventListener("change", (e) => {
-	const disabled = e.target.checked;
-	_provincesEnabled = !disabled;
-	mainDisableProvincesCheckbox.checked = disabled;
-	// Persist immediately
-	setCookie("mw_disable_provinces", disabled ? "true" : "false");
-	influenceLayer.render();
-});
-
-mainDisableProvincesCheckbox.addEventListener("change", (e) => {
-	const disabled = e.target.checked;
-	setupDisableProvincesCheckbox.checked = disabled;
-	_provincesEnabled = !disabled;
-	// Persist immediately
-	setCookie("mw_disable_provinces", disabled ? "true" : "false");
 	influenceLayer.render();
 });
 
@@ -17155,11 +17049,6 @@ export function initializeEngine() {
 		document.getElementById("setup-disable-mountains-checkbox").checked;
 	mountainsEnabled = !mtDisabled;
 
-	const provDisabled =
-		document.getElementById("disable-provinces-checkbox").checked ||
-		document.getElementById("setup-disable-provinces-checkbox").checked;
-	_provincesEnabled = !provDisabled;
-
 	showUnitsVisually = !document.getElementById(
 		"disable-units-visually-checkbox",
 	).checked;
@@ -17286,12 +17175,6 @@ launchBtn.addEventListener("click", () => {
 				: "false",
 		);
 		setCookie(
-			"mw_disable_provinces",
-			document.getElementById("disable-provinces-checkbox").checked
-				? "true"
-				: "false",
-		);
-		setCookie(
 			"mw_disable_units_visually",
 			document.getElementById("disable-units-visually-checkbox").checked
 				? "true"
@@ -17356,18 +17239,6 @@ export function checkAutoLaunch() {
 			document.getElementById("disable-mountains-checkbox").checked = false;
 			setupDisableMountainsCheckbox.checked = false;
 			mountainsEnabled = true;
-		}
-
-		const provSaved = getCookie("mw_disable_provinces");
-		if (provSaved === "false") {
-			mainDisableProvincesCheckbox.checked = false;
-			setupDisableProvincesCheckbox.checked = false;
-			_provincesEnabled = true;
-		} else {
-			// Default to disabled (checked) if 'true' or not yet set
-			mainDisableProvincesCheckbox.checked = true;
-			setupDisableProvincesCheckbox.checked = true;
-			_provincesEnabled = false;
 		}
 
 		const unitsVisSaved = getCookie("mw_disable_units_visually");

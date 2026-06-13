@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>MW-V0.26.10</title>
+    <title>MW-V0.26.11</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
@@ -181,10 +181,6 @@
                     <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
                         <input type="checkbox" id="disable-mountains-checkbox" style="width: 18px; height: 18px; accent-color: #f1c40f;">
                         <span data-i18n="DISABLE_MT">Disable Mountains</span>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                        <input type="checkbox" id="disable-provinces-checkbox" style="width: 18px; height: 18px; accent-color: #95a5a6;" checked>
-                        <span data-i18n="DISABLE_PROV">Disable Provinces</span>
                     </label>
                     <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
                         <input type="checkbox" id="disable-country-gradient-checkbox" style="width: 18px; height: 18px; accent-color: #3498db;">
@@ -486,11 +482,6 @@
             </div>
             
             <div id="setup-options" class="setup-options" style="display:none; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
-                <div class="option-row">
-                    <label data-i18n="DENSITY" title="Controls how many units are spawned per country. Higher density = thicker frontlines but lower performance.">Force Density</label>
-                    <input type="range" id="density-slider" min="0.5" max="2" step="0.1" value="1" title="Slide right for more units and thicker fronts, left for fewer units and higher FPS.">
-                </div>
-
                 <div class="option-row" style="margin-top: 8px;">
                     <label style="font-size: 11px; color: #ccc;" title="Optional: set total manpower (soldiers) each alliance starts with. Leave empty for automatic scaling based on territory.">
                         Alliance Manpower (Optional)
@@ -528,9 +519,22 @@
                     </label>
                 </div>
                 <div class="option-row" style="margin-top: 5px;">
-                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%;" title="When enabled, AI offensives will prioritize capturing cities before other territory.">
-                        <input type="checkbox" id="city-focus-checkbox" style="width: 18px; height: 18px; accent-color: #e67e22; cursor: pointer;">
-                        <span style="font-size: 12px; color: #ccc;">CITY FOCUS MODE (TARGET CITIES)</span>
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%;" title="Turns off long‑range missile/bomb animations and their extra casualties.">
+                        <input type="checkbox" id="disable-bombs-checkbox" style="width: 18px; height: 18px; accent-color: #f39c12; cursor: pointer;">
+                        <span style="font-size: 12px; color: #ccc;" data-i18n="DISABLE_MISSILES">DISABLE LONG-RANGE MISSILES</span>
+                    </label>
+                </div>
+                <div class="option-row" style="margin-top: 5px;">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%;" title="If checked, units ignore mountain movement penalties and mountain darkening.">
+                        <input type="checkbox" id="setup-disable-mountains-checkbox" style="width: 18px; height: 18px; accent-color: #f1c40f; cursor: pointer;">
+                        <span style="font-size: 12px; color: #ccc;" data-i18n="DISABLE_MT">DISABLE MOUNTAINS</span>
+                    </label>
+                </div>
+
+                <div class="option-row" style="margin-top: 5px;">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%;" title="Prevents overlord nations from automatically calling their vassals into the war.">
+                        <input type="checkbox" id="disable-puppets-checkbox" style="width: 18px; height: 18px; accent-color: #9b59b6; cursor: pointer;" checked>
+                        <span style="font-size: 12px; color: #ccc;" data-i18n="DISABLE_PUPPETS">DISABLE PUPPETS (NO VASSAL CALL)</span>
                     </label>
                 </div>
                 <div class="option-row" style="margin-top: 5px;">
@@ -547,9 +551,9 @@
                 </div>
 
                 <div class="option-row" style="margin-top: 5px;">
-                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%;" title="Hide or show detailed internal province borders inside each country.">
-                        <input type="checkbox" id="setup-disable-provinces-checkbox" style="width: 18px; height: 18px; accent-color: #95a5a6; cursor: pointer;" checked>
-                        <span style="font-size: 12px; color: #ccc;" data-i18n="DISABLE_PROV">DISABLE PROVINCES</span>
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%;" title="If checked, units ignore mountain movement penalties and mountain darkening.">
+                        <input type="checkbox" id="setup-disable-mountains-checkbox" style="width: 18px; height: 18px; accent-color: #f1c40f; cursor: pointer;">
+                        <span style="font-size: 12px; color: #ccc;" data-i18n="DISABLE_MT">DISABLE MOUNTAINS</span>
                     </label>
                 </div>
 
