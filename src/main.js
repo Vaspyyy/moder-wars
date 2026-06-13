@@ -11110,11 +11110,12 @@ export function performSimulationTick() {
 										: 0;
 								let targetScore = noisyDSq - healthModifier + superPenalty;
 								if (targetScore < minDist) {
-									// Water-path check: penalize land enemies unreachable by land
+									// Water-path + neutral-path check: penalize enemies unreachable by friendly land
 									if (!isAtSea && !eAtSea && dSq > 4.0) {
 										const lineLen = Math.sqrt(dSq);
 										const steps = Math.min(12, Math.ceil(lineLen / 0.4));
 										let waterSamples = 0;
+										let neutralSamples = 0;
 										for (let s = 1; s < steps; s++) {
 											const t = s / steps;
 											const wIdx = getGridIndex(
@@ -11122,11 +11123,16 @@ export function performSimulationTick() {
 												u.lng + deLng * t,
 											);
 											if (wIdx !== -1 && landMask[wIdx] === 0) waterSamples++;
+											if (wIdx !== -1 && isNeutralCountry(wIdx))
+												neutralSamples++;
 										}
 										if (waterSamples > steps * 0.3) {
 											targetScore += 10000;
 											window.__perf.waterPathPenalized =
 												(window.__perf.waterPathPenalized || 0) + 1;
+										}
+										if (neutralSamples > steps * 0.3) {
+											targetScore += 10000;
 										}
 									}
 									if (targetScore < minDist) {
@@ -11468,11 +11474,12 @@ export function performSimulationTick() {
 									: 0;
 							let targetScore = noisyDSq - healthModifier + superPenalty;
 							if (targetScore < minDist) {
-								// Water-path check: penalize land enemies unreachable by land
+								// Water-path + neutral-path check: penalize enemies unreachable by friendly land
 								if (!isAtSea && !eAtSea && dSq > 4.0) {
 									const lineLen = Math.sqrt(dSq);
 									const steps = Math.min(12, Math.ceil(lineLen / 0.4));
 									let waterSamples = 0;
+									let neutralSamples = 0;
 									for (let s = 1; s < steps; s++) {
 										const t = s / steps;
 										const wIdx = getGridIndex(
@@ -11480,11 +11487,15 @@ export function performSimulationTick() {
 											u.lng + deLng * t,
 										);
 										if (wIdx !== -1 && landMask[wIdx] === 0) waterSamples++;
+										if (wIdx !== -1 && isNeutralCountry(wIdx)) neutralSamples++;
 									}
 									if (waterSamples > steps * 0.3) {
 										targetScore += 10000;
 										window.__perf.waterPathPenalized =
 											(window.__perf.waterPathPenalized || 0) + 1;
+									}
+									if (neutralSamples > steps * 0.3) {
+										targetScore += 10000;
 									}
 								}
 								if (targetScore < minDist) {
@@ -13122,15 +13133,15 @@ export function performSimulationTick() {
 				const isInsideNeutralProtected = isProtectedSupport(currentIdx);
 				// Dynamic lookahead: units stuck inside or near neutral territory look further to find a valid corridor.
 				const lookAheadDist = isNeutralCountry(currentIdx)
-					? 1.6
+					? 3.0
 					: isNeutralCountry(
 								getGridIndex(
-									u.lat + moveDirLat * 0.25,
-									u.lng + moveDirLng * 0.25,
+									u.lat + moveDirLat * 0.5,
+									u.lng + moveDirLng * 0.5,
 								),
 							)
-						? 1.2
-						: 0.6;
+						? 2.0
+						: 1.5;
 
 				const lookIdx = getGridIndex(
 					u.lat + moveDirLat * lookAheadDist,
@@ -13208,7 +13219,7 @@ export function performSimulationTick() {
 
 					if (!foundFriendly) {
 						// Second pass: search a slightly larger ring to get around wider neutral "blocks"
-						const farLook = corridorLook * 1.6;
+						const farLook = corridorLook * 2.0;
 						for (let j = 1; j <= sweepSteps && !foundFriendly; j++) {
 							const angleOff = (sweepAngle / sweepSteps) * j;
 
