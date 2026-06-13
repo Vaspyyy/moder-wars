@@ -66,3 +66,25 @@ Strategic AI design is documented in `AI_COMMANDER.md`. The AI uses a proposal-s
 - GeoJSON files are large (10–30MB). The `geo-parse-worker` exists specifically to avoid blocking the main thread during parse.
 - `index.html` contains all UI markup (1300 lines). The game has no component system — UI is created/mutated via DOM manipulation in `main.js`.
 - GitHub Pages deploys from the repo root. The remote name is `moder-wars` (typo in repo name, not `modern-wars`).
+
+## Skills
+
+### mw-commit
+
+**Location:** `.mimocode/skills/mw-commit/SKILL.md`
+
+Use when committing changes to the Modern Wars project. Automates version bumping, linting, committing, and pushing.
+
+**Activates on:** "commit", "push", "bump version", "deploy", or after making code changes.
+
+**Workflow:**
+1. Run `biome check .` — must pass with 0 errors
+2. Bump patch version in `index.html` (line 6) and `workers/service-worker.js` (line 4)
+3. Stage changed files
+4. Commit with conventional format (`feat:`, `fix:`, etc.)
+5. Push to `origin/main`
+
+**Rules:**
+- PATCH ONLY: 0.26.X → 0.26.X+1 (never minor bump for bug fixes)
+- Both version files MUST stay in sync
+- Always push after committing
