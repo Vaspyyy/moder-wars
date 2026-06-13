@@ -14328,6 +14328,16 @@ export function updateLoop(now) {
 		if (el) el.textContent = sideCityCounts[si];
 	}
 
+	// Update tug-of-war bar with actual territory percentages
+	if (_cachedSideTerritoryPcts.length > 0) {
+		for (let si = 0; si < sides.length; si++) {
+			const segEl = _cachedTerritorySegEls[si];
+			if (segEl) segEl.style.width = `${_cachedSideTerritoryPcts[si]}%`;
+			const pctEl = _cachedTerritoryCtrlEls[si];
+			if (pctEl) pctEl.textContent = `${_cachedSideTerritoryPcts[si]}%`;
+		}
+	}
+
 	// Throttled UI rendering in Flag mode to maintain responsive interaction and framerate
 	simFrameCount++;
 
