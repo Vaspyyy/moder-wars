@@ -6137,7 +6137,7 @@ export async function _startWarInner() {
 
 	for (let sIdx = 0; sIdx < MAX_SIDES; sIdx++) {
 		const initialArmyPool = sideUnitCounts[sIdx] * CONFIG.UNIT_TO_SOLDIER_RATIO;
-		// Use population data from metadata if available, fall back to territory-based
+		// Manpower = 1% of total population
 		let populationPool = 0;
 		for (const [countryId, _cellArr] of countryIndices) {
 			const sIdx2 = countryToSideMap.get(countryId);
@@ -6148,6 +6148,7 @@ export async function _startWarInner() {
 				}
 			}
 		}
+		populationPool = Math.round(populationPool * 0.01);
 		// If no population data, fall back to territory-based calculation
 		if (populationPool === 0) {
 			populationPool =
@@ -6482,9 +6483,9 @@ export function activateCountryMidWar(country, sideIdx) {
 	});
 	activeTheaterCities = [...activeTheaterCities, ...newCities];
 
-	// Compute manpower pool contribution from the joining country
+	// Compute manpower pool contribution from the joining country (1% of population)
 	const popMeta = countryMetadata.find((m) => m && m.id === countryId);
-	const populationPool = popMeta?.pop || 0;
+	const populationPool = popMeta?.pop ? Math.round(popMeta.pop * 0.01) : 0;
 	// Fall back to territory-based if no population data
 	const territoryPool = Math.round(cellCount * 200);
 	const cityPool = Math.round(newCities.length * 10000);
