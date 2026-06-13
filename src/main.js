@@ -9589,9 +9589,9 @@ export function performSimulationTick() {
 	}
 
 	// Compute frontline polylines between warring sides (throttled)
-	if (simFrameCount - _frontlinePolyTick >= FRONTLINE_POLY_UPDATE_INTERVAL) {
+	if (_simTickCount - _frontlinePolyTick >= FRONTLINE_POLY_UPDATE_INTERVAL) {
 		computeFrontlinePolys();
-		_frontlinePolyTick = simFrameCount;
+		_frontlinePolyTick = _simTickCount;
 		assignFrontlineSlots();
 	}
 	window.__perf.frontline =
