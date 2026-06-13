@@ -10115,16 +10115,26 @@ export function performSimulationTick() {
 			const delta = last - first;
 			const deltaRatio = first > 0 ? delta / first : 0;
 
+			// Count consecutive trend direction (last 3 entries)
+			let trendUp = 0;
+			let trendDown = 0;
+			for (let i = Math.max(0, hist.length - 3); i < hist.length; i++) {
+				if (i > 0) {
+					if (hist[i].controlled > hist[i - 1].controlled) trendUp++;
+					else if (hist[i].controlled < hist[i - 1].controlled) trendDown++;
+				}
+			}
+
 			const mpRatio =
 				initialSideSoldiers[si] > 0
 					? sideSoldiers[si] / initialSideSoldiers[si]
 					: 1;
 
-			if (deltaRatio < -0.15 || mpRatio < 0.1) {
+			if (deltaRatio < -0.05 || mpRatio < 0.1) {
 				_sideWarPhase[si] = "COLLAPSING";
-			} else if (deltaRatio < -0.02) {
+			} else if (deltaRatio < -0.005 || trendDown >= 2) {
 				_sideWarPhase[si] = "RETREATING";
-			} else if (deltaRatio > 0.02) {
+			} else if (deltaRatio > 0.005 || trendUp >= 2) {
 				_sideWarPhase[si] = "ADVANCING";
 			} else {
 				_sideWarPhase[si] = "STALEMATE";
