@@ -1854,6 +1854,10 @@ window.__perf = {
 	unitEnemyScan: 0,
 	unitAllyScan: 0,
 	unitRetreatMopUp: 0,
+	unitRetreatDecision: 0,
+	unitGlobalFallback: 0,
+	unitFrontlinePress: 0,
+	unitMopUpSearch: 0,
 	unitCombatMove: 0,
 	// Water avoidance debug counters
 	coastDeflectHalved: 0,
@@ -9201,6 +9205,10 @@ export function performSimulationTick() {
 			unitEnemyScan: 0,
 			unitAllyScan: 0,
 			unitRetreatMopUp: 0,
+			unitRetreatDecision: 0,
+			unitGlobalFallback: 0,
+			unitFrontlinePress: 0,
+			unitMopUpSearch: 0,
 			unitCombatMove: 0,
 			// Water avoidance debug counters
 			coastDeflectHalved: 0,
@@ -9238,6 +9246,10 @@ export function performSimulationTick() {
 		"unitEnemyScan",
 		"unitAllyScan",
 		"unitRetreatMopUp",
+		"unitRetreatDecision",
+		"unitGlobalFallback",
+		"unitFrontlinePress",
+		"unitMopUpSearch",
 		"unitCombatMove",
 	];
 	for (const k of _perfKeys) _perfSnap[k] = window.__perf[k] || 0;
@@ -11772,6 +11784,9 @@ export function performSimulationTick() {
 			}
 		}
 
+		const _u3a = performance.now();
+		window.__perf.unitRetreatDecision += _u3a - _u3;
+
 		const collapsedEnemyNations = sideToCollapsedNations[sideIndex] || [];
 
 		const targetIdx = target ? getGridIndex(target.lat, target.lng) : -1;
@@ -11810,6 +11825,9 @@ export function performSimulationTick() {
 				}
 			});
 		}
+
+		const _u3b = performance.now();
+		window.__perf.unitGlobalFallback += _u3b - _u3a;
 
 		// Unified behavior: Units hunt enemies when nearby, but switch to focused territory capture (mop-up)
 		// when there are literally zero enemy units remaining.
@@ -11916,6 +11934,9 @@ export function performSimulationTick() {
 				}
 			}
 		}
+
+		const _u3c = performance.now();
+		window.__perf.unitFrontlinePress += _u3c - _u3b;
 
 		if (shouldMopUp) {
 			// Mop-up mode: Enemy has no units or target is far and collapsed nations exist
@@ -12148,6 +12169,9 @@ export function performSimulationTick() {
 				}
 			}
 		}
+
+		const _u3d = performance.now();
+		window.__perf.unitMopUpSearch += _u3d - _u3c;
 
 		// CITY-FOCUS COMBAT MODE:
 		let _u4;
