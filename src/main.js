@@ -14814,6 +14814,22 @@ export function capitulateCountry(country, sideIndex) {
 		}
 	}
 
+	// Transfer GDP and population to the primary annexer
+	if (primaryAnnexerId > 0) {
+		const annexerMeta = countryMetadata.find(
+			(m) => m && m.id === primaryAnnexerId,
+		);
+		const victimMeta = countryMetadata.find((m) => m && m.id === country.id);
+		if (annexerMeta && victimMeta) {
+			// Add victim's GDP and population to annexer
+			annexerMeta.gdp = (annexerMeta.gdp || 0) + (victimMeta.gdp || 0);
+			annexerMeta.pop = (annexerMeta.pop || 0) + (victimMeta.pop || 0);
+			// Zero out victim's values so they can't be double-counted
+			victimMeta.gdp = 0;
+			victimMeta.pop = 0;
+		}
+	}
+
 	// Remove the country from its alliance list
 	const cIdx = side.indexOf(country);
 	if (cIdx > -1) side.splice(cIdx, 1);
