@@ -1705,6 +1705,7 @@ export let activeScenarioId = null;
 export let ffaMode = false;
 export let randomWarMode = false;
 export let adjacencyCache = null;
+export let flagProcessedBuffer;
 export let sideColors = [...DEFAULT_SIDE_COLORS];
 export let lastSelectionTime = 0;
 export let lastSelectedId = -1;
@@ -17140,6 +17141,7 @@ export function initializeEngine() {
 		worldControlMap = new Uint16Array(gridWidth * gridHeight);
 		deJureMap = new Uint16Array(gridWidth * gridHeight);
 		provinceMap = new Int32Array(gridWidth * gridHeight);
+		flagProcessedBuffer = new Int32Array(gridWidth * gridHeight);
 		occupationMap = new Float32Array(gridWidth * gridHeight);
 		initSideInfluenceMaps();
 		primaryOccupierMap = new Uint16Array(gridWidth * gridHeight);
@@ -20991,6 +20993,7 @@ choiceSourceEarth.onclick = () => {
 		worldControlMap = new Uint16Array(gridWidth * gridHeight);
 		deJureMap = new Uint16Array(gridWidth * gridHeight);
 		provinceMap = new Int32Array(gridWidth * gridHeight);
+		flagProcessedBuffer = new Int32Array(gridWidth * gridHeight);
 		occupationMap = new Float32Array(gridWidth * gridHeight);
 		initSideInfluenceMaps();
 		primaryOccupierMap = new Uint16Array(gridWidth * gridHeight);
