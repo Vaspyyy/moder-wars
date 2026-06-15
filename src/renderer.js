@@ -85,6 +85,7 @@ const ControlMapLayer = L.Layer.extend({
 		this._renderRequested = false;
 		this._visitId = 0;
 		this._zooming = false;
+		this._zoomStartZoom = map.getZoom();
 
 		// Append to map container directly to avoid double-transforms from mapPane/overlayPane
 		map.getContainer().appendChild(this._container);
@@ -257,7 +258,6 @@ const ControlMapLayer = L.Layer.extend({
 		}
 
 		// Optimization: Pre-calculate pole map for faster lookups in render loop
-		// Optimization: Pre-calculate pole map for faster lookups in render loop
 		const metaMaxId = countryMetadata.reduce(
 			(max, m) => (m ? Math.max(max, m.id) : max),
 			0,
@@ -286,10 +286,11 @@ const ControlMapLayer = L.Layer.extend({
 
 				// BFS over allies graph to find connected component
 				const queue = [id];
+				let qIdx = 0;
 				const component = [];
 				visitedAlliance[id] = 1;
-				while (queue.length) {
-					const cid = queue.shift();
+				while (qIdx < queue.length) {
+					const cid = queue[qIdx++];
 					component.push(cid);
 					const cMeta = countryMetadata[cid - 1];
 					const allies =
@@ -458,7 +459,9 @@ const ControlMapLayer = L.Layer.extend({
 						const vYMin = Math.max(0, yMin - pad);
 						const vYMax = Math.min(gridHeight - 1, yMax + pad);
 
+						let bfsCellCount = 0;
 						while (queue.length > 0) {
+							if (++bfsCellCount > 100000) break;
 							const curr = queue.pop();
 							const cy = Math.floor(curr / gridWidth);
 							const cx = curr % gridWidth;
@@ -922,6 +925,8 @@ const ControlMapLayer = L.Layer.extend({
 
 		// PASS 1.5: Flag Overlays (Only in Flag View)
 		if (viewMode === "FLAG") {
+			const _countryById = new Map();
+			for (const side of sides) for (const c of side) _countryById.set(c.id, c);
 			// Group regions by alliance root when alliance view is enabled, so each alliance
 			// gets a single merged clipping mask and flag overlay.
 			if (allianceViewEnabled) {
@@ -998,7 +1003,7 @@ const ControlMapLayer = L.Layer.extend({
 					const suppressFlag = isFrance && !isWar;
 
 					if (!suppressFlag) {
-						const countryObj = sides.flat().find((c) => c.id === flagMeta.id);
+						const countryObj = _countryById.get(flagMeta.id);
 						if (flagMeta.allianceFlagTempFlag?.complete) {
 							flagImg = flagMeta.allianceFlagTempFlag;
 						} else if (
@@ -1086,14 +1091,7 @@ const ControlMapLayer = L.Layer.extend({
 					const meta = countryMetadata[id - 1];
 					if (!meta) return;
 
-					// Determine which metadata should supply the flag for this region
-					// (alliance root in alliance view, otherwise the country itself)
-					let flagMeta = meta;
-					if (allianceViewEnabled) {
-						const rootId = allianceKeyById[id] || id;
-						const rootMeta = countryMetadata[rootId - 1];
-						if (rootMeta) flagMeta = rootMeta;
-					}
+					const flagMeta = meta;
 
 					ctx.save();
 					ctx.beginPath();
@@ -1149,13 +1147,8 @@ const ControlMapLayer = L.Layer.extend({
 					const suppressFlag = isFrance && !isWar;
 
 					if (!suppressFlag) {
-						const countryObj = sides.flat().find((c) => c.id === flagMeta.id);
+						const countryObj = _countryById.get(flagMeta.id);
 						if (
-							allianceViewEnabled &&
-							flagMeta.allianceFlagTempFlag?.complete
-						) {
-							flagImg = flagMeta.allianceFlagTempFlag;
-						} else if (
 							countryObj?.flag?.complete &&
 							countryObj.flag.naturalWidth > 0
 						) {

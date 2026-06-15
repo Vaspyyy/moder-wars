@@ -1,5 +1,5 @@
 import { CONFIG } from "./config.js";
-import { _geoCacheGet, fetchJSONWithCache } from "./geo.js";
+import { _geoCacheGet, _geoCachePut, fetchJSONWithCache } from "./geo.js";
 import {
 	activeScenarioId,
 	applyEarthDeserts,

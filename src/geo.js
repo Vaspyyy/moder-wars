@@ -2,21 +2,24 @@
 // On first load, parsed GeoJSON is stored in IndexedDB (keyed by URL).
 // Subsequent loads skip the network + JSON.parse entirely.
 
-// On first load, parsed GeoJSON is stored in IndexedDB (keyed by URL).
-// Subsequent loads skip the network + JSON.parse entirely — removes the
-// 20-31MB main-thread stall on revisits.
-
-async function _cacheOpen() {
-	return new Promise((resolve, reject) => {
-		const req = indexedDB.open("mw-geocache", 1);
-		req.onupgradeneeded = () => {
-			if (!req.result.objectStoreNames.contains("geojson")) {
-				req.result.createObjectStore("geojson", { keyPath: "url" });
-			}
-		};
-		req.onsuccess = () => resolve(req.result);
-		req.onerror = () => reject(req.error);
-	});
+let _dbPromise = null;
+function _cacheOpen() {
+	if (!_dbPromise) {
+		_dbPromise = new Promise((resolve, reject) => {
+			const req = indexedDB.open("mw-geocache", 1);
+			req.onupgradeneeded = () => {
+				if (!req.result.objectStoreNames.contains("geojson")) {
+					req.result.createObjectStore("geojson", { keyPath: "url" });
+				}
+			};
+			req.onsuccess = () => resolve(req.result);
+			req.onerror = () => {
+				_dbPromise = null;
+				reject(req.error);
+			};
+		});
+	}
+	return _dbPromise;
 }
 
 export async function _geoCacheGet(url) {
@@ -33,6 +36,10 @@ export async function _geoCacheGet(url) {
 					return;
 				}
 			}
+			try {
+				const delTx = db.transaction("geojson", "readwrite");
+				delTx.objectStore("geojson").delete(url);
+			} catch (_e) {}
 			resolve(null);
 		};
 		req.onerror = () => resolve(null);
@@ -60,4 +67,5 @@ export async function fetchJSONWithCache(url) {
 	return data;
 }
 
+export { _cachePut as _geoCachePut };
 // ─── End Cache ─────────────────────────────────────────────────────────────

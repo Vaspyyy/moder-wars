@@ -843,7 +843,7 @@ body.use-system-font .scroller-card-name {
 		background: rgba(10, 10, 12, 0.75);
 		border-radius: 0;
 		border: none;
-		border-bottom: 1px solid rgba(255,255,255,0.08);
+		border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 		box-shadow: none;
 	}
 	.casualty-panel .casualty-title {
@@ -858,15 +858,22 @@ body.use-system-font .scroller-card-name {
 	.casualty-item {
 		font-size: 10px;
 		padding: 2px 6px;
-		background: rgba(0,0,0,0.35);
+		background: rgba(0, 0, 0, 0.35);
 		border-radius: 3px;
 		display: flex;
 		align-items: center;
 		gap: 3px;
 	}
-	.casualty-item .cas-flag { width: 12px !important; height: 8px !important; }
-	.casualty-item .cas-value { font-size: 10px !important; }
-	.casualty-item .cas-side-mp { font-size: 10px !important; }
+	.casualty-item .cas-flag {
+		width: 12px;
+		height: 8px;
+	}
+	.casualty-item .cas-value {
+		font-size: 10px;
+	}
+	.casualty-item .cas-side-mp {
+		font-size: 10px;
+	}
 
 	/* Stats panel: keep it compact */
 	.stats-panel {
@@ -1157,7 +1164,7 @@ body.use-system-font .scroller-card-name {
 	/* Hide some less-used toggle buttons on mobile to save space */
 	#arrows-toggle-btn,
 	#battles-toggle-btn {
-		display: none !important;
+		display: none;
 	}
 	#minimize-status-btn {
 		font-size: 18px;

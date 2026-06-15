@@ -1068,16 +1068,16 @@ export function getCookie(name) {
 	}, "");
 }
 
+const _colorCanvas = document.createElement("canvas");
+_colorCanvas.width = 1;
+_colorCanvas.height = 1;
+const _colorCtx = _colorCanvas.getContext("2d");
+
 export function parseColorToRGBA(c) {
 	if (!c) return [150, 150, 150, 1.0];
-	const canvas = document.createElement("canvas");
-	canvas.width = 1;
-	canvas.height = 1;
-	const ctx = canvas.getContext("2d");
-	ctx.fillStyle = c;
-	ctx.fillRect(0, 0, 1, 1);
-	const data = ctx.getImageData(0, 0, 1, 1).data;
-	// data is [R, G, B, A] where A is 0-255
+	_colorCtx.fillStyle = c;
+	_colorCtx.fillRect(0, 0, 1, 1);
+	const data = _colorCtx.getImageData(0, 0, 1, 1).data;
 	return [data[0], data[1], data[2], data[3] / 255];
 }
 
@@ -1965,8 +1965,8 @@ export let _cachedFrontierCells = []; // cached BFS frontier seed cells (increme
 export let _frontierScanCounter = 0; // counter for full-scan cadence
 
 // Grid dimensions calculated after settings choice
-export let gridWidth,
-	gridHeight,
+export let gridWidth = 0,
+	gridHeight = 0,
 	worldControlMap,
 	deJureMap,
 	provinceMap,
@@ -3135,6 +3135,12 @@ _simWorker.onmessage = (evt) => {
 	frontlineDirLng = new Float32Array(lngBuf);
 	_frontlineSourceCell = new Int32Array(srcBuf);
 };
+_simWorker.onerror = () => {
+	_workerBusy = false;
+};
+_simWorker.onmessageerror = () => {
+	_workerBusy = false;
+};
 
 export let baseImageryLayer = null;
 export const imagerySelect = document.getElementById("imagery-select");
@@ -3879,7 +3885,8 @@ export function updateSidesUI() {
 			delBtn.onclick = (e) => {
 				e.stopPropagation();
 				sides.splice(sideIdx, 1);
-				if (activeSideIndex >= sides.length) activeSideIndex = sides.length - 1;
+				if (activeSideIndex >= sides.length)
+					activeSideIndex = Math.max(0, sides.length - 1);
 				rebuildManpowerInputs();
 				updateSidesUI();
 			};
@@ -4015,8 +4022,10 @@ export function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
 						}
 					}
 				}
-				sideInfluenceMaps[si][idx] =
-					sideInfluenceMaps[si][idx] * (1 - blur) + (sum / count) * blur;
+				if (count > 0) {
+					sideInfluenceMaps[si][idx] =
+						sideInfluenceMaps[si][idx] * (1 - blur) + (sum / count) * blur;
+				}
 			}
 			syncOccupationFromSideInfluence(idx);
 		}
@@ -14354,7 +14363,6 @@ export function updateLoop(now) {
 	}
 
 	// Throttled UI rendering in Flag mode to maintain responsive interaction and framerate
-	simFrameCount++;
 
 	// Throttled Combatants UI update
 	if (simFrameCount % 30 === 0) {

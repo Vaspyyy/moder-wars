@@ -126,7 +126,7 @@ function rebuildFrontlineField() {
 
 	// Incremental seed: full frontier scan only every 3rd rebuild.
 	// _cachedFrontierCells initialized as [] in main.js, reused here.
-	if (!_cachedFrontierCells) _cachedFrontierCells.length = 0;
+	if (_cachedFrontierCells) _cachedFrontierCells.length = 0;
 	setFrontierScanCounter((_frontierScanCounter + 1) % 3);
 
 	if (_frontierScanCounter === 0 || _cachedFrontierCells.length === 0) {

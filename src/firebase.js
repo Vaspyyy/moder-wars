@@ -1,3 +1,4 @@
+import { SCENARIO_MENU_BGS } from "./constants.js";
 import {
 	countryInspector,
 	currentUsername,
@@ -27,7 +28,14 @@ import {
 	tabFlagsBtn,
 	tabScenariosBtn,
 } from "./main.js";
-import { SCENARIO_MENU_BGS } from "./constants.js";
+
+function escapeHtml(s) {
+	return String(s)
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;");
+}
 
 function openHub(initialTab = "scenarios") {
 	const fade = document.getElementById("fade-transition-overlay");
@@ -137,8 +145,6 @@ function renderHub(scenarios) {
 	hubList.innerHTML = list
 		.map((s) => {
 			hubScenarioCache[s.id] = s;
-			const _safeName = (s.name || "").replace(/'/g, "\\'");
-			const _safeOwner = (s.username || "").replace(/'/g, "\\'");
 			const cCount = commentCounts[s.id] || 0;
 			const cLabel = cCount === 1 ? "1 comment" : `${cCount} comments`;
 			const canDelete = myUsername && s.username === myUsername;
@@ -147,26 +153,26 @@ function renderHub(scenarios) {
             <img src="${s.previewUrl || "https://images.websim.ai/v1/projects/placeholder/landscape"}" class="hub-preview-img">
             <div class="hub-content">
                 <div class="hub-info">
-                    <div class="hub-name">${s.name}</div>
+                    <div class="hub-name">${escapeHtml(s.name)}</div>
                     <div class="hub-meta">
                         <img src="https://images.websim.com/avatar/${s.username}" class="hub-author-img">
-                        <span>${s.username}</span>
+                        <span>${escapeHtml(s.username)}</span>
                     </div>
                     ${
 											s.remixed_from_name
 												? `
                         <div style="font-size: 9px; color: #8e44ad; text-transform: uppercase; font-weight: 900; letter-spacing: 1px; margin-top: 4px; display: flex; align-items: center; gap: 4px;">
-                            <span>🔄</span> REMIXED FROM ${s.remixed_from_name}
+                            <span>🔄</span> REMIXED FROM ${escapeHtml(s.remixed_from_name)}
                         </div>
                     `
 												: ""
 										}
                 </div>
-                <div class="hub-description">${s.description || "No description provided."}</div>
+                <div class="hub-description">${escapeHtml(s.description || "No description provided.")}</div>
                 <div class="hub-comment-count">💬 ${cLabel}</div>
                 <div class="hub-actions" style="margin-top: auto; display: flex; justify-content: space-between; align-items: center;">
                     <div class="hub-actions-buttons" style="display:flex; gap:6px;">
-                        ${canDelete ? `<button class="mini-btn" style="background:#c0392b; padding:6px 10px; font-size:9px;" onclick="window.deleteScenario('${s.id}')">DEL</button>` : ""}
+                        ${canDelete ? `<button class="mini-btn" style="background:#c0392b; padding:6px 10px; font-size:9px;" data-delete-id="${escapeHtml(s.id)}">DEL</button>` : ""}
                     </div>
                     <span style="font-size: 10px; color: #555;">${new Date(s.created_at).toLocaleDateString()}</span>
                 </div>
@@ -192,6 +198,13 @@ function renderHub(scenarios) {
 			const item = hubScenarioCache[id];
 			if (!item) return;
 			openItemModal("scenario", item);
+		});
+	});
+
+	hubList.querySelectorAll("[data-delete-id]").forEach((btn) => {
+		btn.addEventListener("click", (ev) => {
+			ev.stopPropagation();
+			window.deleteScenario(btn.dataset.deleteId);
 		});
 	});
 }

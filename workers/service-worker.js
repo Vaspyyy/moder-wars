@@ -1,7 +1,7 @@
 // Service Worker — cache-first for same-origin static assets
 // Updated for MW-V0.23.0: geodata now bundled locally, added to precache
 
-const CACHE_VERSION = "mw-v0.26.15";
+const CACHE_VERSION = "mw-v0.26.16";
 const CACHE_NAME = `mw-cache-${CACHE_VERSION}`;
 
 const PRECACHE_URLS = [
@@ -31,7 +31,15 @@ self.addEventListener("install", (event) => {
 	event.waitUntil(
 		caches
 			.open(CACHE_NAME)
-			.then((cache) => cache.addAll(PRECACHE_URLS))
+			.then((cache) =>
+				Promise.allSettled(
+					PRECACHE_URLS.map((url) =>
+						cache
+							.add(url)
+							.catch((err) => console.warn("Precache failed:", url, err)),
+					),
+				),
+			)
 			.then(() => self.skipWaiting()),
 	);
 });
@@ -69,7 +77,14 @@ self.addEventListener("fetch", (event) => {
 					});
 				})
 				.catch(() => {
-					// Offline fallback
+					if (
+						url.pathname.endsWith(".json") ||
+						url.pathname.endsWith(".geojson")
+					) {
+						return new Response("[]", {
+							headers: { "Content-Type": "application/json" },
+						});
+					}
 					return caches.match("/index.html");
 				}),
 		);
