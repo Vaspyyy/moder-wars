@@ -1,0 +1,56 @@
+src/editor.js
+  s_689af5680f57c1::t_19e8cb978c1a12 2
+workers/simulation-worker.js
+  s_689af5680f57c1::t_76e2246ead2971 10,15-18,20-22,24-49,52,54-56,58-68,70-77,80-88
+  s_689af5680f57c1::t_a29d853cfec499 6-9,11-13
+  s_689af5680f57c1::t_5d502a38905284 89-91
+src/firebase.js
+  s_689af5680f57c1::t_41e1fc31788373 32-33,38,156,159,165,171,175,203,206-207
+  s_689af5680f57c1::t_76e2246ead2971 1,34-37,204-205
+workers/service-worker.js
+  s_689af5680f57c1::t_2ad0e6f3911e5b 4
+  s_689af5680f57c1::t_3642f76d0022de 34-36,40-42
+  s_689af5680f57c1::t_76e2246ead2971 37-39,80-87
+index.html
+  s_689af5680f57c1::t_b7c5b0ba51fc1a 6
+src/renderer.js
+  s_689af5680f57c1::t_0f7705f09aa204 928-929
+  s_689af5680f57c1::t_42e9d06ae7200c 88
+  s_689af5680f57c1::t_2ebfb0f52ef34e 1006
+  s_689af5680f57c1::t_276003faea6dcc 289,292-293
+  s_689af5680f57c1::t_230bfbd4c2522a 462,464
+  s_689af5680f57c1::t_41abcec0268920 1094
+  s_689af5680f57c1::t_dc3831d92ed555 1150
+src/geo.js
+  s_689af5680f57c1::t_c4e43023aa3e28 16
+  s_689af5680f57c1::t_e9b04484a3a7c5 39-42
+  s_689af5680f57c1::t_94cf392ccd4bce 17-19
+  s_689af5680f57c1::t_251a2ea138acf5 5-15,20-22
+  s_689af5680f57c1::t_8f86536f1ca11a 70
+src/main.js
+  s_689af5680f57c1::t_0ee96da5d70cba 3138-3143
+  s_689af5680f57c1::t_70e66b43dd7090 3888
+  s_689af5680f57c1::t_e778819b68d5db 1071,1074
+  s_689af5680f57c1::t_023e6eebe4024a 4025-4028
+  s_689af5680f57c1::t_b9f6fce8495704 1968-1969
+  s_689af5680f57c1::t_96a0a3fc245e18 1072-1073,1075,1078-1080
+  s_689af5680f57c1::t_f9cfed6dd0dffc 3889
+src/engine.js
+  s_689af5680f57c1::t_392af8096a816b 129
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "8aec7e1c22d0c520be4101bdcf4fd5b79771293a",
+  "prompts": {},
+  "sessions": {
+    "s_689af5680f57c1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_13672800effeSwaOv0Aga1w02E",
+        "model": "unknown"
+      },
+      "human_author": "Vaspyyy <lolbautz2@gmail.com>"
+    }
+  }
+}
