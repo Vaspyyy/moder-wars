@@ -3578,8 +3578,8 @@ export function estimateUnitsForCountry(countryId) {
 	const meta = countryMetadata[countryId - 1];
 	const pop = meta?.pop || countryUrbanPop.get(countryId) || 0;
 	const gdp = meta?.gdp || 0;
-	const popScore = Math.sqrt(pop) * 0.04;
-	const gdpScore = Math.sqrt(gdp) * 0.8;
+	const popScore = Math.sqrt(pop) * 0.15;
+	const gdpScore = Math.sqrt(gdp) * 2.5;
 
 	if (recruitModel === "pop" && pop > 0) {
 		effectiveCount = popScore;
@@ -3589,12 +3589,11 @@ export function estimateUnitsForCountry(countryId) {
 		effectiveCount = popScore * 0.5 + gdpScore * 0.5;
 	}
 
-	// Only apply densityScale for area-based models (it penalizes large countries)
-	const useDensityScale = recruitModel === "area";
+	// Only apply density for area-based models (pop/gdp coefficients are already calibrated)
+	const useAreaModel = recruitModel === "area";
 	let count = Math.floor(
 		effectiveCount *
-			CONFIG.UNIT_DENSITY_FACTOR *
-			(useDensityScale ? densityScale : 1),
+			(useAreaModel ? CONFIG.UNIT_DENSITY_FACTOR * densityScale : 1),
 	);
 	const flatFloor = 3;
 	count = Math.max(flatFloor, Math.min(count, CONFIG.MAX_UNITS_PER_SIDE));
