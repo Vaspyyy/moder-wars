@@ -60,10 +60,10 @@ export const CONFIG = {
 	ENCIRCLEMENT_DAMAGE_MULT: 5.0,
 	ENCIRCLEMENT_RADIUS: 0.7,
 	WAR_GRACE_TICKS: 600, // ~10s ceasefire after war declaration for mobilization
-	NAVAL_INVASION_FORCE_FRAC: 1.0, // Unlimited for testing
+	NAVAL_INVASION_FORCE_FRAC: 1.0,
 	NAVAL_LANDING_DEBUFF: 0.5, // 50% damage reduction for first 300 ticks after landing
 	NAVAL_LANDING_DEBUFF_TICKS: 300,
-	NAVAL_SUPPLY_FORCE_FRAC: 1.0, // Unlimited for testing
+	NAVAL_SUPPLY_FORCE_FRAC: 1.0,
 	NAVAL_SUPPLY_INTERVAL: 3600, // ~60s between supply run re-evaluations
 	TEAM_A_COLOR: "rgba(255, 50, 50, 0.5)",
 	TEAM_B_COLOR: "rgba(50, 100, 255, 0.5)",

@@ -124,6 +124,34 @@ import {
 	worldWidthDeg,
 } from "./main.js";
 
+function getFeatureBounds(feature) {
+	const geom = feature?.geometry?.coordinates;
+	let minX = Infinity,
+		minY = Infinity,
+		maxX = -Infinity,
+		maxY = -Infinity;
+	if (Array.isArray(geom)) {
+		const stack = [...geom];
+		while (stack.length) {
+			const item = stack.pop();
+			if (typeof item[0] === "number" && typeof item[1] === "number") {
+				const lng = item[0],
+					lat = item[1];
+				if (lng < minX) minX = lng;
+				if (lng > maxX) maxX = lng;
+				if (lat < minY) minY = lat;
+				if (lat > maxY) maxY = lat;
+			} else if (Array.isArray(item)) {
+				for (let k = 0; k < item.length; k++) stack.push(item[k]);
+			}
+		}
+	}
+	if (minX === Infinity) {
+		return L.latLngBounds(L.latLng(-90, -180), L.latLng(90, 180));
+	}
+	return L.latLngBounds(L.latLng(minY, minX), L.latLng(maxY, maxX));
+}
+
 function updateCountryFlag(countryId, url) {
 	if (countryId <= 0 || !url) return;
 
@@ -230,36 +258,9 @@ async function updateLandMask(features, maskValue = 1, isBlank = false) {
 			// Use GeoJSON bounds (fast path) where available; fallback to computing via a lightweight bbox helper
 			let bounds;
 			try {
-				bounds = L.geoJSON(feature).getBounds();
+				bounds = getFeatureBounds(feature);
 			} catch (_e) {
-				// In rare malformed cases, attempt a cheap bbox extraction
-				const geom = feature?.geometry?.coordinates;
-				let minX = Infinity,
-					minY = Infinity,
-					maxX = -Infinity,
-					maxY = -Infinity;
-				if (Array.isArray(geom)) {
-					const stack = [...geom];
-					while (stack.length) {
-						const item = stack.pop();
-						if (typeof item[0] === "number" && typeof item[1] === "number") {
-							const lng = item[0],
-								lat = item[1];
-							if (lng < minX) minX = lng;
-							if (lng > maxX) maxX = lng;
-							if (lat < minY) minY = lat;
-							if (lat > maxY) maxY = lat;
-						} else if (Array.isArray(item)) {
-							for (let k = 0; k < item.length; k++) stack.push(item[k]);
-						}
-					}
-				}
-				if (minX === Infinity) {
-					// fallback: full world
-					bounds = L.latLngBounds(L.latLng(-90, -180), L.latLng(90, 180));
-				} else {
-					bounds = L.latLngBounds(L.latLng(minY, minX), L.latLng(maxY, maxX));
-				}
+				bounds = L.latLngBounds(L.latLng(-90, -180), L.latLng(90, 180));
 			}
 
 			const startLat = Math.max(
@@ -426,7 +427,7 @@ async function loadTerrain(res) {
 			}
 
 			const feature = mountains[i];
-			const bounds = L.geoJSON(feature).getBounds();
+			const bounds = getFeatureBounds(feature);
 			const sLat = Math.max(
 				0,
 				Math.floor((bounds.getSouth() + 90) / CONFIG.GRID_RES),
@@ -471,7 +472,7 @@ async function loadTerrain(res) {
 			}
 
 			const feature = lowlands[i];
-			const bounds = L.geoJSON(feature).getBounds();
+			const bounds = getFeatureBounds(feature);
 			const sLat = Math.max(
 				0,
 				Math.floor((bounds.getSouth() + 90) / CONFIG.GRID_RES),

@@ -411,6 +411,10 @@ const ControlMapLayer = L.Layer.extend({
 
 		if ((viewMode === "FLAG" || showCountryLabels) && flagProcessedBuffer) {
 			this._visitId = (this._visitId || 0) + 1;
+			if (this._visitId > 1e15) {
+				flagProcessedBuffer.fill(0);
+				this._visitId = 1;
+			}
 			const visitId = this._visitId;
 
 			// In FLAG view we always sample at full resolution to avoid blocky / dotted flags.
@@ -631,7 +635,7 @@ const ControlMapLayer = L.Layer.extend({
 			const vHeight = yMax - yMin + 1;
 
 			// GC Optimization: Pre-allocate reusable buffers for the greedy mesh pass instead of new Array().fill(null)
-			const maxVSize = gridWidth * gridHeight;
+			const maxVSize = vWidth * vHeight;
 			if (!this._viewportFills || this._viewportFills.length < maxVSize) {
 				this._viewportFills = new Array(maxVSize);
 				this._processedCells = new Uint8Array(maxVSize);
@@ -999,33 +1003,28 @@ const ControlMapLayer = L.Layer.extend({
 					const drawH = Math.abs(p1.y - p2.y);
 
 					let flagImg = null;
-					const isFrance = flagMeta.name === "France";
-					const suppressFlag = isFrance && !isWar;
-
-					if (!suppressFlag) {
-						const countryObj = _countryById.get(flagMeta.id);
-						if (flagMeta.allianceFlagTempFlag?.complete) {
-							flagImg = flagMeta.allianceFlagTempFlag;
-						} else if (
-							countryObj?.flag?.complete &&
-							countryObj.flag.naturalWidth > 0
+					const countryObj = _countryById.get(flagMeta.id);
+					if (flagMeta.allianceFlagTempFlag?.complete) {
+						flagImg = flagMeta.allianceFlagTempFlag;
+					} else if (
+						countryObj?.flag?.complete &&
+						countryObj.flag.naturalWidth > 0
+					) {
+						flagImg = countryObj.flag;
+					} else {
+						if (!flagMeta.tempFlag && flagMeta.flagUrl) {
+							flagMeta.tempFlag = new Image();
+							flagMeta.tempFlag.crossOrigin = "anonymous";
+							flagMeta.tempFlag.onload = () => {
+								if (influenceLayer) influenceLayer.render();
+							};
+							flagMeta.tempFlag.src = flagMeta.flagUrl;
+						}
+						if (
+							flagMeta.tempFlag?.complete &&
+							flagMeta.tempFlag.naturalWidth > 0
 						) {
-							flagImg = countryObj.flag;
-						} else {
-							if (!flagMeta.tempFlag && flagMeta.flagUrl) {
-								flagMeta.tempFlag = new Image();
-								flagMeta.tempFlag.crossOrigin = "anonymous";
-								flagMeta.tempFlag.onload = () => {
-									if (influenceLayer) influenceLayer.render();
-								};
-								flagMeta.tempFlag.src = flagMeta.flagUrl;
-							}
-							if (
-								flagMeta.tempFlag?.complete &&
-								flagMeta.tempFlag.naturalWidth > 0
-							) {
-								flagImg = flagMeta.tempFlag;
-							}
+							flagImg = flagMeta.tempFlag;
 						}
 					}
 
@@ -1143,31 +1142,23 @@ const ControlMapLayer = L.Layer.extend({
 					const drawH = Math.abs(p1.y - p2.y);
 
 					let flagImg = null;
-					const isFrance = meta.name === "France";
-					const suppressFlag = isFrance && !isWar;
-
-					if (!suppressFlag) {
-						const countryObj = _countryById.get(flagMeta.id);
+					const countryObj = _countryById.get(flagMeta.id);
+					if (countryObj?.flag?.complete && countryObj.flag.naturalWidth > 0) {
+						flagImg = countryObj.flag;
+					} else {
+						if (!flagMeta.tempFlag && flagMeta.flagUrl) {
+							flagMeta.tempFlag = new Image();
+							flagMeta.tempFlag.crossOrigin = "anonymous";
+							flagMeta.tempFlag.onload = () => {
+								if (influenceLayer) influenceLayer.render();
+							};
+							flagMeta.tempFlag.src = flagMeta.flagUrl;
+						}
 						if (
-							countryObj?.flag?.complete &&
-							countryObj.flag.naturalWidth > 0
+							flagMeta.tempFlag?.complete &&
+							flagMeta.tempFlag.naturalWidth > 0
 						) {
-							flagImg = countryObj.flag;
-						} else {
-							if (!flagMeta.tempFlag && flagMeta.flagUrl) {
-								flagMeta.tempFlag = new Image();
-								flagMeta.tempFlag.crossOrigin = "anonymous";
-								flagMeta.tempFlag.onload = () => {
-									if (influenceLayer) influenceLayer.render();
-								};
-								flagMeta.tempFlag.src = flagMeta.flagUrl;
-							}
-							if (
-								flagMeta.tempFlag?.complete &&
-								flagMeta.tempFlag.naturalWidth > 0
-							) {
-								flagImg = flagMeta.tempFlag;
-							}
+							flagImg = flagMeta.tempFlag;
 						}
 					}
 
@@ -1628,21 +1619,6 @@ const ControlMapLayer = L.Layer.extend({
 
 			ctx.restore();
 		});
-
-		// Read cached territory percentages from sim tick (avoids 2.88M-cell scan)
-		if (
-			isWar &&
-			_cachedSideTerritoryPcts &&
-			_cachedSideTerritoryPcts.length > 0
-		) {
-			for (let si = 0; si < _cachedSideTerritoryPcts.length; si++) {
-				const pct = _cachedSideTerritoryPcts[si];
-				const ctrlEl = _cachedTerritoryCtrlEls[si];
-				if (ctrlEl) ctrlEl.textContent = `${pct}%`;
-				const segEl = _cachedTerritorySegEls[si];
-				if (segEl) segEl.style.width = `${pct}%`;
-			}
-		}
 
 		// Draw Bases (Missile Silos & Airports) - Viewport Culled
 		if (isWar) {
@@ -2546,6 +2522,23 @@ const ControlMapLayer = L.Layer.extend({
 		}
 
 		ctx.restore();
+
+		if (
+			isWar &&
+			_cachedSideTerritoryPcts &&
+			_cachedSideTerritoryPcts.length > 0
+		) {
+			requestAnimationFrame(() => {
+				for (let si = 0; si < _cachedSideTerritoryPcts.length; si++) {
+					const pct = _cachedSideTerritoryPcts[si];
+					const ctrlEl = _cachedTerritoryCtrlEls[si];
+					if (ctrlEl) ctrlEl.textContent = `${pct}%`;
+					const segEl = _cachedTerritorySegEls[si];
+					if (segEl) segEl.style.width = `${pct}%`;
+				}
+			});
+		}
+
 		if (window.__perf)
 			window.__perf.render =
 				(window.__perf.render || 0) + performance.now() - _r0;

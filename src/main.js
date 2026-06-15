@@ -1131,8 +1131,8 @@ export function ensureFlagImage(meta) {
  */
 export async function generatePuppetFlag(puppetId, overlordId) {
 	if (!puppetId || !overlordId) return;
-	const puppetMeta = countryMetadata.find((m) => m && m.id === puppetId);
-	const overlordMeta = countryMetadata.find((m) => m && m.id === overlordId);
+	const puppetMeta = countryMetadata[puppetId - 1];
+	const overlordMeta = countryMetadata[overlordId - 1];
 	if (!puppetMeta || !overlordMeta) return;
 
 	const puppetImg = await ensureFlagImage(puppetMeta);
@@ -1288,7 +1288,9 @@ export async function initAudio() {
 	if (audioCtx.state === "suspended") {
 		try {
 			await audioCtx.resume();
-		} catch (_e) {}
+		} catch (_e) {
+			console.warn("AudioContext resume failed", _e);
+		}
 	}
 
 	if (isAudioLoading) return;
@@ -1342,14 +1344,13 @@ export async function initAudio() {
 			url = bgMusicUrls[index];
 		}
 
-		// Decode buffer if needed
-		if (!bgMusicBuffers[url]) {
+		while (!bgMusicBuffers[url]) {
 			const buf = await load(url);
 			if (!buf) {
-				// If a track fails, forcefully try the next one in the list immediately
 				console.warn(`Force-skipping broken track: ${url}`);
-				const nextIdx = (index + 1) % bgMusicUrls.length;
-				return playBackgroundTrack(nextIdx);
+				index = (index + 1) % bgMusicUrls.length;
+				url = customTrackUrl || bgMusicUrls[index];
+				continue;
 			}
 			bgMusicBuffers[url] = buf;
 		}
@@ -1809,6 +1810,7 @@ export let hubWasInEditor = false;
 export let godModeActive = false;
 export let godBombActive = false;
 export let godBombSourceId = -1;
+export let buffedSideIdx;
 export let preGodModeState = "SIMULATING";
 export const latestCountryStats = new Map();
 export let disableFullscreen = getCookie("mw_disable_fullscreen") === "true";
@@ -2109,7 +2111,6 @@ export let initialBiomeMaskSnapshot = null;
 // Snapshots for releasables and metadata at scenario start so annexed nations are still releasable on quick restart
 export let initialCountryMetadataSnapshot = null;
 export let initialCitiesSnapshot = null;
-export let flagProcessedBuffer;
 export let countryMetadata = []; // Stores {feature, color, id}
 export let countryUrbanPop = new Map(); // countryId -> total urban population from city data
 export let recruitModel = "balanced"; // "area" | "pop" | "balanced"
@@ -3651,8 +3652,8 @@ export function updateSidesUI() {
 		const listContainer = document.createElement("div");
 		listContainer.className = "side-country-list";
 
-		sideList.forEach((country, i) => {
-			const meta = countryMetadata.find((m) => m && m.id === country.id);
+		sideList.forEach((country, _i) => {
+			const meta = countryMetadata[country.id - 1];
 			const slot = document.createElement("div");
 			slot.className = "setup-slot";
 			slot.style.borderColor = sideColors[sideIdx].replace(rgbaRe, "0.4)");
@@ -3756,9 +3757,7 @@ export function updateSidesUI() {
 			if (addAlliesBtn) {
 				addAlliesBtn.addEventListener("click", (e) => {
 					e.stopPropagation();
-					const thisMeta = countryMetadata.find(
-						(m) => m && m.id === country.id,
-					);
+					const thisMeta = countryMetadata[country.id - 1];
 					if (!thisMeta) return;
 
 					const alliesSet = new Set();
@@ -3856,7 +3855,8 @@ export function updateSidesUI() {
 
 			slot.querySelector(".clear-slot-btn").onclick = (e) => {
 				e.stopPropagation();
-				sideList.splice(i, 1);
+				const idx = sideList.findIndex((c) => c.id === country.id);
+				if (idx !== -1) sideList.splice(idx, 1);
 				updateSidesUI();
 				influenceLayer.render();
 			};
@@ -4853,7 +4853,7 @@ export function handleCountryClick(
 			if (countryIdAtClick > 0) {
 				editingCountryId = countryIdAtClick;
 				const meta = countryMetadata[editingCountryId - 1];
-				statusText.innerText = `DEPLOYMENT: ${meta.name} (Click map to deploy divisions)`;
+				statusText.innerText = `DEPLOYMENT: ${meta?.name || "Unknown"} (Click map to deploy divisions)`;
 			} else {
 				statusText.innerText = "SELECT SOURCE: Click a nation on the map first";
 			}
@@ -5048,7 +5048,7 @@ export function handleCountryClick(
 
 			if (godModeActive && gameState === "EDITOR_ACTIVE") {
 				const meta = countryMetadata[sovereignId - 1];
-				statusText.innerText = `GOD MODE: ${meta.name || "Selected Nation"} selected.`;
+				statusText.innerText = `GOD MODE: ${meta?.name || "Selected Nation"} selected.`;
 			}
 		}
 		return;
@@ -5141,7 +5141,7 @@ export function handleCountryClick(
 			const m = countryMetadata[aid - 1];
 			if (!m) return;
 			// Only add members that actually have territory on the current map
-			const hasLand = worldControlMap?.some?.((v) => v === aid);
+			const hasLand = worldControlMap.indexOf(aid) !== -1;
 			if (!hasLand) return;
 			targetList.push({
 				feature: m.feature,
@@ -5648,7 +5648,7 @@ export async function _startWarInner() {
 			countryIndices.set(c.id, []);
 
 			// Flag initialization: Reuse existing flag objects from metadata to prevent flickering and redundant fetches
-			const meta = countryMetadata.find((m) => m && m.id === c.id);
+			const meta = countryMetadata[c.id - 1];
 			if (meta?.tempFlag) {
 				c.flag = meta.tempFlag;
 			} else {
@@ -5810,7 +5810,7 @@ export async function _startWarInner() {
 		if (isUnderdog && planQuality > 0.9 && !enemyHasStrongBuff) {
 			side.forEach((c) => {
 				c.buffState = c.buffState === "godly" ? "godly" : "super";
-				const meta = countryMetadata.find((m) => m && m.id === c.id);
+				const meta = countryMetadata[c.id - 1];
 				if (meta) meta.buffState = c.buffState;
 			});
 		}
@@ -5921,6 +5921,12 @@ export async function _startWarInner() {
 			const count = Math.min(desiredCount, remainingCap);
 			if (count <= 0) return;
 
+			const friendlyCities = cities.filter((city) => {
+				if (!city.ownerId || city.ownerId !== c.id) return false;
+				const cIdx = getGridIndex(city.lat, city.lng);
+				return cIdx !== -1 && landMask[cIdx] !== 0;
+			});
+
 			for (let j = 0; j < count; j++) {
 				// At war start, spread units along the frontline with city preference.
 				let fromFront = false;
@@ -5937,11 +5943,6 @@ export async function _startWarInner() {
 					fromFront = true;
 				} else {
 					// Prefer spawning near friendly cities if available
-					const friendlyCities = cities.filter((city) => {
-						if (!city.ownerId || city.ownerId !== c.id) return false;
-						const cIdx = getGridIndex(city.lat, city.lng);
-						return cIdx !== -1 && landMask[cIdx] !== 0;
-					});
 					if (friendlyCities.length > 0) {
 						const pick =
 							friendlyCities[Math.floor(Math.random() * friendlyCities.length)];
@@ -6180,7 +6181,9 @@ export async function _startWarInner() {
 			if (c.feature)
 				try {
 					bounds.extend(L.geoJSON(c.feature).getBounds());
-				} catch (_e) {}
+				} catch (_e) {
+					console.warn("GeoJSON bounds computation failed", _e);
+				}
 		});
 	});
 
@@ -6496,7 +6499,7 @@ export function activateCountryMidWar(country, sideIdx) {
 	activeTheaterCities = [...activeTheaterCities, ...newCities];
 
 	// Compute manpower pool contribution from the joining country (1% of population)
-	const popMeta = countryMetadata.find((m) => m && m.id === countryId);
+	const popMeta = countryMetadata[countryId - 1];
 	const populationPool = popMeta?.pop ? Math.round(popMeta.pop * 0.01) : 0;
 	// Fall back to territory-based if no population data
 	const territoryPool = Math.round(cellCount * 200);
@@ -6511,7 +6514,7 @@ export function activateCountryMidWar(country, sideIdx) {
 		sideSoldiers[sideIdx] += joiningPool;
 	}
 
-	const meta = countryMetadata.find((m) => m && m.id === countryId);
+	const meta = countryMetadata[countryId - 1];
 	if (meta?.tempFlag) {
 		country.flag = meta.tempFlag;
 	} else {
@@ -13888,7 +13891,7 @@ export function performSimulationTick() {
 						statusText.innerText = `${c.name.toUpperCase()} REVOLUTIONARY FERVOR SUBSIDING`;
 					}
 				});
-			const meta = countryMetadata.find((m) => m && m.id === rebelId);
+			const meta = countryMetadata[rebelId - 1];
 			if (meta && meta.buffState === "buff") meta.buffState = "none";
 		}
 
@@ -14824,7 +14827,7 @@ export function capitulateCountry(country, sideIndex) {
 
 	// Make the capitulated country itself a releasable of the annexer and remember its old territory
 	if (primaryAnnexerId > 0) {
-		const victimMeta = countryMetadata.find((m) => m && m.id === country.id);
+		const victimMeta = countryMetadata[country.id - 1];
 		if (victimMeta) {
 			victimMeta.releasableBy = primaryAnnexerId;
 
@@ -14847,10 +14850,8 @@ export function capitulateCountry(country, sideIndex) {
 
 	// Transfer GDP and population to the primary annexer
 	if (primaryAnnexerId > 0) {
-		const annexerMeta = countryMetadata.find(
-			(m) => m && m.id === primaryAnnexerId,
-		);
-		const victimMeta = countryMetadata.find((m) => m && m.id === country.id);
+		const annexerMeta = countryMetadata[primaryAnnexerId - 1];
+		const victimMeta = countryMetadata[country.id - 1];
 		if (annexerMeta && victimMeta) {
 			// Add victim's GDP and population to annexer
 			annexerMeta.gdp = (annexerMeta.gdp || 0) + (victimMeta.gdp || 0);
@@ -15206,6 +15207,7 @@ export function handleRebellionPeace() {
 }
 
 export function resetToSelection() {
+	countryLabelAnchors.clear();
 	stopWarAmbiance();
 	// Stop in‑game time progression but keep the last war date visible in the setup
 	gameTimeEnabled = false;
@@ -16384,7 +16386,7 @@ document.addEventListener("keydown", (e) => {
 export function unclaimSelectedCountry() {
 	if (editingCountryId <= 0) return;
 
-	const meta = countryMetadata.find((m) => m && m.id === editingCountryId);
+	const meta = countryMetadata[editingCountryId - 1];
 	const name = meta ? meta.name : "Nation";
 
 	// Visual confirmation is good for destructive actions
@@ -16707,7 +16709,7 @@ window.importFlagFromLibrary = async (id) => {
 		return;
 	}
 
-	const meta = countryMetadata.find((m) => m && m.id === editingCountryId);
+	const meta = countryMetadata[editingCountryId - 1];
 	if (meta) {
 		updateCountryFlag(editingCountryId, flagData.flagUrl);
 		closeHub();
@@ -16717,7 +16719,7 @@ window.importFlagFromLibrary = async (id) => {
 };
 
 export function saveCountryLocally(countryId) {
-	const meta = countryMetadata.find((m) => m && m.id === countryId);
+	const meta = countryMetadata[countryId - 1];
 	if (!meta) return;
 
 	const countryData = {
@@ -17144,7 +17146,6 @@ export function initializeEngine() {
 		landMask = new Uint8Array(gridWidth * gridHeight);
 		biomeMask = new Uint8Array(gridWidth * gridHeight);
 		terrainMask = new Float32Array(gridWidth * gridHeight);
-		flagProcessedBuffer = new Int32Array(gridWidth * gridHeight);
 
 		// If we are already in a mode that has geography loaded, we should refresh it
 		if (rawGeoJsonData) {
@@ -17668,7 +17669,7 @@ closeReleaseModalBtn.onclick = () => {
 };
 
 window.releaseNation = async (nationId, releaserId, sideIdx) => {
-	const meta = countryMetadata.find((m) => m && m.id === nationId);
+	const meta = countryMetadata[nationId - 1];
 	if (!meta) return;
 
 	// Clear releasable flag so this entry doesn’t show again until re‑set
@@ -17820,8 +17821,8 @@ window.releaseNation = async (nationId, releaserId, sideIdx) => {
 };
 
 export function _setAsReleasable(releasableId, releaserId) {
-	const rMeta = countryMetadata.find((m) => m && m.id === releasableId);
-	const hostMeta = countryMetadata.find((m) => m && m.id === releaserId);
+	const rMeta = countryMetadata[releasableId - 1];
+	const hostMeta = countryMetadata[releaserId - 1];
 	if (!rMeta || !hostMeta) return;
 
 	rMeta.releasableBy = releaserId;
@@ -17856,7 +17857,7 @@ export function _setAsReleasable(releasableId, releaserId) {
 }
 
 export function _setVassalage(vassalId, overlordId) {
-	const vassalMeta = countryMetadata.find((m) => m && m.id === vassalId);
+	const vassalMeta = countryMetadata[vassalId - 1];
 	if (!vassalMeta) return;
 
 	// Preserve the original flag the first time this country becomes a puppet
@@ -17874,7 +17875,7 @@ export function _setVassalage(vassalId, overlordId) {
 			if (c.id === vassalId) c.overlordId = overlordId;
 		});
 
-	const overlordMeta = countryMetadata.find((m) => m && m.id === overlordId);
+	const overlordMeta = countryMetadata[overlordId - 1];
 	statusText.innerText = `${vassalMeta.name} is now a vassal of ${overlordMeta ? overlordMeta.name : "Unknown"}`;
 
 	// Generate a dynamic half-and-half puppet flag for vassals created after game start
@@ -17889,7 +17890,7 @@ export function recruitNewSideMidWar(id) {
 	// Create a new independent side and declare war on ALL existing sides
 	if (sides.length >= MAX_SIDES) return;
 
-	const meta = countryMetadata.find((m) => m && m.id === id);
+	const meta = countryMetadata[id - 1];
 	if (!meta) return;
 
 	const newSideIdx = sides.length;
@@ -17933,7 +17934,7 @@ export function recruitNeutralMidWar(id, sideIdx) {
 		}
 	});
 
-	const meta = countryMetadata.find((m) => m && m.id === id);
+	const meta = countryMetadata[id - 1];
 	if (!meta) return;
 
 	const newCountry = {
@@ -17966,7 +17967,7 @@ export function recruitNeutralMidWar(id, sideIdx) {
 
 export function openInspector(id) {
 	editingCountryId = id;
-	const meta = countryMetadata.find((m) => m && m.id === id);
+	const meta = countryMetadata[id - 1];
 	if (!meta) return;
 
 	const isWar = gameState === "SIMULATING";
@@ -17986,7 +17987,7 @@ export function openInspector(id) {
 	if (vassalStatusDisplay) {
 		if (meta.overlordId) {
 			vassalStatusDisplay.style.display = "block";
-			const oMeta = countryMetadata.find((m) => m && m.id === meta.overlordId);
+			const oMeta = countryMetadata[meta.overlordId - 1];
 			document.getElementById("overlord-name-disp").innerText = oMeta
 				? oMeta.name
 				: "Unknown";
@@ -18528,7 +18529,7 @@ confirmCreateBtn.addEventListener("click", async () => {
 
 inspectNameInput.addEventListener("input", (e) => {
 	if (editingCountryId <= 0) return;
-	const meta = countryMetadata.find((m) => m && m.id === editingCountryId);
+	const meta = countryMetadata[editingCountryId - 1];
 	if (meta) {
 		meta.name = e.target.value;
 		// Propagate to live setup/simulation objects
@@ -18625,7 +18626,7 @@ inspectColorPicker.addEventListener("input", (e) => {
 	const g = parseInt(newColorHex.slice(3, 5), 16);
 	const b = parseInt(newColorHex.slice(5, 7), 16);
 
-	const meta = countryMetadata.find((m) => m && m.id === editingCountryId);
+	const meta = countryMetadata[editingCountryId - 1];
 	if (meta) {
 		meta.color = `rgba(${r}, ${g}, ${b}, 0.5)`;
 		meta.rgba = [r, g, b, 0.5];
@@ -18636,7 +18637,7 @@ inspectColorPicker.addEventListener("input", (e) => {
 
 shareCountryBtn.addEventListener("click", () => {
 	if (editingCountryId <= 0) return;
-	const meta = countryMetadata.find((m) => m && m.id === editingCountryId);
+	const meta = countryMetadata[editingCountryId - 1];
 	if (!meta) return;
 
 	shareCountryNameInput.value = meta.name || "Custom Nation";
@@ -18646,7 +18647,7 @@ shareCountryBtn.addEventListener("click", () => {
 
 shareFlagBtn.addEventListener("click", () => {
 	if (editingCountryId <= 0) return;
-	const meta = countryMetadata.find((m) => m && m.id === editingCountryId);
+	const meta = countryMetadata[editingCountryId - 1];
 	if (!meta?.flagUrl) {
 		alert(
 			"This nation does not have a flag to share. Upload or fetch one first.",
@@ -18665,7 +18666,7 @@ cancelShareFlagBtn.onclick = () => {
 
 confirmShareFlagBtn.onclick = async () => {
 	if (editingCountryId <= 0) return;
-	const meta = countryMetadata.find((m) => m && m.id === editingCountryId);
+	const meta = countryMetadata[editingCountryId - 1];
 	if (!meta?.flagUrl) return;
 
 	const publicName = shareFlagNameInput.value.trim() || "Custom Flag";
@@ -18696,7 +18697,7 @@ cancelShareCountryBtn.onclick = () => {
 
 confirmShareCountryBtn.onclick = async () => {
 	if (editingCountryId <= 0) return;
-	const meta = countryMetadata.find((m) => m && m.id === editingCountryId);
+	const meta = countryMetadata[editingCountryId - 1];
 	if (!meta) return;
 
 	const publicName =
@@ -19017,7 +19018,7 @@ if (addAllyBtn) {
 if (clearAlliesBtn) {
 	clearAlliesBtn.addEventListener("click", () => {
 		if (editingCountryId <= 0) return;
-		const meta = countryMetadata.find((m) => m && m.id === editingCountryId);
+		const meta = countryMetadata[editingCountryId - 1];
 		if (!meta?.allies || meta.allies.length === 0) return;
 		const allies = [...meta.allies];
 		allies.forEach((aid) => {
@@ -19091,7 +19092,7 @@ document.getElementById("set-releasable-btn").onclick = () => {
 
 document.getElementById("clear-overlord-btn").onclick = () => {
 	if (editingCountryId <= 0) return;
-	const meta = countryMetadata.find((m) => m && m.id === editingCountryId);
+	const meta = countryMetadata[editingCountryId - 1];
 	if (meta) {
 		meta.overlordId = null;
 		sides.flat().forEach((c) => {
@@ -19118,7 +19119,7 @@ closeInspectorBtn.addEventListener("click", () => {
 if (inspectBuffBtn) {
 	inspectBuffBtn.addEventListener("click", (event) => {
 		if (editingCountryId <= 0) return;
-		const meta = countryMetadata.find((m) => m && m.id === editingCountryId);
+		const meta = countryMetadata[editingCountryId - 1];
 		if (!meta) return;
 
 		// Determine direction: clicked arrow uses its data-dir, clicking center cycles forward
@@ -19559,7 +19560,7 @@ if (editorSaveMultiBtn) {
 
 		// Ensure each selected country has up-to-date savedCells and metadata
 		ids.forEach((id) => {
-			const meta = countryMetadata.find((m) => m && m.id === id);
+			const meta = countryMetadata[id - 1];
 			if (!meta) return;
 
 			// Build or refresh savedCells snapshot
@@ -20995,7 +20996,6 @@ choiceSourceEarth.onclick = () => {
 		primaryOccupierMap = new Uint16Array(gridWidth * gridHeight);
 		landMask = new Uint8Array(gridWidth * gridHeight);
 		terrainMask = new Float32Array(gridWidth * gridHeight);
-		flagProcessedBuffer = new Int32Array(gridWidth * gridHeight);
 	}
 
 	loadCities();

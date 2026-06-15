@@ -1,7 +1,7 @@
 // Service Worker — cache-first for same-origin static assets
 // Updated for MW-V0.23.0: geodata now bundled locally, added to precache
 
-const CACHE_VERSION = "mw-v0.26.17";
+const CACHE_VERSION = "mw-v0.26.18";
 const CACHE_NAME = `mw-cache-${CACHE_VERSION}`;
 
 const PRECACHE_URLS = [
@@ -17,7 +17,6 @@ const PRECACHE_URLS = [
 	"/src/firebase.js",
 	"/styles/style.css",
 	"/workers/simulation-worker.js",
-	"/workers/geo-parse-worker.js",
 	// Geodata - core files used on most loads
 	"/assets/geodata/110m/cultural/ne_110m_admin_0_countries.json",
 	"/assets/geodata/50m/cultural/ne_50m_admin_0_countries.json",

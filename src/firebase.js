@@ -121,8 +121,8 @@ function switchHubTab(tab) {
 function renderHub(scenarios) {
 	// scenarios is now an array from the database
 	const list = scenarios;
-	setHubScenarioCache({});
 	if (list.length === 0) {
+		setHubScenarioCache({});
 		hubList.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: #666; padding: 40px;">No scenarios uploaded yet. Be the first!</div>`;
 		return;
 	}
@@ -142,9 +142,10 @@ function renderHub(scenarios) {
 		commentCounts = {};
 	}
 
+	const cache = {};
 	hubList.innerHTML = list
 		.map((s) => {
-			hubScenarioCache[s.id] = s;
+			cache[s.id] = s;
 			const cCount = commentCounts[s.id] || 0;
 			const cLabel = cCount === 1 ? "1 comment" : `${cCount} comments`;
 			const canDelete = myUsername && s.username === myUsername;
@@ -181,6 +182,8 @@ function renderHub(scenarios) {
     `;
 		})
 		.join("");
+
+	setHubScenarioCache(cache);
 
 	// Attach click handlers to open item modal when clicking the card background
 	hubList.querySelectorAll(".hub-item").forEach((card) => {
