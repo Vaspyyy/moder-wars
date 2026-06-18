@@ -1,0 +1,23 @@
+src/main.js
+  s_ebf44685bd7fc5::t_be022b110e982b 12535-12543
+index.html
+  s_ebf44685bd7fc5::t_be022b110e982b 7
+workers/service-worker.js
+  s_ebf44685bd7fc5::t_be022b110e982b 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "cc0622ea53a65911099e195e3028c3f4cc53f60c",
+  "prompts": {},
+  "sessions": {
+    "s_ebf44685bd7fc5": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_125d96aeffferYdwzTzMclKZUo",
+        "model": "unknown"
+      },
+      "human_author": "Vaspyyy <lolbautz2@gmail.com>"
+    }
+  }
+}
