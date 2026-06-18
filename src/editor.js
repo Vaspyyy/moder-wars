@@ -1008,6 +1008,13 @@ function generatePresetData(name) {
 async function performPresetLoad(fileOrBlob, targetMode = "EDITOR") {
 	if (!fileOrBlob) return;
 
+	const MAX_PRESET_SIZE = 200 * 1024 * 1024;
+	if (fileOrBlob.size && fileOrBlob.size > MAX_PRESET_SIZE) {
+		alert("Scenario file is too large (max 200MB).");
+		loadingOverlay.style.display = "none";
+		return;
+	}
+
 	let userChoice = { action: "skip" };
 
 	try {

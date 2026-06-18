@@ -11,12 +11,12 @@ import {
 	landMask,
 	MAX_SIDES,
 	occupationMap,
-	set_frontlineSourceCell,
 	setDominantSideMap,
 	setFrontierScanCounter,
 	setFrontlineDirLat,
 	setFrontlineDirLng,
 	setFrontlinePolys,
+	setFrontlineSourceCell,
 	setSideInfluenceMaps,
 	sideInfluenceMaps,
 	worldControlMap,
@@ -114,7 +114,7 @@ function rebuildFrontlineField() {
 
 	setFrontlineDirLat(fdl);
 	setFrontlineDirLng(fdlng);
-	set_frontlineSourceCell(fsrc);
+	setFrontlineSourceCell(fsrc);
 
 	fdl.fill(0);
 	fdlng.fill(0);
@@ -126,7 +126,6 @@ function rebuildFrontlineField() {
 
 	// Incremental seed: full frontier scan only every 3rd rebuild.
 	// _cachedFrontierCells initialized as [] in main.js, reused here.
-	if (_cachedFrontierCells) _cachedFrontierCells.length = 0;
 	setFrontierScanCounter((_frontierScanCounter + 1) % 3);
 
 	if (_frontierScanCounter === 0 || _cachedFrontierCells.length === 0) {
@@ -189,6 +188,9 @@ function rebuildFrontlineField() {
 		for (let d = 0; d < 4; d++) {
 			const nb = cur + dirs[d];
 			if (nb < 0 || nb >= total) continue;
+			// Prevent wraparound at row edges for horizontal neighbors
+			if (d < 2 && Math.floor(nb / gridWidth) !== Math.floor(cur / gridWidth))
+				continue;
 			if (fsrc[nb] !== -1) continue;
 			if (landMask[nb] === 0) continue;
 			fsrc[nb] = src;

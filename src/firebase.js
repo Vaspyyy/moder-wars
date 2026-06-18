@@ -3,6 +3,7 @@ import {
 	countryInspector,
 	currentUsername,
 	enterScenarioBtn,
+	escapeHtml,
 	flagLibraryList,
 	gameState,
 	godModeActive,
@@ -28,14 +29,6 @@ import {
 	tabFlagsBtn,
 	tabScenariosBtn,
 } from "./main.js";
-
-function escapeHtml(s) {
-	return String(s)
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;");
-}
 
 function openHub(initialTab = "scenarios") {
 	const fade = document.getElementById("fade-transition-overlay");
@@ -64,9 +57,16 @@ function openHub(initialTab = "scenarios") {
 		switchHubTab(initialTab);
 
 		// Refresh content
-		renderHub(room.collection("scenario_v1").getList());
-		renderCountryLibrary(room.collection("country_library_v1").getList());
-		renderFlagLibrary(room.collection("flag_library_v1").getList());
+		try {
+			renderHub(room.collection("scenario_v1").getList());
+			renderCountryLibrary(room.collection("country_library_v1").getList());
+			renderFlagLibrary(room.collection("flag_library_v1").getList());
+		} catch (e) {
+			console.error("Hub load failed:", e);
+			hubList.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: #666; padding: 40px;">Failed to load scenarios. Please try again.</div>`;
+			libraryList.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: #666; padding: 40px;">Failed to load countries.</div>`;
+			flagLibraryList.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: #666; padding: 40px;">Failed to load flags.</div>`;
+		}
 	};
 
 	if (isFromEditor && fade) {
@@ -149,15 +149,21 @@ function renderHub(scenarios) {
 			const cCount = commentCounts[s.id] || 0;
 			const cLabel = cCount === 1 ? "1 comment" : `${cCount} comments`;
 			const canDelete = myUsername && s.username === myUsername;
+			const safeId = escapeHtml(s.id);
+			const safePreviewUrl = escapeHtml(
+				s.previewUrl ||
+					"https://images.websim.ai/v1/projects/placeholder/landscape",
+			);
+			const safeUsername = escapeHtml(s.username);
 			return `
-        <div class="hub-item" data-item-type="scenario" data-item-id="${s.id}">
-            <img src="${s.previewUrl || "https://images.websim.ai/v1/projects/placeholder/landscape"}" class="hub-preview-img">
+        <div class="hub-item" data-item-type="scenario" data-item-id="${safeId}">
+            <img src="${safePreviewUrl}" class="hub-preview-img">
             <div class="hub-content">
                 <div class="hub-info">
                     <div class="hub-name">${escapeHtml(s.name)}</div>
                     <div class="hub-meta">
-                        <img src="https://images.websim.com/avatar/${s.username}" class="hub-author-img">
-                        <span>${escapeHtml(s.username)}</span>
+                        <img src="https://images.websim.com/avatar/${safeUsername}" class="hub-author-img">
+                        <span>${safeUsername}</span>
                     </div>
                     ${
 											s.remixed_from_name
@@ -173,7 +179,7 @@ function renderHub(scenarios) {
                 <div class="hub-comment-count">💬 ${cLabel}</div>
                 <div class="hub-actions" style="margin-top: auto; display: flex; justify-content: space-between; align-items: center;">
                     <div class="hub-actions-buttons" style="display:flex; gap:6px;">
-                        ${canDelete ? `<button class="mini-btn" style="background:#c0392b; padding:6px 10px; font-size:9px;" data-delete-id="${escapeHtml(s.id)}">DEL</button>` : ""}
+                        ${canDelete ? `<button class="mini-btn" style="background:#c0392b; padding:6px 10px; font-size:9px;" data-delete-id="${safeId}">DEL</button>` : ""}
                     </div>
                     <span style="font-size: 10px; color: #555;">${new Date(s.created_at).toLocaleDateString()}</span>
                 </div>

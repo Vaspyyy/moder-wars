@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>MW-V0.26.18</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://esm.sh; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.websim.ai https://*.websim.com https://*.arcgisonline.com https://*.google.com wss:; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self';">
+    <title>MW-V0.26.19</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous" />
     <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
     <link rel="modulepreload" href="src/main.js">
@@ -384,7 +385,7 @@
                             <label style="font-size: 8px; color: #888;">CUSTOM SATELLITE (BG)</label>
                             <div style="display: flex; gap: 4px;">
                                 <input type="file" id="custom-sat-input" accept="image/*" style="display:none;">
-                                <button onclick="document.getElementById('custom-sat-input').click()" class="mini-btn" style="background:#2e86de; padding:4px 8px;">Upload BG</button>
+                                <button id="upload-sat-btn" class="mini-btn" style="background:#2e86de; padding:4px 8px;">Upload BG</button>
                                 <button id="clear-sat-btn" class="mini-btn" style="background:#c0392b; padding:4px 8px;">Clear</button>
                             </div>
                         </div>
@@ -392,7 +393,7 @@
                             <label style="font-size: 8px; color: #888;">REFERENCE IMAGE (GUIDE)</label>
                             <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
                                 <input type="file" id="ref-image-input" accept="image/*" style="display:none;">
-                                <button onclick="document.getElementById('ref-image-input').click()" class="mini-btn" style="background:#27ae60; padding:4px 8px;">Upload Ref</button>
+                                <button id="upload-ref-btn" class="mini-btn" style="background:#27ae60; padding:4px 8px;">Upload Ref</button>
                                 <div style="display:flex; align-items:center; gap:4px;">
                                     <span style="font-size:8px; color:#555;">Opacity</span>
                                     <input type="range" id="ref-opacity-slider" min="0" max="1" step="0.05" value="0.5" style="width:50px; height:4px;">
@@ -1255,18 +1256,8 @@
 
 
 
-    <script>
-        window.onerror = (msg, _url, line, _col, err) => {
-            document.body.innerHTML = `<div style="background:#111;color:#f44;padding:20px;font-family:monospace;white-space:pre-wrap;font-size:14px;">JS Error at line ${line}:\n${msg}\n\n${err?.stack || ''}</div>`;
-            return true;
-        };
-    </script>
+    <script src="src/bootstrap.js"></script>
     <script type="module" src="src/main.js"></script>
-<script>
-if ('serviceWorker' in navigator) {
-	navigator.serviceWorker.register('workers/service-worker.js');
-}
-</script>
 
 <div id="benchmark-results" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:9999; align-items:center; justify-content:center;">
     <div style="background:#111; padding:32px 48px; border-radius:4px; border:1px solid rgba(0,255,0,0.3); text-align:center;">

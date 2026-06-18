@@ -38,8 +38,15 @@ export async function _geoCacheGet(url) {
 			}
 			try {
 				const delTx = db.transaction("geojson", "readwrite");
-				delTx.objectStore("geojson").delete(url);
-			} catch (_e) {}
+				const delReq = delTx.objectStore("geojson").delete(url);
+				delTx.onerror = () =>
+					console.warn("geoCache: delete tx error", delTx.error);
+				delTx.onabort = () => console.warn("geoCache: delete tx aborted");
+				delReq.onerror = () =>
+					console.warn("geoCache: delete req error", delReq.error);
+			} catch (e) {
+				console.warn("geoCache: delete failed", e);
+			}
 			resolve(null);
 		};
 		req.onerror = () => resolve(null);

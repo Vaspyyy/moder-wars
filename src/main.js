@@ -4,6 +4,15 @@ import L from "leaflet";
 import { CONFIG } from "./config.js";
 import { fetchJSONWithCache } from "./geo.js";
 
+export function escapeHtml(s) {
+	return String(s)
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#39;");
+}
+
 /**
  * TRANSLATION SYSTEM (i18n)
  */
@@ -1698,8 +1707,8 @@ export const DEFAULT_SIDE_COLORS = [
 ];
 export const MAX_SIDES = 8;
 export let sides = [[], []];
-export let _attackers = sides[0];
-export let _defenders = sides[1];
+let _attackers = sides[0];
+let _defenders = sides[1];
 export let activeSideIndex = 0;
 export let activeScenarioId = null;
 export let ffaMode = false;
@@ -1718,6 +1727,10 @@ export const manualSideManpower = new Array(MAX_SIDES).fill(null);
 export let units = [];
 export let activeBattles = [];
 export const _battleHash = new Map(); // spatial hash: gridKey -> battle object reference
+
+function _battleKey(lat, lng) {
+	return (Math.round(lat * 10) + 900) * 10000 + (Math.round(lng * 10) + 1800);
+}
 export let capitalLostCountries = new Set();
 export let bombs = [];
 export let explosions = [];
@@ -1791,6 +1804,13 @@ export let _cachedTerritoryCtrlEls = [];
 export let _cachedMomentumEls = [];
 export let _cachedTerritorySegEls = [];
 export const _cachedManpowerSpans = [];
+
+const PHASE_CONFIG = {
+	ADVANCING: { color: "#2ecc71", symbol: "▲" },
+	STALEMATE: { color: "#f39c12", symbol: "◆" },
+	RETREATING: { color: "#e74c3c", symbol: "▼" },
+	COLLAPSING: { color: "#c0392b", symbol: "✗" },
+};
 export let _casualtyStructureKey = "";
 export let _casualtyValueEls = {};
 export let _casualtySideMpEls = {};
@@ -1889,6 +1909,7 @@ const _tickCityGridIndexSet = new Set();
 const _tickSideAllyIdSets = [];
 const _tickSideSupportIdSets = [];
 const _tickUnitsBySide = [];
+const _tickUnitGridIdx = new Map();
 
 // Temporary diagnostics for cross-war state/capitulation bugs.
 export const aiCountryState = new Map();
@@ -1940,6 +1961,13 @@ export const AI_DESPERATION = {
 	CITY_RATIO_LAST_STAND_TRIGGER: 0.2, // under 20% of starting cities -> last stand
 	PEACE_PRESSURE_PROPOSAL_BASE: 0.001, // base treaty proposal chance
 	PEACE_PRESSURE_PROPOSAL_MULT_MAX: 5.0, // cap additional desperation pressure
+};
+export const AI_POSTURE = {
+	NORMAL: "NORMAL",
+	LAST_STAND: "LAST_STAND",
+	DEFENSIVE_DESPERATION: "DEFENSIVE_DESPERATION",
+	OFFENSIVE_DESPERATION: "OFFENSIVE_DESPERATION",
+	UNDER_MOBILIZED: "UNDER_MOBILIZED",
 };
 export const AI_MOBILIZATION = {
 	INITIAL_SPAWN_FRAC: 0.18, // spawn ~18% of theoretical force at war start
@@ -2091,7 +2119,7 @@ export function setFrontlineDirLat(val) {
 export function setFrontlineDirLng(val) {
 	frontlineDirLng = val;
 }
-export function set_frontlineSourceCell(val) {
+export function setFrontlineSourceCell(val) {
 	_frontlineSourceCell = val;
 }
 export function setFrontierScanCounter(val) {
@@ -2113,6 +2141,13 @@ export let initialBiomeMaskSnapshot = null;
 export let initialCountryMetadataSnapshot = null;
 export let initialCitiesSnapshot = null;
 export let countryMetadata = []; // Stores {feature, color, id}
+export let _allianceCacheDirty = true;
+export function markAllianceCacheDirty() {
+	_allianceCacheDirty = true;
+}
+export function clearAllianceCacheDirty() {
+	_allianceCacheDirty = false;
+}
 export let countryUrbanPop = new Map(); // countryId -> total urban population from city data
 export let recruitModel = "balanced"; // "area" | "pop" | "balanced"
 
@@ -3128,11 +3163,19 @@ export const map = L.map("map", {
 _simWorker = new Worker("../workers/simulation-worker.js");
 _simWorker.onmessage = (evt) => {
 	_workerBusy = false;
+	if (!evt.data || evt.data.error) return;
 	const {
 		frontlineDirLat: latBuf,
 		frontlineDirLng: lngBuf,
 		sourceCell: srcBuf,
 	} = evt.data;
+	if (
+		!(latBuf instanceof ArrayBuffer) ||
+		!(lngBuf instanceof ArrayBuffer) ||
+		!(srcBuf instanceof ArrayBuffer) ||
+		latBuf.byteLength === 0
+	)
+		return;
 	frontlineDirLat = new Float32Array(latBuf);
 	frontlineDirLng = new Float32Array(lngBuf);
 	_frontlineSourceCell = new Int32Array(srcBuf);
@@ -4072,6 +4115,13 @@ export function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
 	const sideAllyIdSets = _tickSideAllyIdSets;
 	const sideSupportIdSets = _tickSideSupportIdSets;
 
+	const _countryById = new Map();
+	for (let _csi = 0; _csi < sides.length; _csi++) {
+		for (let _cc = 0; _cc < sides[_csi].length; _cc++) {
+			_countryById.set(sides[_csi][_cc].id, sides[_csi][_cc]);
+		}
+	}
+
 	for (let i = 0; i < units.length; i++) {
 		const idx = (startIndex + i) % units.length;
 		const u = units[idx];
@@ -4107,8 +4157,7 @@ export function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
 			teamMult *= 1.0 - mountainIntensity * 0.5;
 		}
 
-		const sideList = sides[u.sideIndex] || [];
-		const countryObj = sideList.find((c) => c.id === u.sovereignId);
+		const countryObj = _countryById.get(u.sovereignId);
 		const role = countryObj?.role || "OFFENSE";
 
 		if (countryObj) {
@@ -4934,6 +4983,7 @@ export function handleCountryClick(
 				bMeta.allies = Array.from(
 					new Set([...(bMeta.allies || []), selectingAllyForId]),
 				);
+				markAllianceCacheDirty();
 				statusText.innerText = `Alliance formed: ${aMeta.name} ↔ ${bMeta.name}`;
 			}
 		} else {
@@ -8197,6 +8247,9 @@ function shouldReassess(si) {
 	return result;
 }
 
+const NAVAL_STALL_TICKS = 600; // ticks of no progress before abandoning naval/coastal plan
+const NAVAL_ABORT_TICKS = 1800; // longer stall before aborting second-wave naval plan
+
 export function evaluateAllPlans() {
 	// ── Reassessment: run the proposal pipeline when triggers fire ──
 	const _tp = performance.now();
@@ -8346,7 +8399,7 @@ export function evaluateAllPlans() {
 						plan.phase = "CONSOLIDATION";
 						plan.progress = 1.0;
 						// After consolidation period, generate next plan
-						if (ticksSinceProgress > 600) {
+						if (ticksSinceProgress > NAVAL_STALL_TICKS) {
 							_planReassessNeeded[si] = true;
 						}
 						continue;
@@ -8376,7 +8429,10 @@ export function evaluateAllPlans() {
 				}
 
 				// Check for stall
-				if (ticksSinceProgress > 600 && ticksSinceStart > 600) {
+				if (
+					ticksSinceProgress > NAVAL_STALL_TICKS &&
+					ticksSinceStart > NAVAL_STALL_TICKS
+				) {
 					_planReassessNeeded[si] = true; // Failed — reassess
 					continue;
 				}
@@ -8431,7 +8487,7 @@ export function evaluateAllPlans() {
 					if (captured2) {
 						plan2.phase = "CONSOLIDATION";
 						plan2.progress = 1.0;
-						if (ticksSinceProgress2 > 600) {
+						if (ticksSinceProgress2 > NAVAL_STALL_TICKS) {
 							_planReassessNeeded[si] = true;
 						}
 						continue;
@@ -8459,7 +8515,10 @@ export function evaluateAllPlans() {
 					}
 				}
 
-				if (ticksSinceProgress2 > 1800 && ticksSinceStart2 > 600) {
+				if (
+					ticksSinceProgress2 > NAVAL_ABORT_TICKS &&
+					ticksSinceStart2 > NAVAL_STALL_TICKS
+				) {
 					_planReassessNeeded[si] = true;
 					continue;
 				}
@@ -8512,7 +8571,10 @@ export function evaluateAllPlans() {
 			}
 
 			// Stall detection: if stalled for 30s, cancel naval plan
-			if (ticksSinceProgress > 600 && ticksSinceStart > 600) {
+			if (
+				ticksSinceProgress > NAVAL_STALL_TICKS &&
+				ticksSinceStart > NAVAL_STALL_TICKS
+			) {
 				// Release all assigned units
 				for (const u of _tickUnitsBySide[si] || []) {
 					if (u.navalAssigned) {
@@ -8540,7 +8602,7 @@ export function evaluateAllPlans() {
 				// Force advance if gathering takes too long (staging point on land, ships loop)
 				if (
 					gathered >= Math.min(np.maxAssignedUnits, 5) ||
-					ticksSinceProgress > 600
+					ticksSinceProgress > NAVAL_STALL_TICKS
 				) {
 					np.phase = "EMBARKATION";
 					np.lastProgressTick = simFrameCount;
@@ -8630,7 +8692,8 @@ export function evaluateAllPlans() {
 				simFrameCount - (sp.lastProgressTick || simFrameCount);
 
 			// Stall detection
-			if (ticksSinceProgress > 600) {
+			if (ticksSinceProgress > NAVAL_STALL_TICKS) {
+				// line 8745
 				for (const u of _tickUnitsBySide[si] || []) {
 					if (u.supplyAssigned) {
 						u.supplyAssigned = false;
@@ -8655,7 +8718,7 @@ export function evaluateAllPlans() {
 				}
 				if (
 					gathered >= Math.min(sp.maxAssignedUnits, 3) ||
-					ticksSinceProgress > 600
+					ticksSinceProgress > NAVAL_STALL_TICKS
 				) {
 					sp.phase = "EMBARKATION";
 					sp.lastProgressTick = simFrameCount;
@@ -8691,7 +8754,7 @@ export function evaluateAllPlans() {
 					sp.lastProgressTick = simFrameCount;
 				}
 			} else if (sp.phase === "DELIVERED") {
-				if (ticksSinceProgress > 600) {
+				if (ticksSinceProgress > NAVAL_STALL_TICKS) {
 					for (const u of _tickUnitsBySide[si] || []) {
 						if (u.supplyAssigned) {
 							u.supplyAssigned = false;
@@ -8843,7 +8906,7 @@ export function evaluateAllPlans() {
 				if (enemySideDead || !enemyNP) {
 					shouldCancel = true;
 				} else if (rp._landingDefeatedTick) {
-					if (simFrameCount - rp._landingDefeatedTick > 600)
+					if (simFrameCount - rp._landingDefeatedTick > NAVAL_STALL_TICKS)
 						shouldCancel = true;
 				}
 
@@ -9179,6 +9242,7 @@ export function performSimulationTick() {
 	if (!window.__perf)
 		window.__perf = {
 			_version: "V0.26.1",
+			_enabled: false,
 			plans: 0,
 			proposals: 0,
 			eval: 0,
@@ -9230,7 +9294,8 @@ export function performSimulationTick() {
 		};
 	window.__perf.ticks++;
 	// ── Perf snapshot for per-tick delta computation ──
-	const _perfSnap = {};
+	const _perfEnabled = window.__perf._enabled;
+	const _perfSnap = _perfEnabled ? {} : null;
 	const _perfKeys = [
 		"plans",
 		"proposals",
@@ -9264,25 +9329,27 @@ export function performSimulationTick() {
 		"unitMopUpSearch",
 		"unitCombatMove",
 	];
-	for (const k of _perfKeys) _perfSnap[k] = window.__perf[k] || 0;
-	for (const k of [
-		"proposalRuns",
-		"proposalFailed",
-		"reassess_noPlan",
-		"reassess_interval",
-		"reassess_forced",
-		"reassess_territory",
-		"reassess_posture",
-		"reassess_ratio",
-	])
-		_perfSnap[k] = window.__perf[k] || 0;
-	for (const k of [
-		"coastDeflectHalved",
-		"knockbackBlocked",
-		"waterPathPenalized",
-		"coastStuckAbandoned",
-	])
-		_perfSnap[k] = window.__perf[k] || 0;
+	if (_perfEnabled) {
+		for (const k of _perfKeys) _perfSnap[k] = window.__perf[k] || 0;
+		for (const k of [
+			"proposalRuns",
+			"proposalFailed",
+			"reassess_noPlan",
+			"reassess_interval",
+			"reassess_forced",
+			"reassess_territory",
+			"reassess_posture",
+			"reassess_ratio",
+		])
+			_perfSnap[k] = window.__perf[k] || 0;
+		for (const k of [
+			"coastDeflectHalved",
+			"knockbackBlocked",
+			"waterPathPenalized",
+			"coastStuckAbandoned",
+		])
+			_perfSnap[k] = window.__perf[k] || 0;
+	}
 	_simTickCount++;
 	let _dbgLogCount = 999999; // DEBUG: throttled out (was 0)
 	let moveDirLat, moveDirLng;
@@ -9292,6 +9359,8 @@ export function performSimulationTick() {
 	if (gameState === "WAR_OVER") return false;
 	// If in God Mode but the war hasn't started yet, don't tick simulation mechanics
 	if (godModeActive && preGodModeState !== "SIMULATING") return false;
+
+	const _allCombatants = sides.flat();
 
 	// 0. Initial Utility Helpers
 	const recordDamage = (targetUnit, dmg, attackerUnit) => {
@@ -9542,8 +9611,10 @@ export function performSimulationTick() {
 	// Build Spatial Hash for ultra-fast O(1) local combat & target lookup
 	// Shared with renderer to allow high-performance unit culling
 	const _tsh = performance.now();
-	unitSpatialHash.clear();
-	for (let si = 0; si < sides.length; si++) unitHashBySide[si].clear();
+	for (const arr of unitSpatialHash.values()) arr.length = 0;
+	for (let si = 0; si < sides.length; si++) {
+		for (const arr of unitHashBySide[si].values()) arr.length = 0;
+	}
 	const unitHash = unitSpatialHash;
 	const HASH_SIZE = UNIT_HASH_CELL_SIZE;
 	for (let i = 0; i < units.length; i++) {
@@ -9686,7 +9757,7 @@ export function performSimulationTick() {
 		const _tP133 = performance.now();
 		recalculateAllBounds();
 		const countryFrontlines = new Map();
-		sides.flat().forEach((c) => {
+		_allCombatants.forEach((c) => {
 			countryFrontlines.set(c.id, 0);
 		});
 		let _warCells = 0;
@@ -9739,7 +9810,7 @@ export function performSimulationTick() {
 		}
 
 		// Determine saturation for each country
-		sides.flat().forEach((c) => {
+		_allCombatants.forEach((c) => {
 			const stats = countryStats.get(c.id);
 			const frontCount = countryFrontlines.get(c.id) || 0;
 			// Strict Saturation Requirement: Nations must man 100% of their identified frontline before pushing.
@@ -9760,7 +9831,7 @@ export function performSimulationTick() {
 		// For unitless countries, never inflate controlled/owned to initialCells —
 		// a country with no army can't be controlling territory it hasn't
 		// been counted for. Default to 0 so capitulation can fire promptly.
-		sides.flat().forEach((c) => {
+		_allCombatants.forEach((c) => {
 			const stats = countryStats.get(c.id);
 			if (stats) {
 				const fallback = stats.units === 0 ? 0 : c.initialCells || 0;
@@ -9775,7 +9846,7 @@ export function performSimulationTick() {
 	}
 
 	// Persist stats for next frame's "non-counting" logic
-	sides.flat().forEach((c) => {
+	_allCombatants.forEach((c) => {
 		const stats = countryStats.get(c.id);
 		if (stats && shouldScanFrontier) {
 			c.lastControlledCount = stats.controlled;
@@ -9808,7 +9879,8 @@ export function performSimulationTick() {
 	}
 
 	// Pre-compute grid index for every unit (O(n) once, avoids O(n) getGridIndex per enemy)
-	const _unitGridIdx = new Map();
+	_tickUnitGridIdx.clear();
+	const _unitGridIdx = _tickUnitGridIdx;
 	for (let _ugi = 0; _ugi < units.length; _ugi++) {
 		const _ug = units[_ugi];
 		_unitGridIdx.set(_ug, getGridIndex(_ug.lat, _ug.lng));
@@ -9957,7 +10029,7 @@ export function performSimulationTick() {
 	window.__perf.victory =
 		(window.__perf.victory || 0) + performance.now() - _tVictory;
 	if (shouldCountLand) {
-		sides.flat().forEach((country) => {
+		_allCombatants.forEach((country) => {
 			if (!country) return;
 			const stats = countryStats.get(country.id);
 			if (!stats) return;
@@ -10015,11 +10087,12 @@ export function performSimulationTick() {
 				(controlRatio <= AI_DESPERATION.DEFENSE_TRIGGER_RATIO ||
 					cityRatio <= AI_DESPERATION.CITY_RATIO_DEFENSE_TRIGGER);
 
-			let mode = "NORMAL";
-			if (lastStand) mode = "LAST_STAND";
-			else if (defensiveDesperation) mode = "DEFENSIVE_DESPERATION";
-			else if (canUseOffensiveDesperation) mode = "OFFENSIVE_DESPERATION";
-			else if (canUseUnderMobilized) mode = "UNDER_MOBILIZED";
+			let mode = AI_POSTURE.NORMAL;
+			if (lastStand) mode = AI_POSTURE.LAST_STAND;
+			else if (defensiveDesperation) mode = AI_POSTURE.DEFENSIVE_DESPERATION;
+			else if (canUseOffensiveDesperation)
+				mode = AI_POSTURE.OFFENSIVE_DESPERATION;
+			else if (canUseUnderMobilized) mode = AI_POSTURE.UNDER_MOBILIZED;
 
 			let profile = {
 				mode,
@@ -10033,7 +10106,7 @@ export function performSimulationTick() {
 				reserveShare: 0.02,
 				peacePressure: 0.0,
 			};
-			if (mode === "OFFENSIVE_DESPERATION") {
+			if (mode === AI_POSTURE.OFFENSIVE_DESPERATION) {
 				profile = {
 					mode,
 					recruitCapMult: 1.2,
@@ -10046,7 +10119,7 @@ export function performSimulationTick() {
 					reserveShare: 0.01,
 					peacePressure: 0.02,
 				};
-			} else if (mode === "DEFENSIVE_DESPERATION") {
+			} else if (mode === AI_POSTURE.DEFENSIVE_DESPERATION) {
 				profile = {
 					mode,
 					recruitCapMult: 1.45,
@@ -10059,7 +10132,7 @@ export function performSimulationTick() {
 					reserveShare: 0.06,
 					peacePressure: 0.36,
 				};
-			} else if (mode === "LAST_STAND") {
+			} else if (mode === AI_POSTURE.LAST_STAND) {
 				profile = {
 					mode,
 					recruitCapMult: 1.85,
@@ -10072,7 +10145,7 @@ export function performSimulationTick() {
 					reserveShare: 0.1,
 					peacePressure: 0.7,
 				};
-			} else if (mode === "UNDER_MOBILIZED") {
+			} else if (mode === AI_POSTURE.UNDER_MOBILIZED) {
 				profile = {
 					mode,
 					recruitCapMult: 3.0,
@@ -10201,8 +10274,8 @@ export function performSimulationTick() {
 		let hasOffDesp = false;
 		sides[si].forEach((c) => {
 			const prof = aiCountryState.get(c.id);
-			if (prof?.mode === "LAST_STAND") hasLastStand = true;
-			if (prof?.mode === "OFFENSIVE_DESPERATION") hasOffDesp = true;
+			if (prof?.mode === AI_POSTURE.LAST_STAND) hasLastStand = true;
+			if (prof?.mode === AI_POSTURE.OFFENSIVE_DESPERATION) hasOffDesp = true;
 		});
 
 		// Force defensive posture if a defender reaction plan is active
@@ -10598,7 +10671,7 @@ export function performSimulationTick() {
 		const sideList = sides[sideIndex];
 		if (!sideList) continue;
 
-		const countryObj = sideList.find((c) => c.id === u.sovereignId);
+		const countryObj = _countryById.get(u.sovereignId);
 		const aiProfile = aiCountryState.get(u.sovereignId) || {
 			mode: "NORMAL",
 			retreatTriggerMultiple: 8.0,
@@ -11011,11 +11084,11 @@ export function performSimulationTick() {
 								if (cached.health <= 0) u.victoryBoostTicks = 240;
 								const battleLat = (u.lat + cached.lat) / 2;
 								const battleLng = (u.lng + cached.lng) / 2;
-								const bKey = `${Math.round(battleLat * 10)},${Math.round(battleLng * 10)}`;
+								const bKey = _battleKey(battleLat, battleLng);
 								let existing = null;
 								for (let bk = -1; bk <= 1 && !existing; bk++) {
 									for (let bl = -1; bl <= 1 && !existing; bl++) {
-										const nk = `${Math.round(battleLat * 10) + bk},${Math.round(battleLng * 10) + bl}`;
+										const nk = bKey + bk * 10000 + bl;
 										const b = _battleHash.get(nk);
 										if (b && (u.lat - b.lat) ** 2 + (u.lng - b.lng) ** 2 < 0.16)
 											existing = b;
@@ -11029,7 +11102,7 @@ export function performSimulationTick() {
 									existing.lng =
 										(existing.lng * (existing.participants - 1) + battleLng) /
 										existing.participants;
-									const newKey = `${Math.round(existing.lat * 10)},${Math.round(existing.lng * 10)}`;
+									const newKey = _battleKey(existing.lat, existing.lng);
 									if (newKey !== bKey) _battleHash.set(newKey, existing);
 								} else {
 									const battle = {
@@ -11156,11 +11229,11 @@ export function performSimulationTick() {
 										if (e.health <= 0) u.victoryBoostTicks = 240;
 										const battleLat = (u.lat + e.lat) / 2;
 										const battleLng = (u.lng + e.lng) / 2;
-										const bKey = `${Math.round(battleLat * 10)},${Math.round(battleLng * 10)}`;
+										const bKey = _battleKey(battleLat, battleLng);
 										let existing = null;
 										for (let bk = -1; bk <= 1 && !existing; bk++) {
 											for (let bl = -1; bl <= 1 && !existing; bl++) {
-												const nk = `${Math.round(battleLat * 10) + bk},${Math.round(battleLng * 10) + bl}`;
+												const nk = bKey + bk * 10000 + bl;
 												const b = _battleHash.get(nk);
 												if (
 													b &&
@@ -11179,7 +11252,7 @@ export function performSimulationTick() {
 												(existing.lng * (existing.participants - 1) +
 													battleLng) /
 												existing.participants;
-											const newKey = `${Math.round(existing.lat * 10)},${Math.round(existing.lng * 10)}`;
+											const newKey = _battleKey(existing.lat, existing.lng);
 											if (newKey !== bKey) _battleHash.set(newKey, existing);
 										} else {
 											const battle = {
@@ -11526,11 +11599,11 @@ export function performSimulationTick() {
 
 									const battleLat = (u.lat + e.lat) / 2;
 									const battleLng = (u.lng + e.lng) / 2;
-									const bKey = `${Math.round(battleLat * 10)},${Math.round(battleLng * 10)}`;
+									const bKey = _battleKey(battleLat, battleLng);
 									let existing = null;
 									for (let bk = -1; bk <= 1 && !existing; bk++) {
 										for (let bl = -1; bl <= 1 && !existing; bl++) {
-											const nk = `${Math.round(battleLat * 10) + bk},${Math.round(battleLng * 10) + bl}`;
+											const nk = bKey + bk * 10000 + bl;
 											const b = _battleHash.get(nk);
 											if (
 												b &&
@@ -11547,7 +11620,7 @@ export function performSimulationTick() {
 										existing.lng =
 											(existing.lng * (existing.participants - 1) + battleLng) /
 											existing.participants;
-										const newKey = `${Math.round(existing.lat * 10)},${Math.round(existing.lng * 10)}`;
+										const newKey = _battleKey(existing.lat, existing.lng);
 										if (newKey !== bKey) _battleHash.set(newKey, existing);
 									} else {
 										const battle = {
@@ -14069,6 +14142,7 @@ export function performSimulationTick() {
 	if (_tickMs > window.__perf.maxTick) window.__perf.maxTick = _tickMs;
 
 	// ── Per-tick perf history ring buffer ──
+	if (!_perfEnabled) return false;
 	const _tickEntry = {
 		tick: window.__perf.ticks,
 		ms: _tickMs,
@@ -14105,6 +14179,15 @@ export function performSimulationTick() {
 }
 
 // ── Perf Report: type window.perfReport() in console ──
+window.perfEnable = () => {
+	if (!window.__perf) window.__perf = { ticks: 0, _enabled: false };
+	window.__perf._enabled = true;
+	return "perf tracking enabled — let the sim run, then call window.perfReport()";
+};
+window.perfDisable = () => {
+	if (window.__perf) window.__perf._enabled = false;
+	return "perf tracking disabled";
+};
 window.perfReport = () => {
 	const h = window.__perf?._history;
 	if (!h?.length) {
@@ -14243,8 +14326,9 @@ export function updateLoop(now) {
 
 	// --- Performance measurement ---
 	const realNow = performance.now();
+	const _frameDt = _perfLastTime > 0 ? realNow - _perfLastTime : 16.67;
 	if (_perfLastTime > 0) {
-		const dt = realNow - _perfLastTime;
+		const dt = _frameDt;
 		if (_isBenchmarking) _perfSamples.push(dt);
 		_perfFrameTimeSum += dt;
 		_perfFrameCount++;
@@ -14287,10 +14371,9 @@ export function updateLoop(now) {
 			frameAccumulator -= 1;
 		}
 
-		// Advance in-game date by real time
+		// Advance in-game date by real time (clamped to avoid huge jumps on tab switch)
 		if (typeof now === "number") {
-			// Because we don't track previous timestamp, approximate per-frame using 16ms if undefined
-			tickGameTime(16.67);
+			tickGameTime(Math.min(_frameDt, 50));
 		}
 	}
 
@@ -14327,13 +14410,7 @@ export function updateLoop(now) {
 		const mel = _cachedMomentumEls[si];
 		if (mel) {
 			const phase = _sideWarPhase[si] || "STALEMATE";
-			const phaseConfig = {
-				ADVANCING: { color: "#2ecc71", symbol: "▲" },
-				STALEMATE: { color: "#f39c12", symbol: "◆" },
-				RETREATING: { color: "#e74c3c", symbol: "▼" },
-				COLLAPSING: { color: "#c0392b", symbol: "✗" },
-			};
-			const pc = phaseConfig[phase] || phaseConfig.STALEMATE;
+			const pc = PHASE_CONFIG[phase] || PHASE_CONFIG.STALEMATE;
 			mel.style.color = pc.color;
 			mel.textContent = `${pc.symbol} ${phase}`;
 		}
@@ -14394,13 +14471,14 @@ export function updateLoop(now) {
 		const structureChanged = entriesKey !== _casualtyStructureKey;
 		if (structureChanged) {
 			_casualtyStructureKey = entriesKey;
+			const activeIds = new Set(_allCombatants.map((c) => c.id));
 			let html = "";
 			let currentSide = -1;
 			let sidePos = 0;
 			for (const e of entriesFlat) {
 				const casualties = countryCasualties.get(e.id) || 0;
 				const formatted = influenceLayer.formatSoldiers(casualties);
-				const isDefeated = !sides.flat().some((active) => active.id === e.id);
+				const isDefeated = !activeIds.has(e.id);
 				if (e.side !== currentSide) {
 					if (currentSide !== -1) html += `</div>`;
 					currentSide = e.side;
@@ -14416,8 +14494,9 @@ export function updateLoop(now) {
 						flagSrc = meta.tempFlag.toDataURL();
 					} catch (_e) {}
 				}
+				const safeFlagSrc = escapeHtml(flagSrc);
 				html += `<div class="casualty-item ${isPrimary ? "primary" : "secondary"}" style="opacity: ${isDefeated ? 0.45 : 1};" data-ctype="cas-item" data-cid="${e.id}">
-                    <img src="${flagSrc}" class="cas-flag ${isPrimary ? "" : "small"}" alt="" loading="lazy" decoding="async" style="${isDefeated ? "filter: grayscale(1);" : ""}">
+                    <img src="${safeFlagSrc}" class="cas-flag ${isPrimary ? "" : "small"}" alt="" loading="lazy" decoding="async" style="${isDefeated ? "filter: grayscale(1);" : ""}">
                     <div class="cas-value" data-cval="${e.id}" style="font-size: ${isPrimary ? "18px" : "12px"}; color: ${sideColor};">${formatted}</div>`;
 				if (isPrimary) {
 					const mpRemaining = Math.max(0, sideSoldiers[currentSide]);
@@ -14541,12 +14620,13 @@ export function openLeaderboard() {
 				row.estUnits > 0 ? influenceLayer.formatSoldiers(row.estUnits) : "—";
 			const tilesLabel = row.tiles.toLocaleString();
 			const rank = idx + 1;
-			const flagSrc = row.flagUrl || "";
+			const flagSrc = row.flagUrl ? escapeHtml(row.flagUrl) : "";
+			const safeName = escapeHtml(row.name);
 			return `
             <div class="scroller-card" style="padding: 10px; display: flex; align-items: center; gap: 10px;">
                 <div class="leaderboard-rank" style="width: 30px; font-family: 'Playfair Display'; font-size: 18px;">${rank}</div>
                 ${flagSrc ? `<img src="${flagSrc}" class="leaderboard-flag" style="width: 35px; height: 22px;">` : `<div class="leaderboard-flag" style="width: 35px; height: 22px; background:#111;"></div>`}
-                <div class="scroller-card-name" style="flex: 2; font-size: 16px; margin: 0;">${row.name}</div>
+                <div class="scroller-card-name" style="flex: 2; font-size: 16px; margin: 0;">${safeName}</div>
                 <div class="leaderboard-tiles" style="flex: 1; text-align: right; color: #888; font-size: 12px;">${tilesLabel}</div>
                 <div class="leaderboard-units" style="flex: 1; text-align: right; font-weight: bold; font-size: 13px;">${unitsLabel}</div>
             </div>
@@ -15301,9 +15381,11 @@ export async function resetGame() {
 			if (!response.ok) throw new Error("Reload failed");
 			const blob = await response.blob();
 			await performPresetLoad(blob, gameMode);
+			loadingOverlay.style.display = "none";
 			return;
 		} catch (e) {
 			console.error("Satellite Reset Failed:", e);
+			loadingOverlay.style.display = "none";
 		}
 	}
 
@@ -16564,31 +16646,43 @@ export function renderCountryLibrary(countries) {
 	libraryList.innerHTML = countries
 		.map((c) => {
 			hubCountryCache[c.id] = c;
+			const safeId = escapeHtml(c.id);
+			const safePreviewUrl = escapeHtml(
+				c.previewUrl ||
+					"https://images.websim.ai/v1/projects/placeholder/landscape",
+			);
+			const safeFlagUrl = c.flagUrl ? escapeHtml(c.flagUrl) : "";
+			const safeName = escapeHtml(c.name);
+			const safeUsername = escapeHtml(c.username);
+			const safeDescription = escapeHtml(
+				c.description || "No description provided.",
+			);
+			const safeColor = escapeHtml(c.color || "#fff");
 			return `
-        <div class="hub-item" data-item-type="country" data-item-id="${c.id}">
+        <div class="hub-item" data-item-type="country" data-item-id="${safeId}">
             <div style="height: 120px; position: relative; display: flex; align-items: center; justify-content: center; background: #000; border-bottom: 1px solid rgba(255,255,255,0.1); overflow: hidden;">
-                 <img src="${c.previewUrl || "https://images.websim.ai/v1/projects/placeholder/landscape"}" style="width: 100%; height: 100%; object-fit: cover; opacity: 0.6;">
+                 <img src="${safePreviewUrl}" style="width: 100%; height: 100%; object-fit: cover; opacity: 0.6;">
                  <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(circle, transparent 30%, #000 100%);"></div>
                  <div style="position: absolute; display: flex; align-items: center; justify-content: center; z-index: 2;">
-                    ${c.flagUrl ? `<img src="${c.flagUrl}" style="max-height: 40px; max-width: 60px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2);">` : '<span style="font-size: 30px;">🏳️</span>'}
+                    ${safeFlagUrl ? `<img src="${safeFlagUrl}" style="max-height: 40px; max-width: 60px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2);">` : '<span style="font-size: 30px;">🏳️</span>'}
                  </div>
-                 <div style="position: absolute; bottom: 5px; left: 5px; right: 5px; height: 3px; background: ${c.color || "#fff"}; border-radius: 2px;"></div>
+                 <div style="position: absolute; bottom: 5px; left: 5px; right: 5px; height: 3px; background: ${safeColor}; border-radius: 2px;"></div>
             </div>
             <div class="hub-content">
                 <div class="hub-info">
-                    <div class="hub-name">${c.name}</div>
+                    <div class="hub-name">${safeName}</div>
                     <div class="hub-meta">
-                        <img src="https://images.websim.com/avatar/${c.username}" class="hub-author-img">
-                        <span>${c.username}</span>
+                        <img src="https://images.websim.com/avatar/${safeUsername}" class="hub-author-img">
+                        <span>${safeUsername}</span>
                     </div>
                 </div>
-                <div class="hub-description">${c.description || "No description provided."}</div>
+                <div class="hub-description">${safeDescription}</div>
                 <div class="hub-actions" style="margin-top: auto; display: flex; justify-content: space-between; align-items: center;">
                     <div style="display: flex; gap: 5px;" class="hub-actions-buttons">
-                        ${canImport ? `<button class="mini-btn" style="background: #27ae60; padding: 6px 12px;" onclick="event.stopPropagation(); window.importFromLibrary('${c.id}')">IMPORT</button>` : ""}
+                        ${canImport ? `<button class="mini-btn" style="background: #27ae60; padding: 6px 12px;" data-import-country-id="${safeId}">IMPORT</button>` : ""}
                         ${
 													c.username === myUsername
-														? `<button class="mini-btn" style="background: #c0392b; padding: 6px 12px;" onclick="window.deleteCountry('${c.id}')">DEL</button>`
+														? `<button class="mini-btn" style="background: #c0392b; padding: 6px 12px;" data-delete-country-id="${safeId}">DEL</button>`
 														: ""
 												}
                     </div>
@@ -16616,6 +16710,18 @@ export function renderCountryLibrary(countries) {
 			openItemModal("country", item);
 		});
 	});
+	libraryList.querySelectorAll("[data-import-country-id]").forEach((btn) => {
+		btn.addEventListener("click", (ev) => {
+			ev.stopPropagation();
+			window.importFromLibrary(btn.dataset.importCountryId);
+		});
+	});
+	libraryList.querySelectorAll("[data-delete-country-id]").forEach((btn) => {
+		btn.addEventListener("click", (ev) => {
+			ev.stopPropagation();
+			window.deleteCountry(btn.dataset.deleteCountryId);
+		});
+	});
 }
 
 export function renderFlagLibrary(flags) {
@@ -16631,26 +16737,31 @@ export function renderFlagLibrary(flags) {
 	flagLibraryList.innerHTML = flags
 		.map((f) => {
 			hubFlagCache[f.id] = f;
+			const safeId = escapeHtml(f.id);
+			const safeFlagUrl = escapeHtml(f.flagUrl);
+			const safeName = escapeHtml(f.name);
+			const safeUsername = escapeHtml(f.username);
+			const safeDescription = escapeHtml(f.description || "No description.");
 			return `
-        <div class="hub-item" data-item-type="flag" data-item-id="${f.id}">
+        <div class="hub-item" data-item-type="flag" data-item-id="${safeId}">
             <div style="height: 100px; display: flex; align-items: center; justify-content: center; background: #000; border-bottom: 1px solid rgba(255,255,255,0.1); padding: 15px;">
-                 <img src="${f.flagUrl}" style="max-height: 100%; max-width: 100%; box-shadow: 0 4px 15px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2);">
+                 <img src="${safeFlagUrl}" style="max-height: 100%; max-width: 100%; box-shadow: 0 4px 15px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2);">
             </div>
             <div class="hub-content">
                 <div class="hub-info">
-                    <div class="hub-name">${f.name}</div>
+                    <div class="hub-name">${safeName}</div>
                     <div class="hub-meta">
-                        <img src="https://images.websim.com/avatar/${f.username}" class="hub-author-img">
-                        <span>${f.username}</span>
+                        <img src="https://images.websim.com/avatar/${safeUsername}" class="hub-author-img">
+                        <span>${safeUsername}</span>
                     </div>
                 </div>
-                <div class="hub-description">${f.description || "No description."}</div>
+                <div class="hub-description">${safeDescription}</div>
                 <div class="hub-actions" style="margin-top: auto; display: flex; justify-content: space-between; align-items: center;">
                     <div style="display: flex; gap: 5px;" class="hub-actions-buttons">
-                        ${canImport ? `<button class="mini-btn" style="background: #2e86de; padding: 6px 12px;" onclick="event.stopPropagation(); window.importFlagFromLibrary('${f.id}')">USE</button>` : ""}
+                        ${canImport ? `<button class="mini-btn" style="background: #2e86de; padding: 6px 12px;" data-import-flag-id="${safeId}">USE</button>` : ""}
                         ${
 													f.username === myUsername
-														? `<button class="mini-btn" style="background: #c0392b; padding: 6px 12px;" onclick="window.deleteFlag('${f.id}')">DEL</button>`
+														? `<button class="mini-btn" style="background: #c0392b; padding: 6px 12px;" data-delete-flag-id="${safeId}">DEL</button>`
 														: ""
 												}
                     </div>
@@ -16675,6 +16786,18 @@ export function renderFlagLibrary(flags) {
 			const item = hubFlagCache[id];
 			if (!item) return;
 			openItemModal("flag", item);
+		});
+	});
+	flagLibraryList.querySelectorAll("[data-import-flag-id]").forEach((btn) => {
+		btn.addEventListener("click", (ev) => {
+			ev.stopPropagation();
+			window.importFlagFromLibrary(btn.dataset.importFlagId);
+		});
+	});
+	flagLibraryList.querySelectorAll("[data-delete-flag-id]").forEach((btn) => {
+		btn.addEventListener("click", (ev) => {
+			ev.stopPropagation();
+			window.deleteFlag(btn.dataset.deleteFlagId);
 		});
 	});
 }
@@ -17651,17 +17774,31 @@ export function openReleaseModal(releaserId, sideIdx) {
 	if (releasables.length === 0) return;
 
 	releasableListContainer.innerHTML = releasables
-		.map(
-			(m) => `
-        <button class="menu-card" style="padding: 10px; width: 100%; text-align: left;" onclick="window.releaseNation(${m.id}, ${releaserId}, ${sideIdx})">
-            <img src="${m.flagUrl || ""}" style="width: 30px; height: 18px; object-fit: cover; border: 1px solid #444; margin-right: 10px;">
+		.map((m) => {
+			if (!Number.isFinite(m.id)) return "";
+			const safeId = Number(m.id);
+			const safeName = escapeHtml(m.name);
+			const safeFlagUrl = escapeHtml(m.flagUrl || "");
+			return `
+        <button class="menu-card" style="padding: 10px; width: 100%; text-align: left;" data-release-nation-id="${safeId}" data-release-releaser-id="${releaserId}" data-release-side-idx="${sideIdx}">
+            <img src="${safeFlagUrl}" style="width: 30px; height: 18px; object-fit: cover; border: 1px solid #444; margin-right: 10px;">
             <div class="card-body">
-                <span class="btn-text" style="font-size: 12px;">${m.name}</span>
+                <span class="btn-text" style="font-size: 12px;">${safeName}</span>
             </div>
         </button>
-    `,
-		)
+    `;
+		})
 		.join("");
+	releasableListContainer
+		.querySelectorAll("[data-release-nation-id]")
+		.forEach((btn) => {
+			btn.addEventListener("click", () => {
+				const nationId = Number(btn.dataset.releaseNationId);
+				const relId = Number(btn.dataset.releaseReleaserId);
+				const sIdx = Number(btn.dataset.releaseSideIdx);
+				window.releaseNation(nationId, relId, sIdx);
+			});
+		});
 
 	releaseModal.style.display = "flex";
 }
@@ -19030,6 +19167,7 @@ if (clearAlliesBtn) {
 			}
 		});
 		meta.allies = [];
+		markAllianceCacheDirty();
 		statusText.innerText = "All alliances for this nation have been cleared.";
 		openInspector(editingCountryId);
 		influenceLayer.render();
@@ -19731,6 +19869,13 @@ document.getElementById("clear-sat-btn")?.addEventListener("click", () => {
 	customSatelliteUrl = null;
 	customSatelliteImg = null;
 	influenceLayer.render();
+});
+
+document.getElementById("upload-sat-btn")?.addEventListener("click", () => {
+	document.getElementById("custom-sat-input")?.click();
+});
+document.getElementById("upload-ref-btn")?.addEventListener("click", () => {
+	document.getElementById("ref-image-input")?.click();
 });
 
 document
@@ -20505,15 +20650,15 @@ export function renderCommentsList(comments) {
 		return arr
 			.map((c) => {
 				const created = new Date(c.created_at).toLocaleString();
-				const safeText = (c.text || "")
-					.replace(/</g, "&lt;")
-					.replace(/>/g, "&gt;");
+				const safeText = escapeHtml(c.text || "");
+				const safeUsername = escapeHtml(c.username);
+				const safeCommentId = escapeHtml(c.id);
 				const isMine = currentUsername && c.username === currentUsername;
 				return `
-                <div class="item-comment" data-comment-id="${c.id}" style="padding:6px 8px; border-bottom:1px solid rgba(255,255,255,0.05); margin-left:${depth * 12}px;">
+                <div class="item-comment" data-comment-id="${safeCommentId}" style="padding:6px 8px; border-bottom:1px solid rgba(255,255,255,0.05); margin-left:${depth * 12}px;">
                     <div style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
-                        <img src="https://images.websim.com/avatar/${c.username}" style="width:16px; height:16px; border-radius:50%; background:#000;">
-                        <span style="font-size:11px; color:#ddd;">${c.username}</span>
+                        <img src="https://images.websim.com/avatar/${safeUsername}" style="width:16px; height:16px; border-radius:50%; background:#000;">
+                        <span style="font-size:11px; color:#ddd;">${safeUsername}</span>
                         <span style="font-size:9px; color:#555; margin-left:auto;">${created}</span>
                     </div>
                     <div class="item-comment-text" style="font-size:12px; color:#ccc; white-space:pre-wrap;">${safeText}</div>
@@ -20753,15 +20898,14 @@ export function renderGlobalChatList(messages) {
 	globalChatList.innerHTML = sorted
 		.map((m) => {
 			const created = new Date(m.created_at).toLocaleTimeString();
-			const safeText = (m.text || "")
-				.replace(/</g, "&lt;")
-				.replace(/>/g, "&gt;");
+			const safeText = escapeHtml(m.text || "");
+			const safeUsername = escapeHtml(m.username);
 			const isMine = currentUsername && m.username === currentUsername;
 			return `
             <div style="margin-bottom:6px; font-size:12px; ${isMine ? "text-align:right;" : ""}">
                 <div style="display:flex; ${isMine ? "flex-direction:row-reverse;" : ""} align-items:center; gap:6px;">
-                    <img src="https://images.websim.com/avatar/${m.username}" style="width:16px; height:16px; border-radius:50%; background:#000;">
-                    <span style="font-size:11px; color:#ddd;">${m.username}</span>
+                    <img src="https://images.websim.com/avatar/${safeUsername}" style="width:16px; height:16px; border-radius:50%; background:#000;">
+                    <span style="font-size:11px; color:#ddd;">${safeUsername}</span>
                     <span style="font-size:9px; color:#555;">${created}</span>
                 </div>
                 <div style="margin-top:2px; color:#ccc; white-space:pre-wrap;">${safeText}</div>

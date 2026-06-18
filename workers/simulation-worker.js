@@ -70,6 +70,9 @@ self.onmessage = (evt) => {
 			for (let d = 0; d < 4; d++) {
 				const nb = cur + dirs[d];
 				if (nb < 0 || nb >= total) continue;
+				// Prevent wraparound at row edges for horizontal neighbors
+				if (d < 2 && Math.floor(nb / gridWidth) !== Math.floor(cur / gridWidth))
+					continue;
 				if (sourceCell[nb] !== -1) continue;
 				if (landMask[nb] === 0) continue;
 				sourceCell[nb] = src;

@@ -1,6 +1,7 @@
 import L from "leaflet";
 import { CONFIG } from "./config.js";
 import {
+	_allianceCacheDirty,
 	_cachedSideTerritoryPcts,
 	_cachedTerritoryCtrlEls,
 	_cachedTerritorySegEls,
@@ -18,6 +19,7 @@ import {
 	bombs,
 	cinematicMode,
 	cities,
+	clearAllianceCacheDirty,
 	countryCasualties,
 	countryMetadata,
 	disableCountryGradient,
@@ -69,6 +71,14 @@ import {
 	worldHeightDeg,
 	worldWidthDeg,
 } from "./main.js";
+
+const _allianceCache = {
+	metaLen: -1,
+	metaMaxId: -1,
+	keyById: null,
+	colorByRoot: {},
+	flagMetaByRoot: {},
+};
 
 const ControlMapLayer = L.Layer.extend({
 	onAdd: function (map) {
@@ -271,52 +281,72 @@ const ControlMapLayer = L.Layer.extend({
 
 		// Alliance mapping: group countries into alliances via mutual allies graph.
 		// Root = smallest id in connected component. Every country gets a key so “non‑aligned” shows too.
-		const allianceKeyById = new Int32Array(metaMaxId + 1); // root id per country
-		const allianceColorByRoot = {}; // rootId -> [r,g,b,a]
-		const allianceFlagMetaByRoot = {}; // rootId -> meta used for alliance flag
+		// Cached: recompute only when allies graph or countryMetadata length changes.
+		const allianceDirty =
+			_allianceCacheDirty ||
+			_allianceCache.metaLen !== countryMetadata.length ||
+			_allianceCache.metaMaxId !== metaMaxId;
+		let allianceKeyById;
+		let allianceColorByRoot;
+		let allianceFlagMetaByRoot;
+		if (allianceDirty) {
+			allianceKeyById = new Int32Array(metaMaxId + 1); // root id per country
+			allianceColorByRoot = {}; // rootId -> [r,g,b,a]
+			allianceFlagMetaByRoot = {}; // rootId -> meta used for alliance flag
 
-		if (countryMetadata?.length) {
-			const visitedAlliance = new Uint8Array(metaMaxId + 1);
+			if (countryMetadata?.length) {
+				const visitedAlliance = new Uint8Array(metaMaxId + 1);
 
-			for (let i = 0; i < countryMetadata.length; i++) {
-				const m = countryMetadata[i];
-				if (!m?.id) continue;
-				const id = m.id;
-				if (visitedAlliance[id]) continue;
+				for (let i = 0; i < countryMetadata.length; i++) {
+					const m = countryMetadata[i];
+					if (!m?.id) continue;
+					const id = m.id;
+					if (visitedAlliance[id]) continue;
 
-				// BFS over allies graph to find connected component
-				const queue = [id];
-				let qIdx = 0;
-				const component = [];
-				visitedAlliance[id] = 1;
-				while (qIdx < queue.length) {
-					const cid = queue[qIdx++];
-					component.push(cid);
-					const cMeta = countryMetadata[cid - 1];
-					const allies =
-						cMeta && Array.isArray(cMeta.allies) ? cMeta.allies : [];
-					allies.forEach((aid) => {
-						if (aid > 0 && aid <= metaMaxId && !visitedAlliance[aid]) {
-							visitedAlliance[aid] = 1;
-							queue.push(aid);
-						}
+					// BFS over allies graph to find connected component
+					const queue = [id];
+					let qIdx = 0;
+					const component = [];
+					visitedAlliance[id] = 1;
+					while (qIdx < queue.length) {
+						const cid = queue[qIdx++];
+						component.push(cid);
+						const cMeta = countryMetadata[cid - 1];
+						const allies =
+							cMeta && Array.isArray(cMeta.allies) ? cMeta.allies : [];
+						allies.forEach((aid) => {
+							if (aid > 0 && aid <= metaMaxId && !visitedAlliance[aid]) {
+								visitedAlliance[aid] = 1;
+								queue.push(aid);
+							}
+						});
+					}
+
+					// Root = minimum id in this component
+					const rootId = component.reduce(
+						(min, v) => Math.min(min, v),
+						component[0],
+					);
+					component.forEach((cid) => {
+						allianceKeyById[cid] = rootId;
 					});
+
+					const rootMeta = countryMetadata[rootId - 1];
+					const rgba = rootMeta?.rgba ? rootMeta.rgba : [180, 180, 180, 1];
+					allianceColorByRoot[rootId] = rgba;
+					allianceFlagMetaByRoot[rootId] = rootMeta || null;
 				}
-
-				// Root = minimum id in this component
-				const rootId = component.reduce(
-					(min, v) => Math.min(min, v),
-					component[0],
-				);
-				component.forEach((cid) => {
-					allianceKeyById[cid] = rootId;
-				});
-
-				const rootMeta = countryMetadata[rootId - 1];
-				const rgba = rootMeta?.rgba ? rootMeta.rgba : [180, 180, 180, 1];
-				allianceColorByRoot[rootId] = rgba;
-				allianceFlagMetaByRoot[rootId] = rootMeta || null;
 			}
+			_allianceCache.metaLen = countryMetadata.length;
+			_allianceCache.metaMaxId = metaMaxId;
+			_allianceCache.keyById = allianceKeyById;
+			_allianceCache.colorByRoot = allianceColorByRoot;
+			_allianceCache.flagMetaByRoot = allianceFlagMetaByRoot;
+			clearAllianceCacheDirty();
+		} else {
+			allianceKeyById = _allianceCache.keyById;
+			allianceColorByRoot = _allianceCache.colorByRoot;
+			allianceFlagMetaByRoot = _allianceCache.flagMetaByRoot;
 		}
 
 		if (useSimplifiedBase) {
@@ -2630,8 +2660,6 @@ const ControlMapLayer = L.Layer.extend({
 		ctx.textBaseline = "middle";
 
 		// Background stroke for maximum legibility
-		ctx.shadowBlur = 8;
-		ctx.shadowColor = "rgba(0,0,0,0.8)";
 		ctx.strokeStyle = "black";
 		ctx.lineWidth = 5;
 		ctx.strokeText(text, 0, 0);

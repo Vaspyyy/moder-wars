@@ -39,7 +39,9 @@ function simplifyFile(filePath) {
 	if (raw.type === 'FeatureCollection') {
 		raw.features = raw.features.map(simplifyFeature);
 	} else if (raw.type === 'Feature') {
-		return simplifyFile; // shouldn't happen but handle
+		const simplified = simplifyFeature(raw);
+		Object.keys(raw).forEach((k) => delete raw[k]);
+		Object.assign(raw, simplified);
 	} else if (Array.isArray(raw)) {
 		// flagcodes.json is just an array of [code, name]
 	}

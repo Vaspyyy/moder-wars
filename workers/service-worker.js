@@ -1,12 +1,12 @@
 // Service Worker — cache-first for same-origin static assets
-// Updated for MW-V0.23.0: geodata now bundled locally, added to precache
 
-const CACHE_VERSION = "mw-v0.26.18";
+const CACHE_VERSION = "mw-v0.26.19";
 const CACHE_NAME = `mw-cache-${CACHE_VERSION}`;
 
 const PRECACHE_URLS = [
 	"/",
 	"/index.html",
+	"/src/bootstrap.js",
 	"/src/main.js",
 	"/src/config.js",
 	"/src/editor.js",
@@ -58,33 +58,26 @@ self.addEventListener("activate", (event) => {
 
 // Cache-first for all same-origin requests (covers geodata, JS, CSS, assets)
 self.addEventListener("fetch", (event) => {
-	const url = new URL(event.request.url);
+	const req = event.request;
+	if (req.method !== "GET") return;
+	const url = new URL(req.url);
 	if (url.origin === location.origin) {
 		event.respondWith(
 			caches
-				.match(event.request)
+				.match(req)
 				.then((cached) => {
 					if (cached) return cached;
-					return fetch(event.request).then((response) => {
+					return fetch(req).then((response) => {
 						if (response.ok) {
 							const clone = response.clone();
-							caches
-								.open(CACHE_NAME)
-								.then((cache) => cache.put(event.request, clone));
+							caches.open(CACHE_NAME).then((cache) => cache.put(req, clone));
 						}
 						return response;
 					});
 				})
 				.catch(() => {
-					if (
-						url.pathname.endsWith(".json") ||
-						url.pathname.endsWith(".geojson")
-					) {
-						return new Response("[]", {
-							headers: { "Content-Type": "application/json" },
-						});
-					}
-					return caches.match("/index.html");
+					if (req.mode === "navigate") return caches.match("/index.html");
+					return new Response("", { status: 504, statusText: "Offline" });
 				}),
 		);
 	}
