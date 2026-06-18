@@ -1,0 +1,30 @@
+src/main.js
+  s_ebf44685bd7fc5::t_5648667049e523 1876,1879
+  s_ebf44685bd7fc5::t_24684e0c7f6270 11152
+  s_ebf44685bd7fc5::t_a8462ebd1c7670 11447-11448,11452
+  s_ebf44685bd7fc5::t_1b8b382ad19eff 10723
+  s_ebf44685bd7fc5::t_9fd4ca7ed876eb 9282,9285,11165-11178,11449-11451,11496,11542-11555,11880-11881
+  s_ebf44685bd7fc5::t_b65fea1b90c7e1 9891-9893
+  s_ebf44685bd7fc5::t_52d4fc49538953 11526
+  s_ebf44685bd7fc5::t_51a806aa99800a 9325,9328
+index.html
+  s_ebf44685bd7fc5::t_2648b577e8b9b4 7
+workers/service-worker.js
+  s_ebf44685bd7fc5::t_2648b577e8b9b4 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "c5f1386a2a0d7d969bef423a0e028fc5f248e002",
+  "prompts": {},
+  "sessions": {
+    "s_ebf44685bd7fc5": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_125d96aeffferYdwzTzMclKZUo",
+        "model": "unknown"
+      },
+      "human_author": "Vaspyyy <lolbautz2@gmail.com>"
+    }
+  }
+}
