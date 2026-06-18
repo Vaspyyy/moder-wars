@@ -1873,9 +1873,10 @@ window.__perf = {
 	reassess_ratio: 0,
 	// unitLoop sub-timers
 	unitSetupTerrain: 0,
-	unitSpatialHash: 0,
+	unitScanPhase: 0,
 	unitEnemyScan: 0,
 	unitAllyScan: 0,
+	unitGarrisonCoastal: 0,
 	unitRetreatMopUp: 0,
 	unitRetreatDecision: 0,
 	unitGlobalFallback: 0,
@@ -9278,9 +9279,10 @@ export function performSimulationTick() {
 			reassess_ratio: 0,
 			// unitLoop sub-timers
 			unitSetupTerrain: 0,
-			unitSpatialHash: 0,
+			unitScanPhase: 0,
 			unitEnemyScan: 0,
 			unitAllyScan: 0,
+			unitGarrisonCoastal: 0,
 			unitRetreatMopUp: 0,
 			unitRetreatDecision: 0,
 			unitGlobalFallback: 0,
@@ -9320,9 +9322,10 @@ export function performSimulationTick() {
 		"posture",
 		"render",
 		"unitSetupTerrain",
-		"unitSpatialHash",
+		"unitScanPhase",
 		"unitEnemyScan",
 		"unitAllyScan",
+		"unitGarrisonCoastal",
 		"unitRetreatMopUp",
 		"unitRetreatDecision",
 		"unitGlobalFallback",
@@ -9885,7 +9888,9 @@ export function performSimulationTick() {
 	const _unitGridIdx = _tickUnitGridIdx;
 	for (let _ugi = 0; _ugi < units.length; _ugi++) {
 		const _ug = units[_ugi];
-		_unitGridIdx.set(_ug, getGridIndex(_ug.lat, _ug.lng));
+		const idx = getGridIndex(_ug.lat, _ug.lng);
+		_unitGridIdx.set(_ug, idx);
+		_ug._isAtSea = idx === -1 || landMask[idx] === 0;
 	}
 
 	// Pre-build country lookup Map (avoids .find() per enemy per unit)
@@ -10715,7 +10720,7 @@ export function performSimulationTick() {
 			damageDealtMult *= 1.15;
 		}
 
-		const gridIdxNow = getGridIndex(u.lat, u.lng);
+		const gridIdxNow = _unitGridIdx.get(u) ?? -1;
 		const _uSideIdx = countryToSideMap.get(u.sovereignId);
 		const isAtSea = gridIdxNow === -1 || landMask[gridIdxNow] === 0;
 		const mountainIntensity =
@@ -11144,7 +11149,7 @@ export function performSimulationTick() {
 								const dSq = (u.lat - e.lat) ** 2 + deLng ** 2;
 								// (enemy — no isEnemy check; bucket is enemy-only)
 								const eIdx = _unitGridIdx.get(e) ?? -1;
-								const eAtSea = eIdx === -1 || landMask[eIdx] === 0;
+								const eAtSea = e._isAtSea;
 								if ((effectiveDefensive || isRebelUnit) && !isAtSea) {
 									const isEnemyInMyMandatedLand =
 										eIdx !== -1 &&
@@ -11157,15 +11162,20 @@ export function performSimulationTick() {
 								const noisyDSq = dSq * distMult;
 								const healthModifier =
 									Math.max(0, 1.0 - (e.health || 100) / 100) * 0.02;
-								const eCountry = _countryById.get(e.sovereignId);
-								const eBuff = eCountry?.buffState || "none";
-								const superPenalty =
-									!isMega &&
-									!isSuper &&
-									(eBuff === "super" || eBuff === "godly")
-										? 5.0
-										: 0;
-								let targetScore = noisyDSq - healthModifier + superPenalty;
+								let targetScore = noisyDSq - healthModifier;
+								let eBuff = "none";
+								// Only do expensive _countryById lookup for viable candidates
+								if (targetScore < minDist) {
+									const eCountry = _countryById.get(e.sovereignId);
+									eBuff = eCountry?.buffState || "none";
+									const superPenalty =
+										!isMega &&
+										!isSuper &&
+										(eBuff === "super" || eBuff === "godly")
+											? 5.0
+											: 0;
+									targetScore += superPenalty;
+								}
 								if (targetScore < minDist) {
 									// Water-path + neutral-path check: penalize enemies unreachable by friendly land
 									if (!isAtSea && !eAtSea && dSq > 4.0) {
@@ -11434,6 +11444,12 @@ export function performSimulationTick() {
 				}
 			}
 
+			const _tGarrisonCoastal = performance.now();
+			window.__perf.unitGarrisonCoastal =
+				(window.__perf.unitGarrisonCoastal || 0) +
+				_tGarrisonCoastal -
+				_tEnemyDone;
+
 			// ── Ally pass: iterate own side's hash for repulsion ──
 			if (!skipAllyScan) {
 				const allyHash = unitHashBySide[sideIndex];
@@ -11477,7 +11493,7 @@ export function performSimulationTick() {
 			}
 			const _tAllyDone = performance.now();
 			window.__perf.unitAllyScan =
-				(window.__perf.unitAllyScan || 0) + _tAllyDone - _tEnemyDone;
+				(window.__perf.unitAllyScan || 0) + _tAllyDone - _tGarrisonCoastal;
 		} else {
 			// ═══ Legacy scan (flag off): iterates global unitSpatialHash ═══
 			for (let dy = -2; dy <= 2; dy++) {
@@ -11507,7 +11523,7 @@ export function performSimulationTick() {
 
 						if (isEnemy) {
 							const eIdx = _unitGridIdx.get(e) ?? -1;
-							const eAtSea = eIdx === -1 || landMask[eIdx] === 0;
+							const eAtSea = e._isAtSea;
 
 							if ((effectiveDefensive || isRebelUnit) && !isAtSea) {
 								const isEnemyInMyMandatedLand =
@@ -11523,13 +11539,20 @@ export function performSimulationTick() {
 
 							const healthModifier =
 								Math.max(0, 1.0 - (e.health || 100) / 100) * 0.02;
-							const eCountry = _countryById.get(e.sovereignId);
-							const eBuff = eCountry?.buffState || "none";
-							const superPenalty =
-								!isMega && !isSuper && (eBuff === "super" || eBuff === "godly")
-									? 5.0
-									: 0;
-							let targetScore = noisyDSq - healthModifier + superPenalty;
+							let targetScore = noisyDSq - healthModifier;
+							let eBuff = "none";
+							// Only do expensive _countryById lookup for viable candidates
+							if (targetScore < minDist) {
+								const eCountry = _countryById.get(e.sovereignId);
+								eBuff = eCountry?.buffState || "none";
+								const superPenalty =
+									!isMega &&
+									!isSuper &&
+									(eBuff === "super" || eBuff === "godly")
+										? 5.0
+										: 0;
+								targetScore += superPenalty;
+							}
 							if (targetScore < minDist) {
 								// Water-path + neutral-path check: penalize enemies unreachable by friendly land
 								if (!isAtSea && !eAtSea && dSq > 4.0) {
@@ -11854,7 +11877,8 @@ export function performSimulationTick() {
 
 		// ── unitLoop sub-timer checkpoint: end unitSpatialHash, start retreatMopUp ──
 		const _u3 = performance.now();
-		window.__perf.unitSpatialHash += _u3 - _u2;
+		window.__perf.unitScanPhase =
+			(window.__perf.unitScanPhase || 0) + _u3 - _u2;
 
 		// Retreat logic: If enemy force is > 5x ally force (increased threshold to prevent premature dodging)
 		if (
