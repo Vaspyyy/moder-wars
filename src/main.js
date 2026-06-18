@@ -12532,6 +12532,15 @@ export function performSimulationTick() {
 						if (td > 0.01) {
 							planDirLat = tdLat / td;
 							planDirLng = tdLng / td;
+						} else {
+							// At beachhead: keep advancing inland along approach path
+							planDirLat = Math.sign(tdLat) || 0;
+							planDirLng = Math.sign(tdLng) || 0;
+							const uGI = _unitGridIdx.get(u) ?? -1;
+							if (uGI !== -1 && landMask[uGI] !== 0) {
+								u.navalAssigned = false;
+								u._landedAt = simFrameCount;
+							}
 						}
 						planSpeedMult = 1.5;
 					}
