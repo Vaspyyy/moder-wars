@@ -1910,6 +1910,7 @@ const _tickSideAllyIdSets = [];
 const _tickSideSupportIdSets = [];
 const _tickUnitsBySide = [];
 const _tickUnitGridIdx = new Map();
+let _tickAllCombatants = [];
 
 // Temporary diagnostics for cross-war state/capitulation bugs.
 export const aiCountryState = new Map();
@@ -9360,7 +9361,8 @@ export function performSimulationTick() {
 	// If in God Mode but the war hasn't started yet, don't tick simulation mechanics
 	if (godModeActive && preGodModeState !== "SIMULATING") return false;
 
-	const _allCombatants = sides.flat();
+	_tickAllCombatants = sides.flat();
+	const _allCombatants = _tickAllCombatants;
 
 	// 0. Initial Utility Helpers
 	const recordDamage = (targetUnit, dmg, attackerUnit) => {
@@ -14471,7 +14473,7 @@ export function updateLoop(now) {
 		const structureChanged = entriesKey !== _casualtyStructureKey;
 		if (structureChanged) {
 			_casualtyStructureKey = entriesKey;
-			const activeIds = new Set(_allCombatants.map((c) => c.id));
+			const activeIds = new Set(_tickAllCombatants.map((c) => c.id));
 			let html = "";
 			let currentSide = -1;
 			let sidePos = 0;
