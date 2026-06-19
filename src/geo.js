@@ -63,13 +63,32 @@ async function _cachePut(url, data) {
 	});
 }
 
+let _geoParseWorker = null;
+function _parseInWorker(buf) {
+	if (!_geoParseWorker) {
+		_geoParseWorker = new Worker("../workers/geo-parse-worker.js");
+		_geoParseWorker.onerror = (e) => console.warn("geo-parse-worker error:", e);
+	}
+	return new Promise((resolve, reject) => {
+		const worker = _geoParseWorker;
+		const handler = (evt) => {
+			worker.removeEventListener("message", handler);
+			if (evt.data?.error) reject(new Error(evt.data.error));
+			else resolve(evt.data.data);
+		};
+		worker.addEventListener("message", handler);
+		worker.postMessage(buf, [buf]);
+	});
+}
+
 export async function fetchJSONWithCache(url) {
 	const key = new URL(url, window.location.href).href;
 	const cached = await _geoCacheGet(key);
 	if (cached) return cached;
 	const response = await fetch(url);
 	if (!response.ok) throw new Error(`HTTP ${response.status}`);
-	const data = await response.json();
+	const buf = await response.arrayBuffer();
+	const data = await _parseInWorker(buf);
 	_cachePut(key, data);
 	return data;
 }
