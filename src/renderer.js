@@ -2629,7 +2629,7 @@ const ControlMapLayer = L.Layer.extend({
 		if (Number.isNaN(avgLat) || Number.isNaN(avgLng)) return;
 		let p;
 		try {
-			p = project(avgLat, avgLng);
+			p = map.latLngToContainerPoint([avgLat, avgLng]);
 		} catch (_e) {
 			return;
 		}
@@ -2651,8 +2651,8 @@ const ControlMapLayer = L.Layer.extend({
 					furthest = u;
 				}
 			});
-			const pStart = project(avgLat, avgLng);
-			const pEnd = project(furthest.lat, furthest.lng);
+			const pStart = map.latLngToContainerPoint([avgLat, avgLng]);
+			const pEnd = map.latLngToContainerPoint([furthest.lat, furthest.lng]);
 			angle = Math.atan2(pEnd.y - pStart.y, pEnd.x - pStart.x);
 
 			// Normalize angle to be horizontal-ish and upright
