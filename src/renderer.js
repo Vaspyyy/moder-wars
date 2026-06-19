@@ -274,30 +274,16 @@ const ControlMapLayer = L.Layer.extend({
 		}
 
 		// Optimization: Pre-calculate pole map for faster lookups in render loop
-		const metaDirty =
-			_allianceCacheDirty ||
-			!this._metaMaxId ||
-			this._metaLen !== countryMetadata.length;
-		let metaMaxId;
-		let sovereignSideMap;
-		if (metaDirty) {
-			metaMaxId = countryMetadata.reduce(
-				(max, m) => (m ? Math.max(max, m.id) : max),
-				0,
-			);
-			this._metaMaxId = metaMaxId;
-			this._metaLen = countryMetadata.length;
-			sovereignSideMap = new Int8Array(metaMaxId + 1).fill(-1);
-			sides.forEach((side, idx) => {
-				side.forEach((c) => {
-					if (c.id > 0 && c.id <= metaMaxId) sovereignSideMap[c.id] = idx;
-				});
+		const metaMaxId = countryMetadata.reduce(
+			(max, m) => (m ? Math.max(max, m.id) : max),
+			0,
+		);
+		const sovereignSideMap = new Int8Array(metaMaxId + 1).fill(-1);
+		sides.forEach((side, idx) => {
+			side.forEach((c) => {
+				if (c.id > 0 && c.id <= metaMaxId) sovereignSideMap[c.id] = idx;
 			});
-			this._sovereignSideMap = sovereignSideMap;
-		} else {
-			metaMaxId = this._metaMaxId;
-			sovereignSideMap = this._sovereignSideMap;
-		}
+		});
 
 		// Alliance mapping: group countries into alliances via mutual allies graph.
 		// Root = smallest id in connected component. Every country gets a key so “non‑aligned” shows too.
