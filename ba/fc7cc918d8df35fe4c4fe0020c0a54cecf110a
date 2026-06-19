@@ -1,0 +1,26 @@
+index.html
+  s_ebf44685bd7fc5::t_0216070c89fdb0 7
+src/geo.js
+  s_ebf44685bd7fc5::t_1a6784391f1e99 66-83,90-91
+workers/geo-parse-worker.js
+  s_ebf44685bd7fc5::t_e4f5fa3e6070b7 1-9
+workers/service-worker.js
+  s_ebf44685bd7fc5::t_beba1e3cd98c35 20
+  s_ebf44685bd7fc5::t_b82167614a8000 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "bafc7cc918d8df35fe4c4fe0020c0a54cecf110a",
+  "prompts": {},
+  "sessions": {
+    "s_ebf44685bd7fc5": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_125d96aeffferYdwzTzMclKZUo",
+        "model": "unknown"
+      },
+      "human_author": "Vaspyyy <lolbautz2@gmail.com>"
+    }
+  }
+}
