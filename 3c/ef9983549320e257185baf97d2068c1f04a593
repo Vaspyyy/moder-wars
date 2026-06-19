@@ -1,0 +1,36 @@
+src/main.js
+  s_ebf44685bd7fc5::t_3ff6bdd436b9c2 1912
+src/renderer.js
+  s_ebf44685bd7fc5::t_3e77e6ef594576 196-201
+  s_ebf44685bd7fc5::t_d6409da6396065 859
+  s_ebf44685bd7fc5::t_15dae4032efc5a 1393-1398,1404-1409
+  s_ebf44685bd7fc5::t_c5bf1450714620 12
+  s_ebf44685bd7fc5::t_1358ddda515d75 453,1586,1614,1623,1692,1756,1833,1984,2039,2248,2254,2266,2281-2282,2321-2322,2365-2366,2418-2419,2471-2472,2525,2528,2561,2564,2654,2676-2677
+  s_ebf44685bd7fc5::t_c4fa75af24f59a 1275,1284
+  s_ebf44685bd7fc5::t_165dcc43c28a05 2251,2257
+  s_ebf44685bd7fc5::t_a3ff1b5cfdc763 2635
+  s_ebf44685bd7fc5::t_ce9a852666f37a 1276-1283
+  s_ebf44685bd7fc5::t_bba3a6bc66a051 2616-2630,2632-2633
+  s_ebf44685bd7fc5::t_a0c52b4259580d 277-294,296-300,860-861,1615,1728-1748,1750,2535,2571
+  s_ebf44685bd7fc5::t_6eb1e6bc78585f 1749
+workers/service-worker.js
+  s_ebf44685bd7fc5::t_e73bd2a62dd4b8 3
+index.html
+  s_ebf44685bd7fc5::t_e73bd2a62dd4b8 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.8",
+  "base_commit_sha": "3cef9983549320e257185baf97d2068c1f04a593",
+  "prompts": {},
+  "sessions": {
+    "s_ebf44685bd7fc5": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_125d96aeffferYdwzTzMclKZUo",
+        "model": "unknown"
+      },
+      "human_author": "Vaspyyy <lolbautz2@gmail.com>"
+    }
+  }
+}
