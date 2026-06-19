@@ -9,7 +9,6 @@ import {
 	_navalPlan,
 	_navalSupplyPlan,
 	_neutralGarrisonPlan,
-	_tickUnitsBySide,
 	_transportPlan,
 	_warPlan,
 	activeBattles,
@@ -66,6 +65,7 @@ import {
 	terrainMask,
 	UNIT_HASH_CELL_SIZE,
 	unitSpatialHash,
+	units,
 	viewMode,
 	worldControlMap,
 	worldHeightDeg,
@@ -2599,26 +2599,18 @@ const ControlMapLayer = L.Layer.extend({
 		const vE = viewBounds.getEast();
 		const isWrapped = vW > vE;
 
-		let teamUnits = null;
-		const sideBucket = _tickUnitsBySide[sideIdx];
-		if (sideBucket && sideBucket.length > 0) {
-			if (!this._labelScratch) this._labelScratch = [];
-			const scratch = this._labelScratch;
-			scratch.length = 0;
-			for (let i = 0; i < sideBucket.length; i++) {
-				const u = sideBucket[i];
-				if (u.lat < vS || u.lat > vN) continue;
-				if (isWrapped) {
-					if (u.lng < vW && u.lng > vE) continue;
-				} else {
-					if (u.lng < vW || u.lng > vE) continue;
-				}
-				scratch.push(u);
+		const teamUnits = units.filter((u) => {
+			if (u.sideIndex !== sideIdx) return false;
+			if (u.lat < vS || u.lat > vN) return false;
+			if (isWrapped) {
+				if (u.lng < vW && u.lng > vE) return false;
+			} else {
+				if (u.lng < vW || u.lng > vE) return false;
 			}
-			teamUnits = scratch;
-		}
+			return true;
+		});
 
-		if (!teamUnits || teamUnits.length < 1) return;
+		if (teamUnits.length < 1) return;
 
 		let avgLat = 0,
 			avgLng = 0;
