@@ -9,6 +9,7 @@ import {
 	_navalPlan,
 	_navalSupplyPlan,
 	_neutralGarrisonPlan,
+	_tickUnitsBySide,
 	_transportPlan,
 	_warPlan,
 	activeBattles,
@@ -65,7 +66,6 @@ import {
 	terrainMask,
 	UNIT_HASH_CELL_SIZE,
 	unitSpatialHash,
-	units,
 	viewMode,
 	worldControlMap,
 	worldHeightDeg,
@@ -193,6 +193,12 @@ const ControlMapLayer = L.Layer.extend({
 		const bounds = viewBounds;
 		const res = CONFIG.GRID_RES;
 		const currentZoom = map.getZoom();
+		const _ll = [0, 0];
+		const project = (lat, lng) => {
+			_ll[0] = lat;
+			_ll[1] = lng;
+			return map.latLngToContainerPoint(_ll);
+		};
 
 		// SATELLITE ENGINE STABILIZATION:
 		// Handle longitude wrap-around (e.g. crossing the 180 meridian).
@@ -268,16 +274,30 @@ const ControlMapLayer = L.Layer.extend({
 		}
 
 		// Optimization: Pre-calculate pole map for faster lookups in render loop
-		const metaMaxId = countryMetadata.reduce(
-			(max, m) => (m ? Math.max(max, m.id) : max),
-			0,
-		);
-		const sovereignSideMap = new Int8Array(metaMaxId + 1).fill(-1);
-		sides.forEach((side, idx) => {
-			side.forEach((c) => {
-				if (c.id > 0 && c.id <= metaMaxId) sovereignSideMap[c.id] = idx;
+		const metaDirty =
+			_allianceCacheDirty ||
+			!this._metaMaxId ||
+			this._metaLen !== countryMetadata.length;
+		let metaMaxId;
+		let sovereignSideMap;
+		if (metaDirty) {
+			metaMaxId = countryMetadata.reduce(
+				(max, m) => (m ? Math.max(max, m.id) : max),
+				0,
+			);
+			this._metaMaxId = metaMaxId;
+			this._metaLen = countryMetadata.length;
+			sovereignSideMap = new Int8Array(metaMaxId + 1).fill(-1);
+			sides.forEach((side, idx) => {
+				side.forEach((c) => {
+					if (c.id > 0 && c.id <= metaMaxId) sovereignSideMap[c.id] = idx;
+				});
 			});
-		});
+			this._sovereignSideMap = sovereignSideMap;
+		} else {
+			metaMaxId = this._metaMaxId;
+			sovereignSideMap = this._sovereignSideMap;
+		}
 
 		// Alliance mapping: group countries into alliances via mutual allies graph.
 		// Root = smallest id in connected component. Every country gets a key so “non‑aligned” shows too.
@@ -430,7 +450,7 @@ const ControlMapLayer = L.Layer.extend({
 		const getGridPoint = (gx, gy) => {
 			const lat = gy * CONFIG.GRID_RES - 90;
 			const lng = gx * CONFIG.GRID_RES - 180;
-			return map.latLngToContainerPoint([lat, lng]);
+			return project(lat, lng);
 		};
 
 		// --- REGION SEGMENTATION & DATA COLLECTION ---
@@ -836,7 +856,9 @@ const ControlMapLayer = L.Layer.extend({
 				gridYPositions[y] = getGridPoint(xMin, yMin + y).y;
 
 			// Batch mesh rectangles by resolved fillStyle to minimize ctx.fillStyle + ctx.fill() calls
-			const meshBatch = new Map();
+			if (!this._meshBatch) this._meshBatch = new Map();
+			this._meshBatch.clear();
+			const meshBatch = this._meshBatch;
 
 			for (let vy = 0; vy < vHeight; vy += step) {
 				const rowOffset = vy * vWidth;
@@ -1250,6 +1272,16 @@ const ControlMapLayer = L.Layer.extend({
 			}
 		}
 
+		// Pre-build grid-to-screen position arrays (reused by border loop)
+		const vWidth = xMax - xMin + 1;
+		const vHeight = yMax - yMin + 1;
+		const gridXP = new Float32Array(vWidth + 1);
+		const gridYP = new Float32Array(vHeight + 1);
+		for (let x = 0; x <= vWidth; x++)
+			gridXP[x] = getGridPoint(xMin + x, yMin).x;
+		for (let y = 0; y <= vHeight; y++)
+			gridYP[y] = getGridPoint(xMin, yMin + y).y;
+
 		// PASS 2: Frontlines (Organic borders during war)
 		if (isWar) {
 			ctx.strokeStyle = CONFIG.FRONTLINE_COLOR;
@@ -1357,21 +1389,24 @@ const ControlMapLayer = L.Layer.extend({
 
 				if (x + borderStep < gridWidth) {
 					const idR = getEffectiveId(i + borderStep);
-					// Draw if IDs differ and at least one is land
 					if (id !== idR && (id !== -1 || idR !== -1)) {
-						const p1 = getGridPoint(x + borderStep, y);
-						const p2 = getGridPoint(x + borderStep, y + borderStep);
-						ctx.moveTo(p1.x, p1.y);
-						ctx.lineTo(p2.x, p2.y);
+						const p1x = gridXP[x + borderStep - xMin];
+						const p1y = gridYP[y - yMin];
+						const p2x = gridXP[x + borderStep - xMin];
+						const p2y = gridYP[y + borderStep - yMin];
+						ctx.moveTo(p1x, p1y);
+						ctx.lineTo(p2x, p2y);
 					}
 				}
 				if (y + borderStep < gridHeight) {
 					const idD = getEffectiveId(i + gridWidth * borderStep);
 					if (id !== idD && (id !== -1 || idD !== -1)) {
-						const p1 = getGridPoint(x, y + borderStep);
-						const p2 = getGridPoint(x + borderStep, y + borderStep);
-						ctx.moveTo(p1.x, p1.y);
-						ctx.lineTo(p2.x, p2.y);
+						const p1x = gridXP[x - xMin];
+						const p1y = gridYP[y + borderStep - yMin];
+						const p2x = gridXP[x + borderStep - xMin];
+						const p2y = gridYP[y + borderStep - yMin];
+						ctx.moveTo(p1x, p1y);
+						ctx.lineTo(p2x, p2y);
 					}
 				}
 			}
@@ -1548,7 +1583,7 @@ const ControlMapLayer = L.Layer.extend({
 				return;
 			let p;
 			try {
-				p = map.latLngToContainerPoint([exp.lat, exp.lng]);
+				p = project(exp.lat, exp.lng);
 			} catch (_e) {
 				return;
 			}
@@ -1576,11 +1611,8 @@ const ControlMapLayer = L.Layer.extend({
 				return;
 			let p, pn;
 			try {
-				p = map.latLngToContainerPoint([b.currentLat, b.currentLng]);
-				pn = map.latLngToContainerPoint([
-					b.nextLat ?? b.currentLat,
-					b.nextLng ?? b.currentLng,
-				]);
+				p = project(b.currentLat, b.currentLng);
+				pn = project(b.nextLat ?? b.currentLat, b.nextLng ?? b.currentLng);
 			} catch (_e) {
 				return;
 			}
@@ -1588,7 +1620,7 @@ const ControlMapLayer = L.Layer.extend({
 
 			// Draw trail - Improved glowing plume with better tapering
 			b.trail.forEach((t, i) => {
-				const tp = map.latLngToContainerPoint([t.lat, t.lng]);
+				const tp = project(t.lat, t.lng);
 				const progress = i / b.trail.length;
 				const opacity = progress * 0.7;
 				const baseRadius = 2.5 * zoomScale * progress;
@@ -1657,7 +1689,7 @@ const ControlMapLayer = L.Layer.extend({
 
 			bases.forEach((base) => {
 				if (!drawBounds.contains([base.lat, base.lng])) return;
-				const p = map.latLngToContainerPoint([base.lat, base.lng]);
+				const p = project(base.lat, base.lng);
 				ctx.beginPath();
 				ctx.arc(p.x, p.y, baseSize * 1.2, 0, Math.PI * 2);
 				ctx.fillStyle = sideColors[base.sideIndex].replace(rgbaRe, "0.3)");
@@ -1693,30 +1725,35 @@ const ControlMapLayer = L.Layer.extend({
 		const zoom = map.getZoom();
 		const citySize = Math.max(2, zoom - 2);
 
-		// Show all cities if zoomed in, or major cities/theater cities if zoomed out
-		let citiesToDraw = [];
-		if (zoom >= 6) {
-			citiesToDraw = cities.filter((c) => viewBounds.contains([c.lat, c.lng]));
-		} else if (zoom >= 3) {
-			const minPop = zoom === 5 ? 100000 : zoom === 4 ? 400000 : 1000000;
-			citiesToDraw = cities.filter(
-				(c) =>
-					(c.pop > minPop && viewBounds.contains([c.lat, c.lng])) ||
-					activeTheaterCities.includes(c),
-			);
-		} else {
-			citiesToDraw = activeTheaterCities;
-		}
+		// Single-pass filter into reused scratch array
+		if (!this._citiesScratch) this._citiesScratch = [];
+		const citiesToDraw = this._citiesScratch;
+		citiesToDraw.length = 0;
 
-		// Filter out non-capital cities if toggle is off (always hide non-capitals, even in wars)
-		if (!showNonCapitalCities) {
-			citiesToDraw = citiesToDraw.filter((city) => city.isCapital);
+		const skipNonCapital = !showNonCapitalCities;
+		const minPop = zoom >= 5 ? 100000 : zoom >= 4 ? 400000 : 1000000;
+		const allSource = zoom >= 3 ? cities : activeTheaterCities;
+		const len = allSource.length;
+		for (let i = 0; i < len; i++) {
+			const c = allSource[i];
+			if (skipNonCapital && !c.isCapital) continue;
+			if (zoom >= 3) {
+				if (zoom >= 6) {
+					if (!viewBounds.contains([c.lat, c.lng])) continue;
+				} else {
+					const qualifies =
+						(c.pop > minPop && viewBounds.contains([c.lat, c.lng])) ||
+						activeTheaterCities.includes(c);
+					if (!qualifies) continue;
+				}
+			}
+			citiesToDraw.push(c);
 		}
 
 		citiesToDraw.forEach((city) => {
 			let p;
 			try {
-				p = map.latLngToContainerPoint([city.lat, city.lng]);
+				p = project(city.lat, city.lng);
 			} catch (_e) {
 				return;
 			}
@@ -1793,7 +1830,7 @@ const ControlMapLayer = L.Layer.extend({
 				if (drawProb < 1.0 && u.id % 1 > drawProb) return;
 				let p;
 				try {
-					p = map.latLngToContainerPoint([u.lat, u.lng]);
+					p = project(u.lat, u.lng);
 				} catch (_e) {
 					return;
 				}
@@ -1944,7 +1981,7 @@ const ControlMapLayer = L.Layer.extend({
 				if (!drawBounds.contains([b.lat, b.lng])) return;
 				let p;
 				try {
-					p = map.latLngToContainerPoint([b.lat, b.lng]);
+					p = project(b.lat, b.lng);
 				} catch (_e) {
 					return;
 				}
@@ -1999,7 +2036,7 @@ const ControlMapLayer = L.Layer.extend({
 			const safeLatLngToPoint = (lat, lng) => {
 				if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
 				try {
-					return map.latLngToContainerPoint([lat, lng]);
+					return project(lat, lng);
 				} catch (_e) {
 					return null;
 				}
@@ -2208,16 +2245,16 @@ const ControlMapLayer = L.Layer.extend({
 					ctx.lineWidth = 2;
 					ctx.setLineDash([6, 4]);
 					ctx.beginPath();
-					const fp0 = map.latLngToContainerPoint([
+					const fp0 = project(
 						plan.frontlinePoints[0].lat,
 						plan.frontlinePoints[0].lng,
-					]);
+					);
 					ctx.moveTo(fp0.x, fp0.y);
 					for (let fi = 1; fi < plan.frontlinePoints.length; fi++) {
-						const fp = map.latLngToContainerPoint([
+						const fp = project(
 							plan.frontlinePoints[fi].lat,
 							plan.frontlinePoints[fi].lng,
-						]);
+						);
 						ctx.lineTo(fp.x, fp.y);
 					}
 					ctx.stroke();
@@ -2226,7 +2263,7 @@ const ControlMapLayer = L.Layer.extend({
 					// Label at midpoint
 					const mid =
 						plan.frontlinePoints[Math.floor(plan.frontlinePoints.length / 2)];
-					const midP = map.latLngToContainerPoint([mid.lat, mid.lng]);
+					const midP = project(mid.lat, mid.lng);
 					ctx.font = "bold 9px monospace";
 					ctx.fillStyle = color.replace(rgbaRe, "0.8)");
 					ctx.fillText("DEFEND", midP.x + 8, midP.y - 6);
@@ -2241,8 +2278,8 @@ const ControlMapLayer = L.Layer.extend({
 					plan.arrowPoints.length >= 2
 				) {
 					const pts = plan.arrowPoints;
-					const p0 = map.latLngToContainerPoint([pts[0].lat, pts[0].lng]);
-					const p1 = map.latLngToContainerPoint([pts[1].lat, pts[1].lng]);
+					const p0 = project(pts[0].lat, pts[0].lng);
+					const p1 = project(pts[1].lat, pts[1].lng);
 					const midX = (p0.x + p1.x) / 2;
 					const midY = (p0.y + p1.y) / 2 - 40;
 
@@ -2281,8 +2318,8 @@ const ControlMapLayer = L.Layer.extend({
 				) {
 					continue;
 				}
-				const p0 = map.latLngToContainerPoint([pts[0].lat, pts[0].lng]);
-				const p1 = map.latLngToContainerPoint([pts[1].lat, pts[1].lng]);
+				const p0 = project(pts[0].lat, pts[0].lng);
+				const p1 = project(pts[1].lat, pts[1].lng);
 				const midX = (p0.x + p1.x) / 2;
 				const midY = (p0.y + p1.y) / 2 - 40;
 				ctx.moveTo(p0.x, p0.y);
@@ -2325,8 +2362,8 @@ const ControlMapLayer = L.Layer.extend({
 						Number.isNaN(pts[1].lng)
 					)
 						continue;
-					const p0 = map.latLngToContainerPoint([pts[0].lat, pts[0].lng]);
-					const p1 = map.latLngToContainerPoint([pts[1].lat, pts[1].lng]);
+					const p0 = project(pts[0].lat, pts[0].lng);
+					const p1 = project(pts[1].lat, pts[1].lng);
 					const midX = (p0.x + p1.x) / 2;
 					const midY = (p0.y + p1.y) / 2 - 50;
 					const sideColor = sideColors[si] || "rgba(255,255,0,0.6)";
@@ -2378,8 +2415,8 @@ const ControlMapLayer = L.Layer.extend({
 						Number.isNaN(pts[1].lng)
 					)
 						continue;
-					const p0 = map.latLngToContainerPoint([pts[0].lat, pts[0].lng]);
-					const p1 = map.latLngToContainerPoint([pts[1].lat, pts[1].lng]);
+					const p0 = project(pts[0].lat, pts[0].lng);
+					const p1 = project(pts[1].lat, pts[1].lng);
 					const midX = (p0.x + p1.x) / 2;
 					const midY = (p0.y + p1.y) / 2 - 50;
 					const sideColor = sideColors[si] || "rgba(255,255,0,0.6)";
@@ -2431,8 +2468,8 @@ const ControlMapLayer = L.Layer.extend({
 						Number.isNaN(pts[1].lng)
 					)
 						continue;
-					const p0 = map.latLngToContainerPoint([pts[0].lat, pts[0].lng]);
-					const p1 = map.latLngToContainerPoint([pts[1].lat, pts[1].lng]);
+					const p0 = project(pts[0].lat, pts[0].lng);
+					const p1 = project(pts[1].lat, pts[1].lng);
 					const midX = (p0.x + p1.x) / 2;
 					const midY = (p0.y + p1.y) / 2 - 30;
 					const sideColor = sideColors[si] || "rgba(255,255,0,0.6)";
@@ -2485,20 +2522,17 @@ const ControlMapLayer = L.Layer.extend({
 						ctx.lineWidth = 1.5;
 						ctx.setLineDash([2, 6]);
 						ctx.beginPath();
-						const p0 = map.latLngToContainerPoint([pts[0].lat, pts[0].lng]);
+						const p0 = project(pts[0].lat, pts[0].lng);
 						ctx.moveTo(p0.x, p0.y);
 						for (let pi = 1; pi < pts.length; pi++) {
-							const pp = map.latLngToContainerPoint([pts[pi].lat, pts[pi].lng]);
+							const pp = project(pts[pi].lat, pts[pi].lng);
 							ctx.lineTo(pp.x, pp.y);
 						}
 						ctx.stroke();
 						ctx.setLineDash([]);
 
 						if (cp.target) {
-							const tp = map.latLngToContainerPoint([
-								cp.target.lat,
-								cp.target.lng,
-							]);
+							const tp = project(cp.target.lat, cp.target.lng);
 							ctx.font = "bold 7px monospace";
 							ctx.fillStyle = color.replace(rgbaRe, "0.35)");
 							ctx.fillText(
@@ -2524,20 +2558,17 @@ const ControlMapLayer = L.Layer.extend({
 						ctx.lineWidth = 1.0;
 						ctx.setLineDash([3, 9]);
 						ctx.beginPath();
-						const p0 = map.latLngToContainerPoint([pts[0].lat, pts[0].lng]);
+						const p0 = project(pts[0].lat, pts[0].lng);
 						ctx.moveTo(p0.x, p0.y);
 						for (let pi = 1; pi < pts.length; pi++) {
-							const pp = map.latLngToContainerPoint([pts[pi].lat, pts[pi].lng]);
+							const pp = project(pts[pi].lat, pts[pi].lng);
 							ctx.lineTo(pp.x, pp.y);
 						}
 						ctx.stroke();
 						ctx.setLineDash([]);
 
 						if (gp.target) {
-							const tp = map.latLngToContainerPoint([
-								gp.target.lat,
-								gp.target.lng,
-							]);
+							const tp = project(gp.target.lat, gp.target.lng);
 							ctx.font = "bold 7px monospace";
 							ctx.fillStyle = color.replace(rgbaRe, "0.3)");
 							ctx.fillText(
@@ -2582,18 +2613,26 @@ const ControlMapLayer = L.Layer.extend({
 		const vE = viewBounds.getEast();
 		const isWrapped = vW > vE;
 
-		const teamUnits = units.filter((u) => {
-			if (u.sideIndex !== sideIdx) return false;
-			if (u.lat < vS || u.lat > vN) return false;
-			if (isWrapped) {
-				if (u.lng < vW && u.lng > vE) return false;
-			} else {
-				if (u.lng < vW || u.lng > vE) return false;
+		let teamUnits = null;
+		const sideBucket = _tickUnitsBySide[sideIdx];
+		if (sideBucket && sideBucket.length > 0) {
+			if (!this._labelScratch) this._labelScratch = [];
+			const scratch = this._labelScratch;
+			scratch.length = 0;
+			for (let i = 0; i < sideBucket.length; i++) {
+				const u = sideBucket[i];
+				if (u.lat < vS || u.lat > vN) continue;
+				if (isWrapped) {
+					if (u.lng < vW && u.lng > vE) continue;
+				} else {
+					if (u.lng < vW || u.lng > vE) continue;
+				}
+				scratch.push(u);
 			}
-			return true;
-		});
+			teamUnits = scratch;
+		}
 
-		if (teamUnits.length < 1) return;
+		if (!teamUnits || teamUnits.length < 1) return;
 
 		let avgLat = 0,
 			avgLng = 0;
@@ -2612,7 +2651,7 @@ const ControlMapLayer = L.Layer.extend({
 		if (Number.isNaN(avgLat) || Number.isNaN(avgLng)) return;
 		let p;
 		try {
-			p = map.latLngToContainerPoint([avgLat, avgLng]);
+			p = project(avgLat, avgLng);
 		} catch (_e) {
 			return;
 		}
@@ -2634,8 +2673,8 @@ const ControlMapLayer = L.Layer.extend({
 					furthest = u;
 				}
 			});
-			const pStart = map.latLngToContainerPoint([avgLat, avgLng]);
-			const pEnd = map.latLngToContainerPoint([furthest.lat, furthest.lng]);
+			const pStart = project(avgLat, avgLng);
+			const pEnd = project(furthest.lat, furthest.lng);
 			angle = Math.atan2(pEnd.y - pStart.y, pEnd.x - pStart.x);
 
 			// Normalize angle to be horizontal-ish and upright

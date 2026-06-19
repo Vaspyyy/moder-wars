@@ -1909,7 +1909,7 @@ const _tickMetadataById = new Map();
 const _tickCityGridIndexSet = new Set();
 const _tickSideAllyIdSets = [];
 const _tickSideSupportIdSets = [];
-const _tickUnitsBySide = [];
+export const _tickUnitsBySide = [];
 const _tickUnitGridIdx = new Map();
 let _tickAllCombatants = [];
 
