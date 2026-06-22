@@ -1774,6 +1774,7 @@ export let bombsDisabled = false;
 export let activeRebellion = null; // { rebelId, overlordId }
 export let mountainsEnabled = true;
 export let showUnitsVisually = true;
+export let hideCurvedLabels = false;
 export let disableCountryGradient = false;
 // When false, hiddenBuffState is ignored and only visible buffState is used.
 export let invisibleBuffsEnabled =
@@ -2493,6 +2494,9 @@ export const clearCustomTrackBtn = document.getElementById(
 );
 export const disableUnitsVisuallyCheckbox = document.getElementById(
 	"disable-units-visually-checkbox",
+);
+export const hideCurvedLabelsCheckbox = document.getElementById(
+	"hide-curved-labels-checkbox",
 );
 export const disableAutoFullscreenCheckbox = document.getElementById(
 	"disable-auto-fullscreen-checkbox",
@@ -17284,6 +17288,8 @@ export function initializeEngine() {
 	showUnitsVisually = !document.getElementById(
 		"disable-units-visually-checkbox",
 	).checked;
+	hideCurvedLabels = !!document.getElementById("hide-curved-labels-checkbox")
+		?.checked;
 	disableCountryGradient = !!document.getElementById(
 		"disable-country-gradient-checkbox",
 	)?.checked;
@@ -17483,6 +17489,11 @@ export function checkAutoLaunch() {
 			showUnitsVisually = true;
 		}
 
+		if (getCookie("mw_hide_curved_labels") === "true") {
+			document.getElementById("hide-curved-labels-checkbox").checked = true;
+			hideCurvedLabels = true;
+		}
+
 		const gradSaved = getCookie("mw_disable_country_gradient");
 		if (gradSaved === "true") {
 			disableCountryGradientCheckbox.checked = true;
@@ -17555,12 +17566,16 @@ document.querySelectorAll(".settings-tab-btn").forEach((btn) => {
 
 if (disableCountryGradientCheckbox) {
 	disableCountryGradientCheckbox.addEventListener("change", (e) => {
-		disableCountryGradient = e.target.checked;
 		setCookie(
 			"mw_disable_country_gradient",
 			e.target.checked ? "true" : "false",
 		);
-		influenceLayer.render();
+	});
+}
+if (hideCurvedLabelsCheckbox) {
+	hideCurvedLabelsCheckbox.addEventListener("change", (e) => {
+		hideCurvedLabels = e.target.checked;
+		setCookie("mw_hide_curved_labels", e.target.checked ? "true" : "false");
 	});
 }
 

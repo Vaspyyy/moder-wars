@@ -34,6 +34,7 @@ import {
 	godModeActive,
 	gridHeight,
 	gridWidth,
+	hideCurvedLabels,
 	imagerySelect,
 	influenceLayer,
 	initialCombatants,
@@ -1998,7 +1999,7 @@ const ControlMapLayer = L.Layer.extend({
 
 		// PASS 6: Curved Soldier Labels (HOI4 Style)
 		// Drawn AFTER units so they appear on top
-		if (isWar) {
+		if (isWar && !hideCurvedLabels) {
 			for (let sIdx = 0; sIdx < MAX_SIDES; sIdx++) {
 				if (sides[sIdx] && sides[sIdx].length > 0) {
 					this.drawCurvedLabel(ctx, sIdx);
