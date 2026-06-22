@@ -1,0 +1,25 @@
+src/main.js
+  s_ebf44685bd7fc5::t_485806b55f5671 2498-2500
+  s_ebf44685bd7fc5::t_0127a43b5e5655 17573-17578
+  s_ebf44685bd7fc5::t_770265b22915f5 17291-17292
+  s_ebf44685bd7fc5::t_9e63c356968807 17492-17496
+  s_ebf44685bd7fc5::t_5bd83aa85b8461 1777
+src/renderer.js
+  s_ebf44685bd7fc5::t_770265b22915f5 37,2002
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "9ef56f9c15cf902efa91f2ce84fe6d2a305bf2af",
+  "prompts": {},
+  "sessions": {
+    "s_ebf44685bd7fc5": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_125d96aeffferYdwzTzMclKZUo",
+        "model": "unknown"
+      },
+      "human_author": "Vaspyyy <lolbautz2@gmail.com>"
+    }
+  }
+}
