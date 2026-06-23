@@ -1,0 +1,36 @@
+src/main.js
+  s_570a113165757b::t_53d8ff27805b04 10651,10654,10996-10997
+  s_570a113165757b::t_9f9b1a23619cc0 11055-11062,11064,11071,11073-11075,11474
+  s_570a113165757b::t_a1a67af1dd8288 14426
+  s_570a113165757b::t_d369e0f2ea70f4 12074
+  s_570a113165757b::t_1cc78e9e47a5d6 14453
+  s_570a113165757b::t_692fba9f428a59 13778
+  s_570a113165757b::t_fe2a45d4c8e1ec 14424-14425,14433-14436
+  s_570a113165757b::t_008128a48be122 11310-11314,11465-11471,11514-11518
+  s_570a113165757b::t_4cd36b33ecdb27 11901-11905,11922-11923,11964-11965,12073,12308-12309,12356-12357
+workers/service-worker.js
+  s_570a113165757b::t_e04d40f9d13de5 3
+index.html
+  s_570a113165757b::t_c9a7c290fa24ad 19,1275
+  s_570a113165757b::t_e04d40f9d13de5 7
+src/renderer.js
+  s_570a113165757b::t_4176df4ac52e83 1355-1371,1373-1399,1402-1433
+src/config.js
+  s_570a113165757b::t_77e23d0d8c7775 76-77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "da91573fc22e1b6d5e6c57924cbb9724b50b6aba",
+  "prompts": {},
+  "sessions": {
+    "s_570a113165757b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ef58e-2a9a-7ce3-85c6-baa781d54ca3",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vaspyyy <lolbautz2@gmail.com>"
+    }
+  }
+}
