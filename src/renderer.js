@@ -1352,48 +1352,85 @@ const ControlMapLayer = L.Layer.extend({
 		ctx.beginPath();
 
 		const borderStep = currentZoom < 5 ? 2 : 1;
+		const borderRowStep = gridWidth * borderStep;
 
-		const getEffectiveId = (idx) => {
-			if (idx < 0 || idx >= worldControlMap.length || landMask[idx] === 0)
-				return -1; // -1 represents water
-			if (!isFlag) return worldControlMap[idx];
+		if (isFlag) {
+			const getEffectiveId = (idx) => {
+				if (idx < 0 || idx >= worldControlMap.length || landMask[idx] === 0)
+					return -1; // -1 represents water
 
-			const sovereignId = worldControlMap[idx];
-			if (sovereignId <= 0) return 0;
-			if (isWar && landMask[idx] === 2) {
-				const sSide = sovereignSideMap[sovereignId];
-				const ds = dominantSideMap[idx];
-				const isOccupiedByEnemy = ds !== -1 && ds !== sSide;
-				if (isOccupiedByEnemy) return primaryOccupierMap[idx] || sovereignId;
-			}
-			return sovereignId;
-		};
+				const sovereignId = worldControlMap[idx];
+				if (sovereignId <= 0) return 0;
+				if (isWar && landMask[idx] === 2) {
+					const sSide = sovereignSideMap[sovereignId];
+					const ds = dominantSideMap[idx];
+					const isOccupiedByEnemy = ds !== -1 && ds !== sSide;
+					if (isOccupiedByEnemy) return primaryOccupierMap[idx] || sovereignId;
+				}
+				return sovereignId;
+			};
 
-		for (let y = yMin; y < yMax; y += borderStep) {
-			for (let x = xMin; x < xMax; x += borderStep) {
-				const i = y * gridWidth + x;
-				const id = getEffectiveId(i);
+			for (let y = yMin; y < yMax; y += borderStep) {
+				const rowOffset = y * gridWidth;
+				for (let x = xMin; x < xMax; x += borderStep) {
+					const i = rowOffset + x;
+					const id = getEffectiveId(i);
 
-				if (x + borderStep < gridWidth) {
-					const idR = getEffectiveId(i + borderStep);
-					if (id !== idR && (id !== -1 || idR !== -1)) {
-						const p1x = gridXP[x + borderStep - xMin];
-						const p1y = gridYP[y - yMin];
-						const p2x = gridXP[x + borderStep - xMin];
-						const p2y = gridYP[y + borderStep - yMin];
-						ctx.moveTo(p1x, p1y);
-						ctx.lineTo(p2x, p2y);
+					if (x + borderStep < gridWidth) {
+						const idR = getEffectiveId(i + borderStep);
+						if (id !== idR && (id !== -1 || idR !== -1)) {
+							const p1x = gridXP[x + borderStep - xMin];
+							const p1y = gridYP[y - yMin];
+							const p2x = gridXP[x + borderStep - xMin];
+							const p2y = gridYP[y + borderStep - yMin];
+							ctx.moveTo(p1x, p1y);
+							ctx.lineTo(p2x, p2y);
+						}
+					}
+					if (y + borderStep < gridHeight) {
+						const idD = getEffectiveId(i + borderRowStep);
+						if (id !== idD && (id !== -1 || idD !== -1)) {
+							const p1x = gridXP[x - xMin];
+							const p1y = gridYP[y + borderStep - yMin];
+							const p2x = gridXP[x + borderStep - xMin];
+							const p2y = gridYP[y + borderStep - yMin];
+							ctx.moveTo(p1x, p1y);
+							ctx.lineTo(p2x, p2y);
+						}
 					}
 				}
-				if (y + borderStep < gridHeight) {
-					const idD = getEffectiveId(i + gridWidth * borderStep);
-					if (id !== idD && (id !== -1 || idD !== -1)) {
-						const p1x = gridXP[x - xMin];
-						const p1y = gridYP[y + borderStep - yMin];
-						const p2x = gridXP[x + borderStep - xMin];
-						const p2y = gridYP[y + borderStep - yMin];
-						ctx.moveTo(p1x, p1y);
-						ctx.lineTo(p2x, p2y);
+			}
+		} else {
+			for (let y = yMin; y < yMax; y += borderStep) {
+				const rowOffset = y * gridWidth;
+				for (let x = xMin; x < xMax; x += borderStep) {
+					const i = rowOffset + x;
+					const id = landMask[i] === 0 ? -1 : worldControlMap[i];
+
+					if (x + borderStep < gridWidth) {
+						const rightIdx = i + borderStep;
+						const idR =
+							landMask[rightIdx] === 0 ? -1 : worldControlMap[rightIdx];
+						if (id !== idR && (id !== -1 || idR !== -1)) {
+							const p1x = gridXP[x + borderStep - xMin];
+							const p1y = gridYP[y - yMin];
+							const p2x = gridXP[x + borderStep - xMin];
+							const p2y = gridYP[y + borderStep - yMin];
+							ctx.moveTo(p1x, p1y);
+							ctx.lineTo(p2x, p2y);
+						}
+					}
+					if (y + borderStep < gridHeight) {
+						const downIdx = i + borderRowStep;
+						const idD = landMask[downIdx] === 0 ? -1 : worldControlMap[downIdx];
+						if (id !== idD && (id !== -1 || idD !== -1)) {
+							const p1x = gridXP[x - xMin];
+							const p1y = gridYP[y + borderStep - yMin];
+							const p2x = gridXP[x + borderStep - xMin];
+							const p2y = gridYP[y + borderStep - yMin];
+							ctx.moveTo(p1x, p1y);
+							ctx.lineTo(p2x, p2y);
+						}
 					}
 				}
 			}

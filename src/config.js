@@ -73,4 +73,6 @@ export const CONFIG = {
 	ENABLE_STALE_TARGET_SKIP: true,
 	STALE_TARGET_SCAN_INTERVAL: 3,
 	STALE_TARGET_MAX_CACHE_DIST_SQ: 0.09, // ~0.3° engagement radius squared
+	STALE_TARGET_SCAN_INTERVAL_FAST: 6,
+	STALE_TARGET_MAX_CACHE_DIST_SQ_FAST: 0.64, // ~0.8° cache radius at high sim speed
 };

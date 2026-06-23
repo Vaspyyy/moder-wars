@@ -10648,9 +10648,10 @@ export function performSimulationTick() {
 		}
 		arr.push(city);
 	}
+	const _detailedPerfEnabled = _perfEnabled === true;
 	for (let i = units.length - 1; i >= 0; i--) {
 		const u = units[i];
-		const _u1 = performance.now(); // per-unit sub-timer start
+		const _u1 = _detailedPerfEnabled ? performance.now() : 0; // per-unit sub-timer start
 
 		// Scrub NaN units immediately to prevent rendering crashes
 		if (Number.isNaN(u.lat) || Number.isNaN(u.lng)) {
@@ -10992,8 +10993,8 @@ export function performSimulationTick() {
 		}
 
 		// ── unitLoop sub-timer checkpoint: end setupTerrain, start unitSpatialHash ──
-		const _u2 = performance.now();
-		window.__perf.unitSetupTerrain += _u2 - _u1;
+		const _u2 = _detailedPerfEnabled ? performance.now() : 0;
+		if (_detailedPerfEnabled) window.__perf.unitSetupTerrain += _u2 - _u1;
 
 		// Tactical Awareness: Identify enemies and local balance of power using O(1) Spatial Hash
 		let target = null;
@@ -11051,16 +11052,27 @@ export function performSimulationTick() {
 				u._cachedTarget.health > 0
 			) {
 				const movedCell = u._cachedScanKx !== kx || u._cachedScanKy !== ky;
+				const staleScanInterval =
+					simSpeed >= 3
+						? CONFIG.STALE_TARGET_SCAN_INTERVAL_FAST
+						: CONFIG.STALE_TARGET_SCAN_INTERVAL;
+				const staleMaxDistSq =
+					simSpeed >= 3
+						? CONFIG.STALE_TARGET_MAX_CACHE_DIST_SQ_FAST
+						: CONFIG.STALE_TARGET_MAX_CACHE_DIST_SQ;
 				const staggerSkip =
-					(simFrameCount + u.id * 7) % CONFIG.STALE_TARGET_SCAN_INTERVAL !== 0;
+					(simFrameCount + u.id * 7) % staleScanInterval !== 0;
 				if (!movedCell && staggerSkip) {
 					const cached = u._cachedTarget;
 					let deLng = cached.lng - u.lng;
 					if (deLng > 180) deLng -= 360;
 					else if (deLng < -180) deLng += 360;
 					const cdSq = (u.lat - cached.lat) ** 2 + deLng ** 2;
-					if (cdSq <= CONFIG.STALE_TARGET_MAX_CACHE_DIST_SQ) {
+					if (cdSq <= staleMaxDistSq) {
 						target = cached;
+						localEnemyCount = 1;
+						enemyCentroidLat = cached.lat;
+						enemyCentroidLng = cached.lng;
 						didStaleSkip = true;
 						// Proximity damage vs cached target (same logic as full scan)
 						if (cdSq < 0.09) {
@@ -11295,9 +11307,11 @@ export function performSimulationTick() {
 			}
 			// ── End stale-skip guard ──
 
-			const _tEnemyDone = performance.now();
-			window.__perf.unitEnemyScan =
-				(window.__perf.unitEnemyScan || 0) + _tEnemyDone - _u2;
+			const _tEnemyDone = _detailedPerfEnabled ? performance.now() : 0;
+			if (_detailedPerfEnabled) {
+				window.__perf.unitEnemyScan =
+					(window.__perf.unitEnemyScan || 0) + _tEnemyDone - _u2;
+			}
 
 			// ── Garrison (moved out of neighbor loop — runs once per unit) ──
 			if (!u.navalAssigned && !u.supplyAssigned && !u.coastalAssigned) {
@@ -11448,14 +11462,16 @@ export function performSimulationTick() {
 				}
 			}
 
-			const _tGarrisonCoastal = performance.now();
-			window.__perf.unitGarrisonCoastal =
-				(window.__perf.unitGarrisonCoastal || 0) +
-				_tGarrisonCoastal -
-				_tEnemyDone;
+			const _tGarrisonCoastal = _detailedPerfEnabled ? performance.now() : 0;
+			if (_detailedPerfEnabled) {
+				window.__perf.unitGarrisonCoastal =
+					(window.__perf.unitGarrisonCoastal || 0) +
+					_tGarrisonCoastal -
+					_tEnemyDone;
+			}
 
 			// ── Ally pass: iterate own side's hash for repulsion ──
-			if (!skipAllyScan) {
+			if (!skipAllyScan && !didStaleSkip) {
 				const allyHash = unitHashBySide[sideIndex];
 				for (let dy = -2; dy <= 2; dy++) {
 					for (let dx = -2; dx <= 2; dx++) {
@@ -11495,9 +11511,11 @@ export function performSimulationTick() {
 					}
 				}
 			}
-			const _tAllyDone = performance.now();
-			window.__perf.unitAllyScan =
-				(window.__perf.unitAllyScan || 0) + _tAllyDone - _tGarrisonCoastal;
+			const _tAllyDone = _detailedPerfEnabled ? performance.now() : 0;
+			if (_detailedPerfEnabled) {
+				window.__perf.unitAllyScan =
+					(window.__perf.unitAllyScan || 0) + _tAllyDone - _tGarrisonCoastal;
+			}
 		} else {
 			// ═══ Legacy scan (flag off): iterates global unitSpatialHash ═══
 			for (let dy = -2; dy <= 2; dy++) {
@@ -11880,9 +11898,11 @@ export function performSimulationTick() {
 		}
 
 		// ── unitLoop sub-timer checkpoint: end unitSpatialHash, start retreatMopUp ──
-		const _u3 = performance.now();
-		window.__perf.unitScanPhase =
-			(window.__perf.unitScanPhase || 0) + _u3 - _u2;
+		const _u3 = _detailedPerfEnabled ? performance.now() : 0;
+		if (_detailedPerfEnabled) {
+			window.__perf.unitScanPhase =
+				(window.__perf.unitScanPhase || 0) + _u3 - _u2;
+		}
 
 		// Retreat logic: If enemy force is > 5x ally force (increased threshold to prevent premature dodging)
 		if (
@@ -11899,8 +11919,8 @@ export function performSimulationTick() {
 			}
 		}
 
-		const _u3a = performance.now();
-		window.__perf.unitRetreatDecision += _u3a - _u3;
+		const _u3a = _detailedPerfEnabled ? performance.now() : 0;
+		if (_detailedPerfEnabled) window.__perf.unitRetreatDecision += _u3a - _u3;
 
 		const collapsedEnemyNations = sideToCollapsedNations[sideIndex] || [];
 
@@ -11941,8 +11961,8 @@ export function performSimulationTick() {
 			});
 		}
 
-		const _u3b = performance.now();
-		window.__perf.unitGlobalFallback += _u3b - _u3a;
+		const _u3b = _detailedPerfEnabled ? performance.now() : 0;
+		if (_detailedPerfEnabled) window.__perf.unitGlobalFallback += _u3b - _u3a;
 
 		// Unified behavior: Units hunt enemies when nearby, but switch to focused territory capture (mop-up)
 		// when there are literally zero enemy units remaining.
@@ -12050,8 +12070,8 @@ export function performSimulationTick() {
 			}
 		}
 
-		const _u3c = performance.now();
-		window.__perf.unitFrontlinePress += _u3c - _u3b;
+		const _u3c = _detailedPerfEnabled ? performance.now() : 0;
+		if (_detailedPerfEnabled) window.__perf.unitFrontlinePress += _u3c - _u3b;
 
 		if (shouldMopUp) {
 			// Mop-up mode: Enemy has no units or target is far and collapsed nations exist
@@ -12285,8 +12305,8 @@ export function performSimulationTick() {
 			}
 		}
 
-		const _u3d = performance.now();
-		window.__perf.unitMopUpSearch += _u3d - _u3c;
+		const _u3d = _detailedPerfEnabled ? performance.now() : 0;
+		if (_detailedPerfEnabled) window.__perf.unitMopUpSearch += _u3d - _u3c;
 
 		// CITY-FOCUS COMBAT MODE:
 		let _u4;
@@ -12333,8 +12353,8 @@ export function performSimulationTick() {
 			}
 
 			// ── unitLoop sub-timer checkpoint: end retreatMopUp, start combatMove ──
-			_u4 = performance.now();
-			window.__perf.unitRetreatMopUp += _u4 - _u3;
+			_u4 = _detailedPerfEnabled ? performance.now() : 0;
+			if (_detailedPerfEnabled) window.__perf.unitRetreatMopUp += _u4 - _u3;
 
 			if (dist > 0.05) {
 				// Movement logic
@@ -13755,7 +13775,7 @@ export function performSimulationTick() {
 		}
 
 		// ── unitLoop sub-timer: end combatMove ──
-		if (_u4 !== undefined)
+		if (_detailedPerfEnabled && _u4 !== undefined)
 			window.__perf.unitCombatMove += performance.now() - _u4;
 	}
 
@@ -14401,13 +14421,19 @@ export function updateLoop(now) {
 	if (!isPaused) {
 		// Run sub-ticks based on simSpeed (handles both fast-forward and slow-motion)
 		frameAccumulator += simSpeed;
-		while (frameAccumulator >= 1) {
+		const maxSubTicksThisFrame = simSpeed >= 3 ? 2 : Infinity;
+		let subTicksThisFrame = 0;
+		while (frameAccumulator >= 1 && subTicksThisFrame < maxSubTicksThisFrame) {
 			const warEnded = performSimulationTick();
 			if (warEnded) {
 				frameAccumulator = 0;
 				return;
 			}
 			frameAccumulator -= 1;
+			subTicksThisFrame++;
+		}
+		if (simSpeed >= 3 && frameAccumulator > 1) {
+			frameAccumulator = 1;
 		}
 
 		// Advance in-game date by real time (clamped to avoid huge jumps on tab switch)
@@ -14424,7 +14450,7 @@ export function updateLoop(now) {
 	if (simSpeed >= 5) {
 		skipRenderThisFrame = simFrameCount % 5 !== 0;
 	} else if (simSpeed >= 3) {
-		skipRenderThisFrame = simFrameCount % 3 !== 0;
+		skipRenderThisFrame = simFrameCount % 4 !== 0;
 	} else if (simSpeed >= 2) {
 		skipRenderThisFrame = simFrameCount % 2 !== 0;
 	}
