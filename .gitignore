@@ -4,3 +4,11 @@ Firefox*.json
 # OS files
 .DS_Store
 Thumbs.db
+.directory
+
+# Local project docs/tooling
+AGENTS.md
+AI_COMMANDER.md
+biome.json
+.mimocode/
+.opencode/
