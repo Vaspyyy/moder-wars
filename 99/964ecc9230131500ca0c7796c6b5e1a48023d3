@@ -1,0 +1,23 @@
+index.html
+  s_fa06fd93f78550::t_281134da4c7754 7
+.gitignore
+  s_fa06fd93f78550::t_4ecd90a17935dc 7-14
+workers/service-worker.js
+  s_fa06fd93f78550::t_281134da4c7754 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.11",
+  "base_commit_sha": "99964ecc9230131500ca0c7796c6b5e1a48023d3",
+  "prompts": {},
+  "sessions": {
+    "s_fa06fd93f78550": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ef6b3-cd21-7bc0-9624-72d0de657664",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Vaspyyy <lolbautz2@gmail.com>"
+    }
+  }
+}
