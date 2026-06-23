@@ -1837,9 +1837,10 @@ export let preGodModeState = "SIMULATING";
 export const latestCountryStats = new Map();
 export let disableFullscreen = getCookie("mw_disable_fullscreen") === "true";
 
-// ── Global perf profiler init (once at module load, before any tick code runs) ──
-window.__perf = {
+const PERF_COUNTER_DEFAULTS = {
 	_version: "V0.26.1",
+	_mode: "off",
+	_enabled: false,
 	plans: 0,
 	proposals: 0,
 	eval: 0,
@@ -1890,6 +1891,32 @@ window.__perf = {
 	waterPathPenalized: 0,
 	coastStuckAbandoned: 0,
 };
+
+function createPerfState(mode = "off") {
+	return {
+		...PERF_COUNTER_DEFAULTS,
+		_mode: mode,
+		_enabled: mode !== "off",
+		_history: [],
+		_frameHistory: [],
+		_frameSpikes: [],
+		_scheduler: {
+			frames: 0,
+			renderedFrames: 0,
+			skippedRenderFrames: 0,
+			requestedSubTicks: 0,
+			executedSubTicks: 0,
+			cappedSubTickFrames: 0,
+			cappedSubTicks: 0,
+			accumulatorSum: 0,
+			maxAccumulator: 0,
+		},
+		_lastBenchmark: null,
+	};
+}
+
+// ── Global perf profiler init (once at module load, before any tick code runs) ──
+window.__perf = createPerfState();
 
 // High-performance spatial cache for unit culling and combat
 export const unitSpatialHash = new Map();
@@ -6438,6 +6465,19 @@ function showBenchmarkResults() {
 	const avgFps = 1000 / avg;
 	const minFps = 1000 / max;
 	const maxFps = 1000 / min;
+	if (window.__perf) {
+		window.__perf._lastBenchmark = {
+			frames: _perfSamples.length,
+			speed: simSpeed,
+			avgFps,
+			minFps,
+			maxFps,
+			avgFrameMs: avg,
+			maxFrameMs: max,
+			minFrameMs: min,
+			endedAt: new Date().toISOString(),
+		};
+	}
 	if (benchmarkStatsEl) {
 		benchmarkStatsEl.innerHTML =
 			`Frames: ${_perfSamples.length} &nbsp;|&nbsp; Speed: ${simSpeed}x<br>` +
@@ -6506,6 +6546,12 @@ export async function startBenchmark() {
 	// Initialize benchmark state
 	isPaused = false;
 	_perfSamples = [];
+	if (window.__perf) {
+		window.__perf._frameHistory = [];
+		window.__perf._frameSpikes = [];
+		window.__perf._scheduler = createPerfState(window.__perf._mode)._scheduler;
+		window.__perf._lastBenchmark = null;
+	}
 	_perfBenchmarkEnd = performance.now() + 60_000;
 	_isBenchmarking = true;
 }
@@ -9245,63 +9291,10 @@ export function evaluateAllPlans() {
 
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
-	if (!window.__perf)
-		window.__perf = {
-			_version: "V0.26.1",
-			_enabled: false,
-			plans: 0,
-			proposals: 0,
-			eval: 0,
-			neutralBorder: 0,
-			recruit: 0,
-			unitLoop: 0,
-			post: 0,
-			prePlans: 0,
-			influence: 0,
-			smoothing: 0,
-			phase0: 0,
-			phase67: 0,
-			phase133: 0,
-			spatialHash: 0,
-			frontline: 0,
-			consolidate: 0,
-			caches: 0,
-			victory: 0,
-			aiPosture: 0,
-			posture: 0,
-			render: 0,
-			tickTotal: 0,
-			maxTick: 0,
-			ticks: 0,
-			proposalRuns: 0,
-			proposalFailed: 0,
-			reassess_noPlan: 0,
-			reassess_interval: 0,
-			reassess_forced: 0,
-			reassess_territory: 0,
-			reassess_posture: 0,
-			reassess_ratio: 0,
-			// unitLoop sub-timers
-			unitSetupTerrain: 0,
-			unitScanPhase: 0,
-			unitEnemyScan: 0,
-			unitAllyScan: 0,
-			unitGarrisonCoastal: 0,
-			unitRetreatMopUp: 0,
-			unitRetreatDecision: 0,
-			unitGlobalFallback: 0,
-			unitFrontlinePress: 0,
-			unitMopUpSearch: 0,
-			unitCombatMove: 0,
-			// Water avoidance debug counters
-			coastDeflectHalved: 0,
-			knockbackBlocked: 0,
-			waterPathPenalized: 0,
-			coastStuckAbandoned: 0,
-		};
+	if (!window.__perf) window.__perf = createPerfState();
 	window.__perf.ticks++;
 	// ── Perf snapshot for per-tick delta computation ──
-	const _perfEnabled = window.__perf._enabled;
+	const _perfEnabled = window.__perf._mode !== "off";
 	const _perfSnap = _perfEnabled ? {} : null;
 	const _perfKeys = [
 		"plans",
@@ -10648,7 +10641,7 @@ export function performSimulationTick() {
 		}
 		arr.push(city);
 	}
-	const _detailedPerfEnabled = _perfEnabled === true;
+	const _detailedPerfEnabled = window.__perf._mode === "detailed";
 	for (let i = units.length - 1; i >= 0; i--) {
 		const u = units[i];
 		const _u1 = _detailedPerfEnabled ? performance.now() : 0; // per-unit sub-timer start
@@ -14237,51 +14230,134 @@ export function performSimulationTick() {
 	return false;
 }
 
-// ── Perf Report: type window.perfReport() in console ──
-window.perfEnable = () => {
-	if (!window.__perf) window.__perf = { ticks: 0, _enabled: false };
-	window.__perf._enabled = true;
-	return "perf tracking enabled — let the sim run, then call window.perfReport()";
-};
-window.perfDisable = () => {
-	if (window.__perf) window.__perf._enabled = false;
-	return "perf tracking disabled";
-};
-window.perfReport = () => {
-	const h = window.__perf?._history;
-	if (!h?.length) {
-		const msg = "no perf history yet — let the sim run a few ticks";
-		return msg;
+function percentile(sortedValues, ratio) {
+	if (!sortedValues.length) return 0;
+	const idx = Math.min(
+		sortedValues.length - 1,
+		Math.floor(sortedValues.length * ratio),
+	);
+	return sortedValues[idx] || 0;
+}
+
+function summarizeSamples(samples) {
+	if (!samples.length) {
+		return { count: 0, min: 0, p50: 0, p95: 0, p99: 0, max: 0, avg: 0 };
+	}
+	const sorted = [...samples].sort((a, b) => a - b);
+	const total = samples.reduce((sum, value) => sum + value, 0);
+	return {
+		count: samples.length,
+		min: sorted[0],
+		p50: percentile(sorted, 0.5),
+		p95: percentile(sorted, 0.95),
+		p99: percentile(sorted, 0.99),
+		max: sorted[sorted.length - 1],
+		avg: total / samples.length,
+	};
+}
+
+function getRenderSkipCadence() {
+	if (simSpeed >= 5) return "1 / 5 frames rendered";
+	if (simSpeed >= 3) return "1 / 4 frames rendered";
+	if (simSpeed >= 2) return "1 / 2 frames rendered";
+	return "every frame";
+}
+
+function getPerfConfigSnapshot() {
+	return {
+		gridRes: CONFIG.GRID_RES,
+		mapResolution: mapResSelect?.value || null,
+		maxUnitsPerSide: CONFIG.MAX_UNITS_PER_SIDE,
+		simSpeed,
+		viewMode,
+		unitCount: units.length,
+		sideCount: sides.length,
+		renderSkipCadence: getRenderSkipCadence(),
+		staleTargetScanInterval:
+			simSpeed >= 3
+				? CONFIG.STALE_TARGET_SCAN_INTERVAL_FAST
+				: CONFIG.STALE_TARGET_SCAN_INTERVAL,
+		staleTargetMaxCacheDistSq:
+			simSpeed >= 3
+				? CONFIG.STALE_TARGET_MAX_CACHE_DIST_SQ_FAST
+				: CONFIG.STALE_TARGET_MAX_CACHE_DIST_SQ,
+		frontlineFieldUpdateInterval: FRONTLINE_FIELD_UPDATE_INTERVAL,
+		frontlinePolyUpdateInterval: FRONTLINE_POLY_UPDATE_INTERVAL,
+	};
+}
+
+function recordPerfFrame(entry) {
+	if (!window.__perf || (window.__perf._mode === "off" && !_isBenchmarking)) {
+		return;
+	}
+	if (!window.__perf._frameHistory) window.__perf._frameHistory = [];
+	window.__perf._frameHistory.push(entry);
+	if (window.__perf._frameHistory.length > 600) {
+		window.__perf._frameHistory.shift();
+	}
+	if (entry.ms < 100) return;
+
+	const history = window.__perf._history || [];
+	const nearestTick = history[history.length - 1] || null;
+	let topCategory = null;
+	if (nearestTick?.cats) {
+		for (const [name, ms] of Object.entries(nearestTick.cats)) {
+			if (!topCategory || ms > topCategory.ms) topCategory = { name, ms };
+		}
+	}
+	const reason =
+		entry.ms >= 350 ? ">=350ms" : entry.ms >= 250 ? ">=250ms" : ">=100ms";
+	if (!window.__perf._frameSpikes) window.__perf._frameSpikes = [];
+	window.__perf._frameSpikes.push({
+		...entry,
+		reason,
+		nearestTick: nearestTick
+			? {
+					tick: nearestTick.tick,
+					ms: nearestTick.ms,
+					units: nearestTick.units,
+					topCategory,
+				}
+			: null,
+	});
+	if (window.__perf._frameSpikes.length > 80) {
+		window.__perf._frameSpikes.shift();
+	}
+}
+
+function getPerfReportData() {
+	const h = window.__perf?._history || [];
+	const frameEntries = window.__perf?._frameHistory || [];
+	const benchmark = window.__perf?._lastBenchmark || null;
+	if (!h.length && !frameEntries.length && !benchmark) {
+		return {
+			ok: false,
+			message:
+				"no perf history yet — call window.perfEnable() and let the sim run",
+			instrumentation: window.__perf?._mode || "off",
+			benchmark: window.__perf?._lastBenchmark || null,
+			config: getPerfConfigSnapshot(),
+		};
 	}
 	const n = h.length;
-	const allMs = h.map((e) => e.ms).sort((a, b) => a - b);
-	const avgMs = allMs.reduce((s, v) => s + v, 0) / n;
-	const p50 = allMs[Math.floor(n * 0.5)];
-	const p95 = allMs[Math.floor(n * 0.95)];
-	const p99 = allMs[Math.floor(n * 0.99)];
-	const maxMs = allMs[n - 1];
-	const minMs = allMs[0];
-	const fps =
-		avgMs > 0 && Number.isFinite(avgMs) ? (1000 / avgMs).toFixed(0) : "—";
+	const tickSummary = summarizeSamples(h.map((e) => e.ms));
 
 	// Unit stats
 	const unitCounts = h.map((e) => e.units || 0);
-	const avgUnits = unitCounts.reduce((s, v) => s + v, 0) / n;
-	const maxUnits = Math.max(...unitCounts);
+	const avgUnits = n > 0 ? unitCounts.reduce((s, v) => s + v, 0) / n : 0;
+	const maxUnits = unitCounts.length ? Math.max(...unitCounts) : 0;
 
-	// Per-category averages and p95
-	const catKeys = Object.keys(h[0].cats || {});
-	const avgs = {};
+	// Per-category averages, percentiles, and max
+	const catKeys = Object.keys(h[0]?.cats || {});
 	const catSamples = {};
 	for (const k of catKeys) catSamples[k] = [];
 	for (const e of h) {
 		for (const k of catKeys) {
-			const v = e.cats[k] || 0;
-			avgs[k] = (avgs[k] || 0) + v / n;
-			catSamples[k].push(v);
+			catSamples[k].push(e.cats[k] || 0);
 		}
 	}
-	for (const k of catKeys) catSamples[k].sort((a, b) => a - b);
+	const categories = {};
+	for (const k of catKeys) categories[k] = summarizeSamples(catSamples[k]);
 
 	// Reassessment totals from history
 	const reassessKeys = [
@@ -14303,49 +14379,15 @@ window.perfReport = () => {
 	}
 
 	// Delta since last report (per-tick average change)
+	const categoryAvgs = {};
+	for (const [k, stats] of Object.entries(categories))
+		categoryAvgs[k] = stats.avg;
 	const prevAvgs = window.__perf._lastReportAvgs;
 	const delta = {};
 	if (prevAvgs) {
-		for (const k of catKeys) delta[k] = (avgs[k] || 0) - (prevAvgs[k] || 0);
+		for (const k of catKeys)
+			delta[k] = (categoryAvgs[k] || 0) - (prevAvgs[k] || 0);
 	}
-	window.__perf._lastReportAvgs = { ...avgs };
-
-	const lines = [];
-	lines.push(
-		`=== PERF REPORT (${n} ticks, avg ${avgMs.toFixed(1)}ms, ~${fps} fps) ===`,
-	);
-	lines.push(
-		`  min: ${minMs.toFixed(1)}ms | p50: ${p50.toFixed(1)}ms | p95: ${p95.toFixed(1)}ms | p99: ${p99.toFixed(1)}ms | max: ${maxMs.toFixed(1)}ms`,
-	);
-	lines.push(`  units: avg ${avgUnits.toFixed(0)} | max ${maxUnits}`);
-	lines.push("  ─────────────────────────────────────────────");
-
-	const sorted = Object.entries(avgs).sort((a, b) => b[1] - a[1]);
-	for (const [k, v] of sorted) {
-		if (v < 0.05 || Number.isNaN(v)) continue;
-		const rawPct = avgMs > 0 ? v / avgMs : 0;
-		const pct = Number.isFinite(rawPct) ? (rawPct * 100).toFixed(0) : "—";
-		const barCount = Number.isFinite(rawPct)
-			? Math.min(20, Math.round(rawPct * 20))
-			: 0;
-		const bar = "█".repeat(Math.max(0, barCount));
-		const samples = catSamples[k];
-		const catP95 = samples[Math.floor(samples.length * 0.95)];
-		const deltaStr = prevAvgs
-			? `  Δ${(delta[k] || 0) >= 0 ? "+" : ""}${(delta[k] || 0).toFixed(2)}ms`
-			: "";
-		lines.push(
-			`  ${k.padEnd(14)} ${v.toFixed(1).padStart(6)}ms (${pct.padStart(2)}%) ${bar.padEnd(20)} p95:${catP95.toFixed(1).padStart(5)}ms${deltaStr}`,
-		);
-	}
-
-	lines.push("  ─────────────────────────────────────────────");
-	lines.push(
-		`  reassess: ${reassessTotals.proposalRuns} runs | forced: ${reassessTotals.reassess_forced} | failed: ${reassessTotals.proposalFailed}`,
-	);
-	lines.push(
-		`    noPlan:${reassessTotals.reassess_noPlan}  interval:${reassessTotals.reassess_interval}  forced:${reassessTotals.reassess_forced}  territory:${reassessTotals.reassess_territory}  posture:${reassessTotals.reassess_posture}  ratio:${reassessTotals.reassess_ratio}`,
-	);
 
 	// Water avoidance debug counters from history
 	const waterKeys = [
@@ -14362,14 +14404,216 @@ window.perfReport = () => {
 		}
 	}
 	const waterTotal = Object.values(waterTotals).reduce((s, v) => s + v, 0);
-	if (waterTotal > 0) {
-		lines.push(`  water avoidance: ${waterTotal} events`);
+
+	const frameSummary = summarizeSamples(frameEntries.map((e) => e.ms));
+	const renderSummary = summarizeSamples(
+		frameEntries.filter((e) => e.rendered).map((e) => e.renderMs || 0),
+	);
+	const scheduler = window.__perf._scheduler || {};
+	const avgAccumulator =
+		scheduler.frames > 0 ? scheduler.accumulatorSum / scheduler.frames : 0;
+	const verdict = benchmark
+		? {
+				target: "avg FPS >=25, max frame <350ms",
+				avgFpsPass: benchmark.avgFps >= 25,
+				maxFramePass: benchmark.maxFrameMs < 350,
+				pass: benchmark.avgFps >= 25 && benchmark.maxFrameMs < 350,
+				topLikelyCause:
+					benchmark.maxFrameMs >= 350
+						? "long frame spike"
+						: benchmark.avgFps < 25
+							? "sustained frame cost"
+							: "within target",
+			}
+		: null;
+
+	return {
+		ok: true,
+		instrumentation: window.__perf._mode || "off",
+		ticks: {
+			count: n,
+			avgMs: tickSummary.avg,
+			minMs: tickSummary.min,
+			p50Ms: tickSummary.p50,
+			p95Ms: tickSummary.p95,
+			p99Ms: tickSummary.p99,
+			maxMs: tickSummary.max,
+			approxFps: tickSummary.avg > 0 ? 1000 / tickSummary.avg : null,
+		},
+		frames: {
+			...frameSummary,
+			avgFps: frameSummary.avg > 0 ? 1000 / frameSummary.avg : null,
+			renderedFrameRenderMs: renderSummary,
+			spikes: window.__perf._frameSpikes || [],
+		},
+		units: {
+			avg: avgUnits,
+			max: maxUnits,
+			current: units.length,
+		},
+		categories,
+		categoryDeltaSinceLastReport: delta,
+		reassess: reassessTotals,
+		water: {
+			total: waterTotal,
+			...waterTotals,
+		},
+		scheduler: {
+			frames: scheduler.frames || 0,
+			renderedFrames: scheduler.renderedFrames || 0,
+			skippedRenderFrames: scheduler.skippedRenderFrames || 0,
+			requestedSubTicks: scheduler.requestedSubTicks || 0,
+			executedSubTicks: scheduler.executedSubTicks || 0,
+			cappedSubTickFrames: scheduler.cappedSubTickFrames || 0,
+			cappedSubTicks: scheduler.cappedSubTicks || 0,
+			avgAccumulator,
+			maxAccumulator: scheduler.maxAccumulator || 0,
+		},
+		benchmark,
+		verdict,
+		config: getPerfConfigSnapshot(),
+	};
+}
+
+function formatMs(value) {
+	return Number.isFinite(value) ? value.toFixed(1) : "—";
+}
+
+function formatPerfReport(data) {
+	if (!data.ok) return data.message;
+	const tickFps =
+		data.ticks.approxFps && Number.isFinite(data.ticks.approxFps)
+			? data.ticks.approxFps.toFixed(0)
+			: "—";
+	const lines = [];
+	lines.push(
+		`=== PERF REPORT (${data.ticks.count} ticks, ${data.instrumentation} instrumentation, avg ${formatMs(data.ticks.avgMs)}ms, ~${tickFps} tick/s) ===`,
+	);
+	if (data.benchmark) {
+		const v = data.verdict;
 		lines.push(
-			`    pathPenalized:${waterTotals.waterPathPenalized}  coastDeflectHalved:${waterTotals.coastDeflectHalved}  knockbackBlocked:${waterTotals.knockbackBlocked}  coastStuckAbandoned:${waterTotals.coastStuckAbandoned}`,
+			`  benchmark: ${v.pass ? "PASS" : "FAIL"} avgFPS ${data.benchmark.avgFps.toFixed(0)} (${v.avgFpsPass ? "pass" : "fail"}) | maxFrame ${formatMs(data.benchmark.maxFrameMs)}ms (${v.maxFramePass ? "pass" : "fail"})`,
+		);
+		lines.push(`  target: ${v.target} | likely cause: ${v.topLikelyCause}`);
+	}
+	lines.push(
+		`  ticks: min ${formatMs(data.ticks.minMs)}ms | p50 ${formatMs(data.ticks.p50Ms)}ms | p95 ${formatMs(data.ticks.p95Ms)}ms | p99 ${formatMs(data.ticks.p99Ms)}ms | max ${formatMs(data.ticks.maxMs)}ms`,
+	);
+	if (data.frames.count > 0) {
+		lines.push(
+			`  frames: avg ${formatMs(data.frames.avg)}ms (${data.frames.avgFps.toFixed(0)} FPS) | p95 ${formatMs(data.frames.p95)}ms | p99 ${formatMs(data.frames.p99)}ms | max ${formatMs(data.frames.max)}ms | spikes ${data.frames.spikes.length}`,
+		);
+		lines.push(
+			`  render: avg ${formatMs(data.frames.renderedFrameRenderMs.avg)}ms/rendered frame | p95 ${formatMs(data.frames.renderedFrameRenderMs.p95)}ms | max ${formatMs(data.frames.renderedFrameRenderMs.max)}ms`,
+		);
+	}
+	lines.push(
+		`  units: avg ${data.units.avg.toFixed(0)} | max ${data.units.max} | current ${data.units.current}`,
+	);
+	lines.push(
+		`  scheduler: rendered ${data.scheduler.renderedFrames}/${data.scheduler.frames} frames | subticks ${data.scheduler.executedSubTicks}/${data.scheduler.requestedSubTicks} | cappedFrames ${data.scheduler.cappedSubTickFrames} | cappedSubticks ${data.scheduler.cappedSubTicks}`,
+	);
+	lines.push(
+		`  config: simSpeed ${data.config.simSpeed}x | view ${data.config.viewMode} | grid ${data.config.gridRes} | map ${data.config.mapResolution || "n/a"} | render ${data.config.renderSkipCadence}`,
+	);
+	lines.push("  ─────────────────────────────────────────────");
+
+	const sorted = Object.entries(data.categories).sort(
+		(a, b) => b[1].avg - a[1].avg,
+	);
+	for (const [k, stats] of sorted) {
+		if (stats.avg < 0.05 || Number.isNaN(stats.avg)) continue;
+		const rawPct = data.ticks.avgMs > 0 ? stats.avg / data.ticks.avgMs : 0;
+		const pct = Number.isFinite(rawPct) ? (rawPct * 100).toFixed(0) : "—";
+		const barCount = Number.isFinite(rawPct)
+			? Math.min(20, Math.round(rawPct * 20))
+			: 0;
+		const bar = "█".repeat(Math.max(0, barCount));
+		const delta = data.categoryDeltaSinceLastReport[k];
+		const deltaStr =
+			typeof delta === "number"
+				? `  Δ${delta >= 0 ? "+" : ""}${delta.toFixed(2)}ms`
+				: "";
+		lines.push(
+			`  ${k.padEnd(14)} ${stats.avg.toFixed(1).padStart(6)}ms (${pct.padStart(2)}%) ${bar.padEnd(20)} p95:${formatMs(stats.p95).padStart(5)}ms p99:${formatMs(stats.p99).padStart(5)}ms max:${formatMs(stats.max).padStart(5)}ms${deltaStr}`,
 		);
 	}
 
+	lines.push("  ─────────────────────────────────────────────");
+	lines.push(
+		`  reassess: ${data.reassess.proposalRuns} runs | forced: ${data.reassess.reassess_forced} | failed: ${data.reassess.proposalFailed}`,
+	);
+	lines.push(
+		`    noPlan:${data.reassess.reassess_noPlan}  interval:${data.reassess.reassess_interval}  forced:${data.reassess.reassess_forced}  territory:${data.reassess.reassess_territory}  posture:${data.reassess.reassess_posture}  ratio:${data.reassess.reassess_ratio}`,
+	);
+	if (data.water.total > 0) {
+		lines.push(`  water avoidance: ${data.water.total} events`);
+		lines.push(
+			`    pathPenalized:${data.water.waterPathPenalized}  coastDeflectHalved:${data.water.coastDeflectHalved}  knockbackBlocked:${data.water.knockbackBlocked}  coastStuckAbandoned:${data.water.coastStuckAbandoned}`,
+		);
+	}
+	if (data.frames.spikes.length > 0) {
+		lines.push("  ─────────────────────────────────────────────");
+		lines.push("  recent frame spikes:");
+		data.frames.spikes.slice(-5).forEach((spike) => {
+			const topCat = spike.nearestTick?.topCategory;
+			const catText = topCat
+				? ` | tick hot: ${topCat.name} ${formatMs(topCat.ms)}ms`
+				: "";
+			lines.push(
+				`    ${formatMs(spike.ms)}ms at frame ${spike.frame} (${spike.reason})${catText}`,
+			);
+		});
+	}
 	return lines.join("\n");
+}
+
+// ── Perf Report: type window.perfReport() in console ──
+window.perfEnable = (mode = "basic") => {
+	const normalizedMode = mode === "detailed" ? "detailed" : "basic";
+	if (!window.__perf) window.__perf = createPerfState(normalizedMode);
+	window.__perf._mode = normalizedMode;
+	window.__perf._enabled = true;
+	return `perf tracking enabled (${normalizedMode}) — let the sim run, then call window.perfReport()`;
+};
+window.perfDisable = () => {
+	if (window.__perf) {
+		window.__perf._mode = "off";
+		window.__perf._enabled = false;
+	}
+	return "perf tracking disabled";
+};
+window.perfReset = (mode = window.__perf?._mode || "off") => {
+	const normalizedMode =
+		mode === "detailed" ? "detailed" : mode === "basic" ? "basic" : "off";
+	window.__perf = createPerfState(normalizedMode);
+	_perfSamples = [];
+	_perfFrameTimeSum = 0;
+	_perfFrameCount = 0;
+	_perfLastTime = 0;
+	return `perf counters reset (${normalizedMode})`;
+};
+window.perfReportJson = () => {
+	const data = getPerfReportData();
+	if (data.ok) {
+		const avgs = {};
+		for (const [k, stats] of Object.entries(data.categories)) {
+			avgs[k] = stats.avg;
+		}
+		window.__perf._lastReportAvgs = avgs;
+	}
+	return data;
+};
+window.perfReport = () => {
+	const data = getPerfReportData();
+	if (data.ok) {
+		const avgs = {};
+		for (const [k, stats] of Object.entries(data.categories)) {
+			avgs[k] = stats.avg;
+		}
+		window.__perf._lastReportAvgs = avgs;
+	}
+	return formatPerfReport(data);
 };
 
 export function updateLoop(now) {
@@ -14386,9 +14630,28 @@ export function updateLoop(now) {
 	// --- Performance measurement ---
 	const realNow = performance.now();
 	const _frameDt = _perfLastTime > 0 ? realNow - _perfLastTime : 16.67;
+	let framePerfEntry = null;
+	const shouldTrackFrame =
+		window.__perf && (window.__perf._mode !== "off" || _isBenchmarking);
 	if (_perfLastTime > 0) {
 		const dt = _frameDt;
 		if (_isBenchmarking) _perfSamples.push(dt);
+		if (shouldTrackFrame) {
+			framePerfEntry = {
+				frame: simFrameCount,
+				ms: dt,
+				renderMs: 0,
+				simSpeed,
+				units: units.length,
+				rendered: false,
+				skippedRender: false,
+				requestedSubTicks: 0,
+				executedSubTicks: 0,
+				cappedSubTicks: 0,
+				accumulatorBefore: frameAccumulator,
+				accumulatorAfter: frameAccumulator,
+			};
+		}
 		_perfFrameTimeSum += dt;
 		_perfFrameCount++;
 		if (_perfFrameCount >= 30) {
@@ -14423,6 +14686,7 @@ export function updateLoop(now) {
 		frameAccumulator += simSpeed;
 		const maxSubTicksThisFrame = simSpeed >= 3 ? 2 : Infinity;
 		let subTicksThisFrame = 0;
+		const requestedSubTicks = Math.floor(frameAccumulator);
 		while (frameAccumulator >= 1 && subTicksThisFrame < maxSubTicksThisFrame) {
 			const warEnded = performSimulationTick();
 			if (warEnded) {
@@ -14432,8 +14696,32 @@ export function updateLoop(now) {
 			frameAccumulator -= 1;
 			subTicksThisFrame++;
 		}
+		const cappedSubTicks = Math.max(0, requestedSubTicks - subTicksThisFrame);
 		if (simSpeed >= 3 && frameAccumulator > 1) {
 			frameAccumulator = 1;
+		}
+		if (framePerfEntry) {
+			framePerfEntry.requestedSubTicks = requestedSubTicks;
+			framePerfEntry.executedSubTicks = subTicksThisFrame;
+			framePerfEntry.cappedSubTicks = cappedSubTicks;
+			framePerfEntry.accumulatorAfter = frameAccumulator;
+		}
+		if (shouldTrackFrame) {
+			if (!window.__perf._scheduler) {
+				window.__perf._scheduler = createPerfState(
+					window.__perf._mode,
+				)._scheduler;
+			}
+			const scheduler = window.__perf._scheduler;
+			scheduler.frames++;
+			scheduler.requestedSubTicks += requestedSubTicks;
+			scheduler.executedSubTicks += subTicksThisFrame;
+			scheduler.cappedSubTicks += cappedSubTicks;
+			if (cappedSubTicks > 0) scheduler.cappedSubTickFrames++;
+			scheduler.accumulatorSum += frameAccumulator;
+			if (frameAccumulator > scheduler.maxAccumulator) {
+				scheduler.maxAccumulator = frameAccumulator;
+			}
 		}
 
 		// Advance in-game date by real time (clamped to avoid huge jumps on tab switch)
@@ -14456,8 +14744,18 @@ export function updateLoop(now) {
 	}
 
 	if (skipRenderThisFrame && document.hidden === false) {
+		if (shouldTrackFrame) {
+			window.__perf._scheduler.skippedRenderFrames++;
+		}
+		if (framePerfEntry) {
+			framePerfEntry.skippedRender = true;
+			recordPerfFrame(framePerfEntry);
+		}
 		animationFrameId = requestAnimationFrame(updateLoop);
 		return;
+	}
+	if (shouldTrackFrame) {
+		window.__perf._scheduler.renderedFrames++;
 	}
 
 	const sideUnitCounts = _cachedSideUnitCounts;
@@ -14597,6 +14895,7 @@ export function updateLoop(now) {
 		}
 	}
 
+	const renderStart = framePerfEntry ? performance.now() : 0;
 	if (viewMode === "FLAG") {
 		// In flag view, force the canvas layer to fully update each frame so units and borders
 		// keep animating even when the camera is stationary.
@@ -14604,6 +14903,11 @@ export function updateLoop(now) {
 		influenceLayer._update();
 	} else {
 		influenceLayer.render();
+	}
+	if (framePerfEntry) {
+		framePerfEntry.renderMs = performance.now() - renderStart;
+		framePerfEntry.rendered = true;
+		recordPerfFrame(framePerfEntry);
 	}
 
 	// Show/hide performance overlay only during benchmark runs
