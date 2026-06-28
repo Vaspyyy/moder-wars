@@ -1954,6 +1954,9 @@ export const _transportPlan = []; // per-side transport plan (1 per side max)
 export const _coastalDefensePlan = []; // per-side coastal defense passive overlay
 export const _neutralGarrisonPlan = []; // per-side neutral border garrison plans
 export const _defenderReactionPlan = []; // per-side emergency DEFEND at enemy naval beachhead
+export let _frontIntelBySide = []; // per-side tactical front/theater summaries
+export const _aiPlanMemory = new Map(); // key: side:type:target -> recent plan outcome data
+export let _aiDebugPlans = []; // per-side diagnostics for the war plan overlay/console
 const _proposalReassessTick = []; // per-side last reassessment tick
 const _proposalsCache = []; // per-side cached scored proposals
 const _planReassessNeeded = []; // per-side flag: force immediate reassessment
@@ -5591,6 +5594,9 @@ export async function _startWarInner() {
 	_warPlan = [];
 	_sideMomentumHistory = [];
 	_sideWarPhase = [];
+	_frontIntelBySide = [];
+	_aiDebugPlans = [];
+	_aiPlanMemory.clear();
 	sides.flat().forEach((c) => {
 		if (!c) return;
 		c.lastControlledCount = undefined;
@@ -6783,9 +6789,9 @@ export function assignFrontlineSlots() {
 		if (fronts.length > 0) sideUnits[si].push(u);
 	}
 
-	// Distribute units across fronts proportionally by polyline length,
-	// with stickiness: units stay in their current front segment unless the
-	// segment is over- or under-manned.
+	// Distribute units across fronts proportionally by polyline length while
+	// keeping each unit on the nearest sensible theater. This prevents large
+	// countries from shuffling troops between disconnected fronts.
 	for (let si = 0; si < sides.length; si++) {
 		const fronts = sideFronts[si] || [];
 		const allUnits = sideUnits[si] || [];
@@ -6808,51 +6814,112 @@ export function assignFrontlineSlots() {
 			continue;
 		}
 
-		// Desired unit counts per front, proportional to polyline length
+		const frontSamples = {};
+		for (const key of fronts) {
+			const poly = _frontlinePolys[key] || [];
+			const stride = Math.max(1, Math.floor(poly.length / 24));
+			frontSamples[key] = [];
+			for (let p = 0; p < poly.length; p += stride) {
+				frontSamples[key].push(poly[p]);
+			}
+			if (poly.length > 0 && frontSamples[key].length === 0) {
+				frontSamples[key].push(poly[0]);
+			}
+		}
+		const distToFront = (unit, key) => {
+			let best = Infinity;
+			const samples = frontSamples[key] || [];
+			for (const pt of samples) {
+				const dSq = geoDistSq(unit.lat, unit.lng, pt.lat, pt.lng);
+				if (dSq < best) best = dSq;
+			}
+			return best;
+		};
+
+		// Desired unit counts per front, proportional to polyline length.
 		const desired = {};
 		let desiredSum = 0;
-		for (const key of fronts) {
-			desired[key] = Math.max(
-				1,
-				Math.floor((allUnits.length * frontLengths[key]) / totalLen),
-			);
-			desiredSum += desired[key];
-		}
-		// Distribute remainder to longest fronts
-		const remainder = allUnits.length - desiredSum;
 		const sortedFronts = [...fronts].sort(
 			(a, b) => frontLengths[b] - frontLengths[a],
 		);
-		for (let ri = 0; ri < remainder; ri++) {
-			desired[sortedFronts[ri % sortedFronts.length]]++;
+		if (allUnits.length <= fronts.length) {
+			for (const key of fronts) desired[key] = 0;
+			for (let i = 0; i < allUnits.length; i++) desired[sortedFronts[i]] = 1;
+			desiredSum = allUnits.length;
+		} else {
+			for (const key of fronts) {
+				desired[key] = Math.max(
+					1,
+					Math.floor((allUnits.length * frontLengths[key]) / totalLen),
+				);
+				desiredSum += desired[key];
+			}
+			const remainder = allUnits.length - desiredSum;
+			for (let ri = 0; ri < remainder; ri++) {
+				desired[sortedFronts[ri % sortedFronts.length]]++;
+			}
 		}
 
-		// Sticky assignment: prefer keeping units in their current front segment
-		const sticky = {};
-		for (const key of fronts) sticky[key] = [];
+		const assigned = {};
+		for (const key of fronts) assigned[key] = [];
 		const leftovers = [];
 
 		for (const u of allUnits) {
 			const prevKey = u.frontSlot?.pairKey;
+			const rankedFronts = fronts
+				.map((key) => ({ key, distSq: distToFront(u, key) }))
+				.sort((a, b) => a.distSq - b.distSq);
+			u._nearestFrontKey = rankedFronts[0]?.key || null;
 			if (
 				prevKey &&
-				sticky[prevKey] &&
-				sticky[prevKey].length < desired[prevKey]
+				assigned[prevKey] &&
+				assigned[prevKey].length < desired[prevKey] &&
+				rankedFronts.some(
+					(f) =>
+						f.key === prevKey &&
+						f.distSq <= (rankedFronts[0]?.distSq || 0) * 1.8 + 4.0,
+				)
 			) {
-				sticky[prevKey].push(u);
+				assigned[prevKey].push(u);
 			} else {
 				leftovers.push(u);
 			}
 		}
 
-		// Fill remaining slots from leftovers
 		for (const key of fronts) {
-			const needed = desired[key] - sticky[key].length;
 			if (!allBySideFront[si][key]) allBySideFront[si][key] = [];
-			for (const u of sticky[key]) allBySideFront[si][key].push(u);
-			for (let i = 0; i < needed && leftovers.length > 0; i++) {
-				allBySideFront[si][key].push(leftovers.shift());
+			for (const u of assigned[key]) allBySideFront[si][key].push(u);
+		}
+
+		// Fill remaining capacity by nearest-front distance instead of array order.
+		while (leftovers.length > 0) {
+			let bestUnitIdx = -1;
+			let bestFront = null;
+			let bestDist = Infinity;
+			for (let ui = 0; ui < leftovers.length; ui++) {
+				const u = leftovers[ui];
+				for (const key of fronts) {
+					if ((allBySideFront[si][key]?.length || 0) >= desired[key]) {
+						continue;
+					}
+					const dSq = distToFront(u, key);
+					if (dSq < bestDist) {
+						bestDist = dSq;
+						bestUnitIdx = ui;
+						bestFront = key;
+					}
+				}
 			}
+			if (bestUnitIdx === -1 || !bestFront) break;
+			const [unit] = leftovers.splice(bestUnitIdx, 1);
+			allBySideFront[si][bestFront].push(unit);
+		}
+
+		// If capacities are saturated due rounding, keep any extras on their nearest front.
+		for (const u of leftovers) {
+			const nearest = u._nearestFrontKey || fronts[0];
+			if (!allBySideFront[si][nearest]) allBySideFront[si][nearest] = [];
+			allBySideFront[si][nearest].push(u);
 		}
 	}
 
@@ -6891,6 +6958,421 @@ export function assignFrontlineSlots() {
  * Assign proportional slots to garrison units along neutral border polylines
  * so they spread evenly instead of clustering at cities.
  */
+
+function lngDelta(a, b) {
+	let d = a - b;
+	if (d > 180) d -= 360;
+	else if (d < -180) d += 360;
+	return d;
+}
+
+function geoDistSq(aLat, aLng, bLat, bLng) {
+	const dLat = aLat - bLat;
+	const dLng = lngDelta(aLng, bLng);
+	return dLat * dLat + dLng * dLng;
+}
+
+function getSideStrategyProfile(sideIdx) {
+	const sideCountries = sides[sideIdx] || [];
+	const weights = {
+		TURTLE: 0,
+		DEFENSIVE: 0,
+		BALANCED: 0,
+		AGGRESSIVE: 0,
+		BLITZ: 0,
+	};
+	for (const country of sideCountries) {
+		const strategy = (country.strategy || "BALANCED").toUpperCase();
+		const stats = latestCountryStats.get(country.id);
+		const weight = Math.max(1, stats?.units || country.initialCells || 1);
+		weights[strategy] = (weights[strategy] || 0) + weight;
+	}
+	let dominant = "BALANCED";
+	let bestWeight = -1;
+	for (const [strategy, weight] of Object.entries(weights)) {
+		if (weight > bestWeight) {
+			bestWeight = weight;
+			dominant = strategy;
+		}
+	}
+	return {
+		dominant,
+		weights,
+		aggression:
+			(weights.BLITZ * 1.0 +
+				weights.AGGRESSIVE * 0.75 +
+				weights.BALANCED * 0.45 +
+				weights.DEFENSIVE * 0.2) /
+			Math.max(
+				1,
+				Object.values(weights).reduce((sum, v) => sum + v, 0),
+			),
+	};
+}
+
+function estimateLocalForces(sideIdx, lat, lng, radiusSq = 9.0) {
+	let friendlies = 0;
+	let enemies = 0;
+	let friendlyHealth = 0;
+	let enemyHealth = 0;
+	for (const u of units) {
+		if (u.deployTicks > 0 || u.health <= 0) continue;
+		if (geoDistSq(u.lat, u.lng, lat, lng) > radiusSq) continue;
+		if (u.sideIndex === sideIdx) {
+			friendlies++;
+			friendlyHealth += u.health / CONFIG.UNIT_HEALTH;
+		} else if (u.sideIndex >= 0) {
+			enemies++;
+			enemyHealth += u.health / CONFIG.UNIT_HEALTH;
+		}
+	}
+	return {
+		friendlies,
+		enemies,
+		friendlyHealth,
+		enemyHealth,
+		ratio: friendlyHealth / Math.max(1, enemyHealth),
+	};
+}
+
+function buildFrontIntel(sideIdx) {
+	const fronts = [];
+	const keys = Object.keys(_frontlinePolys || {});
+	for (const key of keys) {
+		const [a, b] = key.split("_").map(Number);
+		if (a !== sideIdx && b !== sideIdx) continue;
+		const enemySide = a === sideIdx ? b : a;
+		const poly = _frontlinePolys[key];
+		if (!poly || poly.length === 0) continue;
+
+		let lat = 0;
+		let lng = 0;
+		const samples = [];
+		const stride = Math.max(1, Math.floor(poly.length / 18));
+		for (let p = 0; p < poly.length; p += stride) {
+			const pt = poly[p];
+			samples.push(pt);
+			lat += pt.lat;
+			lng += pt.lng;
+		}
+		if (samples.length === 0) continue;
+		lat /= samples.length;
+		lng /= samples.length;
+
+		let friendlies = 0;
+		let enemies = 0;
+		let bestWeakPoint = samples[0];
+		let bestWeakScore = -Infinity;
+		for (const u of units) {
+			if (u.deployTicks > 0 || u.health <= 0) continue;
+			let nearFront = false;
+			for (const sample of samples) {
+				if (geoDistSq(u.lat, u.lng, sample.lat, sample.lng) <= 16.0) {
+					nearFront = true;
+					break;
+				}
+			}
+			if (!nearFront) continue;
+			if (u.sideIndex === sideIdx) friendlies++;
+			else if (u.sideIndex >= 0) enemies++;
+		}
+		for (const sample of samples) {
+			const local = estimateLocalForces(sideIdx, sample.lat, sample.lng, 4.0);
+			const overstackPenalty = Math.max(
+				0,
+				local.friendlies - Math.max(4, local.enemies * 2),
+			);
+			const weakScore =
+				Math.min(local.ratio, 2.5) * 10 +
+				Math.min(local.enemies, 12) * 0.6 -
+				overstackPenalty * 0.8;
+			if (weakScore > bestWeakScore) {
+				bestWeakScore = weakScore;
+				bestWeakPoint = sample;
+			}
+		}
+
+		let enemyCitiesNear = 0;
+		let friendlyCitiesThreatened = 0;
+		for (const city of activeTheaterCities) {
+			if (geoDistSq(city.lat, city.lng, lat, lng) > 64) continue;
+			const idx = getGridIndex(city.lat, city.lng);
+			if (idx === -1) continue;
+			const citySide = dominantSideMap[idx];
+			if (citySide === sideIdx) friendlyCitiesThreatened++;
+			else if (citySide === enemySide) enemyCitiesNear++;
+		}
+
+		const localRatio = friendlies / Math.max(1, enemies);
+		const pressureScore =
+			localRatio * 30 +
+			enemyCitiesNear * 8 -
+			friendlyCitiesThreatened * 5 +
+			Math.min(20, poly.length / 15);
+		fronts.push({
+			pairKey: key,
+			enemySide,
+			lat,
+			lng,
+			length: poly.length,
+			samples,
+			weakPoint: { lat: bestWeakPoint.lat, lng: bestWeakPoint.lng },
+			friendlies,
+			enemies,
+			localRatio,
+			enemyCitiesNear,
+			friendlyCitiesThreatened,
+			pressureScore,
+		});
+	}
+	fronts.sort((a, b) => b.pressureScore - a.pressureScore);
+	_frontIntelBySide[sideIdx] = fronts;
+	return fronts;
+}
+
+function findNearestFront(fronts, lat, lng) {
+	let best = null;
+	let bestDist = Infinity;
+	for (const front of fronts || []) {
+		const dSq = geoDistSq(lat, lng, front.lat, front.lng);
+		if (dSq < bestDist) {
+			bestDist = dSq;
+			best = front;
+		}
+	}
+	return { front: best, distSq: bestDist };
+}
+
+function canTraverseLandForPlan(idx, sideIdx, targetIdx) {
+	if (idx === targetIdx) return true;
+	if (idx < 0 || idx >= landMask.length || landMask[idx] === 0) return false;
+	const ds = dominantSideMap[idx];
+	const targetSide = targetIdx >= 0 ? dominantSideMap[targetIdx] : -1;
+	if (ds === sideIdx || ds === -1) return true;
+	return targetSide >= 0 && ds === targetSide;
+}
+
+function findLandPathSummary(startIdx, targetIdx, sideIdx, maxVisited = 70000) {
+	if (startIdx === -1 || targetIdx === -1) return { reachable: false };
+	if (!canTraverseLandForPlan(startIdx, sideIdx, targetIdx)) {
+		const startRow = Math.floor(startIdx / gridWidth);
+		const startCol = startIdx % gridWidth;
+		let replacement = -1;
+		let replacementDist = Infinity;
+		for (let dr = -3; dr <= 3; dr++) {
+			for (let dc = -3; dc <= 3; dc++) {
+				const row = startRow + dr;
+				const col = startCol + dc;
+				if (row < 0 || row >= gridHeight || col < 0 || col >= gridWidth)
+					continue;
+				const idx = row * gridWidth + col;
+				if (!canTraverseLandForPlan(idx, sideIdx, targetIdx)) continue;
+				const dSq = dr * dr + dc * dc;
+				if (dSq < replacementDist) {
+					replacementDist = dSq;
+					replacement = idx;
+				}
+			}
+		}
+		if (replacement === -1) return { reachable: false };
+		startIdx = replacement;
+	}
+	const total = landMask.length;
+	const seen = new Uint8Array(total);
+	const parent = new Int32Array(total);
+	parent.fill(-1);
+	const queue = new Int32Array(Math.min(total, maxVisited + 1));
+	let head = 0;
+	let tail = 0;
+	let visited = 0;
+	queue[tail++] = startIdx;
+	seen[startIdx] = 1;
+	const offsets = [1, -1, gridWidth, -gridWidth];
+	while (head < tail && visited < maxVisited) {
+		const cur = queue[head++];
+		visited++;
+		if (cur === targetIdx) {
+			const waypoints = [];
+			let walk = cur;
+			let steps = 0;
+			while (walk !== -1 && walk !== startIdx && steps < 2048) {
+				if (steps === 12 || steps === 30 || steps === 60) {
+					const r = Math.floor(walk / gridWidth);
+					const c = walk % gridWidth;
+					waypoints.unshift({
+						lat: r * CONFIG.GRID_RES - 90,
+						lng: c * CONFIG.GRID_RES - 180,
+					});
+				}
+				walk = parent[walk];
+				steps++;
+			}
+			return {
+				reachable: true,
+				visited,
+				distanceCells: steps,
+				waypoints: waypoints.slice(0, 3),
+			};
+		}
+		const col = cur % gridWidth;
+		for (const off of offsets) {
+			if ((off === 1 && col === gridWidth - 1) || (off === -1 && col === 0)) {
+				continue;
+			}
+			const ni = cur + off;
+			if (ni < 0 || ni >= total || seen[ni]) continue;
+			if (!canTraverseLandForPlan(ni, sideIdx, targetIdx)) continue;
+			seen[ni] = 1;
+			parent[ni] = cur;
+			if (tail < queue.length) queue[tail++] = ni;
+		}
+	}
+	return { reachable: false, visited, distanceCells: Infinity, waypoints: [] };
+}
+
+function findNearestSeaIdx(idx, radius = 6) {
+	if (idx < 0 || idx >= landMask.length) return -1;
+	const row0 = Math.floor(idx / gridWidth);
+	const col0 = idx % gridWidth;
+	let best = -1;
+	let bestDist = Infinity;
+	for (let dr = -radius; dr <= radius; dr++) {
+		for (let dc = -radius; dc <= radius; dc++) {
+			const row = row0 + dr;
+			const col = col0 + dc;
+			if (row < 0 || row >= gridHeight || col < 0 || col >= gridWidth) continue;
+			const ni = row * gridWidth + col;
+			if (landMask[ni] !== 0) continue;
+			const dSq = dr * dr + dc * dc;
+			if (dSq < bestDist) {
+				bestDist = dSq;
+				best = ni;
+			}
+		}
+	}
+	return best;
+}
+
+function findSeaPathSummary(startIdx, targetIdx, maxVisited = 120000) {
+	if (startIdx === -1 || targetIdx === -1) return { reachable: false };
+	if (landMask[startIdx] !== 0 || landMask[targetIdx] !== 0) {
+		return { reachable: false };
+	}
+	const total = landMask.length;
+	const seen = new Uint8Array(total);
+	const queue = new Int32Array(Math.min(total, maxVisited + 1));
+	let head = 0;
+	let tail = 0;
+	let visited = 0;
+	let distanceCells = 0;
+	queue[tail++] = startIdx;
+	seen[startIdx] = 1;
+	const offsets = [1, -1, gridWidth, -gridWidth];
+	while (head < tail && visited < maxVisited) {
+		const levelEnd = tail;
+		while (head < levelEnd) {
+			const cur = queue[head++];
+			visited++;
+			if (cur === targetIdx) {
+				return { reachable: true, visited, distanceCells };
+			}
+			const col = cur % gridWidth;
+			for (const off of offsets) {
+				if ((off === 1 && col === gridWidth - 1) || (off === -1 && col === 0)) {
+					continue;
+				}
+				const ni = cur + off;
+				if (ni < 0 || ni >= total || seen[ni] || landMask[ni] !== 0) continue;
+				seen[ni] = 1;
+				if (tail < queue.length) queue[tail++] = ni;
+			}
+		}
+		distanceCells++;
+	}
+	return { reachable: false, visited, distanceCells: Infinity };
+}
+
+function getPlanSignature(sideIdx, planLike) {
+	const target = planLike?.target;
+	const lat = target ? Math.round(target.lat * 2) / 2 : 0;
+	const lng = target ? Math.round(target.lng * 2) / 2 : 0;
+	return `${sideIdx}:${planLike?.type || "UNKNOWN"}:${lat}:${lng}`;
+}
+
+function getProposalMemory(sideIdx, proposal) {
+	return _aiPlanMemory.get(getPlanSignature(sideIdx, proposal)) || null;
+}
+
+function recordPlanOutcome(sideIdx, plan, outcome) {
+	if (!plan) return;
+	if (outcome !== "started" && plan._terminalOutcomeRecorded) return;
+	if (outcome !== "started") plan._terminalOutcomeRecorded = outcome;
+	const key = plan.signature || getPlanSignature(sideIdx, plan);
+	const previous = _aiPlanMemory.get(key) || {
+		attempts: 0,
+		successes: 0,
+		failures: 0,
+	};
+	const next = {
+		...previous,
+		type: plan.type,
+		targetName: plan.target?.name || previous.targetName || "",
+		lastTick: simFrameCount,
+		attempts: previous.attempts + (outcome === "started" ? 1 : 0),
+		successes: previous.successes + (outcome === "success" ? 1 : 0),
+		failures: previous.failures + (outcome === "failed" ? 1 : 0),
+		lastOutcome: outcome,
+	};
+	_aiPlanMemory.set(key, next);
+}
+
+function measurePlanProgressSignal(sideIdx, plan) {
+	if (!plan?.target) return 0;
+	const targetIdx = getGridIndex(plan.target.lat, plan.target.lng);
+	if (targetIdx !== -1 && dominantSideMap[targetIdx] === sideIdx) return 1;
+	let sampled = 0;
+	let controlled = 0;
+	const centerRow = Math.floor((plan.target.lat + 90) / CONFIG.GRID_RES);
+	const centerCol = Math.floor((plan.target.lng + 180) / CONFIG.GRID_RES);
+	for (let dr = -4; dr <= 4; dr += 2) {
+		for (let dc = -4; dc <= 4; dc += 2) {
+			const row = centerRow + dr;
+			const col = centerCol + dc;
+			if (row < 0 || row >= gridHeight || col < 0 || col >= gridWidth) continue;
+			const idx = row * gridWidth + col;
+			if (landMask[idx] === 0) continue;
+			sampled++;
+			if (dominantSideMap[idx] === sideIdx) controlled++;
+		}
+	}
+	const controlSignal = sampled > 0 ? controlled / sampled : 0;
+	const local = estimateLocalForces(
+		sideIdx,
+		plan.target.lat,
+		plan.target.lng,
+		9.0,
+	);
+	const forceSignal = Math.min(0.25, local.friendlies / 40);
+	return Math.min(1, controlSignal + forceSignal);
+}
+
+function applyPlanProgressMemory(sideIdx, plan) {
+	if (!plan) return;
+	if (plan.type === "DEFEND") {
+		plan.lastProgressTick = simFrameCount;
+		return;
+	}
+	const signal = measurePlanProgressSignal(sideIdx, plan);
+	if (plan._bestProgressSignal === undefined) {
+		plan._bestProgressSignal = signal;
+		plan.lastProgressTick = simFrameCount;
+	} else if (signal > plan._bestProgressSignal + 0.03) {
+		plan._bestProgressSignal = signal;
+		plan.lastProgressTick = simFrameCount;
+	}
+	plan.progress = Math.max(plan.progress || 0, signal);
+}
+
 /**
  * Proposal Engine: generate every possible plan candidate for a side.
  * Returns an array of lightweight proposal objects — no plan objects created yet.
@@ -6907,6 +7389,15 @@ export function generateAllProposals(sideIdx) {
 	if (unitCount < 3) return proposals;
 
 	const myAllyIds = new Set(sideCountries.map((c) => c.id));
+	const frontIntel = buildFrontIntel(sideIdx);
+	const landPathCache = new Map();
+	const getLandPath = (startIdx, targetIdx) => {
+		const key = `${startIdx}:${targetIdx}`;
+		if (!landPathCache.has(key)) {
+			landPathCache.set(key, findLandPathSummary(startIdx, targetIdx, sideIdx));
+		}
+		return landPathCache.get(key);
+	};
 
 	// ── Pre-compute shared data ──
 
@@ -7042,41 +7533,38 @@ export function generateAllProposals(sideIdx) {
 		fLng /= fCount;
 	}
 
-	for (const ec of enemyCities) {
+	const prioritizedEnemyCities = enemyCities
+		.map((ec) => {
+			const nearest = findNearestFront(frontIntel, ec.city.lat, ec.city.lng);
+			const capitalBoost = ec.isCapital ? 1000 : 0;
+			return {
+				...ec,
+				_nearestFront: nearest.front,
+				_frontDistSq: nearest.distSq,
+				_sortScore: capitalBoost - nearest.distSq,
+			};
+		})
+		.sort((a, b) => b._sortScore - a._sortScore)
+		.slice(0, 50);
+
+	for (const ec of prioritizedEnemyCities) {
 		// Score proximity to frontline
 		let deLng = ec.city.lng - fLng;
 		if (deLng > 180) deLng -= 360;
 		else if (deLng < -180) deLng += 360;
 		const dSq = (ec.city.lat - fLat) ** 2 + deLng ** 2;
 
-		// Water-crossing check: sample line from frontline centroid to city
-		// Use frontline centroid (always on land) instead of unit centroid (could be
-		// scattered across water if side already has units on enemy territory)
-		let crossesWater = false;
-		const checkLat = fCount > 0 ? fLat : uLat;
-		const checkLng = fCount > 0 ? fLng : uLng;
-		if (fCount > 0 || uCount > 0) {
-			const ddLat = ec.city.lat - checkLat;
-			let ddLng = ec.city.lng - checkLng;
-			if (ddLng > 180) ddLng -= 360;
-			else if (ddLng < -180) ddLng += 360;
-			const lineLen = Math.sqrt(ddLat * ddLat + ddLng * ddLng);
-			if (lineLen > 0.5) {
-				const steps = Math.min(20, Math.ceil(lineLen / 0.3));
-				let waterSamples = 0;
-				for (let s = 1; s < steps; s++) {
-					const t = s / steps;
-					const slat = checkLat + ddLat * t;
-					const slng = checkLng + ddLng * t;
-					const sIdx = getGridIndex(slat, slng);
-					if (sIdx !== -1 && landMask[sIdx] === 0) waterSamples++;
-				}
-				if (waterSamples > steps * 0.4) crossesWater = true;
-			}
-		}
+		const source = ec._nearestFront?.weakPoint ||
+			ec._nearestFront || {
+				lat: fCount > 0 ? fLat : uLat,
+				lng: fCount > 0 ? fLng : uLng,
+			};
+		const sourceIdx = getGridIndex(source.lat, source.lng);
+		const path = getLandPath(sourceIdx, ec.idx);
 
-		// Skip if the path crosses water — this city isn't reachable by land
-		if (crossesWater) continue;
+		// Skip if bounded land pathing cannot reach this target.
+		if (!path.reachable) continue;
+		const local = estimateLocalForces(sideIdx, ec.city.lat, ec.city.lng, 9.0);
 
 		proposals.push({
 			type: "CAPTURE_CITY",
@@ -7090,17 +7578,30 @@ export function generateAllProposals(sideIdx) {
 			arrowPoints:
 				uCount > 0 && eCount > 0
 					? [
-							{ lat: uLat, lng: uLng },
+							{ lat: source.lat, lng: source.lng },
 							{ lat: ec.city.lat, lng: ec.city.lng },
 						]
 					: null,
 			estimatedForceNeeded: Math.ceil(unitCount * 0.15),
+			theaterId: ec._nearestFront?.pairKey || null,
+			frontIntel: ec._nearestFront || null,
+			riskAssessment: {
+				enemyForcesNear: local.enemies,
+				ourForcesNear: local.friendlies,
+				enemyCounterWeight:
+					local.enemies / Math.max(1, local.friendlies + local.enemies),
+			},
 			geographicData: {
 				frontlineDistSq: dSq,
-				reachesTarget: !crossesWater,
+				reachesTarget: path.reachable,
 				minSeaDist: Infinity,
-				minLandDist: Math.sqrt(dSq || 1),
+				minLandDist: Math.max(
+					Math.sqrt(dSq || 1),
+					(path.distanceCells || 1) * CONFIG.GRID_RES,
+				),
+				pathDistanceCells: path.distanceCells || 0,
 			},
+			_waypoints: path.waypoints || [],
 		});
 	}
 
@@ -7184,6 +7685,14 @@ export function generateAllProposals(sideIdx) {
 						{ lat: cell.lat, lng: cell.lng },
 					],
 					estimatedForceNeeded: Math.ceil(unitCount * 0.3),
+					theaterId: key,
+					frontIntel: frontIntel.find((f) => f.pairKey === key) || null,
+					riskAssessment: {
+						enemyForcesNear: enemyCount,
+						ourForcesNear: friendlyCount,
+						enemyCounterWeight:
+							enemyCount / Math.max(1, friendlyCount + enemyCount),
+					},
 					geographicData: {
 						frontlineDistSq: 1,
 						reachesTarget: true,
@@ -7233,29 +7742,16 @@ export function generateAllProposals(sideIdx) {
 			esLat /= esCount;
 			esLng /= esCount;
 
-			// Water-crossing check: sample line from friendly centroid to enemy-side centroid
-			let crossesWater = false;
-			if (uCount > 0) {
-				const ddLat = esLat - uLat;
-				let ddLng = esLng - uLng;
-				if (ddLng > 180) ddLng -= 360;
-				else if (ddLng < -180) ddLng += 360;
-				const lineLen = Math.sqrt(ddLat * ddLat + ddLng * ddLng);
-				if (lineLen > 0.5) {
-					const steps = Math.min(20, Math.ceil(lineLen / 0.3));
-					let waterSamples = 0;
-					for (let s = 1; s < steps; s++) {
-						const t = s / steps;
-						const slat = uLat + ddLat * t;
-						const slng = uLng + ddLng * t;
-						const sIdx = getGridIndex(slat, slng);
-						if (sIdx !== -1 && landMask[sIdx] === 0) waterSamples++;
-					}
-					if (waterSamples > steps * 0.4) crossesWater = true;
-				}
-			}
-			// Skip if the path crosses water — this enemy isn't reachable by land
-			if (crossesWater) continue;
+			const front =
+				frontIntel.find((f) => f.enemySide === enemySide) ||
+				findNearestFront(frontIntel, esLat, esLng).front;
+			const source = front?.weakPoint || front || { lat: uLat, lng: uLng };
+			const path = getLandPath(
+				getGridIndex(source.lat, source.lng),
+				getGridIndex(esLat, esLng),
+			);
+			if (!path.reachable) continue;
+			const local = estimateLocalForces(sideIdx, source.lat, source.lng, 9.0);
 
 			proposals.push({
 				type: "PUSH_FRONT",
@@ -7267,16 +7763,26 @@ export function generateAllProposals(sideIdx) {
 				},
 				stagingCells: [],
 				arrowPoints: [
-					{ lat: uLat, lng: uLng },
+					{ lat: source.lat, lng: source.lng },
 					{ lat: esLat, lng: esLng },
 				],
 				estimatedForceNeeded: Math.ceil(unitCount * 0.5),
+				theaterId: front?.pairKey || null,
+				frontIntel: front || null,
+				riskAssessment: {
+					enemyForcesNear: local.enemies,
+					ourForcesNear: local.friendlies,
+					enemyCounterWeight:
+						local.enemies / Math.max(1, local.friendlies + local.enemies),
+				},
 				geographicData: {
 					frontlineDistSq: 0,
-					reachesTarget: !crossesWater,
+					reachesTarget: path.reachable,
 					minSeaDist: Infinity,
-					minLandDist: 0,
+					minLandDist: (path.distanceCells || 0) * CONFIG.GRID_RES,
+					pathDistanceCells: path.distanceCells || 0,
 				},
+				_waypoints: path.waypoints || [],
 			});
 		}
 	}
@@ -7302,6 +7808,7 @@ export function generateAllProposals(sideIdx) {
 		arrowPoints: null,
 		frontlinePoints: flPts,
 		estimatedForceNeeded: Math.ceil(unitCount * 0.3),
+		frontIntel: frontIntel[0] || null,
 		geographicData: {
 			frontlineDistSq: 0,
 			reachesTarget: true,
@@ -7333,6 +7840,7 @@ export function generateAllProposals(sideIdx) {
 		enemyCoastalTiles.length > 0 &&
 		_coastalUnitCount >= 5
 	) {
+		let navalPathChecks = 0;
 		for (const et of enemyCoastalTiles) {
 			let minSeaDist = Infinity;
 			let minLandDist = Infinity;
@@ -7382,6 +7890,16 @@ export function generateAllProposals(sideIdx) {
 				}
 			}
 			if (!bestStaging) continue;
+			if (navalPathChecks >= 80) continue;
+			navalPathChecks++;
+			const seaStart = findNearestSeaIdx(bestStaging.idx);
+			const seaTarget = findNearestSeaIdx(et.idx);
+			const seaPath = findSeaPathSummary(seaStart, seaTarget);
+			if (!seaPath.reachable) continue;
+			minSeaDist = Math.max(
+				minSeaDist,
+				Math.max(1, seaPath.distanceCells) * CONFIG.GRID_RES,
+			);
 
 			proposals.push({
 				type: "NAVAL_INVASION",
@@ -7402,6 +7920,7 @@ export function generateAllProposals(sideIdx) {
 					reachesTarget: true,
 					minSeaDist,
 					minLandDist,
+					seaPathDistanceCells: seaPath.distanceCells || 0,
 				},
 			});
 		}
@@ -7424,27 +7943,37 @@ export function generateAllProposals(sideIdx) {
 			}
 		}
 		if (bestStaging && bestStagingDist <= 400) {
-			proposals.push({
-				type: "NAVAL_SUPPLY",
-				target: {
-					lat: np.target.lat,
-					lng: np.target.lng,
-					name: np.target.name || "Supply Target",
-					isCapital: false,
-				},
-				stagingPoint: { lat: bestStaging.lat, lng: bestStaging.lng },
-				arrowPoints: [
-					{ lat: bestStaging.lat, lng: bestStaging.lng },
-					{ lat: np.target.lat, lng: np.target.lng },
-				],
-				estimatedForceNeeded: Math.ceil(unitCount * 0.1),
-				geographicData: {
-					frontlineDistSq: 0,
-					reachesTarget: true,
-					minSeaDist: bestStagingDist,
-					minLandDist: 0,
-				},
-			});
+			const seaStart = findNearestSeaIdx(bestStaging.idx);
+			const targetIdx = getGridIndex(np.target.lat, np.target.lng);
+			const seaTarget = findNearestSeaIdx(targetIdx);
+			const seaPath = findSeaPathSummary(seaStart, seaTarget);
+			if (seaPath.reachable) {
+				proposals.push({
+					type: "NAVAL_SUPPLY",
+					target: {
+						lat: np.target.lat,
+						lng: np.target.lng,
+						name: np.target.name || "Supply Target",
+						isCapital: false,
+					},
+					stagingPoint: { lat: bestStaging.lat, lng: bestStaging.lng },
+					arrowPoints: [
+						{ lat: bestStaging.lat, lng: bestStaging.lng },
+						{ lat: np.target.lat, lng: np.target.lng },
+					],
+					estimatedForceNeeded: Math.ceil(unitCount * 0.1),
+					geographicData: {
+						frontlineDistSq: 0,
+						reachesTarget: true,
+						minSeaDist: Math.max(
+							bestStagingDist,
+							Math.max(1, seaPath.distanceCells) * CONFIG.GRID_RES,
+						),
+						minLandDist: 0,
+						seaPathDistanceCells: seaPath.distanceCells || 0,
+					},
+				});
+			}
 		}
 	}
 
@@ -7824,7 +8353,7 @@ export function generateAllProposals(sideIdx) {
 			}
 		}
 		if (bestDist < Infinity) {
-			p._waypoints = [{ lat: bestLat, lng: bestLng }];
+			p._waypoints = [...(p._waypoints || []), { lat: bestLat, lng: bestLng }];
 		}
 	}
 	// ── 9. TRANSPORT proposals ──
@@ -7836,36 +8365,56 @@ export function generateAllProposals(sideIdx) {
 		const deployed = sideUnitList.filter(
 			(u) => u.deployTicks === 0 && u.health > 0,
 		);
-		if (deployed.length >= 6 && fCount > 0) {
+		if (deployed.length >= 6 && frontIntel.length > 0) {
 			const strandedThreshold = 3.0; // degrees from frontline
 			let strandedCount = 0;
 			let strandedLat = 0,
 				strandedLng = 0;
+			const targetFrontCounts = new Map();
 			for (const u of deployed) {
-				const dLat = u.lat - fLat;
-				let dLng = u.lng - fLng;
-				if (dLng > 180) dLng -= 360;
-				else if (dLng < -180) dLng += 360;
-				const dSq = dLat * dLat + dLng * dLng;
+				const nearest = findNearestFront(frontIntel, u.lat, u.lng);
+				const dSq = nearest.distSq;
 				if (dSq > strandedThreshold * strandedThreshold) {
 					strandedCount++;
 					strandedLat += u.lat;
 					strandedLng += u.lng;
+					const key = nearest.front?.pairKey || frontIntel[0].pairKey;
+					targetFrontCounts.set(key, (targetFrontCounts.get(key) || 0) + 1);
 				}
 			}
 			if (strandedCount >= 5) {
 				strandedLat /= strandedCount;
 				strandedLng /= strandedCount;
+				let targetFront = frontIntel[0];
+				let targetFrontCount = -1;
+				for (const front of frontIntel) {
+					const count = targetFrontCounts.get(front.pairKey) || 0;
+					const score = count * 10 + front.pressureScore;
+					if (score > targetFrontCount) {
+						targetFrontCount = score;
+						targetFront = front;
+					}
+				}
+				const targetPoint = targetFront?.weakPoint || {
+					lat: fLat,
+					lng: fLng,
+				};
 				proposals.push({
 					type: "TRANSPORT",
-					target: { lat: fLat, lng: fLng, name: "Frontline" },
+					target: {
+						lat: targetPoint.lat,
+						lng: targetPoint.lng,
+						name: "Nearest Frontline",
+					},
 					stagingCells: [],
 					arrowPoints: [
 						{ lat: strandedLat, lng: strandedLng },
-						{ lat: fLat, lng: fLng },
+						{ lat: targetPoint.lat, lng: targetPoint.lng },
 					],
 					estimatedForceNeeded: strandedCount,
 					strandedCount,
+					theaterId: targetFront?.pairKey || null,
+					frontIntel: targetFront || null,
 					geographicData: {
 						frontlineDistSq: 0,
 						reachesTarget: true,
@@ -7886,8 +8435,8 @@ export function generateAllProposals(sideIdx) {
  * @returns {number} priority score
  */
 export function scoreProposal(proposal, sideIdx) {
-	const sideCountries = sides[sideIdx] || [];
-	const strategy = (sideCountries[0]?.strategy || "BALANCED").toUpperCase();
+	const strategyProfile = getSideStrategyProfile(sideIdx);
+	const strategy = strategyProfile.dominant;
 	const sideUnits = _tickUnitsBySide[sideIdx] || [];
 	const unitCount = sideUnits.filter((u) => u.deployTicks === 0).length;
 	const enemyUnitCount = units.filter(
@@ -7895,6 +8444,14 @@ export function scoreProposal(proposal, sideIdx) {
 	).length;
 	const globalForceRatio = unitCount / Math.max(1, enemyUnitCount);
 	const geo = proposal.geographicData || {};
+	const risk = proposal.riskAssessment || {};
+	const localForceRatio =
+		risk.ourForcesNear != null || risk.enemyForcesNear != null
+			? (risk.ourForcesNear || 0) / Math.max(1, risk.enemyForcesNear || 0)
+			: globalForceRatio;
+	const effectiveForceRatio = globalForceRatio * 0.35 + localForceRatio * 0.65;
+	const front = proposal.frontIntel || null;
+	const memory = getProposalMemory(sideIdx, proposal);
 	let score = 0;
 
 	// ── Strategic Value (0–40) ──
@@ -7931,21 +8488,44 @@ export function scoreProposal(proposal, sideIdx) {
 		score += 25 + Math.min(30, (proposal.strandedCount || 0) * 2);
 		// Transport is logistics, not combat — immune to force ratio penalties
 		score *= 1.2; // mild universal boost
+		proposal.scoreBreakdown = {
+			strategy,
+			globalForceRatio,
+			localForceRatio,
+			effectiveForceRatio,
+			memory,
+		};
 		return Math.round(score * 100) / 100;
 	}
 
+	if (front) {
+		if (proposal.type === "PUSH_FRONT" || proposal.type === "ENCIRCLE") {
+			score += Math.min(25, Math.max(0, front.pressureScore * 0.25));
+		}
+		if (proposal.type === "DEFEND") {
+			score += Math.min(
+				20,
+				front.enemies * 0.5 + front.friendlyCitiesThreatened * 6,
+			);
+		}
+		if (proposal.type === "CAPTURE_CITY") {
+			score += Math.min(18, front.enemyCitiesNear * 5 + front.localRatio * 4);
+		}
+	}
+
 	// ── Feasibility (0–30) ──
-	if (globalForceRatio >= 2.0) score += 20;
-	else if (globalForceRatio >= 1.0) score += 10;
+	if (effectiveForceRatio >= 2.0) score += 20;
+	else if (effectiveForceRatio >= 1.0) score += 10;
 	else score -= 15;
 
 	if (geo.reachesTarget) score += 10;
 	else score -= 30;
 
 	// ── Risk (0–20, inverted) ──
-	if (globalForceRatio >= 4.0) score += 20;
-	else if (globalForceRatio >= 2.5) score += 10;
+	if (effectiveForceRatio >= 4.0) score += 20;
+	else if (effectiveForceRatio >= 2.5) score += 10;
 	else score -= 20;
+	score -= Math.min(15, (risk.enemyCounterWeight || 0) * 15);
 
 	// ── Urgency (0–10) ──
 	// Enemy naval landing on our territory boosts COASTAL_DEFENSE
@@ -7993,6 +8573,25 @@ export function scoreProposal(proposal, sideIdx) {
 	if (isOffensive) score *= mult.offensive;
 	else if (isDefensive) score *= mult.defensive;
 
+	if (strategy === "BLITZ" && isOffensive) {
+		if (front?.localRatio >= 1.6) score *= 1.18;
+		if ((geo.pathDistanceCells || 0) > 120) score *= 0.85;
+	}
+	if (strategy === "AGGRESSIVE" && isOffensive && effectiveForceRatio >= 0.9) {
+		score *= 1.08;
+	}
+	if (strategy === "DEFENSIVE" && proposal.type === "CAPTURE_CITY") {
+		score *=
+			proposal.target?.isCapital && effectiveForceRatio >= 1.5 ? 0.9 : 0.65;
+	}
+	if (strategy === "TURTLE" && isOffensive && effectiveForceRatio < 1.6) {
+		score *= 0.05;
+	}
+
+	if (memory?.lastOutcome === "failed") score *= 0.7;
+	if (memory?.lastOutcome === "success") score *= 1.1;
+	if (memory?.failures > memory?.successes + 1) score *= 0.55;
+
 	// ── Special modifiers ──
 	if (proposal.type === "CAPTURE_CITY" && !geo.reachesTarget) {
 		score *= 0.1;
@@ -8008,6 +8607,21 @@ export function scoreProposal(proposal, sideIdx) {
 		}
 	}
 
+	proposal.scoreBreakdown = {
+		strategy,
+		globalForceRatio,
+		localForceRatio,
+		effectiveForceRatio,
+		front: front
+			? {
+					pairKey: front.pairKey,
+					enemySide: front.enemySide,
+					localRatio: front.localRatio,
+					pressureScore: front.pressureScore,
+				}
+			: null,
+		memory,
+	};
 	return Math.round(score * 100) / 100;
 }
 /**
@@ -8020,8 +8634,8 @@ export function scoreProposal(proposal, sideIdx) {
 export function selectPlans(sideIdx, scoredProposals) {
 	if (!scoredProposals || scoredProposals.length === 0) return {};
 
-	const sideCountries = sides[sideIdx] || [];
-	const strategy = (sideCountries[0]?.strategy || "BALANCED").toUpperCase();
+	const strategyProfile = getSideStrategyProfile(sideIdx);
+	const strategy = strategyProfile.dominant;
 	const sideUnits = _tickUnitsBySide[sideIdx] || [];
 	const unitCount = sideUnits.filter((u) => u.deployTicks === 0).length;
 
@@ -8085,9 +8699,18 @@ export function selectPlans(sideIdx, scoredProposals) {
 	const land1 = offensives[0];
 	// ── Land offensive slot 2 ──
 	let land2 = null;
-	if (offensives.length > 1) {
-		const second = offensives[1];
-		if (land1 && (second.priority || 0) >= (land1.priority || 1) * 0.6) {
+	if (land1 && offensives.length > 1) {
+		const secondCandidates = offensives.slice(1);
+		const differentTheater = secondCandidates.find(
+			(p) => p.theaterId && p.theaterId !== land1.theaterId,
+		);
+		const second = differentTheater || secondCandidates[0];
+		const minSecondRatio = differentTheater ? 0.3 : 0.6;
+		if ((second.priority || 0) >= (land1.priority || 1) * minSecondRatio) {
+			const sameTheater =
+				land1.theaterId &&
+				second.theaterId &&
+				land1.theaterId === second.theaterId;
 			// Check direction conflict
 			if (
 				land1.target &&
@@ -8107,9 +8730,16 @@ export function selectPlans(sideIdx, scoredProposals) {
 				const m2 = Math.sqrt(d2Lat * d2Lat + d2Lng * d2Lng);
 				const dot =
 					m1 > 0 && m2 > 0 ? (d1Lat * d2Lat + d1Lng * d2Lng) / (m1 * m2) : 0;
-				if (dot <= 0.85) land2 = second;
+				if (
+					dot <= 0.85 &&
+					(!sameTheater || second.priority >= land1.priority * 0.85)
+				) {
+					land2 = second;
+				}
 			} else {
-				land2 = second;
+				if (!sameTheater || second.priority >= land1.priority * 0.85) {
+					land2 = second;
+				}
 			}
 		}
 	}
@@ -8138,6 +8768,8 @@ export function selectPlans(sideIdx, scoredProposals) {
 		p.allocatedForce =
 			offSum > 0 ? Math.ceil(offensiveForce * ((p.priority || 0) / offSum)) : 0;
 		// Scale by local enemy presence
+		const localRisk = p.riskAssessment || {};
+		const localEnemiesFromRisk = localRisk.enemyForcesNear || 0;
 		if (p.target) {
 			let localEnemies = 0;
 			for (const eu of _allUnits) {
@@ -8155,6 +8787,15 @@ export function selectPlans(sideIdx, scoredProposals) {
 				);
 			}
 		}
+		p.allocatedForce = Math.max(
+			p.allocatedForce,
+			Math.ceil((p.estimatedForceNeeded || 0) * 0.8),
+			Math.ceil(localEnemiesFromRisk * 1.25),
+		);
+		p.allocatedForce = Math.min(
+			p.allocatedForce,
+			Math.max(3, Math.ceil(totalForce * 0.75)),
+		);
 	}
 
 	const selectedDef = [defend1, ...selectedCoastal, ...selectedGarr].filter(
@@ -8174,26 +8815,45 @@ export function selectPlans(sideIdx, scoredProposals) {
 	}
 
 	// ── Convert to plan objects ──
-	const makePlan = (p, phase) => ({
-		type: p.type,
-		phase,
-		target: p.target || null,
-		stagingCells: p.stagingCells || [],
-		arrowPoints: p.arrowPoints || null,
-		frontlinePoints: p.frontlinePoints || null,
-		stagingPoint: p.stagingPoint || null,
-		zonePolyline: p.zonePolyline || null,
-		borderPolyline:
-			p.combatantCountryId != null
-				? _neutralBorderPolys[p.combatantCountryId] || null
+	const makePlan = (p, phase) => {
+		const plan = {
+			type: p.type,
+			phase,
+			target: p.target || null,
+			stagingCells: p.stagingCells || [],
+			arrowPoints: p.arrowPoints || null,
+			frontlinePoints: p.frontlinePoints || null,
+			_waypoints: p._waypoints || [],
+			stagingPoint: p.stagingPoint || null,
+			zonePolyline: p.zonePolyline || null,
+			borderPolyline:
+				p.combatantCountryId != null
+					? _neutralBorderPolys[p.combatantCountryId] || null
+					: null,
+			neutralCountryId: p.neutralCountryId || null,
+			startedTick: simFrameCount,
+			lastProgressTick: simFrameCount,
+			progress: 0,
+			signature: getPlanSignature(sideIdx, p),
+			priority: p.priority || 0,
+			theaterId: p.theaterId || null,
+			scoreBreakdown: p.scoreBreakdown || null,
+			riskAssessment: p.riskAssessment || null,
+			frontIntel: p.frontIntel
+				? {
+						pairKey: p.frontIntel.pairKey,
+						enemySide: p.frontIntel.enemySide,
+						localRatio: p.frontIntel.localRatio,
+						pressureScore: p.frontIntel.pressureScore,
+						weakPoint: p.frontIntel.weakPoint,
+					}
 				: null,
-		neutralCountryId: p.neutralCountryId || null,
-		startedTick: simFrameCount,
-		lastProgressTick: simFrameCount,
-		progress: 0,
-		maxAssignedUnits: p.allocatedForce || 5,
-		activeUnitCount: 0,
-	});
+			maxAssignedUnits: p.allocatedForce || 5,
+			activeUnitCount: 0,
+		};
+		recordPlanOutcome(sideIdx, plan, "started");
+		return plan;
+	};
 
 	if (land1) result.land1 = makePlan(land1, "EXECUTION");
 	if (land2) result.land2 = makePlan(land2, "EXECUTION");
@@ -8325,11 +8985,17 @@ export function evaluateAllPlans() {
 			// Apply land plans to _warPlan slots
 			// Only overwrite on forced reassessment; otherwise fill gaps
 			if (selected.land1 && (!_warPlan[si] || forceReplace)) {
+				if (_warPlan[si] && forceReplace) {
+					recordPlanOutcome(si, _warPlan[si], "failed");
+				}
 				_warPlan[si] = selected.land1;
 			}
 			if (selected.land2) {
 				const lSlot2 = si + sides.length;
 				if (!_warPlan[lSlot2] || forceReplace) {
+					if (_warPlan[lSlot2] && forceReplace) {
+						recordPlanOutcome(si, _warPlan[lSlot2], "failed");
+					}
 					if (_warPlan.length <= lSlot2) {
 						_warPlan[lSlot2] = selected.land2;
 					} else {
@@ -8392,6 +9058,46 @@ export function evaluateAllPlans() {
 				window.__perf.proposalFailed++;
 			}
 
+			const selectedDebugPlans = [
+				selected.land1,
+				selected.land2,
+				selected.naval,
+				selected.defend,
+				selected.transport,
+			].filter(Boolean);
+			const selectedDebugSignatures = new Set(
+				selectedDebugPlans.map((p) => p.signature || getPlanSignature(si, p)),
+			);
+			_aiDebugPlans[si] = {
+				tick: simFrameCount,
+				strategy: getSideStrategyProfile(si).dominant,
+				selected: {
+					land1: selected.land1 || null,
+					land2: selected.land2 || null,
+					naval: selected.naval || null,
+					defend: selected.defend || null,
+					transport: selected.transport || null,
+				},
+				topRejected: proposals
+					.filter((p) => !selectedDebugSignatures.has(getPlanSignature(si, p)))
+					.sort((a, b) => (b.priority || 0) - (a.priority || 0))
+					.slice(0, 5)
+					.map((p) => ({
+						type: p.type,
+						target: p.target?.name || "",
+						priority: p.priority || 0,
+						theaterId: p.theaterId || null,
+						scoreBreakdown: p.scoreBreakdown || null,
+					})),
+				fronts: (_frontIntelBySide[si] || []).slice(0, 4).map((f) => ({
+					pairKey: f.pairKey,
+					enemySide: f.enemySide,
+					localRatio: f.localRatio,
+					pressureScore: f.pressureScore,
+					friendlies: f.friendlies,
+					enemies: f.enemies,
+				})),
+			};
 			_proposalReassessTick[si] = _simTickCount;
 			_proposalsCache[si] = proposals;
 		}
@@ -8450,6 +9156,7 @@ export function evaluateAllPlans() {
 					if (captured) {
 						plan.phase = "CONSOLIDATION";
 						plan.progress = 1.0;
+						recordPlanOutcome(si, plan, "success");
 						// After consolidation period, generate next plan
 						if (ticksSinceProgress > NAVAL_STALL_TICKS) {
 							_planReassessNeeded[si] = true;
@@ -8480,11 +9187,15 @@ export function evaluateAllPlans() {
 					}
 				}
 
+				applyPlanProgressMemory(si, plan);
+
 				// Check for stall
 				if (
-					ticksSinceProgress > NAVAL_STALL_TICKS &&
+					simFrameCount - (plan.lastProgressTick || simFrameCount) >
+						NAVAL_STALL_TICKS &&
 					ticksSinceStart > NAVAL_STALL_TICKS
 				) {
+					recordPlanOutcome(si, plan, "failed");
 					_planReassessNeeded[si] = true; // Failed — reassess
 					continue;
 				}
@@ -8498,6 +9209,7 @@ export function evaluateAllPlans() {
 						const territoryLoss =
 							plan._territoryAtStart - (stats.controlled || 0);
 						if (territoryLoss > 50) {
+							recordPlanOutcome(si, plan, "failed");
 							_planReassessNeeded[si] = true; // Enemy counter-offensive → reassess
 							continue;
 						}
@@ -8509,8 +9221,7 @@ export function evaluateAllPlans() {
 				}
 			}
 
-			// Refresh plan progress tracking
-			plan.lastProgressTick = simFrameCount;
+			applyPlanProgressMemory(si, plan);
 		}
 
 		// ── Land Plan Slot 2 Evaluation ──
@@ -8539,6 +9250,7 @@ export function evaluateAllPlans() {
 					if (captured2) {
 						plan2.phase = "CONSOLIDATION";
 						plan2.progress = 1.0;
+						recordPlanOutcome(si, plan2, "success");
 						if (ticksSinceProgress2 > NAVAL_STALL_TICKS) {
 							_planReassessNeeded[si] = true;
 						}
@@ -8567,10 +9279,14 @@ export function evaluateAllPlans() {
 					}
 				}
 
+				applyPlanProgressMemory(si, plan2);
+
 				if (
-					ticksSinceProgress2 > NAVAL_ABORT_TICKS &&
+					simFrameCount - (plan2.lastProgressTick || simFrameCount) >
+						NAVAL_ABORT_TICKS &&
 					ticksSinceStart2 > NAVAL_STALL_TICKS
 				) {
+					recordPlanOutcome(si, plan2, "failed");
 					_planReassessNeeded[si] = true;
 					continue;
 				}
@@ -8583,6 +9299,7 @@ export function evaluateAllPlans() {
 						const territoryLoss2 =
 							plan2._territoryAtStart - (stats2.controlled || 0);
 						if (territoryLoss2 > 50) {
+							recordPlanOutcome(si, plan2, "failed");
 							_planReassessNeeded[si] = true;
 							continue;
 						}
@@ -8593,7 +9310,7 @@ export function evaluateAllPlans() {
 				}
 			}
 
-			plan2.lastProgressTick = simFrameCount;
+			applyPlanProgressMemory(si, plan2);
 		}
 
 		// ── Naval Plan Evaluation ──
@@ -12371,26 +13088,44 @@ export function performSimulationTick() {
 				planDirLng = 0;
 				isPlanUnit = false;
 				let activePlan = _warPlan[u.sideIndex];
-				// Land slot 2: pick the closer offensive plan if one exists
+				const plan1 = activePlan;
+				const plan1Signature = plan1?.signature || null;
+				let activePlanSignature = plan1Signature;
+				// Land slot 2: keep sticky plan ownership first, otherwise pick the
+				// closer offensive plan if one exists.
 				const slot2Plan = _warPlan[u.sideIndex + sides.length];
+				const slot2Signature = slot2Plan?.signature || null;
 				if (slot2Plan && slot2Plan.type !== "DEFEND") {
-					const d1 = activePlan?.target
-						? (activePlan.target.lat - u.lat) ** 2 +
-							Math.min(
-								Math.abs(((activePlan.target.lng - u.lng + 540) % 360) - 180),
-								180,
-							) **
-								2
-						: Infinity;
-					const d2 = slot2Plan.target
-						? (slot2Plan.target.lat - u.lat) ** 2 +
-							Math.min(
-								Math.abs(((slot2Plan.target.lng - u.lng + 540) % 360) - 180),
-								180,
-							) **
-								2
-						: Infinity;
-					if (d2 < d1) activePlan = slot2Plan;
+					if (u._assignedPlanSignature === slot2Signature) {
+						activePlan = slot2Plan;
+						activePlanSignature = slot2Signature;
+					} else if (u._assignedPlanSignature === plan1Signature) {
+						activePlan = plan1;
+						activePlanSignature = plan1Signature;
+					} else {
+						if (u._assignedPlanSignature) u._assignedPlanSignature = null;
+						const getPlanAnchor = (plan) =>
+							plan?.frontIntel?.weakPoint ||
+							plan?.arrowPoints?.[0] ||
+							plan?.target;
+						const p1Anchor = getPlanAnchor(activePlan);
+						const p2Anchor = getPlanAnchor(slot2Plan);
+						const d1 = p1Anchor
+							? geoDistSq(u.lat, u.lng, p1Anchor.lat, p1Anchor.lng)
+							: Infinity;
+						const d2 = p2Anchor
+							? geoDistSq(u.lat, u.lng, p2Anchor.lat, p2Anchor.lng)
+							: Infinity;
+						if (d2 < d1) {
+							activePlan = slot2Plan;
+							activePlanSignature = slot2Signature;
+						}
+					}
+				} else if (
+					u._assignedPlanSignature &&
+					u._assignedPlanSignature !== plan1Signature
+				) {
+					u._assignedPlanSignature = null;
 				}
 				const navalPlan = _navalPlan[u.sideIndex];
 				const supplyPlan = _navalSupplyPlan[u.sideIndex];
@@ -12748,6 +13483,13 @@ export function performSimulationTick() {
 
 					// TRANSPORT plan: fast-move stranded units toward frontline
 					const transportPlan = _transportPlan[u.sideIndex];
+					const transportSignature = transportPlan?.signature || null;
+					if (
+						u._transportPlanSignature &&
+						u._transportPlanSignature !== transportSignature
+					) {
+						u._transportPlanSignature = null;
+					}
 					if (
 						transportPlan &&
 						!shouldMopUp &&
@@ -12761,9 +13503,21 @@ export function performSimulationTick() {
 						if (tdLng > 180) tdLng -= 360;
 						else if (tdLng < -180) tdLng += 360;
 						const tdSq = tdLat * tdLat + tdLng * tdLng;
+						const assignedToTransport =
+							u._transportPlanSignature === transportSignature;
+						const transportLimit = Math.max(
+							1,
+							transportPlan.maxAssignedUnits || 5,
+						);
+						const transportFull =
+							!assignedToTransport &&
+							(transportPlan.activeUnitCount || 0) >= transportLimit;
 						// Exit transport when within 1.5 degrees of frontline
-						if (tdSq > 2.25) {
+						if (tdSq <= 2.25) {
+							u._transportPlanSignature = null;
+						} else if (!transportFull) {
 							isPlanUnit = true;
+							u._transportPlanSignature = transportSignature;
 							transportPlan.activeUnitCount =
 								(transportPlan.activeUnitCount || 0) + 1;
 							u.isTransport = true;
@@ -12875,9 +13629,37 @@ export function performSimulationTick() {
 							activePlan &&
 							activePlan.type !== "DEFEND"
 						) {
-							const planFull = false;
-							if (!planFull) {
+							const planLimit = Math.max(1, activePlan.maxAssignedUnits || 5);
+							const currentPlanSignature =
+								activePlan.signature || activePlanSignature;
+							const assignedToPlan =
+								u._assignedPlanSignature === currentPlanSignature;
+							const planFull =
+								!assignedToPlan &&
+								(activePlan.activeUnitCount || 0) >= planLimit;
+							const planAnchor =
+								activePlan.frontIntel?.weakPoint ||
+								activePlan.arrowPoints?.[0] ||
+								activePlan.target;
+							const planAnchorDistSq = planAnchor
+								? geoDistSq(u.lat, u.lng, planAnchor.lat, planAnchor.lng)
+								: 0;
+							const planTheaterRadiusSq =
+								activePlan.type === "PUSH_FRONT" ? 36.0 : 25.0;
+							const needsSeedUnits =
+								(activePlan.activeUnitCount || 0) < Math.ceil(planLimit * 0.15);
+							const inPlanTheater =
+								assignedToPlan ||
+								!planAnchor ||
+								planAnchorDistSq <= planTheaterRadiusSq ||
+								(needsSeedUnits && planAnchorDistSq <= 100.0);
+							if (!planFull && inPlanTheater) {
 								isPlanUnit = true;
+								u._assignedPlanSignature = currentPlanSignature;
+								if (u._planWaypointSignature !== currentPlanSignature) {
+									u._planWaypointSignature = currentPlanSignature;
+									u._planWaypointIndex = 0;
+								}
 								if (activePlan.activeUnitCount !== undefined) {
 									activePlan.activeUnitCount++;
 								}
@@ -12917,20 +13699,26 @@ export function performSimulationTick() {
 										activePlan._waypoints &&
 										activePlan._waypoints.length > 0
 									) {
-										const wp = activePlan._waypoints[0];
-										const wLat = wp.lat - u.lat;
-										let wLng = wp.lng - u.lng;
-										if (wLng > 180) wLng -= 360;
-										else if (wLng < -180) wLng += 360;
-										const wDistSq = wLat * wLat + wLng * wLng;
-										if (wDistSq < 1.0) {
-											activePlan._waypoints.shift();
-										} else {
-											const wDist = Math.sqrt(wDistSq);
-											planDirLat = wLat / wDist;
-											planDirLng = wLng / wDist;
-											planSpeedMult = 2.0;
-											useWaypoint = true;
+										const wpIndex = Math.min(
+											u._planWaypointIndex || 0,
+											activePlan._waypoints.length,
+										);
+										const wp = activePlan._waypoints[wpIndex];
+										if (wp) {
+											const wLat = wp.lat - u.lat;
+											let wLng = wp.lng - u.lng;
+											if (wLng > 180) wLng -= 360;
+											else if (wLng < -180) wLng += 360;
+											const wDistSq = wLat * wLat + wLng * wLng;
+											if (wDistSq < 1.0) {
+												u._planWaypointIndex = wpIndex + 1;
+											} else {
+												const wDist = Math.sqrt(wDistSq);
+												planDirLat = wLat / wDist;
+												planDirLng = wLng / wDist;
+												planSpeedMult = 2.0;
+												useWaypoint = true;
+											}
 										}
 									}
 									if (!useWaypoint) {
@@ -13054,7 +13842,7 @@ export function performSimulationTick() {
 					else if (cLng < -180) cLng += 360;
 					const cDist = Math.sqrt(cLat * cLat + cLng * cLng);
 					if (cDist > 0.0001) {
-						const combatWeight = 0.7;
+						const combatWeight = isPlanUnit ? 0.35 : 0.7;
 						moveDirLat =
 							(cLat / cDist) * combatWeight + moveDirLat * (1 - combatWeight);
 						moveDirLng =
@@ -13073,6 +13861,7 @@ export function performSimulationTick() {
 				// Disabled during staging phases and for DEFEND plans (they hold the line)
 				if (
 					u.frontSlot &&
+					!isPlanUnit &&
 					!shouldMopUp &&
 					!retreatVector &&
 					!isEngaged &&
@@ -13172,7 +13961,7 @@ export function performSimulationTick() {
 						dCentLat * dCentLat + dCentLng * dCentLng,
 					);
 					if (dCentDist > 0.1) {
-						const cohesionStr = 0.06;
+						const cohesionStr = isPlanUnit ? 0.025 : 0.06;
 						moveDirLat += (dCentLat / dCentDist) * cohesionStr;
 						moveDirLng += (dCentLng / dCentDist) * cohesionStr;
 					}
@@ -13182,7 +13971,7 @@ export function performSimulationTick() {
 						Math.abs(groupCentroid.vLat) > 0.01 ||
 						Math.abs(groupCentroid.vLng) > 0.01
 					) {
-						const alignStr = 0.25;
+						const alignStr = isPlanUnit ? 0.1 : 0.25;
 						moveDirLat += groupCentroid.vLat * alignStr;
 						moveDirLng += groupCentroid.vLng * alignStr;
 					}
@@ -13204,7 +13993,7 @@ export function performSimulationTick() {
 					);
 					if (rMag > 0) {
 						// Less aggressive repulsion so units keep their forward momentum and don't scatter sideways
-						const repulsionStrength = 0.4;
+						const repulsionStrength = isPlanUnit ? 0.25 : 0.4;
 						moveDirLat =
 							moveDirLat * (1 - repulsionStrength) +
 							(u.repulsionVector.lat / rMag) * repulsionStrength;
@@ -14615,6 +15404,10 @@ window.perfReport = () => {
 	}
 	return formatPerfReport(data);
 };
+window.aiDebugReport = (sideIdx = null) => {
+	if (sideIdx == null) return _aiDebugPlans;
+	return _aiDebugPlans[sideIdx] || null;
+};
 
 export function updateLoop(now) {
 	const shouldSimulate =
@@ -15573,6 +16366,9 @@ export function applyTreaty(type, winnerPoleOverride = null) {
 	_warPlan = [];
 	_sideMomentumHistory = [];
 	_sideWarPhase = [];
+	_frontIntelBySide = [];
+	_aiDebugPlans = [];
+	_aiPlanMemory.clear();
 	activeBattles = [];
 	_battleHash.clear();
 	bombs = [];

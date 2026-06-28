@@ -1,6 +1,7 @@
 import L from "leaflet";
 import { CONFIG } from "./config.js";
 import {
+	_aiDebugPlans,
 	_allianceCacheDirty,
 	_cachedSideTerritoryPcts,
 	_cachedTerritoryCtrlEls,
@@ -2291,6 +2292,14 @@ const ControlMapLayer = L.Layer.extend({
 					ctx.font = "bold 9px monospace";
 					ctx.fillStyle = color.replace(rgbaRe, "0.8)");
 					ctx.fillText("DEFEND", midP.x + 8, midP.y - 6);
+					if (plan.frontIntel) {
+						ctx.font = "8px monospace";
+						ctx.fillText(
+							`FR ${plan.frontIntel.localRatio.toFixed(1)} P${Math.round(plan.frontIntel.pressureScore)}`,
+							midP.x + 8,
+							midP.y + 6,
+						);
+					}
 					ctx.restore();
 					continue;
 				}
@@ -2319,6 +2328,14 @@ const ControlMapLayer = L.Layer.extend({
 					ctx.font = "bold 9px monospace";
 					ctx.fillStyle = color.replace(rgbaRe, "0.6)");
 					ctx.fillText("PUSH", midX + 8, midY);
+					if (plan.scoreBreakdown) {
+						ctx.font = "8px monospace";
+						ctx.fillText(
+							`S${Math.round(plan.priority || 0)} R${plan.scoreBreakdown.effectiveForceRatio.toFixed(1)}`,
+							midX + 8,
+							midY + 12,
+						);
+					}
 					continue;
 				}
 
@@ -2371,6 +2388,39 @@ const ControlMapLayer = L.Layer.extend({
 				ctx.fillStyle = color;
 				const planLabel = plan.type ? `${plan.type} ${plan.phase}` : plan.phase;
 				ctx.fillText(planLabel, midX + 10, midY - 2);
+				if (plan.scoreBreakdown) {
+					ctx.font = "8px monospace";
+					const theater = plan.theaterId ? ` ${plan.theaterId}` : "";
+					ctx.fillText(
+						`S${Math.round(plan.priority || 0)} R${plan.scoreBreakdown.effectiveForceRatio.toFixed(1)}${theater}`,
+						midX + 10,
+						midY + 10,
+					);
+				}
+			}
+
+			if (_aiDebugPlans?.length) {
+				for (let si = 0; si < _aiDebugPlans.length; si++) {
+					const debug = _aiDebugPlans[si];
+					if (!debug?.fronts?.length) continue;
+					const color = sideColors[si] || "rgba(255,255,0,0.6)";
+					ctx.save();
+					ctx.font = "8px monospace";
+					ctx.fillStyle = color.replace(rgbaRe, "0.65)");
+					for (const front of debug.fronts.slice(0, 2)) {
+						const weak =
+							_warPlan[si]?.frontIntel?.weakPoint ||
+							_warPlan[si + sides.length]?.frontIntel?.weakPoint;
+						if (!weak) continue;
+						const p = project(weak.lat, weak.lng);
+						ctx.fillText(
+							`AI ${debug.strategy} FR ${front.localRatio.toFixed(1)} P${Math.round(front.pressureScore)}`,
+							p.x + 8,
+							p.y + 14,
+						);
+					}
+					ctx.restore();
+				}
 			}
 
 			// Draw naval invasion arrows (dashed, country-colored)
