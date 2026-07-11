@@ -1,0 +1,23 @@
+index.html
+  s_f0c78bf6e302a1::t_0b7721413bf40b 7
+src/renderer.js
+  s_f0c78bf6e302a1::t_e7b77dc0fccf54 123-132
+workers/service-worker.js
+  s_f0c78bf6e302a1::t_0b7721413bf40b 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "6d1ac7f86b5913591fd153a7490a1814e9a0a3e6",
+  "prompts": {},
+  "sessions": {
+    "s_f0c78bf6e302a1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f50d6-62a1-7b40-a8b4-1f7a4058f399",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vaspyyy <lolbautz2@gmail.com>"
+    }
+  }
+}
