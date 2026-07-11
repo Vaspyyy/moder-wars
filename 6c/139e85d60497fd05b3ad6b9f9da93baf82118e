@@ -1,0 +1,25 @@
+index.html
+  s_f0c78bf6e302a1::t_23d34197531a68 7
+workers/geo-parse-worker.js
+  s_f0c78bf6e302a1::t_ae447e6d1228ff 3,5-6,8
+workers/service-worker.js
+  s_f0c78bf6e302a1::t_23d34197531a68 3
+src/geo.js
+  s_f0c78bf6e302a1::t_ae447e6d1228ff 67-106,109-117
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.12",
+  "base_commit_sha": "6c139e85d60497fd05b3ad6b9f9da93baf82118e",
+  "prompts": {},
+  "sessions": {
+    "s_f0c78bf6e302a1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f50d6-62a1-7b40-a8b4-1f7a4058f399",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vaspyyy <lolbautz2@gmail.com>"
+    }
+  }
+}
