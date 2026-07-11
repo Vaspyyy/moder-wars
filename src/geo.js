@@ -64,20 +64,57 @@ async function _cachePut(url, data) {
 }
 
 let _geoParseWorker = null;
+let _geoParseRequestId = 0;
+const _pendingGeoParses = new Map();
+
+function _rejectPendingGeoParses(error) {
+	for (const { reject } of _pendingGeoParses.values()) reject(error);
+	_pendingGeoParses.clear();
+}
+
+function _getGeoParseWorker() {
+	if (_geoParseWorker) return _geoParseWorker;
+
+	const worker = new Worker(
+		new URL("../workers/geo-parse-worker.js", import.meta.url),
+	);
+	worker.onmessage = (evt) => {
+		const { id, data, error } = evt.data || {};
+		const pending = _pendingGeoParses.get(id);
+		if (!pending) return;
+
+		_pendingGeoParses.delete(id);
+		if (error) pending.reject(new Error(error));
+		else pending.resolve(data);
+	};
+	worker.onerror = (evt) => {
+		console.warn("geo-parse-worker error:", evt);
+		_rejectPendingGeoParses(
+			new Error(evt.message || "GeoJSON parser worker failed"),
+		);
+		worker.terminate();
+		if (_geoParseWorker === worker) _geoParseWorker = null;
+	};
+	worker.onmessageerror = () => {
+		_rejectPendingGeoParses(new Error("GeoJSON parser returned invalid data"));
+		worker.terminate();
+		if (_geoParseWorker === worker) _geoParseWorker = null;
+	};
+	_geoParseWorker = worker;
+	return worker;
+}
+
 function _parseInWorker(buf) {
-	if (!_geoParseWorker) {
-		_geoParseWorker = new Worker("../workers/geo-parse-worker.js");
-		_geoParseWorker.onerror = (e) => console.warn("geo-parse-worker error:", e);
-	}
 	return new Promise((resolve, reject) => {
-		const worker = _geoParseWorker;
-		const handler = (evt) => {
-			worker.removeEventListener("message", handler);
-			if (evt.data?.error) reject(new Error(evt.data.error));
-			else resolve(evt.data.data);
-		};
-		worker.addEventListener("message", handler);
-		worker.postMessage(buf, [buf]);
+		const worker = _getGeoParseWorker();
+		const id = ++_geoParseRequestId;
+		_pendingGeoParses.set(id, { resolve, reject });
+		try {
+			worker.postMessage({ id, buf }, [buf]);
+		} catch (error) {
+			_pendingGeoParses.delete(id);
+			reject(error);
+		}
 	});
 }
 
