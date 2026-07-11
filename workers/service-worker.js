@@ -1,6 +1,6 @@
 // Service Worker — cache-first for same-origin static assets
 
-const CACHE_VERSION = "mw-v0.26.39";
+const CACHE_VERSION = "mw-v0.26.40";
 const CACHE_NAME = `mw-cache-${CACHE_VERSION}`;
 
 const PRECACHE_URLS = [

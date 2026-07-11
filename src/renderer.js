@@ -120,13 +120,16 @@ const ControlMapLayer = L.Layer.extend({
 		};
 
 		this._onZoomAnim = (e) => {
-			// Apply CSS transform to match Leaflet's tile zoom animation
-			const scale = 2 ** (e.zoom - this._zoomStartZoom);
-			const size = map.getSize();
-			const originX = size.x / 2;
-			const originY = size.y / 2;
-			this._container.style.transformOrigin = `${originX}px ${originY}px`;
-			this._container.style.transform = `scale(${scale})`;
+			// The canvas is viewport-locked, so it does not inherit Leaflet's
+			// animated map-pane transform. Match both its scale and translation.
+			const scale = map.getZoomScale(e.zoom, this._zoomStartZoom);
+			const oldTargetCenter = map.latLngToContainerPoint(e.center);
+			const newTargetCenter = map.getSize().divideBy(2);
+			const offset = newTargetCenter.subtract(
+				oldTargetCenter.multiplyBy(scale),
+			);
+			this._container.style.transformOrigin = "0 0";
+			L.DomUtil.setTransform(this._container, offset, scale);
 		};
 
 		this._onZoomEnd = () => {
