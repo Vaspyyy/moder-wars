@@ -1815,6 +1815,7 @@ let _perfFrameCount = 0;
 let _isBenchmarking = false;
 let _perfBenchmarkEnd = 0;
 let _perfSamples = [];
+let _benchmarkUnitsPerSide = null;
 export let _cachedP1T = 0,
 	_cachedP2T = 0;
 export let _cachedSoldierEls = [];
@@ -2024,6 +2025,8 @@ const PERF_COUNTER_DEFAULTS = {
 	frontline: 0,
 	frontlineDispatch: 0,
 	frontlinePolys: 0,
+	frontlineLayoutApply: 0,
+	frontlineSlotApply: 0,
 	consolidate: 0,
 	caches: 0,
 	victory: 0,
@@ -2052,6 +2055,9 @@ const PERF_COUNTER_DEFAULTS = {
 	unitGlobalFallback: 0,
 	unitFrontlinePress: 0,
 	unitMopUpSearch: 0,
+	unitMopUpTargetSearch: 0,
+	unitCityObjective: 0,
+	unitGarrisonTarget: 0,
 	unitCombatMove: 0,
 	economy: 0,
 	// Water avoidance debug counters
@@ -2067,6 +2073,14 @@ const PERF_COUNTER_DEFAULTS = {
 	frontlineWorkerStaleResults: 0,
 	frontlineWorkerLastDurationMs: 0,
 	frontlineWorkerMaxDurationMs: 0,
+	frontlineWorkerFieldLastDurationMs: 0,
+	frontlineWorkerFieldMaxDurationMs: 0,
+	frontlineWorkerLayoutDispatches: 0,
+	frontlineWorkerLayoutCompleted: 0,
+	frontlineWorkerLayoutCoalesced: 0,
+	frontlineWorkerLayoutErrors: 0,
+	frontlineWorkerLayoutLastDurationMs: 0,
+	frontlineWorkerLayoutMaxDurationMs: 0,
 };
 
 function createPerfState(mode = "off") {
@@ -2117,6 +2131,65 @@ const _tickSideSupportIdSets = [];
 export const _tickUnitsBySide = [];
 const _tickUnitGridIdx = new Map();
 let _tickAllCombatants = [];
+const STRATEGIC_COHORT_COUNT = 4;
+const CITY_CANDIDATE_CACHE_LIMIT = 32;
+const CITY_WATER_CHECK_LIMIT = 4;
+const CITY_OBJECTIVE_REFRESH_INTERVAL = 12;
+let _strategicTargetGeneration = 0;
+let _enemyCityCacheGeneration = -1;
+let _enemyCityCacheSource = null;
+let _enemyCityCandidatesBySide = [];
+
+function invalidateStrategicTargetCaches() {
+	_strategicTargetGeneration++;
+	_enemyCityCacheGeneration = -1;
+	_enemyCityCacheSource = null;
+	_enemyCityCandidatesBySide = [];
+}
+
+function clearUnitStrategicTargets(unit) {
+	unit.mopUpTarget = null;
+	unit.lastMopUpId = null;
+	unit.targetSearchCooldown = 0;
+	unit._cityObjective = null;
+	unit._cityObjectiveTick = -999;
+	unit._strategicTargetGeneration = _strategicTargetGeneration;
+	unit._strategicBeneficiaryId = unit.beneficiaryId;
+}
+
+function getEnemyCityCandidatesBySide(citySource, countryToSideMap) {
+	if (
+		_enemyCityCacheGeneration === _strategicTargetGeneration &&
+		_enemyCityCacheSource === citySource &&
+		_enemyCityCandidatesBySide.length === sides.length
+	) {
+		return _enemyCityCandidatesBySide;
+	}
+	const candidates = Array.from({ length: sides.length }, () => []);
+	for (const city of citySource || []) {
+		const ownerId = city.sovereignId || city.ownerId || 0;
+		const ownerSide = countryToSideMap.get(ownerId);
+		if (ownerSide === undefined) continue;
+		for (let sideIndex = 0; sideIndex < sides.length; sideIndex++) {
+			if (areSidesHostile(sideIndex, ownerSide))
+				candidates[sideIndex].push(city);
+		}
+	}
+	for (const sideCandidates of candidates) {
+		sideCandidates.sort((a, b) => {
+			const capitalDelta = Number(b.isCapital) - Number(a.isCapital);
+			if (capitalDelta !== 0) return capitalDelta;
+			return (b.population || b.pop || 0) - (a.population || a.pop || 0);
+		});
+		if (sideCandidates.length > CITY_CANDIDATE_CACHE_LIMIT) {
+			sideCandidates.length = CITY_CANDIDATE_CACHE_LIMIT;
+		}
+	}
+	_enemyCityCacheGeneration = _strategicTargetGeneration;
+	_enemyCityCacheSource = citySource;
+	_enemyCityCandidatesBySide = candidates;
+	return candidates;
+}
 
 // Temporary diagnostics for cross-war state/capitulation bugs.
 export const aiCountryState = new Map();
@@ -2199,9 +2272,16 @@ export const FRONTLINE_FIELD_UPDATE_INTERVAL = 150; // rebuild field via worker 
 export let _simWorker = null; // Web Worker for async frontline BFS
 export let _workerBusy = false;
 let _frontlineWorkerPending = false;
+let _frontlineWorkerPendingField = false;
+let _frontlineWorkerPendingLayout = false;
 let _frontlineWorkerRequestId = 0;
 let _frontlineWorkerActiveRequestId = 0;
+let _frontlineWorkerActiveField = false;
+let _frontlineWorkerActiveLayout = false;
 let _frontlineWorkerGeneration = 0;
+let _frontlineTerritoryGeneration = 0;
+let _frontlineLayoutApplyPendingMs = 0;
+let _frontlineSlotApplyPendingMs = 0;
 // Frontline polyline system: distributed unit stationing along war fronts
 export let _frontlinePolys = {};
 export let _neutralBorderPolys = {}; // combatant-vs-neutral border polylines for garrison stationing
@@ -2317,9 +2397,6 @@ export function setRefScale(val) {
 }
 export function setSideInfluenceMaps(val) {
 	sideInfluenceMaps = val;
-}
-export function setFrontlinePolys(val) {
-	_frontlinePolys = val;
 }
 export function setNeutralBorderPolys(val) {
 	_neutralBorderPolys = val;
@@ -3375,16 +3452,61 @@ export const map = L.map("map", {
 	wheelPxPerZoomLevel: 120,
 });
 
-// Create Web Worker for async frontline BFS rebuilds
+// Create Web Worker for async frontline field and layout rebuilds.
 _simWorker = new Worker("../workers/simulation-worker.js");
+
+function syncFrontlineWorkerPendingState() {
+	_frontlineWorkerPending =
+		_frontlineWorkerPendingField || _frontlineWorkerPendingLayout;
+}
+
+function applyFrontlineLayout(data) {
+	const layoutApplyStarted = performance.now();
+	_frontlinePolys = data.polylines;
+	const layoutApplyMs = performance.now() - layoutApplyStarted;
+
+	const slotApplyStarted = performance.now();
+	const unitsById = new Map(units.map((unit) => [unit.id, unit]));
+	for (const assignment of data.slotAssignments) {
+		const unit = unitsById.get(assignment.unitId);
+		if (!unit) continue;
+		if (
+			assignment.pairKey == null ||
+			unit._occupationGarrisonVictimId != null
+		) {
+			unit.frontSlot = null;
+			continue;
+		}
+		if (
+			!Number.isFinite(assignment.targetLat) ||
+			!Number.isFinite(assignment.targetLng)
+		) {
+			continue;
+		}
+		unit.frontSlot = {
+			pairKey: assignment.pairKey,
+			segmentIdx: assignment.segmentIdx || 0,
+			targetLat: assignment.targetLat,
+			targetLng: assignment.targetLng,
+		};
+	}
+	const slotApplyMs = performance.now() - slotApplyStarted;
+	_frontlineLayoutApplyPendingMs += layoutApplyMs;
+	_frontlineSlotApplyPendingMs += slotApplyMs;
+}
+
 _simWorker.onmessage = (evt) => {
 	const data = evt.data;
 	if (!data || data.requestId !== _frontlineWorkerActiveRequestId) {
 		if (window.__perf) window.__perf.frontlineWorkerStaleResults++;
 		return;
 	}
+	const completedField = _frontlineWorkerActiveField;
+	const completedLayout = _frontlineWorkerActiveLayout;
 	_workerBusy = false;
 	_frontlineWorkerActiveRequestId = 0;
+	_frontlineWorkerActiveField = false;
+	_frontlineWorkerActiveLayout = false;
 	if (window.__perf) {
 		window.__perf.frontlineWorkerCompleted++;
 		const durationMs = Number(data.durationMs) || 0;
@@ -3395,70 +3517,161 @@ _simWorker.onmessage = (evt) => {
 		);
 	}
 	if (data.error) {
-		if (window.__perf) window.__perf.frontlineWorkerErrors++;
+		if (window.__perf) {
+			window.__perf.frontlineWorkerErrors++;
+			if (completedLayout) window.__perf.frontlineWorkerLayoutErrors++;
+		}
 		return;
 	}
-	if (data.generation !== _frontlineWorkerGeneration) {
+	if (
+		data.generation !== _frontlineWorkerGeneration ||
+		data.territoryGeneration !== _frontlineTerritoryGeneration
+	) {
 		if (window.__perf) window.__perf.frontlineWorkerStaleResults++;
 		return;
 	}
-	const { frontlineDirLat: latBuf, frontlineDirLng: lngBuf } = data;
-	if (
-		!(latBuf instanceof ArrayBuffer) ||
-		!(lngBuf instanceof ArrayBuffer) ||
-		latBuf.byteLength === 0
-	) {
-		if (window.__perf) window.__perf.frontlineWorkerErrors++;
-		return;
+	if (completedField) {
+		const { frontlineDirLat: latBuf, frontlineDirLng: lngBuf } = data;
+		if (
+			!(latBuf instanceof ArrayBuffer) ||
+			!(lngBuf instanceof ArrayBuffer) ||
+			latBuf.byteLength === 0
+		) {
+			if (window.__perf) window.__perf.frontlineWorkerErrors++;
+			return;
+		}
+		frontlineDirLat = new Float32Array(latBuf);
+		frontlineDirLng = new Float32Array(lngBuf);
+		if (window.__perf) {
+			const fieldDurationMs = Number(data.fieldDurationMs) || 0;
+			window.__perf.frontlineWorkerFieldLastDurationMs = fieldDurationMs;
+			window.__perf.frontlineWorkerFieldMaxDurationMs = Math.max(
+				window.__perf.frontlineWorkerFieldMaxDurationMs || 0,
+				fieldDurationMs,
+			);
+		}
 	}
-	frontlineDirLat = new Float32Array(latBuf);
-	frontlineDirLng = new Float32Array(lngBuf);
+	if (completedLayout) {
+		if (
+			!data.polylines ||
+			typeof data.polylines !== "object" ||
+			!Array.isArray(data.slotAssignments)
+		) {
+			if (window.__perf) {
+				window.__perf.frontlineWorkerErrors++;
+				window.__perf.frontlineWorkerLayoutErrors++;
+			}
+			return;
+		}
+		applyFrontlineLayout(data);
+		if (window.__perf) {
+			const layoutDurationMs = Number(data.layoutDurationMs) || 0;
+			window.__perf.frontlineWorkerLayoutCompleted++;
+			window.__perf.frontlineWorkerLayoutLastDurationMs = layoutDurationMs;
+			window.__perf.frontlineWorkerLayoutMaxDurationMs = Math.max(
+				window.__perf.frontlineWorkerLayoutMaxDurationMs || 0,
+				layoutDurationMs,
+			);
+		}
+	}
 };
 _simWorker.onerror = () => {
 	_workerBusy = false;
 	_frontlineWorkerActiveRequestId = 0;
-	if (window.__perf) window.__perf.frontlineWorkerErrors++;
+	if (window.__perf) {
+		window.__perf.frontlineWorkerErrors++;
+		if (_frontlineWorkerActiveLayout)
+			window.__perf.frontlineWorkerLayoutErrors++;
+	}
+	_frontlineWorkerActiveField = false;
+	_frontlineWorkerActiveLayout = false;
 };
 _simWorker.onmessageerror = () => {
 	_workerBusy = false;
 	_frontlineWorkerActiveRequestId = 0;
-	if (window.__perf) window.__perf.frontlineWorkerErrors++;
+	if (window.__perf) {
+		window.__perf.frontlineWorkerErrors++;
+		if (_frontlineWorkerActiveLayout)
+			window.__perf.frontlineWorkerLayoutErrors++;
+	}
+	_frontlineWorkerActiveField = false;
+	_frontlineWorkerActiveLayout = false;
 };
 
 function invalidateFrontlineField() {
 	_frontlineWorkerGeneration++;
-	_frontlineWorkerPending = true;
+	_frontlineTerritoryGeneration++;
+	invalidateStrategicTargetCaches();
+	_frontlineWorkerPendingField = true;
+	_frontlineWorkerPendingLayout = true;
+	syncFrontlineWorkerPendingState();
 	frontlineFieldTick = -999;
+	_frontlinePolyTick = -999;
 	frontlineDirLat = null;
 	frontlineDirLng = null;
+	_frontlinePolys = {};
+	for (const unit of units) unit.frontSlot = null;
 }
 
-function dispatchFrontlineFieldRebuild() {
+function dispatchFrontlineWork(includeField = false, includeLayout = false) {
 	if (!_simWorker) {
 		if (window.__perf) window.__perf.frontlineWorkerErrors++;
 		return false;
 	}
+	if (includeField) frontlineFieldTick = _simTickCount;
+	if (includeLayout) _frontlinePolyTick = _simTickCount;
 	if (_workerBusy) {
-		if (!_frontlineWorkerPending) {
-			_frontlineWorkerPending = true;
-			if (window.__perf) window.__perf.frontlineWorkerCoalesced++;
+		let coalesced = false;
+		if (includeField && !_frontlineWorkerPendingField) {
+			_frontlineWorkerPendingField = true;
+			coalesced = true;
 		}
+		if (includeLayout && !_frontlineWorkerPendingLayout) {
+			_frontlineWorkerPendingLayout = true;
+			coalesced = true;
+			if (window.__perf) window.__perf.frontlineWorkerLayoutCoalesced++;
+		}
+		syncFrontlineWorkerPendingState();
+		if (coalesced && window.__perf) window.__perf.frontlineWorkerCoalesced++;
 		return false;
 	}
+	includeField ||= _frontlineWorkerPendingField;
+	includeLayout ||= _frontlineWorkerPendingLayout;
+	if (!includeField && !includeLayout) return false;
 
 	const requestId = ++_frontlineWorkerRequestId;
 	const generation = _frontlineWorkerGeneration;
+	const territoryGeneration = _frontlineTerritoryGeneration;
 	try {
 		const lmCopy = new Uint8Array(landMask);
 		const dsCopy = new Int8Array(dominantSideMap);
 		const hostilityCopy = new Uint8Array(hostilityMatrix);
+		const unitSnapshots = includeLayout
+			? units.map((unit) => ({
+					id: unit.id,
+					sideIndex: unit.sideIndex,
+					lat: unit.lat,
+					lng: unit.lng,
+					deployTicks: unit.deployTicks || 0,
+					garrisonExcluded: unit._occupationGarrisonVictimId != null,
+					previousPairKey: unit.frontSlot?.pairKey || null,
+					previousSegmentIdx: unit.frontSlot?.segmentIdx || 0,
+				}))
+			: null;
 		_workerBusy = true;
-		_frontlineWorkerPending = false;
+		_frontlineWorkerPendingField = false;
+		_frontlineWorkerPendingLayout = false;
+		syncFrontlineWorkerPendingState();
 		_frontlineWorkerActiveRequestId = requestId;
+		_frontlineWorkerActiveField = includeField;
+		_frontlineWorkerActiveLayout = includeLayout;
 		_simWorker.postMessage(
 			{
 				requestId,
 				generation,
+				territoryGeneration,
+				includeField,
+				includeLayout,
 				landMask: lmCopy.buffer,
 				dominantSideMap: dsCopy.buffer,
 				hostilityMatrix: hostilityCopy.buffer,
@@ -3466,17 +3679,25 @@ function dispatchFrontlineFieldRebuild() {
 				gridWidth,
 				gridHeight,
 				gridRes: CONFIG.GRID_RES,
+				sideCount: sides.length,
+				units: unitSnapshots,
 			},
 			[lmCopy.buffer, dsCopy.buffer, hostilityCopy.buffer],
 		);
-		frontlineFieldTick = _simTickCount;
-		if (window.__perf) window.__perf.frontlineWorkerDispatches++;
+		if (window.__perf) {
+			window.__perf.frontlineWorkerDispatches++;
+			if (includeLayout) window.__perf.frontlineWorkerLayoutDispatches++;
+		}
 		return true;
 	} catch (error) {
 		console.warn("Frontline worker dispatch failed:", error);
 		_workerBusy = false;
-		_frontlineWorkerPending = true;
+		_frontlineWorkerPendingField ||= includeField;
+		_frontlineWorkerPendingLayout ||= includeLayout;
+		syncFrontlineWorkerPendingState();
 		_frontlineWorkerActiveRequestId = 0;
+		_frontlineWorkerActiveField = false;
+		_frontlineWorkerActiveLayout = false;
 		if (window.__perf) window.__perf.frontlineWorkerErrors++;
 		return false;
 	}
@@ -3571,7 +3792,6 @@ import {
 } from "./editor.js";
 import {
 	clearCellInfluence,
-	computeFrontlinePolys,
 	getBorderDirection,
 	getGridIndex,
 	initSideInfluenceMaps,
@@ -7815,6 +8035,7 @@ function showBenchmarkResults() {
 		window.__perf._lastBenchmark = {
 			frames: _perfSamples.length,
 			speed: simSpeed,
+			maxUnitsPerSide: _benchmarkUnitsPerSide,
 			avgFps,
 			minFps,
 			maxFps,
@@ -7826,7 +8047,7 @@ function showBenchmarkResults() {
 	}
 	if (benchmarkStatsEl) {
 		benchmarkStatsEl.innerHTML =
-			`Frames: ${_perfSamples.length} &nbsp;|&nbsp; Speed: ${simSpeed}x<br>` +
+			`Frames: ${_perfSamples.length} &nbsp;|&nbsp; Speed: ${simSpeed}x${_benchmarkUnitsPerSide ? ` &nbsp;|&nbsp; Units/side: ${_benchmarkUnitsPerSide}` : ""}<br>` +
 			`Avg FPS: ${avgFps.toFixed(0)} &nbsp;|&nbsp; Min FPS: ${minFps.toFixed(0)} &nbsp;|&nbsp; Max FPS: ${maxFps.toFixed(0)}<br>` +
 			`Avg frame: ${avg.toFixed(1)}ms &nbsp;|&nbsp; Max frame: ${max.toFixed(1)}ms &nbsp;|&nbsp; Min frame: ${min.toFixed(1)}ms`;
 	}
@@ -7837,7 +8058,25 @@ function showBenchmarkResults() {
  * Benchmark mode: load Modern Day scenario, launch Russia vs China at max speed.
  * Auto-fetches the 2022 preset if the main menu is open with no data loaded yet.
  */
-export async function startBenchmark() {
+export async function startBenchmark(options = {}) {
+	const requestedUnits = Number.isFinite(options.maxUnitsPerSide)
+		? Math.max(1, Math.floor(options.maxUnitsPerSide))
+		: null;
+	const durationMs = Number.isFinite(options.durationMs)
+		? Math.max(1_000, Math.floor(options.durationMs))
+		: 60_000;
+	const perfMode =
+		options.perfMode === "detailed"
+			? "detailed"
+			: options.perfMode === "basic"
+				? "basic"
+				: null;
+	if (requestedUnits !== null) {
+		CONFIG.MAX_UNITS_PER_SIDE = requestedUnits;
+		_benchmarkUnitsPerSide = requestedUnits;
+	} else {
+		_benchmarkUnitsPerSide = null;
+	}
 	// Load the 2022 Modern Day scenario if countryMetadata isn't populated yet
 	if (!countryMetadata || countryMetadata.length === 0) {
 		loadingStatus.innerText = "Loading Modern World Theater...";
@@ -7885,20 +8124,55 @@ export async function startBenchmark() {
 
 	sides = [[russia], [china]];
 	activeSideIndex = 0;
+	// Scenario loading reapplies saved settings, so the programmatic benchmark
+	// cap must be restored immediately before war creation.
+	if (requestedUnits !== null) CONFIG.MAX_UNITS_PER_SIDE = requestedUnits;
 	updateSidesUI();
 	await startWar();
+	if (requestedUnits !== null) {
+		const economyWasEnabled = warEconomyEnabled;
+		warEconomyEnabled = false;
+		for (let sideIndex = 0; sideIndex < sides.length; sideIndex++) {
+			const countryId = sides[sideIndex]?.[0]?.id;
+			if (!countryId) continue;
+			const benchmarkManpower =
+				requestedUnits * CONFIG.UNIT_TO_SOLDIER_RATIO * 4;
+			sideSoldiers[sideIndex] = Math.max(
+				sideSoldiers[sideIndex] || 0,
+				benchmarkManpower,
+			);
+			initialSideSoldiers[sideIndex] = Math.max(
+				initialSideSoldiers[sideIndex] || 0,
+				benchmarkManpower,
+			);
+			let currentCount = units.reduce(
+				(count, unit) => count + Number(unit.sideIndex === sideIndex),
+				0,
+			);
+			let attempts = 0;
+			while (currentCount < requestedUnits && attempts < requestedUnits * 2) {
+				if (spawnSingleUnit(sideIndex, countryId)) currentCount++;
+				attempts++;
+			}
+		}
+		warEconomyEnabled = economyWasEnabled;
+		for (const unit of units) unit.deployTicks = 0;
+	}
 	// Crank to max speed for stress testing
 	setSpeed(SPEED_STEPS.length - 1); // max speed
 	// Initialize benchmark state
 	isPaused = false;
 	_perfSamples = [];
+	if (perfMode && typeof window.perfReset === "function") {
+		window.perfReset(perfMode);
+	}
 	if (window.__perf) {
 		window.__perf._frameHistory = [];
 		window.__perf._frameSpikes = [];
 		window.__perf._scheduler = createPerfState(window.__perf._mode)._scheduler;
 		window.__perf._lastBenchmark = null;
 	}
-	_perfBenchmarkEnd = performance.now() + 60_000;
+	_perfBenchmarkEnd = performance.now() + durationMs;
 	_isBenchmarking = true;
 }
 
@@ -8132,205 +8406,6 @@ export function launchBomb(fromLat, fromLng, toLat, toLng, sideIdx) {
  * O(1) lookup: return direction from a unit's grid cell toward the nearest frontline.
  * Falls back to the old scan only if the field hasn't been built yet.
  */
-
-export function assignFrontlineSlots() {
-	if (!_frontlinePolys || Object.keys(_frontlinePolys).length === 0) return;
-
-	// Build a map: sideIndex → list of side-pair keys this side participates in
-	const sideFronts = {};
-	for (let si = 0; si < sides.length; si++) {
-		sideFronts[si] = [];
-	}
-	for (const key of Object.keys(_frontlinePolys)) {
-		const [a, b] = key.split("_").map(Number);
-		if (sideFronts[a]) sideFronts[a].push(key);
-		if (sideFronts[b]) sideFronts[b].push(key);
-	}
-
-	// Collect ALL units per side for proportional multi-front distribution
-	const allBySideFront = {};
-	const sideUnits = {};
-	for (let si = 0; si < sides.length; si++) {
-		sideUnits[si] = [];
-		allBySideFront[si] = {};
-	}
-
-	for (let ui = 0; ui < units.length; ui++) {
-		const u = units[ui];
-		if (u.deployTicks > 0) continue;
-		if (u._occupationGarrisonVictimId != null) {
-			u.frontSlot = null;
-			continue;
-		}
-		const si = u.sideIndex;
-		const fronts = sideFronts[si] || [];
-		if (fronts.length > 0) sideUnits[si].push(u);
-	}
-
-	// Distribute units across fronts proportionally by polyline length while
-	// keeping each unit on the nearest sensible theater. This prevents large
-	// countries from shuffling troops between disconnected fronts.
-	for (let si = 0; si < sides.length; si++) {
-		const fronts = sideFronts[si] || [];
-		const allUnits = sideUnits[si] || [];
-		if (fronts.length === 0 || allUnits.length === 0) continue;
-
-		if (fronts.length === 1) {
-			allBySideFront[si][fronts[0]] = allUnits;
-			continue;
-		}
-
-		const frontLengths = {};
-		let totalLen = 0;
-		for (const key of fronts) {
-			const len = _frontlinePolys[key]?.length || 0;
-			frontLengths[key] = len;
-			totalLen += len;
-		}
-		if (totalLen === 0) {
-			for (const key of fronts) allBySideFront[si][key] = [];
-			continue;
-		}
-
-		const frontSamples = {};
-		for (const key of fronts) {
-			const poly = _frontlinePolys[key] || [];
-			const stride = Math.max(1, Math.floor(poly.length / 24));
-			frontSamples[key] = [];
-			for (let p = 0; p < poly.length; p += stride) {
-				frontSamples[key].push(poly[p]);
-			}
-			if (poly.length > 0 && frontSamples[key].length === 0) {
-				frontSamples[key].push(poly[0]);
-			}
-		}
-		const distToFront = (unit, key) => {
-			let best = Infinity;
-			const samples = frontSamples[key] || [];
-			for (const pt of samples) {
-				const dSq = geoDistSq(unit.lat, unit.lng, pt.lat, pt.lng);
-				if (dSq < best) best = dSq;
-			}
-			return best;
-		};
-
-		// Desired unit counts per front, proportional to polyline length.
-		const desired = {};
-		let desiredSum = 0;
-		const sortedFronts = [...fronts].sort(
-			(a, b) => frontLengths[b] - frontLengths[a],
-		);
-		if (allUnits.length <= fronts.length) {
-			for (const key of fronts) desired[key] = 0;
-			for (let i = 0; i < allUnits.length; i++) desired[sortedFronts[i]] = 1;
-			desiredSum = allUnits.length;
-		} else {
-			for (const key of fronts) {
-				desired[key] = Math.max(
-					1,
-					Math.floor((allUnits.length * frontLengths[key]) / totalLen),
-				);
-				desiredSum += desired[key];
-			}
-			const remainder = allUnits.length - desiredSum;
-			for (let ri = 0; ri < remainder; ri++) {
-				desired[sortedFronts[ri % sortedFronts.length]]++;
-			}
-		}
-
-		const assigned = {};
-		for (const key of fronts) assigned[key] = [];
-		const leftovers = [];
-
-		for (const u of allUnits) {
-			const prevKey = u.frontSlot?.pairKey;
-			const rankedFronts = fronts
-				.map((key) => ({ key, distSq: distToFront(u, key) }))
-				.sort((a, b) => a.distSq - b.distSq);
-			u._nearestFrontKey = rankedFronts[0]?.key || null;
-			if (
-				prevKey &&
-				assigned[prevKey] &&
-				assigned[prevKey].length < desired[prevKey] &&
-				rankedFronts.some(
-					(f) =>
-						f.key === prevKey &&
-						f.distSq <= (rankedFronts[0]?.distSq || 0) * 1.8 + 4.0,
-				)
-			) {
-				assigned[prevKey].push(u);
-			} else {
-				leftovers.push(u);
-			}
-		}
-
-		for (const key of fronts) {
-			if (!allBySideFront[si][key]) allBySideFront[si][key] = [];
-			for (const u of assigned[key]) allBySideFront[si][key].push(u);
-		}
-
-		// Fill remaining capacity by nearest-front distance instead of array order.
-		while (leftovers.length > 0) {
-			let bestUnitIdx = -1;
-			let bestFront = null;
-			let bestDist = Infinity;
-			for (let ui = 0; ui < leftovers.length; ui++) {
-				const u = leftovers[ui];
-				for (const key of fronts) {
-					if ((allBySideFront[si][key]?.length || 0) >= desired[key]) {
-						continue;
-					}
-					const dSq = distToFront(u, key);
-					if (dSq < bestDist) {
-						bestDist = dSq;
-						bestUnitIdx = ui;
-						bestFront = key;
-					}
-				}
-			}
-			if (bestUnitIdx === -1 || !bestFront) break;
-			const [unit] = leftovers.splice(bestUnitIdx, 1);
-			allBySideFront[si][bestFront].push(unit);
-		}
-
-		// If capacities are saturated due rounding, keep any extras on their nearest front.
-		for (const u of leftovers) {
-			const nearest = u._nearestFrontKey || fronts[0];
-			if (!allBySideFront[si][nearest]) allBySideFront[si][nearest] = [];
-			allBySideFront[si][nearest].push(u);
-		}
-	}
-
-	// Proportional distribution: spread ALL units evenly along each frontline polyline
-	for (let si = 0; si < sides.length; si++) {
-		const frontMap = allBySideFront[si] || {};
-		for (const pairKey of Object.keys(frontMap)) {
-			const unitList = frontMap[pairKey];
-			const poly = _frontlinePolys[pairKey];
-			if (!poly || unitList.length === 0 || poly.length === 0) continue;
-
-			// Sort by current slot index to preserve relative front position while spreading
-			unitList.sort(
-				(a, b) =>
-					(a.frontSlot?.segmentIdx || 0) - (b.frontSlot?.segmentIdx || 0),
-			);
-
-			const n = unitList.length;
-			const step = Math.max(1, Math.floor(poly.length / n));
-
-			for (let i = 0; i < n; i++) {
-				const u = unitList[i];
-				const idx = Math.min(poly.length - 1, Math.floor(i * step));
-				u.frontSlot = {
-					pairKey,
-					segmentIdx: idx,
-					targetLat: poly[idx].lat,
-					targetLng: poly[idx].lng,
-				};
-			}
-		}
-	}
-}
 
 /**
  * Assign proportional slots to garrison units along neutral border polylines
@@ -11706,6 +11781,8 @@ export function performSimulationTick() {
 		"frontline",
 		"frontlineDispatch",
 		"frontlinePolys",
+		"frontlineLayoutApply",
+		"frontlineSlotApply",
 		"consolidate",
 		"caches",
 		"victory",
@@ -11722,6 +11799,9 @@ export function performSimulationTick() {
 		"unitGlobalFallback",
 		"unitFrontlinePress",
 		"unitMopUpSearch",
+		"unitMopUpTargetSearch",
+		"unitCityObjective",
+		"unitGarrisonTarget",
 		"unitCombatMove",
 		"economy",
 	];
@@ -11745,6 +11825,16 @@ export function performSimulationTick() {
 			"coastStuckAbandoned",
 		])
 			_perfSnap[k] = window.__perf[k] || 0;
+	}
+	if (_frontlineLayoutApplyPendingMs || _frontlineSlotApplyPendingMs) {
+		const asyncApplyMs =
+			_frontlineLayoutApplyPendingMs + _frontlineSlotApplyPendingMs;
+		window.__perf.frontlineLayoutApply += _frontlineLayoutApplyPendingMs;
+		window.__perf.frontlineSlotApply += _frontlineSlotApplyPendingMs;
+		window.__perf.frontlinePolys += asyncApplyMs;
+		window.__perf.frontline += asyncApplyMs;
+		_frontlineLayoutApplyPendingMs = 0;
+		_frontlineSlotApplyPendingMs = 0;
 	}
 	_simTickCount++;
 	let _dbgLogCount = 999999; // DEBUG: throttled out (was 0)
@@ -12042,21 +12132,21 @@ export function performSimulationTick() {
 		(window.__perf.spatialHash || 0) + performance.now() - _tsh;
 
 	const _tFrontline = performance.now();
-	// OPT-1: Rebuild frontline direction field every N ticks via Web Worker.
-	// getBorderDirection() now does an O(1) array lookup instead of a 12-radius grid scan.
-	if (_simTickCount - frontlineFieldTick >= FRONTLINE_FIELD_UPDATE_INTERVAL) {
+	// Direction fields and polyline/slot layouts share one async worker. While it
+	// is busy, each work type coalesces to one newest snapshot for the next tick.
+	const fieldDue =
+		_simTickCount - frontlineFieldTick >= FRONTLINE_FIELD_UPDATE_INTERVAL;
+	const layoutDue =
+		_simTickCount - _frontlinePolyTick >= FRONTLINE_POLY_UPDATE_INTERVAL;
+	if (
+		fieldDue ||
+		layoutDue ||
+		(!_workerBusy &&
+			(_frontlineWorkerPendingField || _frontlineWorkerPendingLayout))
+	) {
 		const _tFrontlineDispatch = performance.now();
-		dispatchFrontlineFieldRebuild();
+		dispatchFrontlineWork(fieldDue, layoutDue);
 		window.__perf.frontlineDispatch += performance.now() - _tFrontlineDispatch;
-	}
-
-	// Compute frontline polylines between warring sides (throttled)
-	if (_simTickCount - _frontlinePolyTick >= FRONTLINE_POLY_UPDATE_INTERVAL) {
-		const _tFrontlinePolys = performance.now();
-		computeFrontlinePolys();
-		_frontlinePolyTick = _simTickCount;
-		assignFrontlineSlots();
-		window.__perf.frontlinePolys += performance.now() - _tFrontlinePolys;
 	}
 	window.__perf.frontline =
 		(window.__perf.frontline || 0) + performance.now() - _tFrontline;
@@ -12983,6 +13073,10 @@ export function performSimulationTick() {
 	const globalCityTargets = activeTheaterCities?.length
 		? activeTheaterCities
 		: cities;
+	const enemyCityCandidatesBySide = getEnemyCityCandidatesBySide(
+		globalCityTargets,
+		countryToSideMap,
+	);
 
 	// PERF: Pre-group cities by sovereignId once, instead of cities.filter() per-unit (was 4.3% self-time).
 	_tickCitiesBySovereign.clear();
@@ -14465,6 +14559,25 @@ export function performSimulationTick() {
 
 		const _u3c = _detailedPerfEnabled ? performance.now() : 0;
 		if (_detailedPerfEnabled) window.__perf.unitFrontlinePress += _u3c - _u3b;
+		if (
+			u._strategicTargetGeneration !== _strategicTargetGeneration ||
+			u._strategicBeneficiaryId !== u.beneficiaryId
+		) {
+			clearUnitStrategicTargets(u);
+		}
+		const staggerStrategicTargets = simSpeed >= 3 && units.length >= 800;
+		const strategicCohort =
+			Math.floor(Math.abs(u.id * 1_000_000)) % STRATEGIC_COHORT_COUNT;
+		const canRefreshStrategicTarget =
+			!staggerStrategicTargets ||
+			strategicCohort === _simTickCount % STRATEGIC_COHORT_COUNT;
+		if (u.mopUpTarget) {
+			const mopUpIdx = getGridIndex(u.mopUpTarget.lat, u.mopUpTarget.lng);
+			if (mopUpIdx === -1 || dominantSideMap[mopUpIdx] === u.sideIndex) {
+				u.mopUpTarget = null;
+				u.targetSearchCooldown = 0;
+			}
+		}
 
 		if (shouldMopUp) {
 			// Mop-up mode: Enemy has no units or target is far and collapsed nations exist
@@ -14511,6 +14624,7 @@ export function performSimulationTick() {
 				} else {
 					// Force redirect back to sovereign/enemy goals if ally is safe
 					u.beneficiaryId = u.sovereignId;
+					clearUnitStrategicTargets(u);
 				}
 			}
 
@@ -14521,7 +14635,7 @@ export function performSimulationTick() {
 					u.lastMopUpId !==
 						(activeSupportTarget ? activeSupportTarget.id : enemyId));
 
-			if (needsNewTarget) {
+			if (needsNewTarget && canRefreshStrategicTarget) {
 				u.targetSearchCooldown = 15 + Math.floor(Math.random() * 20); // 0.25s - 0.6s cache
 				const targetId = activeSupportTarget ? activeSupportTarget.id : enemyId;
 				u.lastMopUpId = targetId;
@@ -14625,79 +14739,110 @@ export function performSimulationTick() {
 			}
 			target = u.mopUpTarget;
 		}
-
-		// Objective hierarchy: in desperation modes, bias toward meaningful enemy cities
-		// (especially capitals) instead of purely nearest-unit chasing.
-		if (
-			!shouldMopUp &&
-			aiProfile.targetCityWeight > 0 &&
-			globalCityTargets?.length
-		) {
-			let bestCity = null;
-			let bestScore = -Infinity;
-			for (let ci = 0; ci < globalCityTargets.length; ci++) {
-				const c = globalCityTargets[ci];
-				const cOwner = c.sovereignId || c.ownerId || 0;
-				const cSide = countryToSideMap.get(cOwner);
-				if (cSide === undefined) continue;
-				const isEnemyCity = areSidesHostile(sideIndex, cSide);
-				if (!isEnemyCity) continue;
-
-				let dlng = c.lng - u.lng;
-				if (dlng > 180) dlng -= 360;
-				else if (dlng < -180) dlng += 360;
-				const dSq = (u.lat - c.lat) ** 2 + dlng ** 2;
-
-				// Water-path check: skip cities unreachable by land
-				if (!isAtSea && dSq > 4.0) {
-					const lineLen = Math.sqrt(dSq);
-					const steps = Math.min(12, Math.ceil(lineLen / 0.4));
-					let waterSamples = 0;
-					for (let s = 1; s < steps; s++) {
-						const t = s / steps;
-						const wIdx = getGridIndex(
-							u.lat + (c.lat - u.lat) * t,
-							u.lng + dlng * t,
-						);
-						if (wIdx !== -1 && landMask[wIdx] === 0) waterSamples++;
-					}
-					if (waterSamples > steps * 0.3) continue;
-				}
-
-				const _occ = getControlValue(c.lat, c.lng);
-				const cityIdx = getGridIndex(c.lat, c.lng);
-				const contested = myInfluenceAt(cityIdx, u.sideIndex) < 0.35;
-
-				let score = -(dSq * 0.6);
-				if (contested) score += 120;
-				if (c.isCapital) score += 260;
-				if (score > bestScore) {
-					bestScore = score;
-					bestCity = c;
-				}
-			}
-
-			if (bestCity) {
-				// Don't blend city into unit target — blending with a coordinate
-				// destroys the .health property needed for direct combat
-				if (target && target.health !== undefined) {
-					// Keep the enemy unit target; city is secondary objective
-				} else if (
-					target &&
-					target.lat !== undefined &&
-					target.lng !== undefined
-				) {
-					const w = aiProfile.targetCityWeight;
-					target = {
-						lat: target.lat * (1 - w) + bestCity.lat * w,
-						lng: target.lng * (1 - w) + bestCity.lng * w,
-					};
-				} else {
-					target = { lat: bestCity.lat, lng: bestCity.lng };
-				}
-			}
+		const _u3MopUpDone = _detailedPerfEnabled ? performance.now() : 0;
+		if (_detailedPerfEnabled) {
+			window.__perf.unitMopUpTargetSearch += _u3MopUpDone - _u3c;
 		}
 
+		// Nearby enemy-unit targets always win. City objectives are cached strategic
+		// guidance and only refresh on this unit's cohort at high load.
+		const hasDirectEnemyTarget = target && target.health !== undefined;
+		if (u._cityObjective) {
+			const objective = u._cityObjective;
+			const objectiveSide = countryToSideMap.get(objective.ownerId);
+			const objectiveIdx = objective.gridIndex;
+			if (
+				objectiveSide === undefined ||
+				!areSidesHostile(sideIndex, objectiveSide) ||
+				objectiveIdx < 0 ||
+				(dominantSideMap[objectiveIdx] === sideIndex &&
+					myInfluenceAt(objectiveIdx, sideIndex) >= 0.35)
+			) {
+				u._cityObjective = null;
+				u._cityObjectiveTick = -999;
+			}
+		}
+		const cityCandidates = enemyCityCandidatesBySide[sideIndex] || [];
+		if (
+			!shouldMopUp &&
+			!hasDirectEnemyTarget &&
+			aiProfile.targetCityWeight > 0 &&
+			cityCandidates.length > 0 &&
+			canRefreshStrategicTarget &&
+			(!u._cityObjective ||
+				_simTickCount - (u._cityObjectiveTick || -999) >=
+					CITY_OBJECTIVE_REFRESH_INTERVAL)
+		) {
+			const rankedCities = [];
+			for (const city of cityCandidates) {
+				let deltaLng = city.lng - u.lng;
+				if (deltaLng > 180) deltaLng -= 360;
+				else if (deltaLng < -180) deltaLng += 360;
+				const distSq = (u.lat - city.lat) ** 2 + deltaLng ** 2;
+				const cityIdx = getGridIndex(city.lat, city.lng);
+				const contested = myInfluenceAt(cityIdx, u.sideIndex) < 0.35;
+				let score = -(distSq * 0.6);
+				if (contested) score += 120;
+				if (city.isCapital) score += 260;
+				rankedCities.push({ city, cityIdx, deltaLng, distSq, score });
+			}
+			rankedCities.sort((a, b) => b.score - a.score);
+			let bestCityEntry = null;
+			for (
+				let candidateIndex = 0;
+				candidateIndex < Math.min(CITY_WATER_CHECK_LIMIT, rankedCities.length);
+				candidateIndex++
+			) {
+				const entry = rankedCities[candidateIndex];
+				let blockedByWater = false;
+				if (!isAtSea && entry.distSq > 4) {
+					const lineLength = Math.sqrt(entry.distSq);
+					const steps = Math.min(12, Math.ceil(lineLength / 0.4));
+					let waterSamples = 0;
+					for (let sampleIndex = 1; sampleIndex < steps; sampleIndex++) {
+						const progress = sampleIndex / steps;
+						const waterIdx = getGridIndex(
+							u.lat + (entry.city.lat - u.lat) * progress,
+							u.lng + entry.deltaLng * progress,
+						);
+						if (waterIdx !== -1 && landMask[waterIdx] === 0) waterSamples++;
+					}
+					blockedByWater = waterSamples > steps * 0.3;
+				}
+				if (!blockedByWater) {
+					bestCityEntry = entry;
+					break;
+				}
+			}
+			u._cityObjective = bestCityEntry
+				? {
+						lat: bestCityEntry.city.lat,
+						lng: bestCityEntry.city.lng,
+						gridIndex: bestCityEntry.cityIdx,
+						ownerId:
+							bestCityEntry.city.sovereignId || bestCityEntry.city.ownerId || 0,
+					}
+				: null;
+			u._cityObjectiveTick = _simTickCount;
+		}
+		if (!hasDirectEnemyTarget && u._cityObjective) {
+			const cityObjective = u._cityObjective;
+			if (target && target.lat !== undefined && target.lng !== undefined) {
+				const weight = aiProfile.targetCityWeight;
+				target = {
+					lat: target.lat * (1 - weight) + cityObjective.lat * weight,
+					lng: target.lng * (1 - weight) + cityObjective.lng * weight,
+				};
+			} else {
+				target = { lat: cityObjective.lat, lng: cityObjective.lng };
+			}
+		}
+		const _u3CityDone = _detailedPerfEnabled ? performance.now() : 0;
+		if (_detailedPerfEnabled) {
+			window.__perf.unitCityObjective += _u3CityDone - _u3MopUpDone;
+		}
+
+		const _u3GarrisonStart = _detailedPerfEnabled ? performance.now() : 0;
 		let occupationGarrisonPlan =
 			u._occupationGarrisonVictimId != null
 				? _occupationGarrisonPlans.get(u._occupationGarrisonVictimId)
@@ -14730,7 +14875,10 @@ export function performSimulationTick() {
 		}
 
 		const _u3d = _detailedPerfEnabled ? performance.now() : 0;
-		if (_detailedPerfEnabled) window.__perf.unitMopUpSearch += _u3d - _u3c;
+		if (_detailedPerfEnabled) {
+			window.__perf.unitGarrisonTarget += _u3d - _u3GarrisonStart;
+			window.__perf.unitMopUpSearch += _u3d - _u3c;
+		}
 
 		// CITY-FOCUS COMBAT MODE:
 		let _u4;
@@ -17077,8 +17225,21 @@ function getPerfReportData() {
 			staleResults: window.__perf.frontlineWorkerStaleResults || 0,
 			busy: _workerBusy,
 			pending: _frontlineWorkerPending,
+			pendingField: _frontlineWorkerPendingField,
+			pendingLayout: _frontlineWorkerPendingLayout,
 			lastDurationMs: window.__perf.frontlineWorkerLastDurationMs || 0,
 			maxDurationMs: window.__perf.frontlineWorkerMaxDurationMs || 0,
+			lastFieldDurationMs:
+				window.__perf.frontlineWorkerFieldLastDurationMs || 0,
+			maxFieldDurationMs: window.__perf.frontlineWorkerFieldMaxDurationMs || 0,
+			layoutDispatches: window.__perf.frontlineWorkerLayoutDispatches || 0,
+			layoutCompleted: window.__perf.frontlineWorkerLayoutCompleted || 0,
+			layoutCoalesced: window.__perf.frontlineWorkerLayoutCoalesced || 0,
+			layoutErrors: window.__perf.frontlineWorkerLayoutErrors || 0,
+			lastLayoutDurationMs:
+				window.__perf.frontlineWorkerLayoutLastDurationMs || 0,
+			maxLayoutDurationMs:
+				window.__perf.frontlineWorkerLayoutMaxDurationMs || 0,
 		},
 		scheduler: {
 			frames: scheduler.frames || 0,
@@ -17136,7 +17297,7 @@ function formatPerfReport(data) {
 		`  scheduler: rendered ${data.scheduler.renderedFrames}/${data.scheduler.frames} frames | subticks ${data.scheduler.executedSubTicks}/${data.scheduler.requestedSubTicks} | cappedFrames ${data.scheduler.cappedSubTickFrames} | cappedSubticks ${data.scheduler.cappedSubTicks}`,
 	);
 	lines.push(
-		`  frontline worker: ${data.frontlineWorker.completed}/${data.frontlineWorker.dispatches} completed | coalesced ${data.frontlineWorker.coalesced} | errors ${data.frontlineWorker.errors} | stale ${data.frontlineWorker.staleResults} | last ${formatMs(data.frontlineWorker.lastDurationMs)}ms | max ${formatMs(data.frontlineWorker.maxDurationMs)}ms | ${data.frontlineWorker.busy ? "busy" : "idle"}${data.frontlineWorker.pending ? ", pending" : ""}`,
+		`  frontline worker: ${data.frontlineWorker.completed}/${data.frontlineWorker.dispatches} done | layout ${data.frontlineWorker.layoutCompleted}/${data.frontlineWorker.layoutDispatches} (${formatMs(data.frontlineWorker.lastLayoutDurationMs)}ms, max ${formatMs(data.frontlineWorker.maxLayoutDurationMs)}ms) | errors ${data.frontlineWorker.errors}/${data.frontlineWorker.layoutErrors} | stale ${data.frontlineWorker.staleResults} | ${data.frontlineWorker.busy ? "busy" : "idle"}${data.frontlineWorker.pending ? `, pending${data.frontlineWorker.pendingField ? " field" : ""}${data.frontlineWorker.pendingLayout ? " layout" : ""}` : ""}`,
 	);
 	lines.push(
 		`  config: simSpeed ${data.config.simSpeed}x | view ${data.config.viewMode} | grid ${data.config.gridRes} | map ${data.config.mapResolution || "n/a"} | render ${data.config.renderSkipCadence}`,
@@ -17194,6 +17355,7 @@ function formatPerfReport(data) {
 }
 
 // ── Perf Report: type window.perfReport() in console ──
+window.startBenchmark = startBenchmark;
 window.perfEnable = (mode = "basic") => {
 	const normalizedMode = mode === "detailed" ? "detailed" : "basic";
 	if (!window.__perf) window.__perf = createPerfState(normalizedMode);
