@@ -1407,7 +1407,7 @@ async function performPresetLoad(fileOrBlob, targetMode = "EDITOR") {
 		mainMenu.style.display = "none";
 		mapUi.style.display = "flex";
 
-		if (targetMode === "CONQUEST") {
+		if (targetMode === "CONQUEST" || targetMode === "OPERATION") {
 			setGameState("SELECTING_P1");
 			statusText.innerText = currentScenarioContext
 				? `PLAYING: ${currentScenarioContext.name}`

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://esm.sh 'sha256-UbZTXngprJmMtanNXRwZ5Pi9M0w7gaPwpxlWfxaufYA='; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.websim.ai https://*.websim.com https://*.arcgisonline.com https://*.google.com wss:; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self';">
-    <title>MW-V0.26.48</title>
+    <title>MW-V0.26.49</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous" />
     <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
@@ -252,6 +252,11 @@
                         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
                     </button>
                     <div class="nav-separator"></div>
+                    <button id="commander-mode-btn" class="menu-v2-link commander-link">
+                        <span>COMMANDER</span>
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 4 5v6c0 5.05 3.41 9.74 8 11 4.59-1.26 8-5.95 8-11V5l-8-3zm0 4.1 4 1.5V11c0 3.25-1.92 6.49-4 7.74C9.92 17.49 8 14.25 8 11V7.6l4-1.5z"/></svg>
+                    </button>
+                    <div class="nav-separator"></div>
                     <button id="main-settings-btn" class="menu-v2-link">SETTINGS</button>
                     <div class="nav-separator"></div>
                     <button id="benchmark-btn" class="menu-v2-link">BENCHMARK</button>
@@ -292,6 +297,38 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <div id="commander-briefing-overlay" class="settings-overlay commander-overlay" style="display:none">
+        <div class="commander-backdrop"></div>
+        <section class="commander-dialog commander-briefing" role="dialog" aria-modal="true" aria-labelledby="commander-briefing-title">
+            <div class="commander-kicker">COMMANDER OPERATION 01</div>
+            <h1 id="commander-briefing-title">EASTERN FRONT: HOLD UKRAINE</h1>
+            <p class="commander-framing">This is an alternate-history simulation inspired by the February 2022 setting. It is not a historical recreation or prediction.</p>
+            <div class="commander-briefing-grid">
+                <div>
+                    <span class="commander-label">PRIMARY OBJECTIVE</span>
+                    <strong>Remain active and control Kyiv through 24 February 2023.</strong>
+                </div>
+                <div>
+                    <span class="commander-label">DEFEAT CONDITION</span>
+                    <strong>Capitulation, or 30 consecutive days of Russian control over Kyiv.</strong>
+                </div>
+                <div>
+                    <span class="commander-label">YOUR COMMAND</span>
+                    <strong>Ukraine · 360,000 manpower · War economy enabled</strong>
+                </div>
+                <div>
+                    <span class="commander-label">OPPOSITION</span>
+                    <strong>Russia · 520,000 manpower · Blitz doctrine</strong>
+                </div>
+            </div>
+            <p class="commander-copy">Choose a priority city, set the army's stance, and decide how much strength remains in reserve. Your staff handles individual formations and translates those orders into war plans.</p>
+            <div class="commander-dialog-actions">
+                <button id="commander-briefing-back-btn" class="mini-btn commander-secondary-btn">BACK</button>
+                <button id="commander-deploy-btn" class="start-btn commander-primary-btn">ASSUME COMMAND</button>
+            </div>
+        </section>
     </div>
 
     <div id="fade-transition-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:black; z-index:9999; opacity:0; transition:opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1); pointer-events:none;"></div>
@@ -565,6 +602,53 @@
         </div>
 
         <div id="game-date-display" class="game-date-display" style="display:none;">0000/00/00</div>
+
+        <aside id="commander-hud" class="commander-hud" style="display:none" aria-label="Commander status">
+            <div class="commander-hud-header">
+                <div>
+                    <span class="commander-kicker">OPERATION</span>
+                    <strong>HOLD UKRAINE</strong>
+                </div>
+                <span id="commander-day-label" class="commander-day-label">DAY 0 / 365</span>
+            </div>
+            <div class="commander-objective-status">
+                <span class="commander-label">PRIMARY</span>
+                <strong id="commander-objective-label">Hold Kyiv through 2023/02/24</strong>
+            </div>
+            <div id="commander-city-status" class="commander-city-status"></div>
+            <div class="commander-orders-grid">
+                <label>
+                    <span>STANCE</span>
+                    <select id="commander-stance-select">
+                        <option value="HOLD">Hold</option>
+                        <option value="BALANCED">Balanced</option>
+                        <option value="COUNTERATTACK">Counterattack</option>
+                    </select>
+                </label>
+                <label>
+                    <span>PRIORITY</span>
+                    <select id="commander-city-select">
+                        <option value="kyiv">Kyiv</option>
+                        <option value="kharkiv">Kharkiv</option>
+                        <option value="dnipro">Dnipro</option>
+                        <option value="odesa">Odesa</option>
+                    </select>
+                </label>
+                <label>
+                    <span>RESERVE</span>
+                    <select id="commander-reserve-select">
+                        <option value="0.1">10%</option>
+                        <option value="0.25" selected>25%</option>
+                        <option value="0.4">40%</option>
+                    </select>
+                </label>
+            </div>
+            <button id="commander-apply-orders-btn" class="start-btn commander-orders-btn">ISSUE ORDERS</button>
+            <div id="commander-cooldown-label" class="commander-cooldown-label">ORDERS READY</div>
+            <div id="commander-active-orders" class="commander-active-orders">HOLD · PRIORITY KYIV · 25% RESERVE</div>
+            <div id="commander-event-status" class="commander-event-status">NEXT EVENT · DAY 45</div>
+            <div id="commander-medal-preview" class="commander-medal-preview"></div>
+        </aside>
 
         <div id="casualty-panel" class="casualty-panel" style="display:none">
             <div class="casualty-title">CASUALTIES &amp; MANPOWER</div>
@@ -1098,6 +1182,30 @@
                 <button id="tutorial-next-btn" class="start-btn" style="width: auto; padding: 10px 30px;">Next</button>
             </div>
         </div>
+    </div>
+
+    <div id="commander-event-overlay" class="settings-overlay commander-overlay" style="display:none">
+        <div class="commander-backdrop"></div>
+        <section class="commander-dialog commander-event-dialog" role="dialog" aria-modal="true" aria-labelledby="commander-event-title">
+            <div class="commander-kicker">COMMAND DECISION</div>
+            <h2 id="commander-event-title">FIELD REPORT</h2>
+            <p id="commander-event-body" class="commander-copy"></p>
+            <div id="commander-event-choices" class="commander-event-choices"></div>
+        </section>
+    </div>
+
+    <div id="commander-debrief-overlay" class="settings-overlay commander-overlay" style="display:none">
+        <div class="commander-backdrop"></div>
+        <section class="commander-dialog commander-debrief" role="dialog" aria-modal="true" aria-labelledby="commander-debrief-title">
+            <div class="commander-kicker">OPERATION COMPLETE</div>
+            <h1 id="commander-debrief-title">VICTORY</h1>
+            <p id="commander-debrief-summary" class="commander-copy"></p>
+            <div id="commander-debrief-medals" class="commander-debrief-medals"></div>
+            <div class="commander-dialog-actions">
+                <button id="commander-replay-btn" class="mini-btn commander-secondary-btn">REPLAY</button>
+                <button id="commander-menu-btn" class="start-btn commander-primary-btn">MAIN MENU</button>
+            </div>
+        </section>
     </div>
 
     <!-- Country Inspector -->

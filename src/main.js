@@ -23,6 +23,18 @@ import {
 	selectNearestMopUpCell,
 } from "./mop-up.js";
 import {
+	advanceOperationActivePlay,
+	applyCommanderDirective,
+	COMMANDER_STANCES,
+	calculateDirectiveAllocation,
+	createOperationRuntime,
+	EASTERN_FRONT_OPERATION,
+	evaluateOperationDay as evaluateOperationRules,
+	getDirectiveCooldownRemaining,
+	OPERATION_DEFINITIONS,
+	resolveOperationEvent as resolveOperationRulesEvent,
+} from "./operations.js";
+import {
 	allocateLargestRemainderQuotas,
 	evaluateCountryCapitulation,
 	evaluateGlobalConflict,
@@ -1705,7 +1717,7 @@ export function getOptimizationFactor() {
 }
 
 export let gameState = "MAIN_MENU";
-export let gameMode = "CONQUEST"; // 'CONQUEST' or 'EDITOR'
+export let gameMode = "CONQUEST"; // 'CONQUEST', 'OPERATION', or 'EDITOR'
 export let mapName = "Untitled Map";
 export let worldWidthDeg = 360;
 export let worldHeightDeg = 180;
@@ -1713,6 +1725,11 @@ export let missilesEnabled = true;
 export let gameTimeEnabled = false;
 export let gameTimeDate = null; // {year, month, day}
 export let gameTimeAccumulatorMs = 0;
+export let gameTimeDayDurationMs = 500;
+export let activeOperationDefinition = null;
+export let activeOperationRuntime = null;
+let _operationLastHudRenderMs = -Infinity;
+let _operationPreviousBuffState = null;
 export let viewMode = "POLITICAL"; // 'POLITICAL' or 'FLAG'
 export let allianceViewEnabled = false; // when true, alliances override colors/flags in political/flag views
 export let showCountryLabels = true;
@@ -2228,11 +2245,13 @@ export let _aiDebugPlans = []; // per-side diagnostics for the war plan overlay/
 const _proposalReassessTick = []; // per-side last reassessment tick
 const _proposalsCache = []; // per-side cached scored proposals
 const _planReassessNeeded = []; // per-side flag: force immediate reassessment
+const _commanderPlanReplacePending = []; // per-side flag: directive replacement is not an AI failure
 const _sidePrevControlled = []; // per-side total controlled cells on last territory check
 const _sidePrevStrengthRatio = []; // per-side force ratio vs enemies
 const _sidePrevPosture = []; // per-side posture string from previous tick
 export const WAR_PLAN_TYPES = [
 	"DEFEND",
+	"DEFEND_CITY",
 	"PUSH_FRONT",
 	"CAPTURE_CITY",
 	"ENCIRCLE",
@@ -2930,6 +2949,76 @@ export function setLoadingThematic(enabled) {
 	}
 }
 export const playModeBtn = document.getElementById("play-mode-btn");
+export const commanderModeBtn = document.getElementById("commander-mode-btn");
+export const commanderBriefingOverlay = document.getElementById(
+	"commander-briefing-overlay",
+);
+export const commanderBriefingBackBtn = document.getElementById(
+	"commander-briefing-back-btn",
+);
+export const commanderDeployBtn = document.getElementById(
+	"commander-deploy-btn",
+);
+export const commanderHud = document.getElementById("commander-hud");
+export const commanderDayLabel = document.getElementById("commander-day-label");
+export const commanderObjectiveLabel = document.getElementById(
+	"commander-objective-label",
+);
+export const commanderCityStatus = document.getElementById(
+	"commander-city-status",
+);
+export const commanderStanceSelect = document.getElementById(
+	"commander-stance-select",
+);
+export const commanderCitySelect = document.getElementById(
+	"commander-city-select",
+);
+export const commanderReserveSelect = document.getElementById(
+	"commander-reserve-select",
+);
+export const commanderApplyOrdersBtn = document.getElementById(
+	"commander-apply-orders-btn",
+);
+export const commanderCooldownLabel = document.getElementById(
+	"commander-cooldown-label",
+);
+export const commanderActiveOrders = document.getElementById(
+	"commander-active-orders",
+);
+export const commanderEventStatus = document.getElementById(
+	"commander-event-status",
+);
+export const commanderMedalPreview = document.getElementById(
+	"commander-medal-preview",
+);
+export const commanderEventOverlay = document.getElementById(
+	"commander-event-overlay",
+);
+export const commanderEventTitle = document.getElementById(
+	"commander-event-title",
+);
+export const commanderEventBody = document.getElementById(
+	"commander-event-body",
+);
+export const commanderEventChoices = document.getElementById(
+	"commander-event-choices",
+);
+export const commanderDebriefOverlay = document.getElementById(
+	"commander-debrief-overlay",
+);
+export const commanderDebriefTitle = document.getElementById(
+	"commander-debrief-title",
+);
+export const commanderDebriefSummary = document.getElementById(
+	"commander-debrief-summary",
+);
+export const commanderDebriefMedals = document.getElementById(
+	"commander-debrief-medals",
+);
+export const commanderReplayBtn = document.getElementById(
+	"commander-replay-btn",
+);
+export const commanderMenuBtn = document.getElementById("commander-menu-btn");
 export const editorChoiceModal = document.getElementById("editor-choice-modal");
 export const choiceIngameEditor = document.getElementById(
 	"choice-ingame-editor",
@@ -6005,7 +6094,12 @@ export function updateEconomyPanel() {
 	const simulating =
 		gameState === "SIMULATING" ||
 		(godModeActive && preGodModeState === "SIMULATING");
-	if (!warEconomyEnabled || !simulating || cinematicMode) {
+	if (
+		!warEconomyEnabled ||
+		!simulating ||
+		cinematicMode ||
+		gameMode === "OPERATION"
+	) {
 		economyPanel.style.display = "none";
 		return;
 	}
@@ -7049,6 +7143,9 @@ export function advanceGameDateOneDay() {
 	if (gameDateDisplay) {
 		gameDateDisplay.textContent = formatGameDate();
 	}
+	if (gameMode === "OPERATION" && activeOperationRuntime) {
+		evaluateOperationDay();
+	}
 }
 
 export function tickGameTime(elapsedMs) {
@@ -7059,12 +7156,557 @@ export function tickGameTime(elapsedMs) {
 		!gameTimeDate
 	)
 		return;
+	if (gameMode === "OPERATION" && activeOperationRuntime) {
+		activeOperationRuntime = advanceOperationActivePlay(
+			activeOperationRuntime,
+			elapsedMs,
+			false,
+		);
+		updateCommanderHud();
+	}
 	// Scale in-game time progression with the current simulation speed
 	gameTimeAccumulatorMs += elapsedMs * simSpeed;
-	const step = 500; // 0.5 seconds per day at 1x speed
-	while (gameTimeAccumulatorMs >= step) {
+	const step = gameTimeDayDurationMs;
+	while (gameTimeAccumulatorMs >= step && gameState === "SIMULATING") {
 		advanceGameDateOneDay();
 		gameTimeAccumulatorMs -= step;
+	}
+}
+
+function getOperationCity(cityKey) {
+	const definition = activeOperationDefinition;
+	const cityDefinition = definition?.targetCities?.[cityKey];
+	if (!cityDefinition) return null;
+	const expected = cityDefinition.dataName.toLowerCase();
+	return (
+		activeTheaterCities.find((city) => city.name?.toLowerCase() === expected) ||
+		cities.find((city) => city.name?.toLowerCase() === expected) ||
+		null
+	);
+}
+
+function isOperationCityFriendly(cityKey) {
+	const city = getOperationCity(cityKey);
+	if (!city || !activeOperationDefinition) return false;
+	const idx = getGridIndex(city.lat, city.lng);
+	return (
+		idx !== -1 &&
+		dominantSideMap[idx] === activeOperationDefinition.playerSideIdx
+	);
+}
+
+function getOperationCoreControlRatio() {
+	if (!activeOperationDefinition || !deJureMap) return 0;
+	let total = 0;
+	let controlled = 0;
+	for (let i = 0; i < deJureMap.length; i++) {
+		if (deJureMap[i] !== activeOperationDefinition.playerCountryId) continue;
+		total++;
+		if (dominantSideMap[i] === activeOperationDefinition.playerSideIdx) {
+			controlled++;
+		}
+	}
+	return total > 0 ? controlled / total : 0;
+}
+
+function getOperationSnapshot(
+	currentDay = activeOperationRuntime?.currentDay || 0,
+) {
+	const definition = activeOperationDefinition;
+	const cityFriendly = {};
+	for (const cityKey of Object.keys(definition?.targetCities || {})) {
+		cityFriendly[cityKey] = isOperationCityFriendly(cityKey);
+	}
+	return {
+		currentDay,
+		playerActive: !!sides[definition?.playerSideIdx]?.some(
+			(country) => country.id === definition.playerCountryId,
+		),
+		enemyActive: !!sides[0]?.some(
+			(country) => country.id === definition?.enemyCountryId,
+		),
+		cityFriendly,
+		coreControlRatio: getOperationCoreControlRatio(),
+	};
+}
+
+function getActiveCommanderModifiers(type = null) {
+	const modifiers = activeOperationRuntime?.modifiers || [];
+	return type
+		? modifiers.filter((modifier) => modifier.type === type)
+		: modifiers;
+}
+
+function syncOperationCombatBuff() {
+	if (!activeOperationDefinition) return;
+	const countryId = activeOperationDefinition.playerCountryId;
+	const sideCountry = sides[activeOperationDefinition.playerSideIdx]?.find(
+		(country) => country.id === countryId,
+	);
+	const meta = countryMetadata[countryId - 1];
+	const active = getActiveCommanderModifiers("COMBAT_BUFF").length > 0;
+	if (active && !_operationPreviousBuffState) {
+		_operationPreviousBuffState = {
+			side: sideCountry?.hiddenBuffState || "none",
+			meta: meta?.hiddenBuffState || "none",
+		};
+		if (sideCountry) sideCountry.hiddenBuffState = "buff";
+		if (meta) meta.hiddenBuffState = "buff";
+	} else if (!active && _operationPreviousBuffState) {
+		if (sideCountry)
+			sideCountry.hiddenBuffState = _operationPreviousBuffState.side;
+		if (meta) meta.hiddenBuffState = _operationPreviousBuffState.meta;
+		_operationPreviousBuffState = null;
+	}
+}
+
+function persistOperationResult() {
+	if (!activeOperationDefinition || !activeOperationRuntime?.result) return;
+	try {
+		const key = "mw_operation_progress_v1";
+		const saved = JSON.parse(localStorage.getItem(key) || "{}");
+		const previous = saved[activeOperationDefinition.id] || {
+			completions: 0,
+			bestMedals: [],
+		};
+		const bestMedals = Array.from(
+			new Set([
+				...(previous.bestMedals || []),
+				...activeOperationRuntime.medals,
+			]),
+		);
+		saved[activeOperationDefinition.id] = {
+			completions: previous.completions + 1,
+			bestMedals,
+			lastResult: activeOperationRuntime.result,
+			lastCompletedAt: new Date().toISOString(),
+		};
+		localStorage.setItem(key, JSON.stringify(saved));
+	} catch (error) {
+		console.warn("Failed to persist operation result", error);
+	}
+}
+
+function renderOperationEvent() {
+	if (!activeOperationDefinition || !activeOperationRuntime) return;
+	const eventId = activeOperationRuntime.queuedEventIds[0];
+	if (!eventId) {
+		commanderEventOverlay.style.display = "none";
+		return;
+	}
+	const event = activeOperationDefinition.events.find(
+		(candidate) => candidate.id === eventId,
+	);
+	if (!event) return;
+	isPaused = true;
+	pauseBtn.innerText = "▶";
+	pauseBtn.style.background = "#27ae60";
+	commanderEventTitle.textContent = event.title;
+	commanderEventBody.textContent = event.body;
+	commanderEventChoices.innerHTML = "";
+	for (const choice of event.choices) {
+		const button = document.createElement("button");
+		button.className = "commander-event-choice";
+		button.innerHTML = `<strong>${escapeHtml(choice.label)}</strong><span>${escapeHtml(choice.description)}</span>`;
+		button.addEventListener("click", () => resolveOperationEvent(choice.id));
+		commanderEventChoices.appendChild(button);
+	}
+	commanderEventOverlay.style.display = "flex";
+}
+
+function getOperationSpawnPoint(cityKey, ordinal = 0) {
+	const city = getOperationCity(cityKey) || getOperationCity("kyiv");
+	if (!city || !activeOperationDefinition) return null;
+	const centerIdx = getGridIndex(city.lat, city.lng);
+	const centerRow = centerIdx >= 0 ? Math.floor(centerIdx / gridWidth) : 0;
+	const centerCol = centerIdx >= 0 ? centerIdx % gridWidth : 0;
+	const candidates = [];
+	for (let radius = 0; radius <= 24 && candidates.length < 80; radius++) {
+		for (let dr = -radius; dr <= radius; dr++) {
+			for (let dc = -radius; dc <= radius; dc++) {
+				if (Math.max(Math.abs(dr), Math.abs(dc)) !== radius) continue;
+				const row = centerRow + dr;
+				const col = centerCol + dc;
+				if (row < 0 || row >= gridHeight || col < 0 || col >= gridWidth)
+					continue;
+				const idx = row * gridWidth + col;
+				if (
+					deJureMap[idx] === activeOperationDefinition.playerCountryId &&
+					dominantSideMap[idx] === activeOperationDefinition.playerSideIdx
+				) {
+					candidates.push(idx);
+				}
+			}
+		}
+	}
+	if (!candidates.length) return null;
+	const idx = candidates[ordinal % candidates.length];
+	const row = Math.floor(idx / gridWidth);
+	const col = idx % gridWidth;
+	return {
+		lat: row * CONFIG.GRID_RES - 90 + CONFIG.GRID_RES / 2,
+		lng: col * CONFIG.GRID_RES - 180 + CONFIG.GRID_RES / 2,
+	};
+}
+
+function applyOperationSpawnGroups(groups = []) {
+	if (!activeOperationDefinition) return;
+	for (const group of groups) {
+		for (let index = 0; index < group.count; index++) {
+			const point = getOperationSpawnPoint(group.city, index);
+			if (!point) continue;
+			_placeDivisionAt(point, activeOperationDefinition.playerCountryId);
+			const unit = units[units.length - 1];
+			if (unit?.sovereignId === activeOperationDefinition.playerCountryId) {
+				unit.health *= group.health ?? 1;
+			}
+		}
+	}
+}
+
+export function resolveOperationEvent(choiceId) {
+	if (!activeOperationDefinition || !activeOperationRuntime) return false;
+	const eventId = activeOperationRuntime.queuedEventIds[0];
+	const resolution = resolveOperationRulesEvent(
+		activeOperationDefinition,
+		activeOperationRuntime,
+		eventId,
+		choiceId,
+	);
+	if (!resolution) return false;
+	activeOperationRuntime = resolution.runtime;
+	if (resolution.effect.groups) {
+		applyOperationSpawnGroups(resolution.effect.groups);
+	}
+	if (resolution.effect.type === "PLAN_MODIFIER") {
+		_commanderPlanReplacePending[activeOperationDefinition.playerSideIdx] =
+			true;
+		_planReassessNeeded[activeOperationDefinition.playerSideIdx] = true;
+	}
+	syncOperationCombatBuff();
+	commanderEventOverlay.style.display = "none";
+	if (activeOperationRuntime.queuedEventIds.length) {
+		renderOperationEvent();
+	} else {
+		isPaused = false;
+		pauseBtn.innerText = "⏸";
+		pauseBtn.style.background = "#f39c12";
+	}
+	updateCommanderHud(true);
+	return true;
+}
+
+export function evaluateOperationDay() {
+	if (!activeOperationDefinition || !activeOperationRuntime) return null;
+	const nextDay = activeOperationRuntime.currentDay + 1;
+	activeOperationRuntime = evaluateOperationRules(
+		activeOperationDefinition,
+		activeOperationRuntime,
+		getOperationSnapshot(nextDay),
+	);
+	syncOperationCombatBuff();
+	updateCommanderHud(true);
+	if (activeOperationRuntime.result) {
+		finishOperation(activeOperationRuntime.result);
+		return activeOperationRuntime.result;
+	}
+	if (activeOperationRuntime.queuedEventIds.length) renderOperationEvent();
+	return null;
+}
+
+function operationMedalLabel(id) {
+	return (
+		{
+			capital_unbroken: "Capital Unbroken",
+			cities_held: "Cities Held",
+			sovereign_majority: "Sovereign Majority",
+		}[id] || id
+	);
+}
+
+export function updateCommanderHud(force = false) {
+	if (!activeOperationDefinition || !activeOperationRuntime || !commanderHud) {
+		return;
+	}
+	if (
+		!force &&
+		activeOperationRuntime.activePlayMs - _operationLastHudRenderMs < 250
+	) {
+		return;
+	}
+	_operationLastHudRenderMs = activeOperationRuntime.activePlayMs;
+	const snapshot = getOperationSnapshot();
+	const cooldownMs = getDirectiveCooldownRemaining(
+		activeOperationDefinition,
+		activeOperationRuntime,
+	);
+	commanderDayLabel.textContent = `DAY ${activeOperationRuntime.currentDay} / ${activeOperationDefinition.durationDays}`;
+	commanderObjectiveLabel.textContent =
+		activeOperationRuntime.kyivEnemyDays > 0
+			? `Kyiv under enemy control: ${activeOperationRuntime.kyivEnemyDays} / 30 days`
+			: "Hold Kyiv through 2023/02/24";
+	commanderObjectiveLabel.style.color =
+		activeOperationRuntime.kyivEnemyDays > 0 ? "#ff8b9c" : "";
+	commanderCityStatus.innerHTML = Object.entries(
+		activeOperationDefinition.targetCities,
+	)
+		.map(
+			([key, city]) =>
+				`<span class="commander-city-chip ${snapshot.cityFriendly[key] ? "friendly" : "hostile"}">${escapeHtml(city.displayName)}</span>`,
+		)
+		.join("");
+	commanderApplyOrdersBtn.disabled = cooldownMs > 0;
+	commanderCooldownLabel.textContent =
+		cooldownMs > 0
+			? `STAFF REORGANIZING · ${Math.ceil(cooldownMs / 1000)}s`
+			: "ORDERS READY";
+	commanderCooldownLabel.style.color = cooldownMs > 0 ? "#ffd166" : "#8ee3a5";
+	const directive = activeOperationRuntime.directive;
+	commanderActiveOrders.textContent = `${COMMANDER_STANCES[directive.stance].label.toUpperCase()} · PRIORITY ${activeOperationDefinition.targetCities[directive.targetCity].displayName.toUpperCase()} · ${Math.round(directive.reserve * 100)}% RESERVE`;
+	const nextEvent = activeOperationDefinition.events.find(
+		(event) => !activeOperationRuntime.resolvedEventIds.includes(event.id),
+	);
+	commanderEventStatus.textContent = activeOperationRuntime.queuedEventIds
+		.length
+		? `DECISION REQUIRED · ${nextEvent?.title.toUpperCase() || "COMMAND EVENT"}`
+		: nextEvent
+			? `NEXT EVENT · DAY ${nextEvent.day} · ${nextEvent.title.toUpperCase()}`
+			: "ALL AUTHORED EVENTS RESOLVED";
+	commanderMedalPreview.innerHTML = [
+		{
+			id: "capital_unbroken",
+			active: !activeOperationRuntime.capitalEverLost,
+		},
+		{
+			id: "cities_held",
+			active: ["kyiv", "kharkiv", "odesa"].every(
+				(city) => snapshot.cityFriendly[city],
+			),
+		},
+		{
+			id: "sovereign_majority",
+			active: snapshot.coreControlRatio >= 0.6,
+		},
+	]
+		.map(
+			(medal) =>
+				`<span class="${medal.active ? "active" : ""}">◆ ${escapeHtml(operationMedalLabel(medal.id))}</span>`,
+		)
+		.join("");
+}
+
+export function setCommanderDirective(directive) {
+	if (!activeOperationDefinition || !activeOperationRuntime) return false;
+	const next = applyCommanderDirective(
+		activeOperationDefinition,
+		activeOperationRuntime,
+		directive,
+	);
+	if (!next) return false;
+	activeOperationRuntime = next;
+	const playerSideIdx = activeOperationDefinition.playerSideIdx;
+	const strategy = COMMANDER_STANCES[directive.stance]?.strategy || "BALANCED";
+	for (const country of sides[playerSideIdx] || []) country.strategy = strategy;
+	_commanderPlanReplacePending[playerSideIdx] = true;
+	_planReassessNeeded[playerSideIdx] = true;
+	statusText.innerText = `${COMMANDER_STANCES[directive.stance].label.toUpperCase()} · PRIORITY ${activeOperationDefinition.targetCities[directive.targetCity].displayName.toUpperCase()} · ${Math.round(directive.reserve * 100)}% RESERVE`;
+	updateCommanderHud(true);
+	return true;
+}
+
+function restoreOperationBuff() {
+	if (!_operationPreviousBuffState || !activeOperationDefinition) return;
+	const countryId = activeOperationDefinition.playerCountryId;
+	const sideCountry = sides[activeOperationDefinition.playerSideIdx]?.find(
+		(country) => country.id === countryId,
+	);
+	const meta = countryMetadata[countryId - 1];
+	if (sideCountry)
+		sideCountry.hiddenBuffState = _operationPreviousBuffState.side;
+	if (meta) meta.hiddenBuffState = _operationPreviousBuffState.meta;
+	_operationPreviousBuffState = null;
+}
+
+function clearOperationUi() {
+	restoreOperationBuff();
+	document.body.classList.remove("commander-active");
+	if (commanderHud) commanderHud.style.display = "none";
+	if (commanderEventOverlay) commanderEventOverlay.style.display = "none";
+	if (commanderDebriefOverlay) commanderDebriefOverlay.style.display = "none";
+	if (commanderBriefingOverlay) commanderBriefingOverlay.style.display = "none";
+	activeOperationDefinition = null;
+	activeOperationRuntime = null;
+	gameTimeDayDurationMs = 500;
+	_operationLastHudRenderMs = -Infinity;
+}
+
+export function finishOperation(result) {
+	if (!activeOperationDefinition || !activeOperationRuntime) return;
+	if (activeOperationRuntime.result !== result) {
+		activeOperationRuntime = evaluateOperationRules(
+			activeOperationDefinition,
+			{ ...activeOperationRuntime, result },
+			getOperationSnapshot(),
+		);
+		activeOperationRuntime.result = result;
+	}
+	gameState = "WAR_OVER";
+	isPaused = true;
+	commanderEventOverlay.style.display = "none";
+	commanderHud.style.display = "none";
+	persistOperationResult();
+	const victory = result === "VICTORY" || result === "EARLY_VICTORY";
+	commanderDebriefTitle.textContent = victory
+		? result === "EARLY_VICTORY"
+			? "DECISIVE VICTORY"
+			: "VICTORY"
+		: "OPERATION LOST";
+	commanderDebriefSummary.textContent = victory
+		? `Ukraine remains in the fight after ${activeOperationRuntime.currentDay} operation days. Your directives shaped an alternate outcome generated by the simulation.`
+		: `The command objective failed after ${activeOperationRuntime.currentDay} operation days. Adjust priorities, stance, and reserve use before trying again.`;
+	commanderDebriefMedals.innerHTML = [
+		"capital_unbroken",
+		"cities_held",
+		"sovereign_majority",
+	]
+		.map((id) => {
+			const earned = activeOperationRuntime.medals.includes(id);
+			return `<div class="commander-debrief-medal ${earned ? "earned" : ""}"><strong>${earned ? "◆" : "◇"}</strong><span>${escapeHtml(operationMedalLabel(id))}</span></div>`;
+		})
+		.join("");
+	commanderDebriefOverlay.style.display = "flex";
+}
+
+function makeOperationCountry(meta, strategy) {
+	return {
+		id: meta.id,
+		name: meta.name,
+		color: meta.color,
+		role: "OFFENSE",
+		strategy,
+		buffState: "none",
+		hiddenBuffState: "none",
+		overlordId: null,
+		flag: meta.tempFlag || null,
+	};
+}
+
+export async function startOperation(operationId) {
+	const definition = OPERATION_DEFINITIONS[operationId];
+	if (!definition) throw new Error(`Unknown operation: ${operationId}`);
+	if (animationFrameId !== null) {
+		cancelAnimationFrame(animationFrameId);
+		animationFrameId = null;
+	}
+	if (backgroundTickId) {
+		clearInterval(backgroundTickId);
+		backgroundTickId = null;
+	}
+	stopWarAmbiance();
+	restoreOperationBuff();
+	activeOperationDefinition = definition;
+	activeOperationRuntime = createOperationRuntime(definition);
+	gameTimeDayDurationMs = definition.dayDurationMs;
+	commanderBriefingOverlay.style.display = "none";
+	commanderDebriefOverlay.style.display = "none";
+	commanderDeployBtn.disabled = true;
+	commanderDeployBtn.textContent = "DEPLOYING...";
+	setLoadingThematic(true);
+	loadingStatus.innerText = "Preparing Eastern Front Command...";
+	loadingOverlay.style.display = "flex";
+	try {
+		const response = await fetch(definition.scenarioUrl);
+		if (!response.ok) throw new Error("Failed to load operation map");
+		const blob = await response.blob();
+		currentScenarioContext = {
+			id: definition.id,
+			name: definition.title,
+			ownerUsername: "System",
+			blobUrl: definition.scenarioUrl,
+		};
+		activeScenarioId = null;
+		await performPresetLoad(blob, "OPERATION");
+		await new Promise((resolve) => setTimeout(resolve, 550));
+		const enemyMeta = countryMetadata[definition.enemyCountryId - 1];
+		const playerMeta = countryMetadata[definition.playerCountryId - 1];
+		if (!enemyMeta || !playerMeta) {
+			throw new Error("Operation countries are missing from the scenario");
+		}
+		sides = [
+			[makeOperationCountry(enemyMeta, "BLITZ")],
+			[makeOperationCountry(playerMeta, "DEFENSIVE")],
+		];
+		_attackers = sides[0];
+		_defenders = sides[1];
+		activeSideIndex = definition.playerSideIdx;
+		updateSidesUI();
+		const enemyManpower = document.getElementById("manpower-side-0");
+		const playerManpower = document.getElementById("manpower-side-1");
+		if (enemyManpower) enemyManpower.value = String(definition.enemyManpower);
+		if (playerManpower)
+			playerManpower.value = String(definition.playerManpower);
+		timeSystemCheckbox.checked = true;
+		timeYearInput.value = String(definition.startDate.year);
+		timeMonthInput.value = String(definition.startDate.month);
+		timeDayInput.value = String(definition.startDate.day);
+		warEconomyCheckbox.checked = true;
+		noPeaceCheckbox.checked = true;
+		disableBombsCheckbox.checked = true;
+		disablePuppetsCheckbox.checked = true;
+		const operationCinematicCheckbox = document.getElementById(
+			"cinematic-mode-checkbox",
+		);
+		if (operationCinematicCheckbox) operationCinematicCheckbox.checked = false;
+		missilesEnabled = false;
+		await startWar();
+		setupPanel.style.display = "none";
+		casualtyPanel.style.display = "none";
+		statsPanel.style.display = "none";
+		economyPanel.style.display = "none";
+		godModeBtn.style.display = "none";
+		forcePeaceBtn.style.display = "none";
+		quickRestartBtn.style.display = "none";
+		restartScenarioBtn.style.display = "none";
+		commanderHud.style.display = "block";
+		document.body.classList.add("commander-active");
+		commanderStanceSelect.value = activeOperationRuntime.directive.stance;
+		commanderCitySelect.value = activeOperationRuntime.directive.targetCity;
+		commanderReserveSelect.value = String(
+			activeOperationRuntime.directive.reserve,
+		);
+		_planReassessNeeded[definition.playerSideIdx] = true;
+		if (window.innerWidth > 768) {
+			map.fitBounds(
+				[
+					[43.5, 20],
+					[56.5, 42.5],
+				],
+				{ paddingTopLeft: [350, 60], paddingBottomRight: [30, 30] },
+			);
+		} else {
+			map.fitBounds(
+				[
+					[43.5, 20],
+					[56.5, 42.5],
+				],
+				{
+					paddingTopLeft: [8, Math.round(window.innerHeight * 0.2)],
+					paddingBottomRight: [8, Math.round(window.innerHeight * 0.36)],
+				},
+			);
+		}
+		updateCommanderHud(true);
+		influenceLayer.render();
+	} catch (error) {
+		console.error("Commander operation failed to start", error);
+		clearOperationUi();
+		loadingOverlay.style.display = "none";
+		mainMenu.style.display = "flex";
+		alert(`Commander operation failed: ${error.message}`);
+		throw error;
+	} finally {
+		commanderDeployBtn.disabled = false;
+		commanderDeployBtn.textContent = "ASSUME COMMAND";
 	}
 }
 
@@ -8454,7 +9096,55 @@ function geoDistSq(aLat, aLng, bLat, bLng) {
 	return dLat * dLat + dLng * dLng;
 }
 
+function getCommanderCityDefenseMovement(unit, plan, fallbackSignature) {
+	const currentPlanSignature = plan.signature || fallbackSignature;
+	const assignedToPlan = unit._assignedPlanSignature === currentPlanSignature;
+	const planLimit = Math.max(1, plan.maxAssignedUnits || 5);
+	const planFull = !assignedToPlan && (plan.activeUnitCount || 0) >= planLimit;
+	const anchor = plan.target;
+	const closeEnough =
+		assignedToPlan ||
+		!anchor ||
+		geoDistSq(unit.lat, unit.lng, anchor.lat, anchor.lng) <= 100;
+	if (planFull || !closeEnough) return null;
+	unit._assignedPlanSignature = currentPlanSignature;
+	plan.activeUnitCount = Math.min(planLimit, (plan.activeUnitCount || 0) + 1);
+	const points = plan.garrisonPoints?.length
+		? plan.garrisonPoints
+		: [plan.target];
+	const pointIndex = Math.floor(Math.abs(unit.id * 1000000) % points.length);
+	const point = points[pointIndex];
+	const deltaLat = point.lat - unit.lat;
+	let deltaLng = point.lng - unit.lng;
+	if (deltaLng > 180) deltaLng -= 360;
+	else if (deltaLng < -180) deltaLng += 360;
+	const distance = Math.sqrt(deltaLat * deltaLat + deltaLng * deltaLng);
+	if (distance <= 0.16) {
+		return { lat: 0, lng: 0, speed: 0.2 };
+	}
+	return {
+		lat: deltaLat / distance,
+		lng: deltaLng / distance,
+		speed: 1.35,
+	};
+}
+
 function getSideStrategyProfile(sideIdx) {
+	if (
+		gameMode === "OPERATION" &&
+		activeOperationDefinition &&
+		activeOperationRuntime &&
+		sideIdx === activeOperationDefinition.playerSideIdx
+	) {
+		const stance =
+			COMMANDER_STANCES[activeOperationRuntime.directive.stance] ||
+			COMMANDER_STANCES.BALANCED;
+		return {
+			dominant: stance.strategy,
+			weights: { [stance.strategy]: 1 },
+			aggression: stance.offenseShare,
+		};
+	}
 	const sideCountries = sides[sideIdx] || [];
 	const weights = {
 		TURTLE: 0,
@@ -9035,7 +9725,7 @@ export function generateAllProposals(sideIdx) {
 		const city = activeTheaterCities[ci];
 		const cIdx = getGridIndex(city.lat, city.lng);
 		if (cIdx === -1) continue;
-		const ownerId = city.ownerId || 0;
+		const ownerId = city.ownerId;
 		if (myAllyIds.has(ownerId)) continue;
 		const citySide = _tickCountryToSideMap.get(ownerId);
 		if (
@@ -9144,6 +9834,143 @@ export function generateAllProposals(sideIdx) {
 			},
 			_waypoints: path.waypoints || [],
 		});
+	}
+
+	// Commander Mode adds one explicit city directive to the normal proposal pool.
+	// Friendly targets become localized defense plans; lost targets promote the
+	// matching capture proposal into a high-priority recapture order.
+	if (
+		gameMode === "OPERATION" &&
+		activeOperationDefinition &&
+		activeOperationRuntime &&
+		sideIdx === activeOperationDefinition.playerSideIdx
+	) {
+		const directive = activeOperationRuntime.directive;
+		const targetCity = getOperationCity(directive.targetCity);
+		const targetIdx = targetCity
+			? getGridIndex(targetCity.lat, targetCity.lng)
+			: -1;
+		const friendly = targetIdx !== -1 && dominantSideMap[targetIdx] === sideIdx;
+		if (targetCity && friendly) {
+			const garrisonPoints = [];
+			for (let pointIndex = 0; pointIndex < 12; pointIndex++) {
+				const angle = (pointIndex / 12) * Math.PI * 2;
+				const lat = targetCity.lat + Math.sin(angle) * 0.55;
+				const lng = targetCity.lng + Math.cos(angle) * 0.8;
+				const idx = getGridIndex(lat, lng);
+				if (idx !== -1 && dominantSideMap[idx] === sideIdx) {
+					garrisonPoints.push({ lat, lng });
+				}
+			}
+			if (!garrisonPoints.length) {
+				garrisonPoints.push({ lat: targetCity.lat, lng: targetCity.lng });
+			}
+			const nearest = findNearestFront(
+				frontIntel,
+				targetCity.lat,
+				targetCity.lng,
+			);
+			const local = estimateLocalForces(
+				sideIdx,
+				targetCity.lat,
+				targetCity.lng,
+				16,
+			);
+			proposals.push({
+				type: "DEFEND_CITY",
+				isCommanderDirective: true,
+				target: {
+					lat: targetCity.lat,
+					lng: targetCity.lng,
+					name: activeOperationDefinition.targetCities[directive.targetCity]
+						.displayName,
+					isCapital: !!targetCity.isCapital,
+				},
+				garrisonPoints,
+				stagingCells: [],
+				arrowPoints: nearest.front
+					? [
+							{ lat: nearest.front.lat, lng: nearest.front.lng },
+							{ lat: targetCity.lat, lng: targetCity.lng },
+						]
+					: null,
+				estimatedForceNeeded: Math.max(8, Math.ceil(unitCount * 0.35)),
+				theaterId: nearest.front?.pairKey || null,
+				frontIntel: nearest.front || null,
+				riskAssessment: {
+					enemyForcesNear: local.enemies,
+					ourForcesNear: local.friendlies,
+					enemyCounterWeight:
+						local.enemies / Math.max(1, local.friendlies + local.enemies),
+				},
+				geographicData: { reachesTarget: true, minLandDist: 0 },
+			});
+		} else if (targetCity) {
+			let recapture = proposals.find(
+				(proposal) =>
+					proposal.type === "CAPTURE_CITY" &&
+					proposal.target?.name === targetCity.name,
+			);
+			if (!recapture) {
+				const nearest = findNearestFront(
+					frontIntel,
+					targetCity.lat,
+					targetCity.lng,
+				);
+				const source = nearest.front?.weakPoint ||
+					nearest.front || {
+						lat: uLat,
+						lng: uLng,
+					};
+				const sourceIdx = getGridIndex(source.lat, source.lng);
+				const path = getLandPath(sourceIdx, targetIdx);
+				const local = estimateLocalForces(
+					sideIdx,
+					targetCity.lat,
+					targetCity.lng,
+					16,
+				);
+				recapture = {
+					type: "CAPTURE_CITY",
+					isCommanderDirective: true,
+					target: {
+						lat: targetCity.lat,
+						lng: targetCity.lng,
+						name: activeOperationDefinition.targetCities[directive.targetCity]
+							.displayName,
+						isCapital: !!targetCity.isCapital,
+					},
+					stagingCells: [],
+					arrowPoints: [
+						{ lat: source.lat, lng: source.lng },
+						{ lat: targetCity.lat, lng: targetCity.lng },
+					],
+					estimatedForceNeeded: Math.max(8, Math.ceil(unitCount * 0.35)),
+					theaterId: nearest.front?.pairKey || null,
+					frontIntel: nearest.front || null,
+					riskAssessment: {
+						enemyForcesNear: local.enemies,
+						ourForcesNear: local.friendlies,
+						enemyCounterWeight:
+							local.enemies / Math.max(1, local.friendlies + local.enemies),
+					},
+					geographicData: {
+						frontlineDistSq: nearest.distSq || 0,
+						reachesTarget: path.reachable,
+						minSeaDist: Infinity,
+						minLandDist: Math.max(
+							Math.sqrt(nearest.distSq || 1),
+							(path.distanceCells || 1) * CONFIG.GRID_RES,
+						),
+						pathDistanceCells: path.distanceCells || 0,
+					},
+					_waypoints: path.waypoints || [],
+				};
+				proposals.push(recapture);
+			} else {
+				recapture.isCommanderDirective = true;
+			}
+		}
 	}
 
 	// ── 2. ENCIRCLE proposals ──
@@ -10033,9 +10860,10 @@ export function scoreProposal(proposal, sideIdx) {
 	if (proposal.type === "NEUTRAL_GARRISON") {
 		score += Math.min(20, (proposal.borderLength || 0) * 0.3);
 	}
-	if (proposal.type === "DEFEND") {
+	if (proposal.type === "DEFEND" || proposal.type === "DEFEND_CITY") {
 		score += 10;
 		if (globalForceRatio < 1.0) score += 15;
+		if (proposal.type === "DEFEND_CITY") score += 20;
 	}
 	if (proposal.type === "ENCIRCLE") {
 		score += 25;
@@ -10116,6 +10944,7 @@ export function scoreProposal(proposal, sideIdx) {
 	].includes(proposal.type);
 	const isDefensive = [
 		"DEFEND",
+		"DEFEND_CITY",
 		"COASTAL_DEFENSE",
 		"NEUTRAL_GARRISON",
 	].includes(proposal.type);
@@ -10168,6 +10997,18 @@ export function scoreProposal(proposal, sideIdx) {
 			score *= 1.3;
 		}
 	}
+	if (
+		gameMode === "OPERATION" &&
+		activeOperationDefinition &&
+		activeOperationRuntime &&
+		sideIdx === activeOperationDefinition.playerSideIdx
+	) {
+		if (proposal.isCommanderDirective) score += 120;
+		const planClass = isOffensive ? "OFFENSE" : isDefensive ? "DEFENSE" : null;
+		for (const modifier of getActiveCommanderModifiers(planClass)) {
+			score *= modifier.multiplier || 1;
+		}
+	}
 
 	proposal.scoreBreakdown = {
 		strategy,
@@ -10202,13 +11043,24 @@ export function selectPlans(sideIdx, scoredProposals) {
 	const unitCount = sideUnits.filter((u) => u.deployTicks === 0).length;
 
 	// Force allocation by strategy
-	const alloc = {
+	let alloc = {
 		BLITZ: { offense: 0.85, defense: 0.1, reserve: 0.05 },
 		AGGRESSIVE: { offense: 0.75, defense: 0.2, reserve: 0.05 },
 		BALANCED: { offense: 0.5, defense: 0.4, reserve: 0.1 },
 		DEFENSIVE: { offense: 0.25, defense: 0.65, reserve: 0.1 },
 		TURTLE: { offense: 0.0, defense: 0.9, reserve: 0.1 },
 	}[strategy] || { offense: 0.5, defense: 0.4, reserve: 0.1 };
+	if (
+		gameMode === "OPERATION" &&
+		activeOperationDefinition &&
+		activeOperationRuntime &&
+		sideIdx === activeOperationDefinition.playerSideIdx
+	) {
+		alloc = calculateDirectiveAllocation(
+			activeOperationRuntime.directive,
+			getActiveCommanderModifiers(),
+		);
+	}
 
 	// TURTLE: only allocate offense when we have force advantage
 	if (strategy === "TURTLE") {
@@ -10246,7 +11098,9 @@ export function selectPlans(sideIdx, scoredProposals) {
 		(p) => p.type === "NAVAL_SUPPLY" && (p.priority || 0) > 0,
 	);
 	const defs = sorted.filter(
-		(p) => p.type === "DEFEND" && (p.priority || 0) > 0,
+		(p) =>
+			(p.type === "DEFEND" || p.type === "DEFEND_CITY") &&
+			(p.priority || 0) > 0,
 	);
 	const coastals = sorted.filter(
 		(p) => p.type === "COASTAL_DEFENSE" && (p.priority || 0) > 0,
@@ -10264,10 +11118,14 @@ export function selectPlans(sideIdx, scoredProposals) {
 	const result = {};
 
 	// ── Land offensive slot 1 ──
+	const directiveDefense = defs.find(
+		(proposal) =>
+			proposal.type === "DEFEND_CITY" && proposal.isCommanderDirective,
+	);
 	const land1 = offensives[0];
 	// ── Land offensive slot 2 ──
-	let land2 = null;
-	if (land1 && offensives.length > 1) {
+	let land2 = directiveDefense || null;
+	if (!land2 && land1 && offensives.length > 1) {
 		const secondCandidates = offensives.slice(1);
 		const differentTheater = secondCandidates.find(
 			(p) => p.theaterId && p.theaterId !== land1.theaterId,
@@ -10319,7 +11177,7 @@ export function selectPlans(sideIdx, scoredProposals) {
 	const supply1 = supplies[0];
 
 	// ── Defensive slot ──
-	const defend1 = defs[0];
+	const defend1 = defs.find((proposal) => proposal !== directiveDefense);
 
 	// ── Coastal defense zones ──
 	const selectedCoastal = coastals.filter((p) => (p.threatScore || 0) >= 0.1);
@@ -10330,7 +11188,12 @@ export function selectPlans(sideIdx, scoredProposals) {
 	const selectedOccupationGarr = occupationGarrisons;
 
 	// ── Force allocation ──
-	const selectedOff = [land1, land2, naval1, supply1].filter(Boolean);
+	const selectedOff = [
+		land1,
+		land2 !== directiveDefense ? land2 : null,
+		naval1,
+		supply1,
+	].filter(Boolean);
 	const offSum = selectedOff.reduce((s, p) => s + (p.priority || 0), 0);
 	// Count local enemies near each target and scale force accordingly
 	const _allUnits = units || [];
@@ -10368,9 +11231,12 @@ export function selectPlans(sideIdx, scoredProposals) {
 		);
 	}
 
-	const selectedDef = [defend1, ...selectedCoastal, ...selectedGarr].filter(
-		Boolean,
-	);
+	const selectedDef = [
+		directiveDefense,
+		defend1,
+		...selectedCoastal,
+		...selectedGarr,
+	].filter(Boolean);
 	const defSum = selectedDef.reduce((s, p) => s + (p.priority || 0), 0);
 	for (const p of selectedDef) {
 		p.allocatedForce =
@@ -10741,6 +11607,8 @@ export function evaluateAllPlans() {
 		if (shouldReassess(si)) {
 			window.__perf.proposalRuns++;
 			const forceReplace = !!_planReassessNeeded[si];
+			const commanderReplacement =
+				forceReplace && !!_commanderPlanReplacePending[si];
 			_planReassessNeeded[si] = false;
 			const proposals = generateAllProposals(si);
 
@@ -10756,7 +11624,11 @@ export function evaluateAllPlans() {
 			// Only overwrite on forced reassessment; otherwise fill gaps
 			if (selected.land1 && (!_warPlan[si] || forceReplace)) {
 				if (_warPlan[si] && forceReplace) {
-					recordPlanOutcome(si, _warPlan[si], "failed");
+					recordPlanOutcome(
+						si,
+						_warPlan[si],
+						commanderReplacement ? "replaced" : "failed",
+					);
 				}
 				_warPlan[si] = selected.land1;
 			}
@@ -10764,7 +11636,11 @@ export function evaluateAllPlans() {
 				const lSlot2 = si + sides.length;
 				if (!_warPlan[lSlot2] || forceReplace) {
 					if (_warPlan[lSlot2] && forceReplace) {
-						recordPlanOutcome(si, _warPlan[lSlot2], "failed");
+						recordPlanOutcome(
+							si,
+							_warPlan[lSlot2],
+							commanderReplacement ? "replaced" : "failed",
+						);
 					}
 					if (_warPlan.length <= lSlot2) {
 						_warPlan[lSlot2] = selected.land2;
@@ -10875,6 +11751,7 @@ export function evaluateAllPlans() {
 			};
 			_proposalReassessTick[si] = _simTickCount;
 			_proposalsCache[si] = proposals;
+			_commanderPlanReplacePending[si] = false;
 		}
 	}
 	for (const plan of _occupationGarrisonPlans.values()) {
@@ -10921,6 +11798,24 @@ export function evaluateAllPlans() {
 				simFrameCount - (plan.startedTick || simFrameCount);
 			const ticksSinceProgress =
 				simFrameCount - (plan.lastProgressTick || simFrameCount);
+			if (plan.type === "DEFEND_CITY") {
+				const targetIdx = plan.target
+					? getGridIndex(plan.target.lat, plan.target.lng)
+					: -1;
+				if (targetIdx === -1 || dominantSideMap[targetIdx] !== si) {
+					recordPlanOutcome(si, plan, "replaced");
+					_commanderPlanReplacePending[si] = true;
+					_planReassessNeeded[si] = true;
+				} else {
+					plan.lastProgressTick = simFrameCount;
+					plan.progress = Math.min(
+						1,
+						(plan.activeUnitCount || 0) /
+							Math.max(1, plan.maxAssignedUnits || 1),
+					);
+				}
+				continue;
+			}
 
 			if (
 				plan.type === "CAPTURE_CITY" ||
@@ -14960,7 +15855,13 @@ export function performSimulationTick() {
 				) {
 					u._assignedPlanSignature = null;
 				}
-				if (commandPolicy.refusesOffense && activePlan?.type !== "DEFEND") {
+				const isCommanderCityPlan =
+					!!activeOperationRuntime && activePlan?.type === "DEFEND_CITY";
+				if (
+					commandPolicy.refusesOffense &&
+					activePlan?.type !== "DEFEND" &&
+					!isCommanderCityPlan
+				) {
 					activePlan = null;
 					activePlanSignature = null;
 				}
@@ -15402,6 +16303,29 @@ export function performSimulationTick() {
 
 					// DEFEND plan and land plan execution — skip if unit is in transport mode
 					if (!u.isTransport) {
+						// Commander city defense: assign a bounded group to a ring of
+						// friendly points around the selected city and hold once in place.
+						if (
+							isCommanderCityPlan &&
+							!isEngaged &&
+							!shouldMopUp &&
+							!retreatVector
+						) {
+							const commanderMovement = getCommanderCityDefenseMovement(
+								u,
+								activePlan,
+								activePlanSignature,
+							);
+							if (commanderMovement) {
+								isPlanUnit = true;
+								planDirLat = commanderMovement.lat;
+								planDirLng = commanderMovement.lng;
+								planSpeedMult = commanderMovement.speed;
+								moveDirLat = 0;
+								moveDirLng = 0;
+							}
+						}
+
 						// DEFEND plan: hold the frontline, do not advance
 						if (
 							activePlan &&
@@ -15497,7 +16421,8 @@ export function performSimulationTick() {
 							!isEngaged &&
 							(localEnemyCount < 2 || pocketContained) &&
 							activePlan &&
-							activePlan.type !== "DEFEND"
+							activePlan.type !== "DEFEND" &&
+							!isCommanderCityPlan
 						) {
 							const planLimit = Math.max(1, activePlan.maxAssignedUnits || 5);
 							const currentPlanSignature =
@@ -18102,6 +19027,17 @@ export function capitulateCountry(country, sideIndex) {
 }
 
 export function applyTreaty(type, winnerPoleOverride = null) {
+	if (
+		gameMode === "OPERATION" &&
+		activeOperationDefinition &&
+		activeOperationRuntime
+	) {
+		const playerWon =
+			type.includes("FULL_CAPITULATION") &&
+			winnerPoleOverride === activeOperationDefinition.playerSideIdx;
+		finishOperation(playerWon ? "EARLY_VICTORY" : "DEFEAT");
+		return;
+	}
 	gameState = "WAR_OVER";
 	updateEconomyPanel();
 	playPeaceSound();
@@ -19010,6 +19946,7 @@ mainMenuBtn.addEventListener("click", () => {
 		backgroundTickId = null;
 	}
 	stopWarAmbiance();
+	clearOperationUi();
 
 	// Reset high‑level state to menu
 	gameState = "MAIN_MENU";
@@ -20757,6 +21694,34 @@ playModeBtn.addEventListener("click", () => {
 	}, 500);
 });
 
+commanderModeBtn.addEventListener("click", () => {
+	commanderBriefingOverlay.style.display = "flex";
+});
+
+commanderBriefingBackBtn.addEventListener("click", () => {
+	commanderBriefingOverlay.style.display = "none";
+});
+
+commanderDeployBtn.addEventListener("click", () => {
+	startOperation(EASTERN_FRONT_OPERATION.id).catch(() => {});
+});
+
+commanderApplyOrdersBtn.addEventListener("click", () => {
+	setCommanderDirective({
+		stance: commanderStanceSelect.value,
+		targetCity: commanderCitySelect.value,
+		reserve: Number(commanderReserveSelect.value),
+	});
+});
+
+commanderReplayBtn.addEventListener("click", () => {
+	startOperation(EASTERN_FRONT_OPERATION.id).catch(() => {});
+});
+
+commanderMenuBtn.addEventListener("click", () => {
+	mainMenuBtn.click();
+});
+
 document.getElementById("back-to-nav-btn").addEventListener("click", () => {
 	const navMain = document.getElementById("nav-links-container");
 	const selector = document.getElementById("menu-scenario-selector");
@@ -21268,6 +22233,7 @@ export function recruitNeutralMidWar(id, sideIdx) {
 }
 
 export function openInspector(id) {
+	if (gameMode === "OPERATION") return;
 	editingCountryId = id;
 	const meta = countryMetadata[id - 1];
 	if (!meta) return;
@@ -24444,7 +25410,7 @@ document.addEventListener("visibilitychange", () => {
 		}
 		if (!backgroundTickId && gameState === "SIMULATING") {
 			backgroundTickId = setInterval(() => {
-				if (gameState !== "SIMULATING") return;
+				if (gameState !== "SIMULATING" || isPaused) return;
 				// Advance simulation based on simSpeed, but skip rendering/UI-heavy work
 				frameAccumulator += simSpeed;
 				while (frameAccumulator >= 1) {
