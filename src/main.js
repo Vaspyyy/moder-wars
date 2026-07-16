@@ -18,6 +18,11 @@ import {
 } from "./economy.js";
 import { fetchJSONWithCache } from "./geo.js";
 import {
+	cacheMopUpCell,
+	selectAssignedMopUpCountryId,
+	selectNearestMopUpCell,
+} from "./mop-up.js";
+import {
 	allocateLargestRemainderQuotas,
 	evaluateCountryCapitulation,
 	evaluateGlobalConflict,
@@ -2148,6 +2153,8 @@ let _strategicTargetGeneration = 0;
 let _enemyCityCacheGeneration = -1;
 let _enemyCityCacheSource = null;
 let _enemyCityCandidatesBySide = [];
+const _mopUpOwnedCellCache = new Map();
+const _mopUpDeJureCellCache = new Map();
 
 function invalidateStrategicTargetCaches() {
 	_strategicTargetGeneration++;
@@ -2158,6 +2165,7 @@ function invalidateStrategicTargetCaches() {
 
 function clearUnitStrategicTargets(unit) {
 	unit.mopUpTarget = null;
+	unit.mopUpTargetId = 0;
 	unit.lastMopUpId = null;
 	unit.targetSearchCooldown = 0;
 	unit._cityObjective = null;
@@ -7294,6 +7302,8 @@ export async function _startWarInner() {
 	const cellCounts = new Map();
 	const countryIndices = new Map();
 	const sideCellIndices = sides.map(() => []);
+	_mopUpOwnedCellCache.clear();
+	_mopUpDeJureCellCache.clear();
 
 	// Ensure country bounds are up to date before we derive any war theater extents
 	recalculateAllBounds();
@@ -7398,6 +7408,8 @@ export async function _startWarInner() {
 				cellCounts.set(id, cellCounts.get(id) + 1);
 				countryIndices.get(id).push(i);
 				sideCellIndices[sideIdx].push(i);
+				cacheMopUpCell(_mopUpOwnedCellCache, id, i);
+				cacheMopUpCell(_mopUpDeJureCellCache, deJureMap[i], i);
 			}
 			processed++;
 			if (processed % chunkSize === 0) {
@@ -8215,6 +8227,8 @@ export function activateCountryMidWar(country, sideIdx) {
 
 	for (let i = 0; i < worldControlMap.length; i++) {
 		if (worldControlMap[i] === countryId) {
+			cacheMopUpCell(_mopUpOwnedCellCache, countryId, i);
+			cacheMopUpCell(_mopUpDeJureCellCache, deJureMap[i], i);
 			landMask[i] = 2;
 			// Don't erase enemy occupation if the cell is already under enemy control.
 			// Otherwise the German army that already conquered Czechia would need to
@@ -12463,37 +12477,32 @@ export function performSimulationTick() {
 		);
 	});
 
-	// Pre-calculate collapsed nations for each side to avoid O(N^2) complexity inside the unit loop
-	const sideToCollapsedNations = sides.map((_side, idx) => {
+	// Pre-calculate unitless hostile nations for each side. SUPPORT is an AI role,
+	// not immunity from final occupation.
+	const sideToCollapsedNationIds = sides.map((_side, idx) => {
 		const enemies = [];
 		sides.forEach((s, sIdx) => {
 			const isEnemy = areSidesHostile(idx, sIdx);
 			if (isEnemy && s.length > 0) {
-				s.forEach((c) => {
-					const stats = countryStats.get(c.id);
+				s.forEach((country) => {
+					const stats = countryStats.get(country.id);
 					if (stats && stats.units === 0 && stats.controlled > 0) {
-						// Support nations are only valid targets for mop-up if they've already been "activated"
-						// (meaning someone has managed to breach their border already).
-						if (c.role === "SUPPORT") {
-							const initial = c.initialCells || 1;
-							if (stats.controlled >= initial * 0.99) {
-								// Virtually untouched support nation, ignore for now
-								return;
-							}
-						}
-						enemies.push(c);
+						enemies.push(country.id);
 					}
 				});
 			}
 		});
-		// Prioritize OFFENSE nations in the mop-up list to ensure core enemies are finished first
-		enemies.sort((a, b) => {
-			const aOffense = a.role === "OFFENSE" ? 1 : 0;
-			const bOffense = b.role === "OFFENSE" ? 1 : 0;
-			return bOffense - aOffense;
-		});
+		enemies.sort((a, b) => a - b);
 		return enemies;
 	});
+	for (let sideIndex = 0; sideIndex < unitsBySide.length; sideIndex++) {
+		const sideUnits = unitsBySide[sideIndex] || [];
+		const targetCountryIds = sideToCollapsedNationIds[sideIndex] || [];
+		for (let unitIndex = 0; unitIndex < sideUnits.length; unitIndex++) {
+			sideUnits[unitIndex]._mopUpAssignedCountryId =
+				selectAssignedMopUpCountryId(targetCountryIds, unitIndex);
+		}
+	}
 
 	_tickCountryToCityCount.clear();
 	const countryToCityCount = _tickCountryToCityCount;
@@ -14424,8 +14433,6 @@ export function performSimulationTick() {
 		const _u3a = _detailedPerfEnabled ? performance.now() : 0;
 		if (_detailedPerfEnabled) window.__perf.unitRetreatDecision += _u3a - _u3;
 
-		const collapsedEnemyNations = sideToCollapsedNations[sideIndex] || [];
-
 		const targetIdx = target ? getGridIndex(target.lat, target.lng) : -1;
 		const _targetAtSea =
 			target && (targetIdx === -1 || landMask[targetIdx] === 0);
@@ -14469,6 +14476,26 @@ export function performSimulationTick() {
 		// Unified behavior: Units hunt enemies when nearby, but switch to focused territory capture (mop-up)
 		// when there are literally zero enemy units remaining.
 		const shouldMopUp = totalEnemiesCount === 0;
+		if (shouldMopUp && !u._mopUpModeActive) {
+			u._mopUpModeActive = true;
+			u._cityObjective = null;
+			u._cityObjectiveTick = -999;
+			u._assignedPlanSignature = null;
+			u._transportPlanSignature = null;
+			u._planWaypointSignature = null;
+			u._planWaypointIndex = 0;
+			u.navalAssigned = false;
+			u.supplyAssigned = false;
+			u.coastalAssigned = false;
+			u.isTransport = false;
+			u.frontSlot = null;
+		} else if (!shouldMopUp && u._mopUpModeActive) {
+			u._mopUpModeActive = false;
+			u.mopUpTarget = null;
+			u.mopUpTargetId = 0;
+			u.lastMopUpId = null;
+			u.targetSearchCooldown = 0;
+		}
 
 		// Target Caching: Only re-search for mop-up targets every few ticks to save CPU
 		if (u.targetSearchCooldown > 0) {
@@ -14588,8 +14615,14 @@ export function performSimulationTick() {
 			strategicCohort === _simTickCount % STRATEGIC_COHORT_COUNT;
 		if (u.mopUpTarget) {
 			const mopUpIdx = getGridIndex(u.mopUpTarget.lat, u.mopUpTarget.lng);
-			if (mopUpIdx === -1 || dominantSideMap[mopUpIdx] === u.sideIndex) {
+			const mopUpOccupier = mopUpIdx === -1 ? -1 : dominantSideMap[mopUpIdx];
+			if (
+				mopUpIdx === -1 ||
+				mopUpOccupier === u.sideIndex ||
+				(mopUpOccupier >= 0 && !areSidesHostile(u.sideIndex, mopUpOccupier))
+			) {
 				u.mopUpTarget = null;
+				u.mopUpTargetId = 0;
 				u.targetSearchCooldown = 0;
 			}
 		}
@@ -14603,27 +14636,11 @@ export function performSimulationTick() {
 			if (isRebel) {
 				// REBELS: Target their own de jure land exclusively
 				enemyId = u.sovereignId;
-			} else if (effectiveDefensive) {
-				// DEFENSIVE: Target own nation to find occupied cells to reclaim
+			} else if (commandPolicy.refusesOffense || commandPolicy.returnHome) {
+				// Unpaid or mutinous units may reclaim home territory but cannot mop up abroad.
 				enemyId = u.sovereignId;
-			} else if (collapsedEnemyNations.length > 0) {
-				// If there are multiple collapsed nations, prioritize the first few (which are sorted by OFFENSE role)
-				const candidates = collapsedEnemyNations.slice(0, 3);
-				enemyId = candidates[Math.floor(Math.random() * candidates.length)].id;
-			} else {
-				const possibleEnemySides = sides
-					.filter((_s, idx) => areSidesHostile(sideIndex, idx))
-					.filter((s) => s.length > 0);
-
-				if (possibleEnemySides.length > 0) {
-					const randomEnemySide =
-						possibleEnemySides[
-							Math.floor(Math.random() * possibleEnemySides.length)
-						];
-					const randomEnemyCountry =
-						randomEnemySide[Math.floor(Math.random() * randomEnemySide.length)];
-					enemyId = randomEnemyCountry?.id || -1;
-				}
+			} else if (u._mopUpAssignedCountryId > 0) {
+				enemyId = u._mopUpAssignedCountryId;
 			}
 
 			// If supporting an ally and no enemies nearby, move towards their frontlines
@@ -14646,110 +14663,49 @@ export function performSimulationTick() {
 			const needsNewTarget =
 				!u.mopUpTarget ||
 				u.targetSearchCooldown <= 0 ||
-				(u.lastMopUpId &&
-					u.lastMopUpId !==
-						(activeSupportTarget ? activeSupportTarget.id : enemyId));
+				u.mopUpTargetId !==
+					(activeSupportTarget ? activeSupportTarget.id : enemyId);
 
 			if (needsNewTarget && canRefreshStrategicTarget) {
-				u.targetSearchCooldown = 15 + Math.floor(Math.random() * 20); // 0.25s - 0.6s cache
 				const targetId = activeSupportTarget ? activeSupportTarget.id : enemyId;
 				u.lastMopUpId = targetId;
-				let bestCellIdx = -1;
-				let bestScore = -Infinity;
-
-				const _relLat = groupCentroid ? u.lat - groupCentroid.lat : 0;
-				const _relLng = groupCentroid ? u.lng - groupCentroid.lng : 0;
-
-				for (let j = 0; j < 100; j++) {
-					const randIdx = Math.floor(Math.random() * worldControlMap.length);
-					const ownerAtIdx = worldControlMap[randIdx];
-					const deJureAtIdx = deJureMap[randIdx];
-
-					let isCandidate = false;
-					if (isRebel) {
-						if (deJureAtIdx === rebellion.rebelId) {
-							if (dominantSideMap[randIdx] !== u.sideIndex) isCandidate = true;
+				const cellCache = isRebel
+					? _mopUpDeJureCellCache
+					: _mopUpOwnedCellCache;
+				const cachedCells = cellCache.get(targetId)?.cells;
+				const bestCellIdx = selectNearestMopUpCell(cachedCells, {
+					unitLat: u.lat,
+					unitLng: u.lng,
+					gridWidth,
+					gridRes: CONFIG.GRID_RES,
+					isEligible: (cellIndex) => {
+						if (landMask[cellIndex] !== 2) return false;
+						if (isRebel) {
+							if (deJureMap[cellIndex] !== rebellion.rebelId) return false;
+						} else if (worldControlMap[cellIndex] !== targetId) {
+							return false;
 						}
-					} else if (ownerAtIdx === targetId) {
-						if (effectiveDefensive) {
-							if (dominantSideMap[randIdx] !== u.sideIndex) isCandidate = true;
-						} else {
-							if (dominantSideMap[randIdx] !== u.sideIndex) isCandidate = true;
-						}
-					}
-
-					if (isCandidate) {
-						const cy = Math.floor(randIdx / gridWidth);
-						const cx = randIdx % gridWidth;
-						const cLat = cy * CONFIG.GRID_RES - 90;
-						const cLng = cx * CONFIG.GRID_RES - 180;
-
-						// Hive Sector Logic: Bias groups toward specific geographic arcs to create organized fronts
-						const sectorAngle = (gIdx / numGroups) * Math.PI * 2;
-						const sectorLat = Math.sin(sectorAngle) * 45;
-						const sectorLng = Math.cos(sectorAngle) * 45;
-
-						// Distance to assigned squad sector
-						const sectorDistSq =
-							(cLat - sectorLat) ** 2 + (cLng - sectorLng) ** 2;
-						const sectorBias = Math.max(0, 100 - sectorDistSq * 0.05);
-
-						let dcLng = cLng - u.lng;
-						if (dcLng > 180) dcLng -= 360;
-						else if (dcLng < -180) dcLng += 360;
-
-						const distSq = (u.lat - cLat) ** 2 + dcLng ** 2;
-						const occ = occupationMap[randIdx];
-						const occFavor = (1.0 - Math.abs(occ)) * 120;
-
-						// City bias removed (was URBAN strategy, now TURTLE)
-						const cityBias = 0;
-
-						// Combinatorial score: Proximity + Frontline Freshness + Squad Sector Focus + City priority
-						let score = occFavor - distSq * 0.4 + sectorBias + cityBias;
-
-						// ALASKA & ARCTIC PENALTY: Discourage units from roaming to Alaska or far north islands
-						// when Fighting in North America. This forces them to prioritize the Mainland US/Canada borders.
-						const isAlaska = cLat > 54 && cLng < -130;
-						const isArctic = cLat > 65;
-
-						if (isAlaska) score -= 1500;
-						if (isArctic) score -= 800;
-
-						// MAINLAND THEATER BOOST: Encourage units to target "The Heartland" (Lower 48 / Europe core)
-						if (cLat > 25 && cLat < 50 && cLng > -125 && cLng < -65)
-							score += 200; // US Mainland
-						if (cLat > 35 && cLat < 60 && cLng > -10 && cLng < 40) score += 200; // Europe Core
-
-						if (score > bestScore) {
-							bestScore = score;
-							bestCellIdx = randIdx;
-						}
-					}
-				}
+						const occupierSide = dominantSideMap[cellIndex];
+						return (
+							occupierSide !== u.sideIndex &&
+							(occupierSide < 0 || areSidesHostile(u.sideIndex, occupierSide))
+						);
+					},
+				});
 
 				if (bestCellIdx !== -1) {
 					const y = Math.floor(bestCellIdx / gridWidth);
 					const x = bestCellIdx % gridWidth;
 					u.mopUpTarget = {
-						lat: y * CONFIG.GRID_RES - 90,
-						lng: x * CONFIG.GRID_RES - 180,
+						lat: y * CONFIG.GRID_RES - 90 + CONFIG.GRID_RES * 0.5,
+						lng: x * CONFIG.GRID_RES - 180 + CONFIG.GRID_RES * 0.5,
 					};
+					u.mopUpTargetId = targetId;
+					u.targetSearchCooldown = 15 + Math.floor(Math.random() * 20);
 				} else {
-					// Fallback: If no priority cells found, target ANY cell of the target nation.
-					// This prevents units (especially defensive or weakened ones) from freezing when priority targets are gone.
-					for (let j = 0; j < 40; j++) {
-						const randIdx = Math.floor(Math.random() * worldControlMap.length);
-						if (worldControlMap[randIdx] === targetId) {
-							const y = Math.floor(randIdx / gridWidth);
-							const x = randIdx % gridWidth;
-							u.mopUpTarget = {
-								lat: y * CONFIG.GRID_RES - 90,
-								lng: x * CONFIG.GRID_RES - 180,
-							};
-							break;
-						}
-					}
+					u.mopUpTarget = null;
+					u.mopUpTargetId = 0;
+					u.targetSearchCooldown = 1;
 				}
 			}
 			target = u.mopUpTarget;
@@ -15863,6 +15819,7 @@ export function performSimulationTick() {
 					!commandPolicy.refusesOffense &&
 					!isAtSea &&
 					!isPlanUnit &&
+					!shouldMopUp &&
 					(!activePlan ||
 						(activePlan.phase !== "PREPARATION" &&
 							activePlan.phase !== "CONSOLIDATION"))
@@ -22843,6 +22800,8 @@ export function resetConflictSetupState() {
 	countryCasualties.clear();
 	casualtyByAttacker.clear();
 	latestCountryStats.clear();
+	_mopUpOwnedCellCache.clear();
+	_mopUpDeJureCellCache.clear();
 	selectedCountryIds.clear();
 	editingCityId = -1;
 	paintMaskId = -1;
