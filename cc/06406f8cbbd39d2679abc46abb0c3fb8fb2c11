@@ -1,0 +1,23 @@
+index.html
+  s_2d17ccf75546db::t_4d9cb6f55897e4 7
+workers/service-worker.js
+  s_2d17ccf75546db::t_4d9cb6f55897e4 3
+src/main.js
+  s_2d17ccf75546db::t_83d908a5361b62 9075,9093,9123,9126,15483-15484,15493-15550
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "cc06406f8cbbd39d2679abc46abb0c3fb8fb2c11",
+  "prompts": {},
+  "sessions": {
+    "s_2d17ccf75546db": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f6a94-86ed-7b80-8471-2e3047aaab51",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vaspyyy <lolbautz2@gmail.com>"
+    }
+  }
+}
