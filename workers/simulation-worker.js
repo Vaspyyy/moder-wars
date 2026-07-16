@@ -3,6 +3,8 @@
 // Runs off main thread to avoid jank during the 15-tick rebuild cycle.
 
 self.onmessage = (evt) => {
+	const started = performance.now();
+	const { requestId = 0, generation = 0 } = evt.data || {};
 	try {
 		const {
 			landMask: landMaskBuffer,
@@ -19,7 +21,12 @@ self.onmessage = (evt) => {
 			!gridWidth ||
 			!gridHeight
 		) {
-			self.postMessage({ error: "Invalid input" });
+			self.postMessage({
+				requestId,
+				generation,
+				durationMs: performance.now() - started,
+				error: "Invalid input",
+			});
 			return;
 		}
 		const landMask = new Uint8Array(landMaskBuffer);
@@ -103,13 +110,20 @@ self.onmessage = (evt) => {
 		// Transfer the result arrays back (zero-copy)
 		self.postMessage(
 			{
+				requestId,
+				generation,
+				durationMs: performance.now() - started,
 				frontlineDirLat: frontlineDirLat.buffer,
 				frontlineDirLng: frontlineDirLng.buffer,
-				sourceCell: sourceCell.buffer,
 			},
-			[frontlineDirLat.buffer, frontlineDirLng.buffer, sourceCell.buffer],
+			[frontlineDirLat.buffer, frontlineDirLng.buffer],
 		);
 	} catch (err) {
-		self.postMessage({ error: err.message });
+		self.postMessage({
+			requestId,
+			generation,
+			durationMs: performance.now() - started,
+			error: err.message,
+		});
 	}
 };

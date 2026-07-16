@@ -1859,9 +1859,8 @@ export function rebuildHostilityMatrix() {
 		sideUids,
 		MAX_SIDES,
 	);
-	_cachedFrontierCells.length = 0;
 	_frontlinePolys = {};
-	frontlineFieldTick = -999;
+	invalidateFrontlineField();
 	for (const u of units) {
 		if (
 			u._cachedTarget &&
@@ -2023,6 +2022,8 @@ const PERF_COUNTER_DEFAULTS = {
 	phase133: 0,
 	spatialHash: 0,
 	frontline: 0,
+	frontlineDispatch: 0,
+	frontlinePolys: 0,
 	consolidate: 0,
 	caches: 0,
 	victory: 0,
@@ -2058,6 +2059,14 @@ const PERF_COUNTER_DEFAULTS = {
 	knockbackBlocked: 0,
 	waterPathPenalized: 0,
 	coastStuckAbandoned: 0,
+	// Frontline worker lifecycle counters
+	frontlineWorkerDispatches: 0,
+	frontlineWorkerCompleted: 0,
+	frontlineWorkerCoalesced: 0,
+	frontlineWorkerErrors: 0,
+	frontlineWorkerStaleResults: 0,
+	frontlineWorkerLastDurationMs: 0,
+	frontlineWorkerMaxDurationMs: 0,
 };
 
 function createPerfState(mode = "off") {
@@ -2185,18 +2194,19 @@ export const AI_MOBILIZATION = {
 // Each entry stores [dirLat, dirLng] packed as two Float32 values.
 export let frontlineDirLat = null; // Float32Array, length = gridWidth * gridHeight
 export let frontlineDirLng = null; // Float32Array, length = gridWidth * gridHeight
-export let frontlineFieldTick = -999; // last simFrameCount when field was rebuilt
-export let _frontlineSourceCell = null; // reusable Int32Array for BFS — allocated once
+export let frontlineFieldTick = -999; // sim tick when the latest worker request was dispatched
 export const FRONTLINE_FIELD_UPDATE_INTERVAL = 150; // rebuild field via worker every N ticks (15→30→60→150)
 export let _simWorker = null; // Web Worker for async frontline BFS
 export let _workerBusy = false;
+let _frontlineWorkerPending = false;
+let _frontlineWorkerRequestId = 0;
+let _frontlineWorkerActiveRequestId = 0;
+let _frontlineWorkerGeneration = 0;
 // Frontline polyline system: distributed unit stationing along war fronts
 export let _frontlinePolys = {};
 export let _neutralBorderPolys = {}; // combatant-vs-neutral border polylines for garrison stationing
 export let _frontlinePolyTick = -999;
 export const FRONTLINE_POLY_UPDATE_INTERVAL = 30; // visual frames between polyline rebuilds (15→30)
-export let _cachedFrontierCells = []; // cached BFS frontier seed cells (incremental rebuild)
-export let _frontierScanCounter = 0; // counter for full-scan cadence
 
 // Grid dimensions calculated after settings choice
 export let gridWidth = 0,
@@ -2320,19 +2330,6 @@ export function setDominantSideMap(val) {
 export function setReferenceOverlay(val) {
 	referenceOverlay = val;
 }
-export function setFrontlineDirLat(val) {
-	frontlineDirLat = val;
-}
-export function setFrontlineDirLng(val) {
-	frontlineDirLng = val;
-}
-export function setFrontlineSourceCell(val) {
-	_frontlineSourceCell = val;
-}
-export function setFrontierScanCounter(val) {
-	_frontierScanCounter = val;
-}
-
 // ── State setters for module imports (ES imports are read-only) ────
 export function setAdjacencyCache(val) {
 	adjacencyCache = val;
@@ -3381,30 +3378,109 @@ export const map = L.map("map", {
 // Create Web Worker for async frontline BFS rebuilds
 _simWorker = new Worker("../workers/simulation-worker.js");
 _simWorker.onmessage = (evt) => {
+	const data = evt.data;
+	if (!data || data.requestId !== _frontlineWorkerActiveRequestId) {
+		if (window.__perf) window.__perf.frontlineWorkerStaleResults++;
+		return;
+	}
 	_workerBusy = false;
-	if (!evt.data || evt.data.error) return;
-	const {
-		frontlineDirLat: latBuf,
-		frontlineDirLng: lngBuf,
-		sourceCell: srcBuf,
-	} = evt.data;
+	_frontlineWorkerActiveRequestId = 0;
+	if (window.__perf) {
+		window.__perf.frontlineWorkerCompleted++;
+		const durationMs = Number(data.durationMs) || 0;
+		window.__perf.frontlineWorkerLastDurationMs = durationMs;
+		window.__perf.frontlineWorkerMaxDurationMs = Math.max(
+			window.__perf.frontlineWorkerMaxDurationMs || 0,
+			durationMs,
+		);
+	}
+	if (data.error) {
+		if (window.__perf) window.__perf.frontlineWorkerErrors++;
+		return;
+	}
+	if (data.generation !== _frontlineWorkerGeneration) {
+		if (window.__perf) window.__perf.frontlineWorkerStaleResults++;
+		return;
+	}
+	const { frontlineDirLat: latBuf, frontlineDirLng: lngBuf } = data;
 	if (
 		!(latBuf instanceof ArrayBuffer) ||
 		!(lngBuf instanceof ArrayBuffer) ||
-		!(srcBuf instanceof ArrayBuffer) ||
 		latBuf.byteLength === 0
-	)
+	) {
+		if (window.__perf) window.__perf.frontlineWorkerErrors++;
 		return;
+	}
 	frontlineDirLat = new Float32Array(latBuf);
 	frontlineDirLng = new Float32Array(lngBuf);
-	_frontlineSourceCell = new Int32Array(srcBuf);
 };
 _simWorker.onerror = () => {
 	_workerBusy = false;
+	_frontlineWorkerActiveRequestId = 0;
+	if (window.__perf) window.__perf.frontlineWorkerErrors++;
 };
 _simWorker.onmessageerror = () => {
 	_workerBusy = false;
+	_frontlineWorkerActiveRequestId = 0;
+	if (window.__perf) window.__perf.frontlineWorkerErrors++;
 };
+
+function invalidateFrontlineField() {
+	_frontlineWorkerGeneration++;
+	_frontlineWorkerPending = true;
+	frontlineFieldTick = -999;
+	frontlineDirLat = null;
+	frontlineDirLng = null;
+}
+
+function dispatchFrontlineFieldRebuild() {
+	if (!_simWorker) {
+		if (window.__perf) window.__perf.frontlineWorkerErrors++;
+		return false;
+	}
+	if (_workerBusy) {
+		if (!_frontlineWorkerPending) {
+			_frontlineWorkerPending = true;
+			if (window.__perf) window.__perf.frontlineWorkerCoalesced++;
+		}
+		return false;
+	}
+
+	const requestId = ++_frontlineWorkerRequestId;
+	const generation = _frontlineWorkerGeneration;
+	try {
+		const lmCopy = new Uint8Array(landMask);
+		const dsCopy = new Int8Array(dominantSideMap);
+		const hostilityCopy = new Uint8Array(hostilityMatrix);
+		_workerBusy = true;
+		_frontlineWorkerPending = false;
+		_frontlineWorkerActiveRequestId = requestId;
+		_simWorker.postMessage(
+			{
+				requestId,
+				generation,
+				landMask: lmCopy.buffer,
+				dominantSideMap: dsCopy.buffer,
+				hostilityMatrix: hostilityCopy.buffer,
+				maxSides: MAX_SIDES,
+				gridWidth,
+				gridHeight,
+				gridRes: CONFIG.GRID_RES,
+			},
+			[lmCopy.buffer, dsCopy.buffer, hostilityCopy.buffer],
+		);
+		frontlineFieldTick = _simTickCount;
+		if (window.__perf) window.__perf.frontlineWorkerDispatches++;
+		return true;
+	} catch (error) {
+		console.warn("Frontline worker dispatch failed:", error);
+		_workerBusy = false;
+		_frontlineWorkerPending = true;
+		_frontlineWorkerActiveRequestId = 0;
+		if (window.__perf) window.__perf.frontlineWorkerErrors++;
+		return false;
+	}
+}
 
 export let baseImageryLayer = null;
 export const imagerySelect = document.getElementById("imagery-select");
@@ -3502,7 +3578,6 @@ import {
 	isEnemyTerritory,
 	isMyTerritory,
 	myInfluenceAt,
-	rebuildFrontlineField,
 	resetSideInfluenceMaps,
 	syncOccupationFromSideInfluence,
 } from "./engine.js";
@@ -6099,8 +6174,7 @@ function launchRebellion(record) {
 	emitEconomyEvent(`${country.name}: rebellion has begun`, "danger");
 	generateProvinces();
 	recalculateAllBounds();
-	frontlineFieldTick = -999;
-	_workerBusy = false;
+	invalidateFrontlineField();
 	updateSidesUI();
 	if (influenceLayer) influenceLayer.render();
 	return true;
@@ -6151,8 +6225,7 @@ function resolveRebellionSuccess(rebellion) {
 	statusText.innerText = `${meta?.name || "Rebels"} INDEPENDENCE RECOGNIZED`;
 	generateProvinces();
 	recalculateAllBounds();
-	frontlineFieldTick = -999;
-	_workerBusy = false;
+	invalidateFrontlineField();
 	updateSidesUI();
 }
 
@@ -6917,16 +6990,11 @@ export async function _startWarInner() {
 	// Reset cached frontline field state between wars.
 	// Without this, a new war may reuse old direction vectors and pull both
 	// teams toward the same stale hotspot from the previous conflict.
-	frontlineFieldTick = -999;
-	_workerBusy = false;
-	_cachedFrontierCells = [];
-	_frontierScanCounter = 0;
+	invalidateFrontlineField();
 	_frontlinePolys = {};
 	_neutralBorderPolys = {};
 	_frontlinePolyTick = -999;
 
-	// Reset cached frontline field state between wars.
-	_frontlineSourceCell = null;
 	setSpeed(0); // Conflicts start at 1x speed (Index 0 in SPEED_STEPS)
 
 	// Initialize diplomacy and technology toggles
@@ -11633,6 +11701,8 @@ export function performSimulationTick() {
 		"phase133",
 		"spatialHash",
 		"frontline",
+		"frontlineDispatch",
+		"frontlinePolys",
 		"consolidate",
 		"caches",
 		"victory",
@@ -11972,34 +12042,18 @@ export function performSimulationTick() {
 	// OPT-1: Rebuild frontline direction field every N ticks via Web Worker.
 	// getBorderDirection() now does an O(1) array lookup instead of a 12-radius grid scan.
 	if (_simTickCount - frontlineFieldTick >= FRONTLINE_FIELD_UPDATE_INTERVAL) {
-		frontlineFieldTick = _simTickCount;
-		if (_simWorker && !_workerBusy) {
-			_workerBusy = true;
-			const lmCopy = new Uint8Array(landMask);
-			const dsCopy = new Int8Array(dominantSideMap);
-			const hostilityCopy = new Uint8Array(hostilityMatrix);
-			_simWorker.postMessage(
-				{
-					landMask: lmCopy.buffer,
-					dominantSideMap: dsCopy.buffer,
-					hostilityMatrix: hostilityCopy.buffer,
-					maxSides: MAX_SIDES,
-					gridWidth,
-					gridHeight,
-					gridRes: CONFIG.GRID_RES,
-				},
-				[lmCopy.buffer, dsCopy.buffer, hostilityCopy.buffer],
-			);
-		} else {
-			rebuildFrontlineField();
-		}
+		const _tFrontlineDispatch = performance.now();
+		dispatchFrontlineFieldRebuild();
+		window.__perf.frontlineDispatch += performance.now() - _tFrontlineDispatch;
 	}
 
 	// Compute frontline polylines between warring sides (throttled)
 	if (_simTickCount - _frontlinePolyTick >= FRONTLINE_POLY_UPDATE_INTERVAL) {
+		const _tFrontlinePolys = performance.now();
 		computeFrontlinePolys();
 		_frontlinePolyTick = _simTickCount;
 		assignFrontlineSlots();
+		window.__perf.frontlinePolys += performance.now() - _tFrontlinePolys;
 	}
 	window.__perf.frontline =
 		(window.__perf.frontline || 0) + performance.now() - _tFrontline;
@@ -16961,6 +17015,17 @@ function getPerfReportData() {
 			total: waterTotal,
 			...waterTotals,
 		},
+		frontlineWorker: {
+			dispatches: window.__perf.frontlineWorkerDispatches || 0,
+			completed: window.__perf.frontlineWorkerCompleted || 0,
+			coalesced: window.__perf.frontlineWorkerCoalesced || 0,
+			errors: window.__perf.frontlineWorkerErrors || 0,
+			staleResults: window.__perf.frontlineWorkerStaleResults || 0,
+			busy: _workerBusy,
+			pending: _frontlineWorkerPending,
+			lastDurationMs: window.__perf.frontlineWorkerLastDurationMs || 0,
+			maxDurationMs: window.__perf.frontlineWorkerMaxDurationMs || 0,
+		},
 		scheduler: {
 			frames: scheduler.frames || 0,
 			renderedFrames: scheduler.renderedFrames || 0,
@@ -17015,6 +17080,9 @@ function formatPerfReport(data) {
 	);
 	lines.push(
 		`  scheduler: rendered ${data.scheduler.renderedFrames}/${data.scheduler.frames} frames | subticks ${data.scheduler.executedSubTicks}/${data.scheduler.requestedSubTicks} | cappedFrames ${data.scheduler.cappedSubTickFrames} | cappedSubticks ${data.scheduler.cappedSubTicks}`,
+	);
+	lines.push(
+		`  frontline worker: ${data.frontlineWorker.completed}/${data.frontlineWorker.dispatches} completed | coalesced ${data.frontlineWorker.coalesced} | errors ${data.frontlineWorker.errors} | stale ${data.frontlineWorker.staleResults} | last ${formatMs(data.frontlineWorker.lastDurationMs)}ms | max ${formatMs(data.frontlineWorker.maxDurationMs)}ms | ${data.frontlineWorker.busy ? "busy" : "idle"}${data.frontlineWorker.pending ? ", pending" : ""}`,
 	);
 	lines.push(
 		`  config: simSpeed ${data.config.simSpeed}x | view ${data.config.viewMode} | grid ${data.config.gridRes} | map ${data.config.mapResolution || "n/a"} | render ${data.config.renderSkipCadence}`,
@@ -17835,10 +17903,7 @@ export function capitulateCountry(country, sideIndex) {
 
 	// Invalidate caches so the frontline field and adjacency reflect new borders
 	adjacencyCache = null;
-	frontlineFieldTick = -999;
-	_workerBusy = false;
-	_cachedFrontierCells = [];
-	_frontierScanCounter = 0;
+	invalidateFrontlineField();
 	_frontlinePolys = {};
 	_neutralBorderPolys = {};
 	_frontlinePolyTick = -999;

@@ -1,7 +1,5 @@
 import { CONFIG } from "./config.js";
 import {
-	_cachedFrontierCells,
-	_frontierScanCounter,
 	_frontlinePolys,
 	areSidesHostile,
 	dominantSideMap,
@@ -13,11 +11,7 @@ import {
 	MAX_SIDES,
 	occupationMap,
 	setDominantSideMap,
-	setFrontierScanCounter,
-	setFrontlineDirLat,
-	setFrontlineDirLng,
 	setFrontlinePolys,
-	setFrontlineSourceCell,
 	setSideInfluenceMaps,
 	sideInfluenceMaps,
 	worldControlMap,
@@ -104,100 +98,6 @@ function getGridIndex(lat, lng) {
 	const y = Math.floor((lat + 90) / CONFIG.GRID_RES);
 	if (x < 0 || x >= gridWidth || y < 0 || y >= gridHeight) return -1;
 	return y * gridWidth + x;
-}
-
-function rebuildFrontlineField() {
-	const total = gridWidth * gridHeight;
-
-	const fdl = new Float32Array(total);
-	const fdlng = new Float32Array(total);
-	const fsrc = new Int32Array(total);
-
-	setFrontlineDirLat(fdl);
-	setFrontlineDirLng(fdlng);
-	setFrontlineSourceCell(fsrc);
-
-	fdl.fill(0);
-	fdlng.fill(0);
-	fsrc.fill(-1);
-
-	const queue = new Int32Array(total);
-	let qHead = 0,
-		qTail = 0;
-
-	// Incremental seed: full frontier scan only every 3rd rebuild.
-	// _cachedFrontierCells initialized as [] in main.js, reused here.
-	setFrontierScanCounter((_frontierScanCounter + 1) % 3);
-
-	if (_frontierScanCounter === 0 || _cachedFrontierCells.length === 0) {
-		// Full scan: find all frontier cells
-		_cachedFrontierCells.length = 0;
-		for (let i = 0; i < total; i++) {
-			if (landMask[i] !== 2) continue;
-			const mySide = dominantSideMap[i];
-			if (mySide < 0) continue;
-			let isFront = false;
-			if (i % gridWidth < gridWidth - 1) {
-				const ns = dominantSideMap[i + 1];
-				if (ns >= 0 && areSidesHostile(mySide, ns)) isFront = true;
-			}
-			if (!isFront && i % gridWidth > 0) {
-				const ns = dominantSideMap[i - 1];
-				if (ns >= 0 && areSidesHostile(mySide, ns)) isFront = true;
-			}
-			if (!isFront && i + gridWidth < total) {
-				const ns = dominantSideMap[i + gridWidth];
-				if (ns >= 0 && areSidesHostile(mySide, ns)) isFront = true;
-			}
-			if (!isFront && i - gridWidth >= 0) {
-				const ns = dominantSideMap[i - gridWidth];
-				if (ns >= 0 && areSidesHostile(mySide, ns)) isFront = true;
-			}
-			if (isFront) {
-				_cachedFrontierCells.push(i);
-			}
-		}
-	}
-
-	// Seed queue from cached frontier cells
-	for (let f = 0; f < _cachedFrontierCells.length; f++) {
-		const i = _cachedFrontierCells[f];
-		if (landMask[i] === 2 && dominantSideMap[i] >= 0) {
-			queue[qTail++] = i;
-			fsrc[i] = i;
-		}
-	}
-
-	const dirs = [1, -1, gridWidth, -gridWidth];
-
-	while (qHead < qTail) {
-		const cur = queue[qHead++];
-		const src = fsrc[cur];
-
-		const cy = Math.floor(cur / gridWidth);
-		const cx = cur % gridWidth;
-		const sy = Math.floor(src / gridWidth);
-		const sx = src % gridWidth;
-		const dLat = (sy - cy) * CONFIG.GRID_RES;
-		const dLng = (sx - cx) * CONFIG.GRID_RES;
-		const mag = Math.sqrt(dLat * dLat + dLng * dLng);
-		if (mag > 0) {
-			fdl[cur] = dLat / mag;
-			fdlng[cur] = dLng / mag;
-		}
-
-		for (let d = 0; d < 4; d++) {
-			const nb = cur + dirs[d];
-			if (nb < 0 || nb >= total) continue;
-			// Prevent wraparound at row edges for horizontal neighbors
-			if (d < 2 && Math.floor(nb / gridWidth) !== Math.floor(cur / gridWidth))
-				continue;
-			if (fsrc[nb] !== -1) continue;
-			if (landMask[nb] === 0) continue;
-			fsrc[nb] = src;
-			queue[qTail++] = nb;
-		}
-	}
 }
 
 function computeFrontlinePolys() {
@@ -316,7 +216,6 @@ export {
 	isEnemyTerritory,
 	isMyTerritory,
 	myInfluenceAt,
-	rebuildFrontlineField,
 	resetSideInfluenceMaps,
 	syncOccupationFromSideInfluence,
 };
