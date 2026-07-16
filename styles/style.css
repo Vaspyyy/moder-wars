@@ -1971,6 +1971,157 @@ body.use-system-font .scroller-card-name {
 	box-shadow: 0 28px 60px rgba(0, 0, 0, 0.75);
 }
 
+.economy-panel {
+	position: absolute;
+	top: 68px;
+	right: 16px;
+	z-index: 1001;
+	width: min(340px, calc(100vw - 32px));
+	max-height: calc(100vh - 150px);
+	background: rgba(12, 12, 14, 0.92);
+	backdrop-filter: blur(8px);
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 6px;
+	box-shadow: 0 28px 60px rgba(0, 0, 0, 0.75);
+	pointer-events: auto;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.economy-panel-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 9px 10px;
+	font-size: 11px;
+	font-weight: 900;
+	letter-spacing: 1.5px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.economy-panel-actions,
+.economy-god-actions {
+	display: flex;
+	gap: 4px;
+}
+
+.economy-panel-actions .mini-btn,
+.economy-god-actions button {
+	padding: 3px 6px;
+	font-size: 8px;
+}
+
+#economy-panel-content {
+	overflow-y: auto;
+	padding: 7px;
+}
+
+.economy-panel.minimized #economy-panel-content {
+	display: none;
+}
+
+.economy-row {
+	padding: 7px;
+	margin-bottom: 5px;
+	background: rgba(255, 255, 255, 0.035);
+	border: 1px solid rgba(255, 255, 255, 0.06);
+	border-radius: 4px;
+}
+
+.economy-row.occupation-row {
+	border-color: rgba(230, 126, 34, 0.35);
+}
+
+.economy-row-heading,
+.economy-metrics {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 6px;
+}
+
+.economy-row-heading {
+	font-size: 10px;
+	font-weight: 800;
+}
+
+.economy-metrics {
+	margin-top: 5px;
+	font-size: 8px;
+	color: #aaa;
+	flex-wrap: wrap;
+}
+
+.economy-band {
+	font-size: 8px;
+	color: #2ecc71;
+}
+
+.economy-band.strained,
+.economy-band.unpaid {
+	color: #f39c12;
+}
+
+.economy-band.breakdown,
+.economy-band.mutiny {
+	color: #ff4757;
+}
+
+.economy-god-actions {
+	margin-top: 6px;
+}
+
+.economy-god-actions button {
+	background: #4b2e13;
+	color: #fff;
+	border: 1px solid #7f4f24;
+	border-radius: 3px;
+	cursor: pointer;
+}
+
+.economy-events-title {
+	margin: 8px 0 4px;
+	font-size: 8px;
+	font-weight: 900;
+	letter-spacing: 1px;
+	color: #777;
+}
+
+.economy-event {
+	display: grid;
+	grid-template-columns: 26px 1fr;
+	gap: 5px;
+	padding: 3px 2px;
+	font-size: 8px;
+	color: #aaa;
+}
+
+.economy-event span {
+	color: #555;
+}
+
+.economy-event.warning {
+	color: #f39c12;
+}
+
+.economy-event.danger {
+	color: #ff6b81;
+}
+
+.economy-event.recovery {
+	color: #2ecc71;
+}
+
+@media (max-width: 768px) {
+	.economy-panel {
+		top: 112px;
+		right: 6px;
+		width: min(300px, calc(100vw - 12px));
+		max-height: 42vh;
+	}
+}
+
 .casualty-title {
 	color: #fff;
 	font-weight: 900;

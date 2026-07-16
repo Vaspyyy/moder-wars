@@ -4,13 +4,33 @@
 
 self.onmessage = (evt) => {
 	try {
-		const { landMask, dominantSideMap, gridWidth, gridHeight, gridRes } =
-			evt.data;
-		if (!landMask || !dominantSideMap || !gridWidth || !gridHeight) {
+		const {
+			landMask: landMaskBuffer,
+			dominantSideMap: dominantSideMapBuffer,
+			hostilityMatrix,
+			maxSides = 8,
+			gridWidth,
+			gridHeight,
+			gridRes,
+		} = evt.data;
+		if (
+			!landMaskBuffer ||
+			!dominantSideMapBuffer ||
+			!gridWidth ||
+			!gridHeight
+		) {
 			self.postMessage({ error: "Invalid input" });
 			return;
 		}
+		const landMask = new Uint8Array(landMaskBuffer);
+		const dominantSideMap = new Int8Array(dominantSideMapBuffer);
 		const total = gridWidth * gridHeight;
+		const relations = hostilityMatrix ? new Uint8Array(hostilityMatrix) : null;
+		const hostile = (a, b) =>
+			a >= 0 &&
+			b >= 0 &&
+			a !== b &&
+			(!relations || relations[a * maxSides + b] === 1);
 
 		const frontlineDirLat = new Float32Array(total);
 		const frontlineDirLng = new Float32Array(total);
@@ -29,19 +49,19 @@ self.onmessage = (evt) => {
 			let isFront = false;
 			if (i % gridWidth < gridWidth - 1) {
 				const ns = dominantSideMap[i + 1];
-				if (ns >= 0 && ns !== mySide) isFront = true;
+				if (hostile(mySide, ns)) isFront = true;
 			}
 			if (!isFront && i % gridWidth > 0) {
 				const ns = dominantSideMap[i - 1];
-				if (ns >= 0 && ns !== mySide) isFront = true;
+				if (hostile(mySide, ns)) isFront = true;
 			}
 			if (!isFront && i + gridWidth < total) {
 				const ns = dominantSideMap[i + gridWidth];
-				if (ns >= 0 && ns !== mySide) isFront = true;
+				if (hostile(mySide, ns)) isFront = true;
 			}
 			if (!isFront && i - gridWidth >= 0) {
 				const ns = dominantSideMap[i - gridWidth];
-				if (ns >= 0 && ns !== mySide) isFront = true;
+				if (hostile(mySide, ns)) isFront = true;
 			}
 			if (isFront) {
 				queue[qTail++] = i;

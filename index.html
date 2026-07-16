@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://esm.sh 'sha256-UbZTXngprJmMtanNXRwZ5Pi9M0w7gaPwpxlWfxaufYA='; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.websim.ai https://*.websim.com https://*.arcgisonline.com https://*.google.com wss:; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self';">
-    <title>MW-V0.26.40</title>
+    <title>MW-V0.26.41</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous" />
     <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
@@ -519,6 +519,13 @@
                 </div>
 
                 <div class="option-row" style="margin-top: 10px;">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%;" title="Countries collect budget, pay recurring army payroll, and fund occupations. Unpaid armies can refuse orders, desert, and mutiny.">
+                        <input type="checkbox" id="war-economy-checkbox" style="width: 18px; height: 18px; accent-color: #2ecc71; cursor: pointer;" checked>
+                        <span style="font-size: 12px; color: #ccc;">WAR ECONOMY, MUTINIES &amp; REBELLIONS</span>
+                    </label>
+                </div>
+
+                <div class="option-row" style="margin-top: 5px;">
                     <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%;" title="When enabled, the AI will never offer peace; the war only ends when one side is fully defeated.">
                         <input type="checkbox" id="no-peace-checkbox" style="width: 18px; height: 18px; accent-color: #ff4757; cursor: pointer;">
                         <span style="font-size: 12px; color: #ccc;" data-i18n="FIGHT_TO_DEATH">FIGHT TO THE DEATH (NO PEACE)</span>
@@ -562,6 +569,21 @@
         <div id="casualty-panel" class="casualty-panel" style="display:none">
             <div class="casualty-title">CASUALTIES &amp; MANPOWER</div>
             <div id="casualty-lists-container"></div>
+        </div>
+
+        <div id="economy-panel" class="economy-panel" style="display:none">
+            <div class="economy-panel-header">
+                <span>WAR ECONOMY</span>
+                <div class="economy-panel-actions">
+                    <button id="economy-force-cycle-btn" class="mini-btn" style="display:none" title="God Mode: immediately settle one pay cycle">PAY NOW</button>
+                    <button id="minimize-economy-btn" class="mini-btn" title="Minimize economy panel">−</button>
+                </div>
+            </div>
+            <div id="economy-panel-content">
+                <div id="economy-panel-body"></div>
+                <div class="economy-events-title">EVENTS</div>
+                <div id="economy-events"></div>
+            </div>
         </div>
 
         <div id="stats-panel" class="stats-panel" style="display:none">

@@ -2,6 +2,18 @@ import JSZip from "jszip";
 
 import L from "leaflet";
 import { CONFIG } from "./config.js";
+import {
+	COMMAND_BANDS,
+	commandRefusalShare,
+	computeCurrentIncome,
+	createEconomyState,
+	createHostilityMatrix,
+	desertionRate,
+	ECONOMY_CONFIG,
+	selectRebellionCandidates,
+	settleEconomyCycle,
+	updateResistance,
+} from "./economy.js";
 import { fetchJSONWithCache } from "./geo.js";
 
 export function escapeHtml(s) {
@@ -1771,7 +1783,16 @@ export let refAboveTerrain = false;
 export let paintMaskId = -1; // -1 means no mask, >= 0 restricts painting to that ID
 export let peaceTreatiesDisabled = false;
 export let bombsDisabled = false;
-export let activeRebellion = null; // { rebelId, overlordId }
+export let warEconomyEnabled = true;
+export const countryEconomy = new Map();
+export const occupationEconomies = new Map();
+export const activeRebellions = new Map();
+export const economyEvents = [];
+export let economyPayCycle = 0;
+export let sideUids = [];
+export const hostileSidePairs = new Set();
+export let hostilityMatrix = new Uint8Array(MAX_SIDES * MAX_SIDES);
+let _nextSideUid = 1;
 export let mountainsEnabled = true;
 export let showUnitsVisually = true;
 export let hideCurvedLabels = false;
@@ -1812,6 +1833,148 @@ const PHASE_CONFIG = {
 	RETREATING: { color: "#e74c3c", symbol: "▼" },
 	COLLAPSING: { color: "#c0392b", symbol: "✗" },
 };
+
+function sidePairKey(uidA, uidB) {
+	return uidA < uidB ? `${uidA}|${uidB}` : `${uidB}|${uidA}`;
+}
+
+function ensureSideIdentities(reset = false) {
+	if (reset) {
+		sideUids = [];
+		hostileSidePairs.clear();
+	}
+	for (let i = 0; i < sides.length; i++) {
+		if (!sideUids[i]) sideUids[i] = `side-${_nextSideUid++}`;
+	}
+	if (sideUids.length > sides.length) sideUids.length = sides.length;
+}
+
+export function rebuildHostilityMatrix() {
+	ensureSideIdentities();
+	hostilityMatrix = createHostilityMatrix(
+		sides.length,
+		hostileSidePairs,
+		sideUids,
+		MAX_SIDES,
+	);
+	_cachedFrontierCells.length = 0;
+	_frontlinePolys = {};
+	frontlineFieldTick = -999;
+	for (const u of units) {
+		if (
+			u._cachedTarget &&
+			!areSidesHostile(u.sideIndex, u._cachedTarget.sideIndex)
+		) {
+			u._cachedTarget = null;
+		}
+	}
+	return hostilityMatrix;
+}
+
+export function resetSideHostilities() {
+	ensureSideIdentities(true);
+	for (let a = 0; a < sides.length; a++) {
+		if (!sides[a]?.length) continue;
+		for (let b = a + 1; b < sides.length; b++) {
+			if (!sides[b]?.length) continue;
+			hostileSidePairs.add(sidePairKey(sideUids[a], sideUids[b]));
+		}
+	}
+	rebuildHostilityMatrix();
+}
+
+export function areSidesHostile(sideA, sideB) {
+	if (
+		!Number.isInteger(sideA) ||
+		!Number.isInteger(sideB) ||
+		sideA < 0 ||
+		sideB < 0 ||
+		sideA >= MAX_SIDES ||
+		sideB >= MAX_SIDES ||
+		sideA === sideB
+	)
+		return false;
+	return hostilityMatrix[sideA * MAX_SIDES + sideB] === 1;
+}
+
+export function setSidesHostile(sideA, sideB, hostile = true) {
+	ensureSideIdentities();
+	const uidA = sideUids[sideA];
+	const uidB = sideUids[sideB];
+	if (!uidA || !uidB || sideA === sideB) return false;
+	const key = sidePairKey(uidA, uidB);
+	if (hostile) hostileSidePairs.add(key);
+	else hostileSidePairs.delete(key);
+	rebuildHostilityMatrix();
+	return true;
+}
+
+function getActiveHostilePairs() {
+	const pairs = [];
+	for (let a = 0; a < sides.length; a++) {
+		if (!sides[a]?.length) continue;
+		for (let b = a + 1; b < sides.length; b++) {
+			if (sides[b]?.length && areSidesHostile(a, b)) pairs.push([a, b]);
+		}
+	}
+	return pairs;
+}
+
+function getUnitDiscipline(unit) {
+	if (!Number.isFinite(unit._discipline)) {
+		const seed =
+			Math.sin((unit.id || 0.5) * 99991 + (unit.sovereignId || 0) * 7919) *
+			43758.5453;
+		unit._discipline = Math.abs(seed - Math.floor(seed));
+	}
+	return unit._discipline;
+}
+
+function getUnitCommandPolicy(unit) {
+	if (!warEconomyEnabled) {
+		return {
+			band: COMMAND_BANDS.PAID,
+			refusesOffense: false,
+			returnHome: false,
+			selfDefenseOnly: false,
+		};
+	}
+	let band = unit._commandBand;
+	if (!band) {
+		band =
+			countryEconomy.get(unit.sovereignId)?.commandBand || COMMAND_BANDS.PAID;
+		unit._commandBand = band;
+	}
+	let refusesOffense = unit._refusesOffense;
+	if (typeof refusesOffense !== "boolean") {
+		refusesOffense = getUnitDiscipline(unit) < commandRefusalShare(band);
+		unit._refusesOffense = refusesOffense;
+	}
+	return {
+		band,
+		refusesOffense,
+		returnHome:
+			band === COMMAND_BANDS.BREAKDOWN || band === COMMAND_BANDS.MUTINY,
+		selfDefenseOnly: band === COMMAND_BANDS.MUTINY,
+	};
+}
+
+function clearUnitCommandAssignments(unit) {
+	unit._assignedPlanSignature = null;
+	unit._transportPlanSignature = null;
+	unit._planWaypointSignature = null;
+	unit._planWaypointIndex = 0;
+	unit.navalAssigned = false;
+	unit.supplyAssigned = false;
+	unit.coastalAssigned = false;
+	unit.garrisonAssigned = false;
+	unit.frontSlot = null;
+	unit._defenderReactTarget = null;
+}
+
+function getRebellionForUnit(unit) {
+	return activeRebellions.get(unit.sovereignId) || null;
+}
 export let _casualtyStructureKey = "";
 export let _casualtyValueEls = {};
 export let _casualtySideMpEls = {};
@@ -1885,6 +2048,7 @@ const PERF_COUNTER_DEFAULTS = {
 	unitFrontlinePress: 0,
 	unitMopUpSearch: 0,
 	unitCombatMove: 0,
+	economy: 0,
 	// Water avoidance debug counters
 	coastDeflectHalved: 0,
 	knockbackBlocked: 0,
@@ -2106,6 +2270,10 @@ export function setIsCustomTerrain(val) {
 }
 export function setMissilesEnabled(val) {
 	missilesEnabled = val;
+}
+export function setWarEconomyEnabled(val) {
+	warEconomyEnabled = val !== false;
+	if (warEconomyCheckbox) warEconomyCheckbox.checked = warEconomyEnabled;
 }
 export function setRawGeoJsonData(val) {
 	rawGeoJsonData = val;
@@ -2995,6 +3163,9 @@ if (rebellionBtn) {
 	}
 }
 export const noPeaceCheckbox = document.getElementById("no-peace-checkbox");
+export const warEconomyCheckbox = document.getElementById(
+	"war-economy-checkbox",
+);
 export const disableBombsCheckbox = document.getElementById(
 	"disable-bombs-checkbox",
 );
@@ -3019,6 +3190,12 @@ export const closeLeaderboardBtn = document.getElementById(
 
 // Status & control panels
 export const statsPanel = document.getElementById("stats-panel");
+export const economyPanel = document.getElementById("economy-panel");
+export const economyPanelBody = document.getElementById("economy-panel-body");
+export const economyEventsList = document.getElementById("economy-events");
+export const minimizeEconomyBtn = document.getElementById(
+	"minimize-economy-btn",
+);
 export const restartScenarioBtn = document.getElementById(
 	"restart-scenario-btn",
 );
@@ -4194,6 +4371,7 @@ export function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
 		}
 
 		const countryObj = _countryById.get(u.sovereignId);
+		const commandPolicy = getUnitCommandPolicy(u);
 		const role = countryObj?.role || "OFFENSE";
 
 		if (countryObj) {
@@ -4274,23 +4452,31 @@ export function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
 					let newInfluence = curInfluence + Math.abs(cellDelta) * weight;
 					if (newInfluence > 1) newInfluence = 1;
 
-					const isRebelUnit =
-						activeRebellion && u.sovereignId === activeRebellion.rebelId;
-					if (isRebelUnit && deJureMap[idx] !== activeRebellion.rebelId) {
+					const unitRebellion = getRebellionForUnit(u);
+					const isRebelUnit = !!unitRebellion;
+					if (isRebelUnit && deJureMap[idx] !== unitRebellion.rebelId) {
 						if (newInfluence > curInfluence) {
 							newInfluence = curInfluence;
 						}
 					}
 
 					const ownerId = worldControlMap[idx];
+					const ownerSideIdx = countryToSideMap.get(ownerId);
+					if (
+						ownerSideIdx !== undefined &&
+						ownerSideIdx !== mySideIdx &&
+						!areSidesHostile(mySideIdx, ownerSideIdx)
+					) {
+						continue;
+					}
 					const isOwnerAlly =
 						sideAllyIdSets[u.sideIndex] &&
 						sideAllyIdSets[u.sideIndex].has(ownerId);
+					if (commandPolicy.refusesOffense && !isOwnerAlly) continue;
 
 					// If owner is a SUPPORT nation on the other side and we are OFFENSE, don't invade (skip influence)
 					// unless we already have established some occupation in that cell.
 					if (!isOwnerAlly && ownerId > 0 && role === "OFFENSE") {
-						const ownerSideIdx = countryToSideMap.get(ownerId);
 						if (ownerSideIdx !== undefined && ownerSideIdx !== u.sideIndex) {
 							if (sideSupportIdSets[ownerSideIdx]?.has(ownerId)) {
 								const curOcc = occupationMap[idx];
@@ -4344,11 +4530,11 @@ export function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
 
 							const finalCreditId = bestAllyId || creditToId;
 
-							const isRebelFinalCredit =
-								activeRebellion && finalCreditId === activeRebellion.rebelId;
+							const creditRebellion = activeRebellions.get(finalCreditId);
+							const isRebelFinalCredit = !!creditRebellion;
 							const canReceiveCredit =
 								!isRebelFinalCredit ||
-								deJureMap[idx] === activeRebellion.rebelId;
+								deJureMap[idx] === creditRebellion.rebelId;
 
 							if (canReceiveCredit) {
 								if (newInfluence > 0.05 || currentOccupierId === 0) {
@@ -4361,7 +4547,10 @@ export function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
 					sideInfluenceMaps[mySideIdx][idx] = newInfluence;
 					// Decay opposing sides' influence when we enter a cell
 					for (let si = 0; si < sideInfluenceMaps.length; si++) {
-						if (si !== mySideIdx && sideInfluenceMaps[si][idx] > 0) {
+						if (
+							areSidesHostile(mySideIdx, si) &&
+							sideInfluenceMaps[si][idx] > 0
+						) {
 							sideInfluenceMaps[si][idx] = Math.max(
 								0,
 								sideInfluenceMaps[si][idx] - cellDelta * 0.5,
@@ -5273,6 +5462,16 @@ export function spawnSingleUnit(
 	sovereignId,
 	_preferEnemyFront = false,
 ) {
+	const economyState = countryEconomy.get(sovereignId);
+	if (
+		warEconomyEnabled &&
+		gameState === "SIMULATING" &&
+		economyState &&
+		(economyState.arrearsCycles >= 1 ||
+			economyState.treasury < ECONOMY_CONFIG.RECRUITMENT_COST)
+	) {
+		return false;
+	}
 	// Enforce per‑side unit cap: if this side is already at or above the limit, do not spawn.
 	const sideUnits = units.filter((u) => u.sideIndex === sideIdx).length;
 	const manualMP = manualSideManpower[sideIdx];
@@ -5312,7 +5511,7 @@ export function spawnSingleUnit(
 			for (const n of neighbors) {
 				if (n >= 0 && n < landMask.length) {
 					const nds = dominantSideMap[n];
-					if (nds >= 0 && nds !== sideIdx) return true;
+					if (nds >= 0 && areSidesHostile(sideIdx, nds)) return true;
 				}
 			}
 			return false;
@@ -5380,8 +5579,11 @@ export function spawnSingleUnit(
 		unitHealth *= 0.4; // 60% health penalty
 	}
 
+	const unitId = Math.random();
+	const unitDiscipline = getUnitDiscipline({ id: unitId, sovereignId });
+	const unitCommandBand = economyState?.commandBand || COMMAND_BANDS.PAID;
 	units.push({
-		id: Math.random(),
+		id: unitId,
 		lat,
 		lng,
 		sideIndex: sideIdx,
@@ -5396,7 +5598,16 @@ export function spawnSingleUnit(
 		_cachedScanKx: -999,
 		_cachedScanKy: -999,
 		_lastFullScanTick: 0,
+		_discipline: unitDiscipline,
+		_commandBand: unitCommandBand,
+		_refusesOffense: unitDiscipline < commandRefusalShare(unitCommandBand),
 	});
+	if (warEconomyEnabled && gameState === "SIMULATING" && economyState) {
+		economyState.treasury = Math.max(
+			0,
+			economyState.treasury - ECONOMY_CONFIG.RECRUITMENT_COST,
+		);
+	}
 
 	if (sideIdx >= 0 && sideIdx < MAX_SIDES) {
 		sideSoldiers[sideIdx] = Math.max(
@@ -5407,6 +5618,956 @@ export function spawnSingleUnit(
 
 	return true;
 }
+
+function estimateTerritoryArmyUnits(cellCount) {
+	const cells = Math.max(1, cellCount || 0);
+	const sizeFactor = Math.max(1, cells / 1500);
+	const densityScale = 1 / sizeFactor ** 0.45;
+	return Math.max(
+		3,
+		Math.min(
+			CONFIG.MAX_UNITS_PER_SIDE,
+			Math.floor(cells * CONFIG.UNIT_DENSITY_FACTOR * densityScale),
+		),
+	);
+}
+
+function findCountrySideIndex(countryId) {
+	return sides.findIndex((side) => side?.some((c) => c.id === countryId));
+}
+
+function clearSideHostilities(sideIdx) {
+	ensureSideIdentities();
+	const uid = sideUids[sideIdx];
+	if (!uid) return;
+	for (const key of Array.from(hostileSidePairs)) {
+		if (key.startsWith(`${uid}|`) || key.endsWith(`|${uid}`)) {
+			hostileSidePairs.delete(key);
+		}
+	}
+	rebuildHostilityMatrix();
+}
+
+function allocateIndependentSide(country, hostileSideIdx = -1) {
+	let sideIdx = sides.findIndex((side) => !side || side.length === 0);
+	if (sideIdx === -1) {
+		if (sides.length >= MAX_SIDES) return -1;
+		sideIdx = sides.length;
+		sides.push([]);
+	}
+	ensureSideIdentities();
+	clearSideHostilities(sideIdx);
+	sides[sideIdx] = [country];
+	if (hostileSideIdx >= 0) setSidesHostile(sideIdx, hostileSideIdx, true);
+	else rebuildHostilityMatrix();
+	return sideIdx;
+}
+
+function emitEconomyEvent(message, level = "info") {
+	if (!message) return;
+	economyEvents.unshift({
+		cycle: economyPayCycle,
+		message,
+		level,
+	});
+	if (economyEvents.length > 8) economyEvents.length = 8;
+}
+
+function formatBudget(value) {
+	if (!Number.isFinite(value)) return "0";
+	if (Math.abs(value) >= 1000)
+		return value.toLocaleString(undefined, {
+			maximumFractionDigits: 0,
+		});
+	return value.toFixed(value >= 100 ? 0 : 1);
+}
+
+export function updateEconomyPanel() {
+	if (!economyPanel || !economyPanelBody || !economyEventsList) return;
+	const simulating =
+		gameState === "SIMULATING" ||
+		(godModeActive && preGodModeState === "SIMULATING");
+	if (!warEconomyEnabled || !simulating || cinematicMode) {
+		economyPanel.style.display = "none";
+		return;
+	}
+	economyPanel.style.display = "flex";
+	const activeIds = new Set(
+		sides
+			.flat()
+			.filter(Boolean)
+			.map((c) => c.id),
+	);
+	const rows = Array.from(countryEconomy.values())
+		.filter((state) => activeIds.has(state.countryId) && !state.capitulated)
+		.sort((a, b) => b.arrearsCycles - a.arrearsCycles)
+		.map((state) => {
+			const meta = countryMetadata[state.countryId - 1];
+			const bandClass = state.commandBand.toLowerCase();
+			const godActions = godModeActive
+				? `<div class="economy-god-actions"><button data-economy-action="fund" data-country-id="${state.countryId}">+$</button><button data-economy-action="clear" data-country-id="${state.countryId}">CLEAR</button></div>`
+				: "";
+			return `<div class="economy-row">
+				<div class="economy-row-heading"><span>${escapeHtml(meta?.name || `Country ${state.countryId}`)}</span><span class="economy-band ${bandClass}">${state.commandBand}</span></div>
+				<div class="economy-metrics"><span title="Treasury">$ ${formatBudget(state.treasury)}</span><span title="Income">+${formatBudget(state.income + state.occupationYield)}</span><span title="Payroll">PAY ${formatBudget(state.payrollDue)} @ ${Math.round(state.payrollCoverage * 100)}%</span><span title="Occupation costs">OCC ${formatBudget(state.occupationDue)}</span><span title="Payroll arrears">AR ${state.arrearsCycles.toFixed(1)}</span></div>
+				${godActions}
+			</div>`;
+		});
+
+	const occupations = Array.from(occupationEconomies.values())
+		.sort((a, b) => b.resistance - a.resistance)
+		.map((record) => {
+			const victim = countryMetadata[record.victimId - 1];
+			const annexer = countryMetadata[record.annexerId - 1];
+			const godActions = godModeActive
+				? `<div class="economy-god-actions"><button data-economy-action="resist" data-country-id="${record.victimId}">+25 RES</button><button data-economy-action="rebel" data-country-id="${record.victimId}">REVOLT</button></div>`
+				: "";
+			return `<div class="economy-row occupation-row">
+				<div class="economy-row-heading"><span>${escapeHtml(victim?.name || `Country ${record.victimId}`)}</span><span>${Math.round(record.resistance)}% RES</span></div>
+				<div class="economy-metrics"><span>${escapeHtml(annexer?.name || "Unknown")} occupation</span><span>COST ${formatBudget(record.baseIncome * ECONOMY_CONFIG.OCCUPATION_COST_SHARE * (record.heldRatio || 0))}</span><span>GARR ${Math.round((record.garrisonCoverage || 0) * 100)}%</span><span>FUND ${Math.round((record.occupationCoverage || 0) * 100)}%</span></div>
+				${godActions}
+			</div>`;
+		});
+
+	economyPanelBody.innerHTML = [...rows, ...occupations].join("");
+	economyEventsList.innerHTML = economyEvents
+		.map(
+			(event) =>
+				`<div class="economy-event ${event.level}"><span>C${event.cycle}</span>${escapeHtml(event.message)}</div>`,
+		)
+		.join("");
+	const cycleButton = document.getElementById("economy-force-cycle-btn");
+	if (cycleButton) cycleButton.style.display = godModeActive ? "block" : "none";
+}
+
+function initializeWarEconomy() {
+	countryEconomy.clear();
+	if (!warEconomyEnabled) {
+		updateEconomyPanel();
+		return;
+	}
+	const cityPopByCountry = new Map();
+	for (const city of cities) {
+		const ownerId = city.ownerId || city.sovereignId;
+		if (!ownerId) continue;
+		cityPopByCountry.set(
+			ownerId,
+			(cityPopByCountry.get(ownerId) || 0) + Math.max(0, city.pop || 0),
+		);
+	}
+	for (const country of sides.flat().filter(Boolean)) {
+		const meta = countryMetadata[country.id - 1] || country;
+		const territoryUnits = estimateTerritoryArmyUnits(
+			country.initialCells || 0,
+		);
+		const state = createEconomyState({
+			countryId: country.id,
+			gdp: meta.gdp || 0,
+			pop: meta.pop || 0,
+			territoryUnits,
+			initialCoreCells: country.initialCells || 0,
+			initialCityPop: cityPopByCountry.get(country.id) || 0,
+		});
+		state.expectedArmyUnits = Math.max(
+			territoryUnits,
+			units.filter((u) => u.sovereignId === country.id).length,
+		);
+		state.baseIncome = Math.max(
+			state.baseIncome,
+			state.expectedArmyUnits / ECONOMY_CONFIG.TARGET_STARTING_PAYROLL_SHARE,
+		);
+		state.income = state.baseIncome;
+		state.treasury = state.baseIncome * ECONOMY_CONFIG.STARTING_RESERVE_CYCLES;
+		countryEconomy.set(country.id, state);
+		for (const unit of units) {
+			if (unit.sovereignId !== country.id) continue;
+			getUnitDiscipline(unit);
+			unit._commandBand = COMMAND_BANDS.PAID;
+			unit._refusesOffense = false;
+		}
+	}
+	emitEconomyEvent("War economy initialized");
+	updateEconomyPanel();
+}
+
+function findCountryHomeTarget(countryId, sideIdx) {
+	const capital = cities.find(
+		(city) =>
+			(city.ownerId || city.sovereignId) === countryId && city.isCapital,
+	);
+	if (capital) {
+		const idx = getGridIndex(capital.lat, capital.lng);
+		if (idx !== -1 && dominantSideMap[idx] === sideIdx) {
+			return { lat: capital.lat, lng: capital.lng };
+		}
+	}
+	let chosen = -1;
+	let seen = 0;
+	for (let i = 0; i < worldControlMap.length; i++) {
+		if (
+			worldControlMap[i] !== countryId ||
+			landMask[i] === 0 ||
+			dominantSideMap[i] !== sideIdx
+		)
+			continue;
+		seen++;
+		if (Math.floor(Math.random() * seen) === 0) chosen = i;
+	}
+	if (chosen < 0) return null;
+	return {
+		lat: Math.floor(chosen / gridWidth) * CONFIG.GRID_RES - 90,
+		lng: (chosen % gridWidth) * CONFIG.GRID_RES - 180,
+	};
+}
+
+function updateUnitCommandState(countryId, previousBand, nextBand) {
+	if (previousBand === nextBand) return;
+	const sideIdx = findCountrySideIndex(countryId);
+	const homeTarget =
+		nextBand === COMMAND_BANDS.BREAKDOWN || nextBand === COMMAND_BANDS.MUTINY
+			? findCountryHomeTarget(countryId, sideIdx)
+			: null;
+	for (const unit of units) {
+		if (unit.sovereignId !== countryId) continue;
+		clearUnitCommandAssignments(unit);
+		unit._commandBand = nextBand;
+		unit._refusesOffense =
+			getUnitDiscipline(unit) < commandRefusalShare(nextBand);
+		unit._economyHomeTarget = homeTarget ? { ...homeTarget } : null;
+	}
+	const name = countryMetadata[countryId - 1]?.name || `Country ${countryId}`;
+	const severity =
+		nextBand === COMMAND_BANDS.BREAKDOWN || nextBand === COMMAND_BANDS.MUTINY
+			? "danger"
+			: nextBand === COMMAND_BANDS.PAID
+				? "recovery"
+				: "warning";
+	const transitionMessages = {
+		[COMMAND_BANDS.PAID]: "command and recruitment recovered",
+		[COMMAND_BANDS.STRAINED]: "25% of troops resist offensive orders",
+		[COMMAND_BANDS.UNPAID]: "60% of troops refuse offensive orders",
+		[COMMAND_BANDS.BREAKDOWN]: "command breakdown; troops returning home",
+		[COMMAND_BANDS.MUTINY]: "army mutiny; self-defense orders only",
+	};
+	emitEconomyEvent(`${name}: ${transitionMessages[nextBand]}`, severity);
+}
+
+function applyDesertion() {
+	const survivingUnits = [];
+	for (const unit of units) {
+		const state = countryEconomy.get(unit.sovereignId);
+		const rate = state ? desertionRate(state.commandBand) : 0;
+		if (rate <= 0) {
+			survivingUnits.push(unit);
+			continue;
+		}
+		const healthLoss = Math.max(0, unit.health * rate);
+		unit.health -= healthLoss;
+		const sideIdx = unit.sideIndex;
+		if (sideIdx >= 0 && sideIdx < MAX_SIDES) {
+			const soldierLoss =
+				(healthLoss / Math.max(1, CONFIG.UNIT_HEALTH)) *
+				(soldiersPerUnit[sideIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO);
+			sideSoldiers[sideIdx] = Math.max(0, sideSoldiers[sideIdx] - soldierLoss);
+		}
+		if (unit.health > 1) survivingUnits.push(unit);
+	}
+	units = survivingUnits;
+}
+
+function occupationCountsByAnnexer() {
+	const counts = new Map();
+	for (const rebellion of activeRebellions.values()) {
+		counts.set(rebellion.annexerId, (counts.get(rebellion.annexerId) || 0) + 1);
+	}
+	return counts;
+}
+
+function pickRebellionSeed(record, annexerSideIdx) {
+	const candidates = [];
+	let seen = 0;
+	const capital = cities.find(
+		(c) => (c.ownerId || c.sovereignId) === record.victimId && c.isCapital,
+	);
+	const capitalIdx = capital ? getGridIndex(capital.lat, capital.lng) : -1;
+	for (let i = 0; i < deJureMap.length; i++) {
+		if (
+			deJureMap[i] !== record.victimId ||
+			landMask[i] === 0 ||
+			dominantSideMap[i] !== annexerSideIdx
+		)
+			continue;
+		seen++;
+		if (candidates.length < 256) candidates.push(i);
+		else {
+			const replacement = Math.floor(Math.random() * seen);
+			if (replacement < candidates.length) candidates[replacement] = i;
+		}
+	}
+	if (capitalIdx !== -1 && candidates.includes(capitalIdx)) return capitalIdx;
+	if (!candidates.length) return -1;
+	const garrisons = units
+		.filter((u) => u.sideIndex === annexerSideIdx)
+		.map((u) => ({ lat: u.lat, lng: u.lng }));
+	let best = candidates[0];
+	let bestScore = -Infinity;
+	for (const idx of candidates) {
+		const y = Math.floor(idx / gridWidth);
+		const x = idx % gridWidth;
+		const lat = y * CONFIG.GRID_RES - 90;
+		const lng = x * CONFIG.GRID_RES - 180;
+		let nearest = 9999;
+		for (const unit of garrisons) {
+			let dLng = unit.lng - lng;
+			if (dLng > 180) dLng -= 360;
+			else if (dLng < -180) dLng += 360;
+			nearest = Math.min(nearest, (unit.lat - lat) ** 2 + dLng ** 2);
+		}
+		const capitalBonus = idx === capitalIdx ? 100000 : 0;
+		const score = nearest + capitalBonus;
+		if (score > bestScore) {
+			bestScore = score;
+			best = idx;
+		}
+	}
+	return best;
+}
+
+function collectRebellionFoothold(record, seedIdx, annexerSideIdx) {
+	if (seedIdx < 0) return [];
+	const target = Math.max(
+		5,
+		Math.min(50, Math.round((record.coreCells || 1) * 0.02)),
+	);
+	const queue = [seedIdx];
+	const visited = new Set([seedIdx]);
+	const foothold = [];
+	while (queue.length && foothold.length < target) {
+		const idx = queue.shift();
+		if (
+			deJureMap[idx] !== record.victimId ||
+			landMask[idx] === 0 ||
+			dominantSideMap[idx] !== annexerSideIdx
+		)
+			continue;
+		foothold.push(idx);
+		const x = idx % gridWidth;
+		const neighbors = [idx + gridWidth, idx - gridWidth];
+		if (x > 0) neighbors.push(idx - 1);
+		if (x < gridWidth - 1) neighbors.push(idx + 1);
+		for (const neighbor of neighbors) {
+			if (
+				neighbor >= 0 &&
+				neighbor < deJureMap.length &&
+				!visited.has(neighbor)
+			) {
+				visited.add(neighbor);
+				queue.push(neighbor);
+			}
+		}
+	}
+	return foothold;
+}
+
+function launchRebellion(record) {
+	if (!warEconomyEnabled || record.cooldownUntilCycle > economyPayCycle)
+		return false;
+	if (activeRebellions.has(record.victimId)) return false;
+	if (activeRebellions.size >= ECONOMY_CONFIG.MAX_ACTIVE_REBELLIONS)
+		return false;
+	const annexerCounts = occupationCountsByAnnexer();
+	if (
+		(annexerCounts.get(record.annexerId) || 0) >=
+		ECONOMY_CONFIG.MAX_REBELLIONS_PER_ANNEXER
+	)
+		return false;
+	const annexerSideIdx = findCountrySideIndex(record.annexerId);
+	if (annexerSideIdx < 0) return false;
+	const meta = countryMetadata[record.victimId - 1];
+	if (!meta) return false;
+	const country = {
+		id: meta.id,
+		name: meta.name || `Country ${meta.id}`,
+		color: meta.color,
+		role: "OFFENSE",
+		strategy: "DEFENSIVE",
+		buffState: "buff",
+		initialCells: record.coreCells,
+		isRebel: true,
+	};
+	const rebelSideIdx = allocateIndependentSide(country, annexerSideIdx);
+	if (rebelSideIdx < 0) return false;
+	const seed = pickRebellionSeed(record, annexerSideIdx);
+	const foothold = collectRebellionFoothold(record, seed, annexerSideIdx);
+	if (!foothold.length) {
+		sides[rebelSideIdx] = [];
+		clearSideHostilities(rebelSideIdx);
+		return false;
+	}
+	for (const idx of foothold) {
+		worldControlMap[idx] = record.victimId;
+		primaryOccupierMap[idx] = record.victimId;
+		landMask[idx] = 2;
+		for (let sideIdx = 0; sideIdx < sideInfluenceMaps.length; sideIdx++) {
+			sideInfluenceMaps[sideIdx][idx] = 0;
+		}
+		sideInfluenceMaps[rebelSideIdx][idx] = 1;
+		syncOccupationFromSideInfluence(idx);
+	}
+	const spawnCount = Math.max(
+		3,
+		Math.min(12, Math.ceil((record.expectedArmyUnits || 3) * 0.15)),
+	);
+	for (let i = 0; i < spawnCount; i++) {
+		const idx = foothold[i % foothold.length];
+		const y = Math.floor(idx / gridWidth);
+		const x = idx % gridWidth;
+		const unitId = Math.random();
+		units.push({
+			id: unitId,
+			lat:
+				y * CONFIG.GRID_RES -
+				90 +
+				CONFIG.GRID_RES / 2 +
+				(Math.random() - 0.5) * CONFIG.GRID_RES * 0.4,
+			lng:
+				x * CONFIG.GRID_RES -
+				180 +
+				CONFIG.GRID_RES / 2 +
+				(Math.random() - 0.5) * CONFIG.GRID_RES * 0.4,
+			sideIndex: rebelSideIdx,
+			sovereignId: record.victimId,
+			beneficiaryId: record.victimId,
+			health: CONFIG.UNIT_HEALTH,
+			lastAttack: 0,
+			deployTicks: 15,
+			_discipline: getUnitDiscipline({
+				id: unitId,
+				sovereignId: record.victimId,
+			}),
+			_commandBand: COMMAND_BANDS.PAID,
+			_refusesOffense: false,
+		});
+	}
+	initialSideSoldiers[rebelSideIdx] = Math.max(
+		spawnCount * CONFIG.UNIT_TO_SOLDIER_RATIO,
+		(meta.pop || 0) * 0.002,
+	);
+	sideSoldiers[rebelSideIdx] = initialSideSoldiers[rebelSideIdx];
+	soldiersPerUnit[rebelSideIdx] = CONFIG.UNIT_TO_SOLDIER_RATIO;
+	meta.releasableBy = null;
+	meta.buffState = "buff";
+	let state = countryEconomy.get(record.victimId);
+	if (!state) {
+		state = createEconomyState({
+			countryId: record.victimId,
+			gdp: meta.gdp || 0,
+			pop: meta.pop || 0,
+			territoryUnits: record.expectedArmyUnits,
+			initialCoreCells: record.coreCells,
+			initialCityPop: record.initialCityPop || 0,
+		});
+	}
+	state.capitulated = false;
+	state.arrearsCycles = 0;
+	state.commandBand = COMMAND_BANDS.PAID;
+	state.mutinyRecoveryCycles = 0;
+	state.treasury = Math.max(state.treasury, state.baseIncome * 3);
+	countryEconomy.set(record.victimId, state);
+	record.active = true;
+	record.queued = false;
+	const rebellion = {
+		rebelId: record.victimId,
+		annexerId: record.annexerId,
+		annexerSideIdx,
+		rebelSideIdx,
+		startCycle: economyPayCycle,
+		failedCycles: 0,
+	};
+	activeRebellions.set(record.victimId, rebellion);
+	emitEconomyEvent(`${country.name}: rebellion has begun`, "danger");
+	generateProvinces();
+	recalculateAllBounds();
+	frontlineFieldTick = -999;
+	_workerBusy = false;
+	updateSidesUI();
+	if (influenceLayer) influenceLayer.render();
+	return true;
+}
+
+function resolveRebellionSuccess(rebellion) {
+	const record = occupationEconomies.get(rebellion.rebelId);
+	const rebelSideIdx = findCountrySideIndex(rebellion.rebelId);
+	const annexerSideIdx = findCountrySideIndex(rebellion.annexerId);
+	if (!record || rebelSideIdx < 0) return;
+	for (let i = 0; i < deJureMap.length; i++) {
+		if (deJureMap[i] !== rebellion.rebelId || landMask[i] === 0) continue;
+		if (
+			dominantSideMap[i] === rebelSideIdx ||
+			dominantSideMap[i] === annexerSideIdx
+		) {
+			worldControlMap[i] = rebellion.rebelId;
+			primaryOccupierMap[i] = rebellion.rebelId;
+			landMask[i] = 2;
+			for (let sideIdx = 0; sideIdx < sideInfluenceMaps.length; sideIdx++) {
+				sideInfluenceMaps[sideIdx][i] = 0;
+			}
+			sideInfluenceMaps[rebelSideIdx][i] = 1;
+			syncOccupationFromSideInfluence(i);
+		}
+	}
+	if (annexerSideIdx >= 0) setSidesHostile(rebelSideIdx, annexerSideIdx, false);
+	const meta = countryMetadata[rebellion.rebelId - 1];
+	if (meta) {
+		meta.releasableBy = null;
+		meta.buffState = "none";
+	}
+	const country = sides[rebelSideIdx]?.find((c) => c.id === rebellion.rebelId);
+	if (country) {
+		country.isRebel = false;
+		country.isRestoredNeutral = true;
+		country.buffState = "none";
+		country.strategy = "DEFENSIVE";
+	}
+	activeRebellions.delete(rebellion.rebelId);
+	occupationEconomies.delete(rebellion.rebelId);
+	emitEconomyEvent(
+		`${meta?.name || "Rebels"}: independence restored`,
+		"recovery",
+	);
+	statusText.innerText = `${meta?.name || "Rebels"} INDEPENDENCE RECOGNIZED`;
+	generateProvinces();
+	recalculateAllBounds();
+	frontlineFieldTick = -999;
+	_workerBusy = false;
+	updateSidesUI();
+}
+
+function resolveRebellionFailure(rebellion) {
+	const record = occupationEconomies.get(rebellion.rebelId);
+	if (!record) return;
+	const rebelSideIdx = findCountrySideIndex(rebellion.rebelId);
+	const annexerSideIdx = findCountrySideIndex(record.annexerId);
+	for (let i = 0; i < deJureMap.length; i++) {
+		if (deJureMap[i] !== rebellion.rebelId || landMask[i] === 0) continue;
+		if (dominantSideMap[i] === rebelSideIdx) {
+			worldControlMap[i] = record.annexerId;
+			primaryOccupierMap[i] = record.annexerId;
+			for (let sideIdx = 0; sideIdx < sideInfluenceMaps.length; sideIdx++) {
+				sideInfluenceMaps[sideIdx][i] = 0;
+			}
+			if (annexerSideIdx >= 0) {
+				sideInfluenceMaps[annexerSideIdx][i] = 1;
+				syncOccupationFromSideInfluence(i);
+			}
+		}
+	}
+	units = units.filter((unit) => unit.sovereignId !== rebellion.rebelId);
+	if (rebelSideIdx >= 0) {
+		sides[rebelSideIdx] = sides[rebelSideIdx].filter(
+			(country) => country.id !== rebellion.rebelId,
+		);
+		clearSideHostilities(rebelSideIdx);
+	}
+	const state = countryEconomy.get(rebellion.rebelId);
+	if (state) state.capitulated = true;
+	const meta = countryMetadata[rebellion.rebelId - 1];
+	if (meta) {
+		meta.releasableBy = record.annexerId;
+		meta.buffState = "none";
+	}
+	record.active = false;
+	record.queued = false;
+	record.resistance = 40;
+	record.cooldownUntilCycle = economyPayCycle + 10;
+	activeRebellions.delete(rebellion.rebelId);
+	emitEconomyEvent(`${meta?.name || "Rebels"}: rebellion defeated`, "warning");
+	generateProvinces();
+	recalculateAllBounds();
+	updateSidesUI();
+}
+
+function processRebellionStates() {
+	for (const rebellion of Array.from(activeRebellions.values())) {
+		const rebelSideIdx = findCountrySideIndex(rebellion.rebelId);
+		let coreCells = 0;
+		let controlled = 0;
+		for (let i = 0; i < deJureMap.length; i++) {
+			if (deJureMap[i] !== rebellion.rebelId || landMask[i] === 0) continue;
+			coreCells++;
+			if (dominantSideMap[i] === rebelSideIdx) {
+				controlled++;
+			}
+		}
+		const ratio = coreCells > 0 ? controlled / coreCells : 0;
+		if (ratio >= 0.85) {
+			resolveRebellionSuccess(rebellion);
+			continue;
+		}
+		const unitCount = units.filter(
+			(unit) => unit.sovereignId === rebellion.rebelId,
+		).length;
+		if (unitCount === 0 && ratio < 0.05) rebellion.failedCycles++;
+		else rebellion.failedCycles = 0;
+		if (rebellion.failedCycles >= 3) resolveRebellionFailure(rebellion);
+	}
+
+	const queued = selectRebellionCandidates(
+		occupationEconomies.values(),
+		activeRebellions.values(),
+		economyPayCycle,
+	);
+	for (const record of queued) {
+		record.queued = true;
+		if (!record.queuedAtCycle) record.queuedAtCycle = economyPayCycle;
+		launchRebellion(record);
+	}
+}
+
+function restoreCountryPeacefully(record) {
+	const meta = countryMetadata[record.victimId - 1];
+	if (!meta) return false;
+	const country = {
+		id: meta.id,
+		name: meta.name || `Country ${meta.id}`,
+		color: meta.color,
+		role: "OFFENSE",
+		strategy: "DEFENSIVE",
+		buffState: "none",
+		initialCells: record.coreCells,
+		isRestoredNeutral: true,
+	};
+	const sideIdx = allocateIndependentSide(country, -1);
+	if (sideIdx < 0) return false;
+	for (let i = 0; i < deJureMap.length; i++) {
+		if (deJureMap[i] !== record.victimId || landMask[i] === 0) continue;
+		worldControlMap[i] = record.victimId;
+		primaryOccupierMap[i] = record.victimId;
+		landMask[i] = 2;
+		for (let si = 0; si < sideInfluenceMaps.length; si++) {
+			sideInfluenceMaps[si][i] = 0;
+		}
+		sideInfluenceMaps[sideIdx][i] = 1;
+		syncOccupationFromSideInfluence(i);
+	}
+	meta.releasableBy = null;
+	const state = countryEconomy.get(record.victimId);
+	if (state) {
+		state.capitulated = false;
+		state.treasury = Math.max(state.treasury, state.baseIncome * 3);
+		state.arrearsCycles = 0;
+		state.commandBand = COMMAND_BANDS.PAID;
+	}
+	occupationEconomies.delete(record.victimId);
+	emitEconomyEvent(`${country.name}: occupation ended`, "recovery");
+	generateProvinces();
+	updateSidesUI();
+	return true;
+}
+
+function ensureOccupationControllers() {
+	const activeCountryIds = new Set(
+		sides
+			.flat()
+			.filter(Boolean)
+			.map((c) => c.id),
+	);
+	for (const record of Array.from(occupationEconomies.values())) {
+		if (activeCountryIds.has(record.annexerId)) continue;
+		const controllerCounts = new Map();
+		for (let i = 0; i < deJureMap.length; i++) {
+			if (deJureMap[i] !== record.victimId) continue;
+			const controller = primaryOccupierMap[i] || worldControlMap[i];
+			if (
+				controller > 0 &&
+				controller !== record.victimId &&
+				activeCountryIds.has(controller)
+			) {
+				controllerCounts.set(
+					controller,
+					(controllerCounts.get(controller) || 0) + 1,
+				);
+			}
+		}
+		let nextAnnexer = 0;
+		let bestCount = 0;
+		for (const [countryId, count] of controllerCounts) {
+			if (count > bestCount) {
+				bestCount = count;
+				nextAnnexer = countryId;
+			}
+		}
+		const rebellion = activeRebellions.get(record.victimId);
+		if (nextAnnexer > 0) {
+			const previousAnnexerSide = findCountrySideIndex(record.annexerId);
+			record.annexerId = nextAnnexer;
+			if (rebellion) {
+				const nextAnnexerSide = findCountrySideIndex(nextAnnexer);
+				if (previousAnnexerSide >= 0) {
+					setSidesHostile(rebellion.rebelSideIdx, previousAnnexerSide, false);
+				}
+				if (nextAnnexerSide >= 0) {
+					setSidesHostile(rebellion.rebelSideIdx, nextAnnexerSide, true);
+				}
+				rebellion.annexerId = nextAnnexer;
+				rebellion.annexerSideIdx = nextAnnexerSide;
+			}
+		} else if (rebellion) {
+			resolveRebellionSuccess(rebellion);
+		} else {
+			restoreCountryPeacefully(record);
+		}
+	}
+}
+
+export function registerOccupation(victimId, annexerId) {
+	if (!warEconomyEnabled || victimId <= 0 || annexerId <= 0) return null;
+	const meta = countryMetadata[victimId - 1] || {};
+	let state = countryEconomy.get(victimId);
+	let coreCells = 0;
+	for (let i = 0; i < deJureMap.length; i++) {
+		if (deJureMap[i] === victimId && landMask[i] > 0) coreCells++;
+	}
+	const initialCityPop = cities
+		.filter((city) => (city.ownerId || city.sovereignId) === victimId)
+		.reduce((sum, city) => sum + Math.max(0, city.pop || 0), 0);
+	if (!state) {
+		state = createEconomyState({
+			countryId: victimId,
+			gdp: meta.gdp || 0,
+			pop: meta.pop || 0,
+			territoryUnits: estimateTerritoryArmyUnits(coreCells),
+			initialCoreCells: coreCells,
+			initialCityPop,
+		});
+		countryEconomy.set(victimId, state);
+	}
+	state.capitulated = true;
+	const record = {
+		victimId,
+		annexerId,
+		baseIncome: state.baseIncome,
+		coreCells: Math.max(1, coreCells),
+		initialCityPop,
+		expectedArmyUnits: Math.max(
+			3,
+			state.expectedArmyUnits || estimateTerritoryArmyUnits(coreCells),
+		),
+		resistance: 0,
+		occupationCoverage: 1,
+		garrisonCoverage: 0,
+		heldRatio: 1,
+		active: false,
+		queued: false,
+		queuedAtCycle: 0,
+		cooldownUntilCycle: 0,
+	};
+	occupationEconomies.set(victimId, record);
+	return record;
+}
+
+export function runWarEconomyCycle(force = false) {
+	if (!force && _simTickCount % ECONOMY_CONFIG.PAY_CYCLE_TICKS !== 0) return;
+	const started = performance.now();
+	if (!warEconomyEnabled) {
+		updateEconomyPanel();
+		return;
+	}
+	economyPayCycle++;
+	ensureOccupationControllers();
+	const countryToSide = new Map();
+	for (let sideIdx = 0; sideIdx < sides.length; sideIdx++) {
+		for (const country of sides[sideIdx] || []) {
+			countryToSide.set(country.id, sideIdx);
+		}
+	}
+	const unitCounts = new Map();
+	for (const unit of units) {
+		unitCounts.set(
+			unit.sovereignId,
+			(unitCounts.get(unit.sovereignId) || 0) + 1,
+		);
+		getUnitDiscipline(unit);
+	}
+	const controlledCore = new Map();
+	const occupiedCore = new Map();
+	for (let i = 0; i < deJureMap.length; i++) {
+		if (landMask[i] === 0) continue;
+		const countryId = deJureMap[i];
+		if (countryToSide.has(countryId)) {
+			const sideIdx = countryToSide.get(countryId);
+			if (dominantSideMap[i] === sideIdx) {
+				controlledCore.set(countryId, (controlledCore.get(countryId) || 0) + 1);
+			}
+		}
+		const occupation = occupationEconomies.get(countryId);
+		if (occupation) {
+			const annexerSideIdx = countryToSide.get(occupation.annexerId);
+			if (dominantSideMap[i] === annexerSideIdx) {
+				occupiedCore.set(countryId, (occupiedCore.get(countryId) || 0) + 1);
+			}
+		}
+	}
+	const controlledCityPop = new Map();
+	const capitalHeld = new Map();
+	for (const countryId of countryToSide.keys())
+		capitalHeld.set(countryId, true);
+	for (const city of cities) {
+		const ownerId = city.ownerId || city.sovereignId;
+		if (!countryToSide.has(ownerId)) continue;
+		const sideIdx = countryToSide.get(ownerId);
+		const idx = getGridIndex(city.lat, city.lng);
+		const held = idx !== -1 && dominantSideMap[idx] === sideIdx;
+		if (held) {
+			controlledCityPop.set(
+				ownerId,
+				(controlledCityPop.get(ownerId) || 0) + Math.max(0, city.pop || 0),
+			);
+		}
+		if (city.isCapital && !held) capitalHeld.set(ownerId, false);
+	}
+	const occupationDueByAnnexer = new Map();
+	const occupationYieldByAnnexer = new Map();
+	for (const record of occupationEconomies.values()) {
+		const held = occupiedCore.get(record.victimId) || 0;
+		record.heldRatio = Math.max(0, Math.min(1, held / record.coreCells));
+		const annexerSideIdx = countryToSide.get(record.annexerId);
+		let garrisonUnits = 0;
+		if (annexerSideIdx !== undefined) {
+			for (const unit of units) {
+				if (unit.sideIndex !== annexerSideIdx) continue;
+				const idx = getGridIndex(unit.lat, unit.lng);
+				if (idx !== -1 && deJureMap[idx] === record.victimId) garrisonUnits++;
+			}
+		}
+		const requiredGarrison = Math.max(
+			3,
+			Math.ceil(record.expectedArmyUnits * 0.15),
+		);
+		record.garrisonCoverage = Math.min(1, garrisonUnits / requiredGarrison);
+		const due =
+			record.baseIncome *
+			ECONOMY_CONFIG.OCCUPATION_COST_SHARE *
+			record.heldRatio;
+		const yieldAmount =
+			record.baseIncome *
+			ECONOMY_CONFIG.OCCUPATION_YIELD_SHARE *
+			record.heldRatio;
+		occupationDueByAnnexer.set(
+			record.annexerId,
+			(occupationDueByAnnexer.get(record.annexerId) || 0) + due,
+		);
+		occupationYieldByAnnexer.set(
+			record.annexerId,
+			(occupationYieldByAnnexer.get(record.annexerId) || 0) + yieldAmount,
+		);
+	}
+
+	for (const [countryId, sideIdx] of countryToSide) {
+		const state = countryEconomy.get(countryId);
+		if (!state || state.capitulated) continue;
+		const coreControlRatio = Math.max(
+			0,
+			Math.min(
+				1,
+				(controlledCore.get(countryId) || 0) / state.initialCoreCells,
+			),
+		);
+		const cityControlRatio =
+			state.initialCityPop > 0
+				? Math.max(
+						0,
+						Math.min(
+							1,
+							(controlledCityPop.get(countryId) || 0) / state.initialCityPop,
+						),
+					)
+				: coreControlRatio;
+		const hasCapital = capitalHeld.get(countryId) !== false;
+		const income = computeCurrentIncome(state.baseIncome, {
+			coreControlRatio,
+			cityControlRatio,
+			capitalHeld: hasCapital,
+		});
+		const previousBand = state.commandBand;
+		const previousCoverage = state.payrollCoverage;
+		const settled = settleEconomyCycle(state, {
+			income,
+			occupationYield: occupationYieldByAnnexer.get(countryId) || 0,
+			payrollDue:
+				(unitCounts.get(countryId) || 0) * ECONOMY_CONFIG.PAYROLL_PER_UNIT,
+			occupationDue: occupationDueByAnnexer.get(countryId) || 0,
+		});
+		settled.coreControlRatio = coreControlRatio;
+		settled.cityControlRatio = cityControlRatio;
+		settled.capitalHeld = hasCapital;
+		countryEconomy.set(countryId, settled);
+		if (previousCoverage >= 0.999 && settled.payrollCoverage < 0.999) {
+			const name =
+				countryMetadata[countryId - 1]?.name || `Country ${countryId}`;
+			emitEconomyEvent(
+				`${name}: budget deficit; recruitment frozen`,
+				"warning",
+			);
+		}
+		updateUnitCommandState(countryId, previousBand, settled.commandBand);
+		if (sideIdx >= 0 && settled.commandBand !== COMMAND_BANDS.PAID) {
+			const country = sides[sideIdx]?.find((c) => c.id === countryId);
+			if (country) country.isSurging = false;
+		}
+	}
+
+	for (const record of occupationEconomies.values()) {
+		const annexerState = countryEconomy.get(record.annexerId);
+		record.occupationCoverage = annexerState?.occupationCoverage ?? 0;
+		const casualtyPressure = Math.min(
+			1,
+			(countryCasualties.get(record.victimId) || 0) /
+				Math.max(1, record.expectedArmyUnits * CONFIG.UNIT_TO_SOLDIER_RATIO),
+		);
+		const previousResistance = record.resistance;
+		record.resistance = updateResistance(record.resistance, {
+			occupationCoverage: record.occupationCoverage,
+			garrisonCoverage: record.garrisonCoverage,
+			casualtyPressure,
+		});
+		if (previousResistance < 75 && record.resistance >= 75) {
+			const name =
+				countryMetadata[record.victimId - 1]?.name || "Occupied nation";
+			emitEconomyEvent(`${name}: resistance is nearing revolt`, "warning");
+		}
+	}
+	applyDesertion();
+	processRebellionStates();
+	updateEconomyPanel();
+	window.__perf.economy =
+		(window.__perf.economy || 0) + performance.now() - started;
+}
+
+window.economyDebugReport = (countryId = null) => {
+	const countries = Array.from(countryEconomy.values())
+		.filter(
+			(state) => countryId == null || state.countryId === Number(countryId),
+		)
+		.map((state) => ({ ...state }));
+	const occupations = Array.from(occupationEconomies.values())
+		.filter(
+			(state) => countryId == null || state.victimId === Number(countryId),
+		)
+		.map((state) => ({ ...state }));
+	return {
+		enabled: warEconomyEnabled,
+		payCycle: economyPayCycle,
+		countries,
+		occupations,
+		rebellions: Array.from(activeRebellions.values()).map((state) => ({
+			...state,
+		})),
+		sideUids: [...sideUids],
+		hostilityMatrix: Array.from(hostilityMatrix),
+		events: [...economyEvents],
+	};
+};
 
 export function setGameTimeFromInputs() {
 	if (!timeSystemCheckbox?.checked) {
@@ -5557,6 +6718,13 @@ export async function _startWarInner() {
 
 	const _attackers = sides[0] || [];
 	const _defenders = sides[1] || [];
+	warEconomyEnabled = warEconomyCheckbox?.checked !== false;
+	countryEconomy.clear();
+	occupationEconomies.clear();
+	activeRebellions.clear();
+	economyEvents.length = 0;
+	economyPayCycle = 0;
+	resetSideHostilities();
 
 	// Initialize time system for this war
 	setGameTimeFromInputs();
@@ -5863,7 +7031,7 @@ export async function _startWarInner() {
 	sides.forEach((side, idx) => {
 		const myLand = sideLand[idx] || 0;
 		const enemyLand = sideLand.reduce(
-			(sum, v, i) => (i === idx ? sum : sum + v),
+			(sum, v, i) => (areSidesHostile(idx, i) ? sum + v : sum),
 			0,
 		);
 		const isUnderdog = enemyLand > 0 && myLand < enemyLand;
@@ -5889,7 +7057,7 @@ export async function _startWarInner() {
 		// their raw quality largely negates this general advantage.
 		const enemyHasStrongBuff = sides.some(
 			(otherSide, j) =>
-				j !== idx &&
+				areSidesHostile(idx, j) &&
 				otherSide.some((c) =>
 					["buff", "super", "godly"].includes(c.buffState || "none"),
 				),
@@ -5955,7 +7123,7 @@ export async function _startWarInner() {
 					if (
 						nId > 0 &&
 						countryToSideMap.has(nId) &&
-						countryToSideMap.get(nId) !== sideIdx
+						areSidesHostile(sideIdx, countryToSideMap.get(nId))
 					) {
 						isFrontline = true;
 						vx -= n.dx; // Vector away from enemy neighbor
@@ -6317,6 +7485,8 @@ export async function _startWarInner() {
 		});
 	}
 
+	initializeWarEconomy();
+
 	requestAnimationFrame(updateLoop);
 }
 
@@ -6564,6 +7734,10 @@ export async function startBenchmark() {
 
 export function activateCountryMidWar(country, sideIdx) {
 	const countryId = country.id;
+	if (!sides[sideIdx]) sides[sideIdx] = [];
+	if (!sides[sideIdx].some((member) => member.id === countryId)) {
+		sides[sideIdx].push(country);
+	}
 
 	units.forEach((u) => {
 		if (u.sovereignId === countryId) {
@@ -6653,7 +7827,7 @@ export function activateCountryMidWar(country, sideIdx) {
 				// A cell is a frontline if its neighbor belongs to an enemy side
 				if (nId > 0 && nId !== countryId) {
 					const nSide = sides.findIndex((s) => s.some((c) => c.id === nId));
-					if (nSide !== -1 && nSide !== sideIdx) {
+					if (nSide !== -1 && areSidesHostile(sideIdx, nSide)) {
 						isF = true;
 						vx -= n.dx;
 						vy -= n.dy;
@@ -6702,8 +7876,9 @@ export function activateCountryMidWar(country, sideIdx) {
 		const isMountainCell = terrainMask && terrainMask[spawnIdx] > 0.35;
 		const isAlpen = isMountainCell && Math.random() < 0.4;
 
+		const unitId = Math.random();
 		units.push({
-			id: Math.random(),
+			id: unitId,
 			lat:
 				y * CONFIG.GRID_RES -
 				90 +
@@ -6721,9 +7896,38 @@ export function activateCountryMidWar(country, sideIdx) {
 			health: CONFIG.UNIT_HEALTH * (isAlpen ? CONFIG.ALPEN_HEALTH_MULT : 1),
 			lastAttack: 0,
 			deployTicks: 30,
+			_discipline: getUnitDiscipline({ id: unitId, sovereignId: countryId }),
+			_commandBand: COMMAND_BANDS.PAID,
+			_refusesOffense: false,
 		});
 	}
+	if (warEconomyEnabled && !countryEconomy.has(countryId)) {
+		const territoryUnits = estimateTerritoryArmyUnits(cellCount);
+		const actualUnits = units.filter(
+			(unit) => unit.sovereignId === countryId,
+		).length;
+		const state = createEconomyState({
+			countryId,
+			gdp: meta?.gdp || 0,
+			pop: meta?.pop || 0,
+			territoryUnits,
+			initialCoreCells: cellCount,
+			initialCityPop: newCities.reduce(
+				(sum, city) => sum + Math.max(0, city.pop || 0),
+				0,
+			),
+		});
+		state.expectedArmyUnits = Math.max(territoryUnits, actualUnits);
+		state.baseIncome = Math.max(
+			state.baseIncome,
+			state.expectedArmyUnits / ECONOMY_CONFIG.TARGET_STARTING_PAYROLL_SHARE,
+		);
+		state.income = state.baseIncome;
+		state.treasury = state.baseIncome * ECONOMY_CONFIG.STARTING_RESERVE_CYCLES;
+		countryEconomy.set(countryId, state);
+	}
 	recalculateAllBounds();
+	updateEconomyPanel();
 }
 
 export function launchBomb(fromLat, fromLng, toLat, toLng, sideIdx) {
@@ -7021,7 +8225,7 @@ function estimateLocalForces(sideIdx, lat, lng, radiusSq = 9.0) {
 		if (u.sideIndex === sideIdx) {
 			friendlies++;
 			friendlyHealth += u.health / CONFIG.UNIT_HEALTH;
-		} else if (u.sideIndex >= 0) {
+		} else if (areSidesHostile(sideIdx, u.sideIndex)) {
 			enemies++;
 			enemyHealth += u.health / CONFIG.UNIT_HEALTH;
 		}
@@ -7074,7 +8278,7 @@ function buildFrontIntel(sideIdx) {
 			}
 			if (!nearFront) continue;
 			if (u.sideIndex === sideIdx) friendlies++;
-			else if (u.sideIndex >= 0) enemies++;
+			else if (areSidesHostile(sideIdx, u.sideIndex)) enemies++;
 		}
 		for (const sample of samples) {
 			const local = estimateLocalForces(sideIdx, sample.lat, sample.lng, 4.0);
@@ -7149,7 +8353,9 @@ function canTraverseLandForPlan(idx, sideIdx, targetIdx) {
 	const ds = dominantSideMap[idx];
 	const targetSide = targetIdx >= 0 ? dominantSideMap[targetIdx] : -1;
 	if (ds === sideIdx || ds === -1) return true;
-	return targetSide >= 0 && ds === targetSide;
+	return (
+		targetSide >= 0 && ds === targetSide && areSidesHostile(sideIdx, targetSide)
+	);
 }
 
 function findLandPathSummary(startIdx, targetIdx, sideIdx, maxVisited = 70000) {
@@ -7423,7 +8629,7 @@ export function generateAllProposals(sideIdx) {
 		eCount = 0;
 	for (let i = 0; i < dominantSideMap.length; i += 20) {
 		if (landMask[i] === 0) continue;
-		if (dominantSideMap[i] !== sideIdx && dominantSideMap[i] >= 0) {
+		if (areSidesHostile(sideIdx, dominantSideMap[i])) {
 			const row = Math.floor(i / gridWidth);
 			const col = i % gridWidth;
 			_eLat += row * CONFIG.GRID_RES - 90;
@@ -7471,7 +8677,8 @@ export function generateAllProposals(sideIdx) {
 		if (dominantSideMap[gi] === sideIdx) continue;
 		const cellOwnerId = worldControlMap[gi];
 		const ownerSide = _tickCountryToSideMap.get(cellOwnerId);
-		if (ownerSide === sideIdx || ownerSide === undefined) continue;
+		if (ownerSide === undefined || !areSidesHostile(sideIdx, ownerSide))
+			continue;
 		if (myAllyIds.has(cellOwnerId)) continue;
 		const row = Math.floor(gi / gridWidth);
 		const col = gi % gridWidth;
@@ -7502,7 +8709,13 @@ export function generateAllProposals(sideIdx) {
 		if (cIdx === -1) continue;
 		const ownerId = city.ownerId || 0;
 		if (myAllyIds.has(ownerId)) continue;
-		if (dominantSideMap[cIdx] === sideIdx) continue;
+		const citySide = _tickCountryToSideMap.get(ownerId);
+		if (
+			citySide === undefined ||
+			!areSidesHostile(sideIdx, citySide) ||
+			dominantSideMap[cIdx] === sideIdx
+		)
+			continue;
 		enemyCities.push({
 			city,
 			isCapital: city.isCapital || false,
@@ -8030,7 +9243,7 @@ export function generateAllProposals(sideIdx) {
 
 			let enemyNavalThreat = 0;
 			for (let ei = 0; ei < sides.length; ei++) {
-				if (ei === sideIdx) continue;
+				if (!areSidesHostile(sideIdx, ei)) continue;
 				const enp = _navalPlan[ei];
 				if (enp?.phase && enp.target) {
 					const dLat2 = zLat - enp.target.lat;
@@ -8186,7 +9399,7 @@ export function generateAllProposals(sideIdx) {
 							const ni = nr * gridWidth + nc;
 							if (landMask[ni] === 0) continue;
 							const nds = dominantSideMap[ni];
-							if (nds !== -1 && nds !== sideIdx) hasEnemy = true;
+							if (areSidesHostile(sideIdx, nds)) hasEnemy = true;
 						}
 					}
 					if (hasEnemy) {
@@ -8335,7 +9548,7 @@ export function generateAllProposals(sideIdx) {
 					const ni2 = nr2 * gridWidth + nc2;
 					if (landMask[ni2] === 0) continue;
 					const nds2 = dominantSideMap[ni2];
-					if (nds2 !== -1 && nds2 !== sideIdx) bordersEnemy = true;
+					if (areSidesHostile(sideIdx, nds2)) bordersEnemy = true;
 				}
 			}
 			if (!bordersEnemy) continue;
@@ -8440,7 +9653,10 @@ export function scoreProposal(proposal, sideIdx) {
 	const sideUnits = _tickUnitsBySide[sideIdx] || [];
 	const unitCount = sideUnits.filter((u) => u.deployTicks === 0).length;
 	const enemyUnitCount = units.filter(
-		(u) => u.sideIndex !== sideIdx && u.deployTicks === 0 && u.health > 0,
+		(u) =>
+			areSidesHostile(sideIdx, u.sideIndex) &&
+			u.deployTicks === 0 &&
+			u.health > 0,
 	).length;
 	const globalForceRatio = unitCount / Math.max(1, enemyUnitCount);
 	const geo = proposal.geographicData || {};
@@ -8531,7 +9747,7 @@ export function scoreProposal(proposal, sideIdx) {
 	// Enemy naval landing on our territory boosts COASTAL_DEFENSE
 	let enemyLandedOnUs = false;
 	for (let ei = 0; ei < sides.length; ei++) {
-		if (ei === sideIdx) continue;
+		if (!areSidesHostile(sideIdx, ei)) continue;
 		const enp = _navalPlan[ei];
 		if (enp?.phase === "LANDING" && enp.target) {
 			const tIdx = getGridIndex(enp.target.lat, enp.target.lng);
@@ -8651,7 +9867,10 @@ export function selectPlans(sideIdx, scoredProposals) {
 	// TURTLE: only allocate offense when we have force advantage
 	if (strategy === "TURTLE") {
 		const turtleEnemyCount = units.filter(
-			(u) => u.sideIndex !== sideIdx && u.deployTicks === 0 && u.health > 0,
+			(u) =>
+				areSidesHostile(sideIdx, u.sideIndex) &&
+				u.deployTicks === 0 &&
+				u.health > 0,
 		).length;
 		if (unitCount >= turtleEnemyCount) {
 			alloc.offense = 0.3;
@@ -8773,7 +9992,7 @@ export function selectPlans(sideIdx, scoredProposals) {
 		if (p.target) {
 			let localEnemies = 0;
 			for (const eu of _allUnits) {
-				if (eu.sideIndex === sideIdx) continue;
+				if (!areSidesHostile(sideIdx, eu.sideIndex)) continue;
 				const dLat = p.target.lat - eu.lat;
 				let dLng = p.target.lng - eu.lng;
 				if (dLng > 180) dLng -= 360;
@@ -8937,7 +10156,7 @@ function shouldReassess(si) {
 	const ourUnits = _tickUnitsBySide[si] ? _tickUnitsBySide[si].length : 0;
 	let totalEnemyUnits = 0;
 	for (let ei = 0; ei < sides.length; ei++) {
-		if (ei === si) continue;
+		if (!areSidesHostile(si, ei)) continue;
 		if (!sides[ei] || sides[ei].length === 0) continue;
 		totalEnemyUnits += _tickUnitsBySide[ei] ? _tickUnitsBySide[ei].length : 0;
 	}
@@ -9541,7 +10760,7 @@ export function evaluateAllPlans() {
 		for (let si = 0; si < sides.length; si++) {
 			if (!sides[si] || sides[si].length === 0) continue;
 			for (let ei = 0; ei < sides.length; ei++) {
-				if (ei === si) continue;
+				if (!areSidesHostile(si, ei)) continue;
 				if (!sides[ei] || sides[ei].length === 0) continue;
 				for (const enemyPlan of [_warPlan[ei], _warPlan[ei + sides.length]]) {
 					if (!enemyPlan?.target) continue;
@@ -9612,7 +10831,7 @@ export function evaluateAllPlans() {
 		for (let si = 0; si < sides.length; si++) {
 			if (!sides[si] || sides[si].length === 0) continue;
 			for (let ei = 0; ei < sides.length; ei++) {
-				if (ei === si) continue;
+				if (!areSidesHostile(si, ei)) continue;
 				if (!sides[ei] || sides[ei].length === 0) continue;
 				const enemyNP = _navalPlan[ei];
 				if (!enemyNP?.target) continue;
@@ -9715,7 +10934,7 @@ export function evaluateAllPlans() {
 			// ---- Detect threats & manage reaction plan ----
 			// Check both naval and land threats from enemies
 			for (let ei = 0; ei < sides.length; ei++) {
-				if (ei === si) continue;
+				if (!areSidesHostile(si, ei)) continue;
 				if (!sides[ei] || sides[ei].length === 0) continue;
 				const enemyNP = _navalPlan[ei];
 				const enemyLand1 = _warPlan[ei];
@@ -10046,6 +11265,7 @@ export function performSimulationTick() {
 		"unitFrontlinePress",
 		"unitMopUpSearch",
 		"unitCombatMove",
+		"economy",
 	];
 	if (_perfEnabled) {
 		for (const k of _perfKeys) _perfSnap[k] = window.__perf[k] || 0;
@@ -10077,6 +11297,7 @@ export function performSimulationTick() {
 	if (gameState === "WAR_OVER") return false;
 	// If in God Mode but the war hasn't started yet, don't tick simulation mechanics
 	if (godModeActive && preGodModeState !== "SIMULATING") return false;
+	runWarEconomyCycle();
 
 	_tickAllCombatants = sides.flat();
 	const _allCombatants = _tickAllCombatants;
@@ -10258,7 +11479,7 @@ export function performSimulationTick() {
 			const sideIdx = countryToSideMap.get(ownerId);
 			if (sideIdx === undefined) continue;
 
-			const isEnemyOccupation = dsIdx !== sideIdx;
+			const isEnemyOccupation = areSidesHostile(sideIdx, dsIdx);
 			const isSelfOccupation = dsIdx === sideIdx;
 
 			const y = Math.floor(idx / gridWidth);
@@ -10275,7 +11496,7 @@ export function performSimulationTick() {
 					const nIdx = ny * gridWidth + nx;
 					if (worldControlMap[nIdx] === ownerId) sovereignNeighbors++;
 					const nDsIdx = dominantSideMap[nIdx];
-					if (nDsIdx >= 0 && nDsIdx !== sideIdx) enemyOccupiedNeighbors++;
+					if (areSidesHostile(sideIdx, nDsIdx)) enemyOccupiedNeighbors++;
 				}
 			}
 
@@ -10371,15 +11592,18 @@ export function performSimulationTick() {
 			_workerBusy = true;
 			const lmCopy = new Uint8Array(landMask);
 			const dsCopy = new Int8Array(dominantSideMap);
+			const hostilityCopy = new Uint8Array(hostilityMatrix);
 			_simWorker.postMessage(
 				{
 					landMask: lmCopy.buffer,
 					dominantSideMap: dsCopy.buffer,
+					hostilityMatrix: hostilityCopy.buffer,
+					maxSides: MAX_SIDES,
 					gridWidth,
 					gridHeight,
 					gridRes: CONFIG.GRID_RES,
 				},
-				[lmCopy.buffer, dsCopy.buffer],
+				[lmCopy.buffer, dsCopy.buffer, hostilityCopy.buffer],
 			);
 		} else {
 			rebuildFrontlineField();
@@ -10582,6 +11806,15 @@ export function performSimulationTick() {
 			_tickUnitsBySide[sIdx].push(units[ui]);
 	}
 	const unitsBySide = _tickUnitsBySide;
+	const hostileUnitCountsBySide = sides.map((_, sideIdx) => {
+		let count = 0;
+		for (let otherIdx = 0; otherIdx < unitsBySide.length; otherIdx++) {
+			if (areSidesHostile(sideIdx, otherIdx)) {
+				count += unitsBySide[otherIdx]?.length || 0;
+			}
+		}
+		return count;
+	});
 
 	// Overwhelming force: if one side has 10x more deployed personnel, all units attack evenly
 	const _overwhelmingForce = new Array(sides.length).fill(false);
@@ -10687,7 +11920,7 @@ export function performSimulationTick() {
 	const sideToCollapsedNations = sides.map((_side, idx) => {
 		const enemies = [];
 		sides.forEach((s, sIdx) => {
-			const isEnemy = sIdx !== idx;
+			const isEnemy = areSidesHostile(idx, sIdx);
 			if (isEnemy && s.length > 0) {
 				s.forEach((c) => {
 					const stats = countryStats.get(c.id);
@@ -10735,7 +11968,7 @@ export function performSimulationTick() {
 		if (city.isCapital && originalSovereignId > 0) {
 			const originalSide = countryToSideMap.get(originalSovereignId);
 			const ds = dominantSideMap[idx];
-			const isOccupiedByEnemy = ds !== -1 && ds !== originalSide;
+			const isOccupiedByEnemy = areSidesHostile(originalSide, ds);
 			if (isOccupiedByEnemy) {
 				countryCapitalLost.set(originalSovereignId, true);
 			}
@@ -10986,7 +12219,7 @@ export function performSimulationTick() {
 		let totalEnemyStrength = 0;
 		let totalEnemyUnits = 0;
 		for (let ej = 0; ej < sides.length; ej++) {
-			if (ej === si) continue;
+			if (!areSidesHostile(si, ej)) continue;
 			totalEnemyStrength += sideStrength[ej];
 			totalEnemyUnits += sideUnitCounts[ej];
 		}
@@ -11394,6 +12627,7 @@ export function performSimulationTick() {
 		if (!sideList) continue;
 
 		const countryObj = _countryById.get(u.sovereignId);
+		const commandPolicy = getUnitCommandPolicy(u);
 		const aiProfile = aiCountryState.get(u.sovereignId) || {
 			mode: "NORMAL",
 			retreatTriggerMultiple: 8.0,
@@ -11405,7 +12639,8 @@ export function performSimulationTick() {
 			peacePressure: 0.0,
 		};
 		const isDefensive = countryObj?.strategy === "DEFENSIVE";
-		const effectiveDefensive = isDefensive || aiProfile.forceDefensive;
+		const effectiveDefensive =
+			isDefensive || aiProfile.forceDefensive || commandPolicy.refusesOffense;
 		const metaForBuff = _metadataById.get(u.sovereignId) || null;
 		const effectiveBuff = getEffectiveBuffState(countryObj, metaForBuff);
 
@@ -11585,7 +12820,7 @@ export function performSimulationTick() {
 			let targetLandSize = 0;
 			const enemySideIndices = sides
 				.map((_, idx) => idx)
-				.filter((idx) => idx !== sideIndex);
+				.filter((idx) => areSidesHostile(sideIndex, idx));
 			enemySideIndices.forEach((idx) => {
 				sides[idx].forEach((enemy) => {
 					const s = countryStats.get(enemy.id);
@@ -11726,8 +12961,8 @@ export function performSimulationTick() {
 			idleTicks < 600 && // force re-scan after 600 idle frames to break perpetual idle loop
 			u.mopUpTargetId === 0;
 
-		const isRebelUnit =
-			activeRebellion && u.sovereignId === activeRebellion.rebelId;
+		const unitRebellion = getRebellionForUnit(u);
+		const isRebelUnit = !!unitRebellion;
 		const _isAlpen = !!u.isAlpenjager;
 
 		const kx = Math.floor((u.lng + 180) / HASH_SIZE);
@@ -11759,7 +12994,8 @@ export function performSimulationTick() {
 			if (
 				CONFIG.ENABLE_STALE_TARGET_SKIP &&
 				u._cachedTarget &&
-				u._cachedTarget.health > 0
+				u._cachedTarget.health > 0 &&
+				areSidesHostile(sideIndex, u._cachedTarget.sideIndex)
 			) {
 				const movedCell = u._cachedScanKx !== kx || u._cachedScanKy !== ky;
 				const staleScanInterval =
@@ -11855,7 +13091,7 @@ export function performSimulationTick() {
 			// ── Enemy pass: iterate each enemy side's hash cells ──
 			if (!didStaleSkip) {
 				for (let ei = 0; ei < sides.length; ei++) {
-					if (ei === sideIndex) continue;
+					if (!areSidesHostile(sideIndex, ei)) continue;
 					const eHash = unitHashBySide[ei];
 					for (let dy = -2; dy <= 2; dy++) {
 						for (let dx = -2; dx <= 2; dx++) {
@@ -12245,7 +13481,7 @@ export function performSimulationTick() {
 						const e = arr[j];
 						if (e === u) continue;
 
-						const isEnemy = e.sideIndex !== sideIndex;
+						const isEnemy = areSidesHostile(sideIndex, e.sideIndex);
 
 						let deLng = e.lng - u.lng;
 						if (deLng > 180) deLng -= 360;
@@ -12638,7 +13874,7 @@ export function performSimulationTick() {
 		const _targetAtSea =
 			target && (targetIdx === -1 || landMask[targetIdx] === 0);
 
-		const totalEnemiesCount = units.length - unitsBySide[sideIndex].length;
+		const totalEnemiesCount = hostileUnitCountsBySide[sideIndex] || 0;
 
 		const pocketContained =
 			localEnemyCount > 0 && localAllyCount > localEnemyCount * 3;
@@ -12648,7 +13884,7 @@ export function performSimulationTick() {
 		if (!target && totalEnemiesCount > 0) {
 			let bestCentroidDist = Infinity;
 			sideCentroids.forEach((centroids, idx) => {
-				const isEnemySide = idx !== sideIndex;
+				const isEnemySide = areSidesHostile(sideIndex, idx);
 				if (isEnemySide && centroids) {
 					centroids.forEach((c) => {
 						if (!c) return;
@@ -12697,7 +13933,7 @@ export function performSimulationTick() {
 		const _isOnEnemyLand =
 			!isEffectivelyMyLand &&
 			currentOwnerSideIdx !== undefined &&
-			currentOwnerSideIdx !== sideIndex;
+			areSidesHostile(sideIndex, currentOwnerSideIdx);
 
 		// Mega and Super units are immune to the automatic pushback; they ARE the pushback.
 		// BUG FIX: Units were being "pushed back" and taking skirmish damage even when attacking into enemy land.
@@ -12786,8 +14022,8 @@ export function performSimulationTick() {
 		if (shouldMopUp) {
 			// Mop-up mode: Enemy has no units or target is far and collapsed nations exist
 			let enemyId = -1;
-			const isRebel =
-				activeRebellion && u.sovereignId === activeRebellion.rebelId;
+			const rebellion = getRebellionForUnit(u);
+			const isRebel = !!rebellion;
 
 			if (isRebel) {
 				// REBELS: Target their own de jure land exclusively
@@ -12801,7 +14037,7 @@ export function performSimulationTick() {
 				enemyId = candidates[Math.floor(Math.random() * candidates.length)].id;
 			} else {
 				const possibleEnemySides = sides
-					.filter((_s, idx) => idx !== sideIndex)
+					.filter((_s, idx) => areSidesHostile(sideIndex, idx))
 					.filter((s) => s.length > 0);
 
 				if (possibleEnemySides.length > 0) {
@@ -12855,7 +14091,7 @@ export function performSimulationTick() {
 
 					let isCandidate = false;
 					if (isRebel) {
-						if (deJureAtIdx === activeRebellion.rebelId) {
+						if (deJureAtIdx === rebellion.rebelId) {
 							if (dominantSideMap[randIdx] !== u.sideIndex) isCandidate = true;
 						}
 					} else if (ownerAtIdx === targetId) {
@@ -12957,7 +14193,7 @@ export function performSimulationTick() {
 				const cOwner = c.sovereignId || c.ownerId || 0;
 				const cSide = countryToSideMap.get(cOwner);
 				if (cSide === undefined) continue;
-				const isEnemyCity = cSide !== sideIndex;
+				const isEnemyCity = areSidesHostile(sideIndex, cSide);
 				if (!isEnemyCity) continue;
 
 				let dlng = c.lng - u.lng;
@@ -13127,8 +14363,16 @@ export function performSimulationTick() {
 				) {
 					u._assignedPlanSignature = null;
 				}
-				const navalPlan = _navalPlan[u.sideIndex];
-				const supplyPlan = _navalSupplyPlan[u.sideIndex];
+				if (commandPolicy.refusesOffense && activePlan?.type !== "DEFEND") {
+					activePlan = null;
+					activePlanSignature = null;
+				}
+				const navalPlan = commandPolicy.refusesOffense
+					? null
+					: _navalPlan[u.sideIndex];
+				const supplyPlan = commandPolicy.refusesOffense
+					? null
+					: _navalSupplyPlan[u.sideIndex];
 
 				// Naval plan assignment: if this unit is close to staging coast and
 				// the naval plan needs units, recruit it
@@ -13492,6 +14736,7 @@ export function performSimulationTick() {
 					}
 					if (
 						transportPlan &&
+						!commandPolicy.refusesOffense &&
 						!shouldMopUp &&
 						!retreatVector &&
 						!isEngaged &&
@@ -13861,6 +15106,7 @@ export function performSimulationTick() {
 				// Disabled during staging phases and for DEFEND plans (they hold the line)
 				if (
 					u.frontSlot &&
+					!commandPolicy.refusesOffense &&
 					!isPlanUnit &&
 					!shouldMopUp &&
 					!retreatVector &&
@@ -13894,6 +15140,7 @@ export function performSimulationTick() {
 				// Pull towards nearby frontline — disabled when plan is driving the unit
 				if (
 					borderDir &&
+					!commandPolicy.refusesOffense &&
 					!isAtSea &&
 					!isPlanUnit &&
 					(!activePlan ||
@@ -13916,7 +15163,12 @@ export function performSimulationTick() {
 				}
 
 				// Overwhelming force: all units rush the frontline when 10x advantage
-				if (_overwhelmingForce[sideIndex] && borderDir && !isAtSea) {
+				if (
+					_overwhelmingForce[sideIndex] &&
+					borderDir &&
+					!isAtSea &&
+					!commandPolicy.refusesOffense
+				) {
 					moveDirLat = borderDir.lat;
 					moveDirLng = borderDir.lng;
 					isPlanUnit = false;
@@ -14017,7 +15269,7 @@ export function performSimulationTick() {
 					const ownerSideIdx = countryToSideMap.get(cellOwnerId);
 					if (ownerSideIdx === undefined) return false;
 					const isEnemySupport =
-						ownerSideIdx !== sideIndex &&
+						areSidesHostile(sideIndex, ownerSideIdx) &&
 						role === "OFFENSE" &&
 						sides[ownerSideIdx].find((c) => c.id === cellOwnerId)?.role ===
 							"SUPPORT";
@@ -14288,6 +15540,29 @@ export function performSimulationTick() {
 
 					if (countryObj && !countryObj.isSaturated) {
 						pushReadiness = 0.3;
+					}
+				}
+
+				if (
+					commandPolicy.returnHome &&
+					!isEngaged &&
+					localEnemyCount === 0 &&
+					u._economyHomeTarget
+				) {
+					const homeLat = u._economyHomeTarget.lat - u.lat;
+					let homeLng = u._economyHomeTarget.lng - u.lng;
+					if (homeLng > 180) homeLng -= 360;
+					else if (homeLng < -180) homeLng += 360;
+					const homeDist = Math.sqrt(homeLat * homeLat + homeLng * homeLng);
+					if (homeDist > 0.15) {
+						moveDirLat = homeLat / homeDist;
+						moveDirLng = homeLng / homeDist;
+						planSpeedMult = 0.8;
+						pushReadiness = 1;
+					} else if (commandPolicy.selfDefenseOnly) {
+						moveDirLat = 0;
+						moveDirLng = 0;
+						pushReadiness = 0;
 					}
 				}
 
@@ -14579,6 +15854,13 @@ export function performSimulationTick() {
 	// Check for individual country falls
 	for (let sIdx = 0; sIdx < sides.length; sIdx++) {
 		const side = sides[sIdx];
+		const hasActiveHostility = sides.some(
+			(other, otherIdx) =>
+				otherIdx !== sIdx &&
+				other?.length > 0 &&
+				areSidesHostile(sIdx, otherIdx),
+		);
+		if (!hasActiveHostility) continue;
 		for (let i = side.length - 1; i >= 0; i--) {
 			const country = side[i];
 
@@ -14685,14 +15967,27 @@ export function performSimulationTick() {
 	});
 
 	if (gameState === "SIMULATING") {
+		const activeHostilePairs = getActiveHostilePairs();
+		if (activeSideSet.size > 1 && activeHostilePairs.length === 0) {
+			applyTreaty("WHITE_PEACE");
+			return true;
+		}
 		if (activeSideSet.size <= 1) {
 			const winnerIdx = Array.from(activeSideSet)[0] || 0;
 			applyTreaty("FULL_CAPITULATION", winnerIdx);
 			return true;
 		}
 
-		if (effectiveSideSet.size <= 1 && activeSideSet.size > 1) {
-			const winnerIdx = Array.from(effectiveSideSet)[0] || 0;
+		const sidesInHostility = new Set(activeHostilePairs.flat());
+		const effectiveHostileSides = new Set(
+			Array.from(effectiveSideSet).filter((idx) => sidesInHostility.has(idx)),
+		);
+		if (
+			effectiveHostileSides.size <= 1 &&
+			activeHostilePairs.length > 0 &&
+			activeSideSet.size > 1
+		) {
+			const winnerIdx = Array.from(effectiveHostileSides)[0] || 0;
 			applyTreaty("FULL_CAPITULATION", winnerIdx);
 			return true;
 		}
@@ -14733,10 +16028,21 @@ export function performSimulationTick() {
 		sides[1].some((c) => units.some((u) => u.sovereignId === c.id));
 	const recentCapitulation = simFrameCount - (_lastCapitulationTick || 0) < 600;
 
-	if (!recentCapitulation && side0Pct >= 99.9 && side1HasUnits) {
+	const primarySidesHostile = sides.length === 2 && areSidesHostile(0, 1);
+	if (
+		primarySidesHostile &&
+		!recentCapitulation &&
+		side0Pct >= 99.9 &&
+		side1HasUnits
+	) {
 		applyTreaty("FULL_CAPITULATION", 0);
 		return true;
-	} else if (!recentCapitulation && side0Pct <= 0.1 && side0HasUnits) {
+	} else if (
+		primarySidesHostile &&
+		!recentCapitulation &&
+		side0Pct <= 0.1 &&
+		side0HasUnits
+	) {
 		applyTreaty("FULL_CAPITULATION", sides.length > 1 ? 1 : 0);
 		return true;
 	} else if (timeSinceTreaty > 6000 && treatyAlert.style.display === "none") {
@@ -14766,7 +16072,10 @@ export function performSimulationTick() {
 				const proposerSideIdx = Math.floor(Math.random() * sides.length);
 				if (sides[proposerSideIdx] && sides[proposerSideIdx].length > 0) {
 					const receiverSideIdx = sides.findIndex(
-						(s, i) => i !== proposerSideIdx && s.length > 0,
+						(s, i) =>
+							i !== proposerSideIdx &&
+							s.length > 0 &&
+							areSidesHostile(proposerSideIdx, i),
 					);
 					if (receiverSideIdx !== -1) {
 						const receiverLand =
@@ -14788,57 +16097,6 @@ export function performSimulationTick() {
 					}
 				}
 			}
-		}
-	}
-
-	// Rebellion victory check
-	if (activeRebellion && simFrameCount % 15 === 0) {
-		const { rebelId, startTime } = activeRebellion;
-
-		// Goliath Buff Decay: Rebels lose their initial combat bonus after ~20 seconds at 1x speed
-		if (simFrameCount - startTime > 1200) {
-			sides
-				.flat()
-				.filter(Boolean)
-				.forEach((c) => {
-					if (c.id === rebelId && c.buffState === "buff") {
-						c.buffState = "none";
-						statusText.innerText = `${c.name.toUpperCase()} REVOLUTIONARY FERVOR SUBSIDING`;
-					}
-				});
-			const meta = countryMetadata[rebelId - 1];
-			if (meta && meta.buffState === "buff") meta.buffState = "none";
-		}
-
-		let rebelDeJureCount = 0;
-		let rebelReclaimedCount = 0;
-
-		// Check if rebel has reclaimed its original borders
-		// Use a much higher density scan for this to ensure small countries (like Portugal) hit the trigger reliably.
-		// When many sides are active, we can safely sample more sparsely.
-		const optimizationFactor = getOptimizationFactor();
-		const winCheckStep = Math.max(
-			1,
-			Math.floor((deJureMap.length / 100000) * optimizationFactor),
-		);
-		const rebelSide = sides.find((s) => s.some((c) => c.id === rebelId));
-		const rebelSideIdx = rebelSide ? sides.indexOf(rebelSide) : -1;
-
-		for (let i = 0; i < deJureMap.length; i += winCheckStep) {
-			if (deJureMap[i] === rebelId) {
-				rebelDeJureCount++;
-				const isOccupiedByRebel =
-					worldControlMap[i] === rebelId || dominantSideMap[i] === rebelSideIdx;
-				if (isOccupiedByRebel) {
-					rebelReclaimedCount++;
-				}
-			}
-		}
-
-		// Robust threshold (85%) and high scan density to ensure peace triggers even with scattered islands/tiny pockets
-		if (rebelDeJureCount > 0 && rebelReclaimedCount > rebelDeJureCount * 0.85) {
-			handleRebellionPeace();
-			return true;
 		}
 	}
 
@@ -14897,6 +16155,7 @@ export function performSimulationTick() {
 			const killRadius = Math.sqrt(killRadiusSq);
 			for (let j = 0; j < units.length; j++) {
 				const victim = units[j];
+				if (!areSidesHostile(b.sideIndex, victim.sideIndex)) continue;
 				const dSq =
 					(victim.lat - b.targetLat) ** 2 + (victim.lng - b.targetLng) ** 2;
 				if (dSq < killRadiusSq) {
@@ -14928,8 +16187,8 @@ export function performSimulationTick() {
 				const launcherEntry =
 					activeSideList[Math.floor(Math.random() * activeSideList.length)];
 				const launcherSideIdx = launcherEntry.idx;
-				const enemyEntries = activeSideList.filter(
-					(x) => x.idx !== launcherSideIdx,
+				const enemyEntries = activeSideList.filter((x) =>
+					areSidesHostile(launcherSideIdx, x.idx),
 				);
 				if (enemyEntries.length > 0) {
 					const targetEntry =
@@ -15901,6 +17160,8 @@ export function capitulateCountry(country, sideIndex) {
 	if (totalCasToVictim > 0) {
 		attackerMap.forEach((loss, attackerId) => {
 			if (!activeCombatantIds.has(attackerId)) return;
+			const attackerSideIdx = ownerToSideMap.get(attackerId);
+			if (!areSidesHostile(sideIndex, attackerSideIdx)) return;
 			const share = loss / totalCasToVictim;
 			if (share >= 0.25) {
 				qualifyingAttackers.push({ sovereignId: attackerId, loss, share });
@@ -15913,7 +17174,7 @@ export function capitulateCountry(country, sideIndex) {
 	let fallbackWinnerId = 0;
 	if (qualifyingAttackers.length === 0) {
 		for (let j = 0; j < sides.length; j++) {
-			if (j !== sideIndex && sides[j].length > 0) {
+			if (areSidesHostile(sideIndex, j) && sides[j].length > 0) {
 				fallbackWinnerId = sides[j][0].id;
 				qualifyingAttackers.push({
 					sovereignId: fallbackWinnerId,
@@ -15978,7 +17239,10 @@ export function capitulateCountry(country, sideIndex) {
 			// Check if already physically occupied by an enemy
 			let occupierOnOpposingSide = false;
 			sides.forEach((s, idx) => {
-				if (idx !== sideIndex && s.some((c) => c.id === occupierId)) {
+				if (
+					areSidesHostile(sideIndex, idx) &&
+					s.some((c) => c.id === occupierId)
+				) {
 					occupierOnOpposingSide = true;
 				}
 			});
@@ -16091,19 +17355,9 @@ export function capitulateCountry(country, sideIndex) {
 		}
 	}
 
-	// Transfer GDP and population to the primary annexer
-	if (primaryAnnexerId > 0) {
-		const annexerMeta = countryMetadata[primaryAnnexerId - 1];
-		const victimMeta = countryMetadata[country.id - 1];
-		if (annexerMeta && victimMeta) {
-			// Add victim's GDP and population to annexer
-			annexerMeta.gdp = (annexerMeta.gdp || 0) + (victimMeta.gdp || 0);
-			annexerMeta.pop = (annexerMeta.pop || 0) + (victimMeta.pop || 0);
-			// Zero out victim's values so they can't be double-counted
-			victimMeta.gdp = 0;
-			victimMeta.pop = 0;
-		}
-	}
+	// Preserve the defeated nation's economic identity. The annexer receives a
+	// partial occupation yield and owes occupation costs through the war economy.
+	if (primaryAnnexerId > 0) registerOccupation(country.id, primaryAnnexerId);
 
 	// Remove the country from its alliance list
 	const cIdx = side.indexOf(country);
@@ -16142,6 +17396,7 @@ export function capitulateCountry(country, sideIndex) {
 
 export function applyTreaty(type, winnerPoleOverride = null) {
 	gameState = "WAR_OVER";
+	updateEconomyPanel();
 	playPeaceSound();
 
 	// Stop recording if active
@@ -16211,7 +17466,7 @@ export function applyTreaty(type, winnerPoleOverride = null) {
 
 	if (isTotalCapitulation) {
 		const loserNames = sides
-			.filter((s, i) => i !== winnerSideIdx && s.length > 0)
+			.filter((s, i) => areSidesHostile(winnerSideIdx, i) && s.length > 0)
 			.map((s) => s[0]?.name || "Unknown")
 			.join(", ");
 		statusText.innerText = `Victory! ${winnerName} prevails${loserNames ? ` — ${loserNames} defeated` : ""}`;
@@ -16247,7 +17502,11 @@ export function applyTreaty(type, winnerPoleOverride = null) {
 			const ownerSideIdx = countryToSideMap.get(originalOwner);
 
 			let cellNewOwner = originalOwner;
-			if (ds >= 0 && ds !== ownerSideIdx) {
+			if (
+				ds >= 0 &&
+				ownerSideIdx !== undefined &&
+				areSidesHostile(ownerSideIdx, ds)
+			) {
 				cellNewOwner =
 					occupierSideIdx !== undefined && occupierSideIdx === ds
 						? occupierId
@@ -16266,7 +17525,7 @@ export function applyTreaty(type, winnerPoleOverride = null) {
 				let newOwnerId = 0;
 				if (
 					currentSideIdx !== undefined &&
-					currentSideIdx !== winnerSideIdx &&
+					areSidesHostile(winnerSideIdx, currentSideIdx) &&
 					currentRole !== "SUPPORT"
 				) {
 					newOwnerId =
@@ -16386,70 +17645,11 @@ export function applyTreaty(type, winnerPoleOverride = null) {
 	}, 2500);
 }
 
-export function handleRebellionPeace() {
-	if (!activeRebellion) return;
-	const { rebelId, overlordId } = activeRebellion;
-
-	gameState = "WAR_OVER";
-	playPeaceSound();
-
-	// Freeze time system at war end and reflect final date in the setup inputs
-	if (gameTimeDate && timeYearInput && timeMonthInput && timeDayInput) {
-		gameTimeEnabled = false;
-		gameTimeAccumulatorMs = 0;
-		timeYearInput.value = gameTimeDate.year;
-		timeMonthInput.value = gameTimeDate.month;
-		timeDayInput.value = gameTimeDate.day;
-		if (gameDateDisplay) {
-			gameDateDisplay.textContent = formatGameDate();
-			gameDateDisplay.style.display = "block";
-		}
-	}
-
-	statusText.innerText = "Rebellion Successful: Borders Restored";
-	treatyMsg.innerText = "INDEPENDENCE RECOGNIZED";
-	document.getElementById("treaty-status").innerText =
-		"Post-colonial borders enforced";
-	treatyAlert.style.display = "block";
-
-	// Special Peace Condition:
-	// 1. Rebel gets its de jure land back.
-	// 2. Overlord gets its de jure land back (even if captured by rebel during war).
-	// 3. Any other land involved stabilized.
-
-	for (let i = 0; i < worldControlMap.length; i++) {
-		if (landMask[i] === 2) {
-			const djId = deJureMap[i];
-			if (djId === rebelId) {
-				worldControlMap[i] = rebelId;
-			} else if (djId === overlordId) {
-				worldControlMap[i] = overlordId;
-			} else {
-				// If it was some other land captured during the chaos, return to original
-				if (djId > 0) worldControlMap[i] = djId;
-			}
-
-			landMask[i] = 1;
-			clearCellInfluence(i);
-			primaryOccupierMap[i] = 0;
-		}
-	}
-
-	activeRebellion = null;
-	units = [];
-	bombs = [];
-
-	// Sync provinces back to restored de jure borders
-	generateProvinces();
-	explosions = [];
-	bases = [];
-	recalculateAllBounds();
-	influenceLayer.render();
-
-	setTimeout(() => {
-		treatyAlert.style.display = "none";
-		resetToSelection();
-	}, 3000);
+export function handleRebellionPeace(rebelId = null) {
+	const rebellion = rebelId
+		? activeRebellions.get(rebelId)
+		: activeRebellions.values().next().value;
+	if (rebellion) resolveRebellionSuccess(rebellion);
 }
 
 export function resetToSelection() {
@@ -16508,6 +17708,12 @@ export function resetToSelection() {
 	bombs = [];
 	explosions = [];
 	bases = [];
+	activeRebellions.clear();
+	occupationEconomies.clear();
+	countryEconomy.clear();
+	economyEvents.length = 0;
+	economyPayCycle = 0;
+	resetSideHostilities();
 	setSpeed(0);
 	frameAccumulator = 0;
 
@@ -16532,6 +17738,7 @@ export function resetToSelection() {
 	godBombBtn.classList.remove("active");
 	forcePeaceBtn.style.display = "none";
 	unitCountsDiv.style.display = "none";
+	updateEconomyPanel();
 }
 
 export async function resetGame() {
@@ -16844,6 +18051,73 @@ if (noPeaceCheckbox) {
 	});
 }
 
+if (warEconomyCheckbox) {
+	warEconomyCheckbox.checked = warEconomyEnabled;
+	warEconomyCheckbox.addEventListener("change", () => {
+		warEconomyEnabled = warEconomyCheckbox.checked;
+		if (
+			warEconomyEnabled &&
+			(gameState === "SIMULATING" ||
+				(godModeActive && preGodModeState === "SIMULATING"))
+		) {
+			initializeWarEconomy();
+		} else if (!warEconomyEnabled) {
+			for (const unit of units) {
+				unit._commandBand = COMMAND_BANDS.PAID;
+				unit._refusesOffense = false;
+			}
+			updateEconomyPanel();
+		}
+	});
+}
+
+if (minimizeEconomyBtn && economyPanel) {
+	minimizeEconomyBtn.addEventListener("click", () => {
+		const minimized = economyPanel.classList.toggle("minimized");
+		minimizeEconomyBtn.innerText = minimized ? "+" : "−";
+	});
+}
+
+document
+	.getElementById("economy-force-cycle-btn")
+	?.addEventListener("click", () => {
+		if (godModeActive) runWarEconomyCycle(true);
+	});
+
+if (economyPanelBody) {
+	economyPanelBody.addEventListener("click", (event) => {
+		if (!godModeActive) return;
+		const button = event.target.closest("button[data-economy-action]");
+		if (!button) return;
+		const countryId = Number(button.dataset.countryId);
+		const action = button.dataset.economyAction;
+		const state = countryEconomy.get(countryId);
+		const occupation = occupationEconomies.get(countryId);
+		if (action === "fund" && state) {
+			state.treasury += state.baseIncome * 3;
+			emitEconomyEvent(
+				`${countryMetadata[countryId - 1]?.name || "Country"}: emergency funds granted`,
+				"recovery",
+			);
+		} else if (action === "clear" && state) {
+			const previousBand = state.commandBand;
+			state.arrearsCycles = 0;
+			state.mutinyRecoveryCycles = 0;
+			state.commandBand = COMMAND_BANDS.PAID;
+			state.payrollCoverage = 1;
+			updateUnitCommandState(countryId, previousBand, state.commandBand);
+		} else if (action === "resist" && occupation) {
+			occupation.resistance = Math.min(100, occupation.resistance + 25);
+		} else if (action === "rebel" && occupation) {
+			occupation.resistance = 100;
+			occupation.cooldownUntilCycle = 0;
+			occupation.queuedAtCycle = economyPayCycle;
+			processRebellionStates();
+		}
+		updateEconomyPanel();
+	});
+}
+
 // Secret Sounds checkbox
 const useSecretSoundsCheckbox = document.getElementById(
 	"use-secret-sounds-checkbox",
@@ -16960,7 +18234,11 @@ if (quickRestartBtn) {
 		activeBattles = [];
 		_battleHash.clear();
 		capitalLostCountries = new Set();
-		activeRebellion = null;
+		activeRebellions.clear();
+		occupationEconomies.clear();
+		countryEconomy.clear();
+		economyEvents.length = 0;
+		economyPayCycle = 0;
 		countryCasualties.clear();
 		casualtyByAttacker.clear();
 		latestCountryStats.clear();
@@ -16984,6 +18262,7 @@ if (quickRestartBtn) {
 		_defenders = sides[1];
 		activeSideIndex = 0;
 		ffaMode = false;
+		resetSideHostilities();
 
 		// Reset UI back to conflict setup with no loading screen
 		gameState = "SELECTING_P1";
@@ -17053,7 +18332,7 @@ mainMenuBtn.addEventListener("click", () => {
 });
 
 startBtn.addEventListener("click", () => {
-	activeRebellion = null;
+	activeRebellions.clear();
 	startWar();
 });
 
@@ -17246,6 +18525,7 @@ godModeBtn.addEventListener("click", () => {
 		}
 		updateRestartVisibility();
 	}
+	updateEconomyPanel();
 });
 
 godBombBtn.addEventListener("click", () => {
@@ -19227,6 +20507,12 @@ export function recruitNewSideMidWar(id) {
 	};
 
 	sides.push([newCountry]);
+	ensureSideIdentities();
+	for (let otherIdx = 0; otherIdx < newSideIdx; otherIdx++) {
+		if (!sides[otherIdx]?.length) continue;
+		hostileSidePairs.add(sidePairKey(sideUids[newSideIdx], sideUids[otherIdx]));
+	}
+	rebuildHostilityMatrix();
 	activeSideIndex = newSideIdx;
 	activateCountryMidWar(newCountry, newSideIdx);
 
@@ -20802,7 +22088,12 @@ export function resetConflictSetupState() {
 	activeBattles = [];
 	_battleHash.clear();
 	capitalLostCountries = new Set();
-	activeRebellion = null;
+	activeRebellions.clear();
+	occupationEconomies.clear();
+	countryEconomy.clear();
+	economyEvents.length = 0;
+	economyPayCycle = 0;
+	resetSideHostilities();
 	countryCasualties.clear();
 	casualtyByAttacker.clear();
 	latestCountryStats.clear();

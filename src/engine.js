@@ -3,6 +3,7 @@ import {
 	_cachedFrontierCells,
 	_frontierScanCounter,
 	_frontlinePolys,
+	areSidesHostile,
 	dominantSideMap,
 	frontlineDirLat,
 	frontlineDirLng,
@@ -88,7 +89,7 @@ function isMyTerritory(idx, sideIndex) {
 
 function isEnemyTerritory(idx, sideIndex) {
 	const ds = dominantSideMap[idx];
-	return ds >= 0 && ds !== sideIndex;
+	return ds >= 0 && areSidesHostile(sideIndex, ds);
 }
 
 function myInfluenceAt(idx, sideIndex) {
@@ -138,19 +139,19 @@ function rebuildFrontlineField() {
 			let isFront = false;
 			if (i % gridWidth < gridWidth - 1) {
 				const ns = dominantSideMap[i + 1];
-				if (ns >= 0 && ns !== mySide) isFront = true;
+				if (ns >= 0 && areSidesHostile(mySide, ns)) isFront = true;
 			}
 			if (!isFront && i % gridWidth > 0) {
 				const ns = dominantSideMap[i - 1];
-				if (ns >= 0 && ns !== mySide) isFront = true;
+				if (ns >= 0 && areSidesHostile(mySide, ns)) isFront = true;
 			}
 			if (!isFront && i + gridWidth < total) {
 				const ns = dominantSideMap[i + gridWidth];
-				if (ns >= 0 && ns !== mySide) isFront = true;
+				if (ns >= 0 && areSidesHostile(mySide, ns)) isFront = true;
 			}
 			if (!isFront && i - gridWidth >= 0) {
 				const ns = dominantSideMap[i - gridWidth];
-				if (ns >= 0 && ns !== mySide) isFront = true;
+				if (ns >= 0 && areSidesHostile(mySide, ns)) isFront = true;
 			}
 			if (isFront) {
 				_cachedFrontierCells.push(i);
@@ -219,7 +220,7 @@ function computeFrontlinePolys() {
 			if (nb < 0 || nb >= total) continue;
 			if (landMask[nb] !== 2) continue;
 			const nds = dominantSideMap[nb];
-			if (nds < 0 || nds === ds) continue;
+			if (nds < 0 || !areSidesHostile(ds, nds)) continue;
 
 			// Normalize pair key (lower side first)
 			const key = ds < nds ? `${ds}_${nds}` : `${nds}_${ds}`;

@@ -109,6 +109,7 @@ import {
 	setRefScale,
 	setSelectedImportCountryId,
 	setupPanel,
+	setWarEconomyEnabled,
 	sides,
 	skipRandomGenBtn,
 	spawnRandomNationsAcrossMap,
@@ -119,6 +120,7 @@ import {
 	updateRefHandles,
 	updateRestartVisibility,
 	updateSidesUI,
+	warEconomyEnabled,
 	worldControlMap,
 	worldHeightDeg,
 	worldWidthDeg,
@@ -963,6 +965,8 @@ function generatePresetData(name) {
 			buffState: m.buffState || "none",
 			hiddenBuffState: m.hiddenBuffState || "none",
 			allies: Array.isArray(m.allies) ? m.allies : [],
+			gdp: Number.isFinite(m.gdp) ? m.gdp : 0,
+			pop: Number.isFinite(m.pop) ? m.pop : 0,
 		}));
 
 	// Persist city data (custom + any edited capitals)
@@ -992,6 +996,7 @@ function generatePresetData(name) {
 		worldWidthDeg: worldWidthDeg,
 		worldHeightDeg: worldHeightDeg,
 		missilesEnabled: missilesEnabled,
+		warEconomyEnabled: warEconomyEnabled,
 		// Reference image persistence
 		referenceImageUrl: referenceImageUrl || null,
 		refImageOpacity: typeof refOpacity === "number" ? refOpacity : 0.5,
@@ -1097,6 +1102,7 @@ async function performPresetLoad(fileOrBlob, targetMode = "EDITOR") {
 			disableBombsCheckbox.checked = !missilesEnabled;
 		}
 		setBombsDisabled(disableBombsCheckbox?.checked || !missilesEnabled);
+		setWarEconomyEnabled(data.warEconomyEnabled !== false);
 
 		// Restore Custom Overlays
 		if (data.customSatelliteUrl) {
