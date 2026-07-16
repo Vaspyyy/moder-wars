@@ -9072,6 +9072,7 @@ export function generateAllProposals(sideIdx) {
 			if (enemyCount >= 2 && friendlyCount >= enemyCount * 3) {
 				// Water check: verify friendly units can reach the encirclement target by land
 				let crossesWater = false;
+				let stagingPoint = null;
 				if (friendlyCount > 0) {
 					let fLat = 0,
 						fLng = 0;
@@ -9089,6 +9090,7 @@ export function generateAllProposals(sideIdx) {
 					if (friendlyCount > 0) {
 						fLat /= friendlyCount;
 						fLng /= friendlyCount;
+						stagingPoint = { lat: fLat, lng: fLng };
 						const ddLat = cell.lat - fLat;
 						let ddLng = cell.lng - fLng;
 						if (ddLng > 180) ddLng -= 360;
@@ -9118,9 +9120,10 @@ export function generateAllProposals(sideIdx) {
 					},
 					stagingCells: [],
 					arrowPoints: [
-						{ lat: cell.lat, lng: cell.lng },
+						stagingPoint || { lat: cell.lat, lng: cell.lng },
 						{ lat: cell.lat, lng: cell.lng },
 					],
+					stagingPoint,
 					estimatedForceNeeded: Math.ceil(unitCount * 0.3),
 					theaterId: key,
 					frontIntel: frontIntel.find((f) => f.pairKey === key) || null,
@@ -15477,7 +15480,8 @@ export function performSimulationTick() {
 										const pd = Math.sqrt(pdLat * pdLat + pdLng * pdLng);
 
 										if (activePlan.type === "ENCIRCLE") {
-											const role = u.id % 3;
+											const unitSeed = Math.floor(Math.abs(u.id * 1_000_000));
+											const role = unitSeed % 3;
 											if (role === 0) {
 												// Pin: hold position, minimal advance
 												if (pd > 0.01) {
@@ -15486,14 +15490,64 @@ export function performSimulationTick() {
 												}
 												planSpeedMult = 0.4;
 											} else {
-												// Flank: curve around pocket at breakthrough speed
-												const flankAngle = role === 1 ? -70 : 70;
-												const rad = (flankAngle * Math.PI) / 180;
-												if (pd > 0.01) {
-													const nx = pdLat / pd,
-														ny = pdLng / pd;
-													planDirLat = nx * Math.cos(rad) - ny * Math.sin(rad);
-													planDirLng = nx * Math.sin(rad) + ny * Math.cos(rad);
+												// Flank through a fixed waypoint. Continuously rotating the
+												// target vector makes units orbit the pocket instead of closing it.
+												const approach =
+													activePlan.stagingPoint ||
+													activePlan.arrowPoints?.[0];
+												let approachLat =
+													activePlan.target.lat - (approach?.lat ?? u.lat);
+												let approachLng =
+													activePlan.target.lng - (approach?.lng ?? u.lng);
+												if (approachLng > 180) approachLng -= 360;
+												else if (approachLng < -180) approachLng += 360;
+												let approachDist = Math.sqrt(
+													approachLat * approachLat + approachLng * approachLng,
+												);
+												if (approachDist <= 0.01 && pd > 0.01) {
+													if (
+														Number.isFinite(activePlan._encircleApproachLat) &&
+														Number.isFinite(activePlan._encircleApproachLng)
+													) {
+														approachLat = activePlan._encircleApproachLat;
+														approachLng = activePlan._encircleApproachLng;
+														approachDist = 1;
+													} else {
+														approachLat = pdLat / pd;
+														approachLng = pdLng / pd;
+														approachDist = 1;
+														activePlan._encircleApproachLat = approachLat;
+														activePlan._encircleApproachLng = approachLng;
+													}
+												}
+												if (approachDist > 0.01) {
+													const forwardLat = approachLat / approachDist;
+													const forwardLng = approachLng / approachDist;
+													const flankSide = role === 1 ? -1 : 1;
+													const lane = (Math.floor(unitSeed / 3) % 7) - 3;
+													const flankRadius = 0.8 + lane * 0.06;
+													const flankLat =
+														activePlan.target.lat -
+														forwardLng * flankSide * flankRadius +
+														forwardLat * 0.2;
+													const flankLng =
+														activePlan.target.lng +
+														forwardLat * flankSide * flankRadius +
+														forwardLng * 0.2;
+													const fdLat = flankLat - u.lat;
+													let fdLng = flankLng - u.lng;
+													if (fdLng > 180) fdLng -= 360;
+													else if (fdLng < -180) fdLng += 360;
+													const flankDist = Math.sqrt(
+														fdLat * fdLat + fdLng * fdLng,
+													);
+													if (flankDist > 0.3) {
+														planDirLat = fdLat / flankDist;
+														planDirLng = fdLng / flankDist;
+													} else if (pd > 0.01) {
+														planDirLat = pdLat / pd;
+														planDirLng = pdLng / pd;
+													}
 												}
 												planSpeedMult = 2.0;
 											}
