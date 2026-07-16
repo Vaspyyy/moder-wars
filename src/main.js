@@ -6,6 +6,8 @@ import {
 	COMMAND_BANDS,
 	commandRefusalShare,
 	computeCurrentIncome,
+	computeOccupationGarrisonPriority,
+	computeRequiredGarrison,
 	createEconomyState,
 	createHostilityMatrix,
 	desertionRate,
@@ -1968,6 +1970,8 @@ function clearUnitCommandAssignments(unit) {
 	unit.supplyAssigned = false;
 	unit.coastalAssigned = false;
 	unit.garrisonAssigned = false;
+	unit._occupationGarrisonVictimId = null;
+	unit._occupationGarrisonPointIndex = null;
 	unit.frontSlot = null;
 	unit._defenderReactTarget = null;
 }
@@ -2117,6 +2121,7 @@ export const _navalSupplyPlan = []; // per-side naval supply run plan (1 per sid
 export const _transportPlan = []; // per-side transport plan (1 per side max)
 export const _coastalDefensePlan = []; // per-side coastal defense passive overlay
 export const _neutralGarrisonPlan = []; // per-side neutral border garrison plans
+export const _occupationGarrisonPlans = new Map(); // victimId -> occupation suppression plan
 export const _defenderReactionPlan = []; // per-side emergency DEFEND at enemy naval beachhead
 export let _frontIntelBySide = []; // per-side tactical front/theater summaries
 export const _aiPlanMemory = new Map(); // key: side:type:target -> recent plan outcome data
@@ -2136,6 +2141,7 @@ export const WAR_PLAN_TYPES = [
 	"NAVAL_SUPPLY",
 	"COASTAL_DEFENSE",
 	"NEUTRAL_GARRISON",
+	"OCCUPATION_GARRISON",
 	"TRANSPORT",
 ];
 export const WAR_PLAN_PHASES = [
@@ -5722,9 +5728,12 @@ export function updateEconomyPanel() {
 			const godActions = godModeActive
 				? `<div class="economy-god-actions"><button data-economy-action="resist" data-country-id="${record.victimId}">+25 RES</button><button data-economy-action="rebel" data-country-id="${record.victimId}">REVOLT</button></div>`
 				: "";
+			const requiredGarrison =
+				record.requiredGarrison ||
+				computeRequiredGarrison(record.expectedArmyUnits || 0);
 			return `<div class="economy-row occupation-row">
 				<div class="economy-row-heading"><span>${escapeHtml(victim?.name || `Country ${record.victimId}`)}</span><span>${Math.round(record.resistance)}% RES</span></div>
-				<div class="economy-metrics"><span>${escapeHtml(annexer?.name || "Unknown")} occupation</span><span>COST ${formatBudget(record.baseIncome * ECONOMY_CONFIG.OCCUPATION_COST_SHARE * (record.heldRatio || 0))}</span><span>GARR ${Math.round((record.garrisonCoverage || 0) * 100)}%</span><span>FUND ${Math.round((record.occupationCoverage || 0) * 100)}%</span></div>
+				<div class="economy-metrics"><span>${escapeHtml(annexer?.name || "Unknown")} occupation</span><span>COST ${formatBudget(record.baseIncome * ECONOMY_CONFIG.OCCUPATION_COST_SHARE * (record.heldRatio || 0))}</span><span>GARR ${Math.round((record.garrisonCoverage || 0) * 100)}%</span><span>ORD ${record.garrisonAssignedCount || 0}/${requiredGarrison}</span><span>FUND ${Math.round((record.occupationCoverage || 0) * 100)}%</span></div>
 				${godActions}
 			</div>`;
 		});
@@ -6076,6 +6085,8 @@ function launchRebellion(record) {
 	countryEconomy.set(record.victimId, state);
 	record.active = true;
 	record.queued = false;
+	_occupationGarrisonPlans.delete(record.victimId);
+	clearOccupationGarrisonAssignments(record.victimId);
 	const rebellion = {
 		rebelId: record.victimId,
 		annexerId: record.annexerId,
@@ -6131,6 +6142,8 @@ function resolveRebellionSuccess(rebellion) {
 	}
 	activeRebellions.delete(rebellion.rebelId);
 	occupationEconomies.delete(rebellion.rebelId);
+	_occupationGarrisonPlans.delete(rebellion.rebelId);
+	clearOccupationGarrisonAssignments(rebellion.rebelId);
 	emitEconomyEvent(
 		`${meta?.name || "Rebels"}: independence restored`,
 		"recovery",
@@ -6181,6 +6194,7 @@ function resolveRebellionFailure(rebellion) {
 	record.resistance = 40;
 	record.cooldownUntilCycle = economyPayCycle + 10;
 	activeRebellions.delete(rebellion.rebelId);
+	if (annexerSideIdx >= 0) _planReassessNeeded[annexerSideIdx] = true;
 	emitEconomyEvent(`${meta?.name || "Rebels"}: rebellion defeated`, "warning");
 	generateProvinces();
 	recalculateAllBounds();
@@ -6259,6 +6273,8 @@ function restoreCountryPeacefully(record) {
 		state.commandBand = COMMAND_BANDS.PAID;
 	}
 	occupationEconomies.delete(record.victimId);
+	_occupationGarrisonPlans.delete(record.victimId);
+	clearOccupationGarrisonAssignments(record.victimId);
 	emitEconomyEvent(`${country.name}: occupation ended`, "recovery");
 	generateProvinces();
 	updateSidesUI();
@@ -6301,8 +6317,13 @@ function ensureOccupationControllers() {
 		if (nextAnnexer > 0) {
 			const previousAnnexerSide = findCountrySideIndex(record.annexerId);
 			record.annexerId = nextAnnexer;
+			const nextAnnexerSide = findCountrySideIndex(nextAnnexer);
+			_occupationGarrisonPlans.delete(record.victimId);
+			clearOccupationGarrisonAssignments(record.victimId);
+			if (nextAnnexerSide >= 0) {
+				_planReassessNeeded[nextAnnexerSide] = true;
+			}
 			if (rebellion) {
-				const nextAnnexerSide = findCountrySideIndex(nextAnnexer);
 				if (previousAnnexerSide >= 0) {
 					setSidesHostile(rebellion.rebelSideIdx, previousAnnexerSide, false);
 				}
@@ -6320,13 +6341,65 @@ function ensureOccupationControllers() {
 	}
 }
 
+function buildOccupationGarrisonPoints(
+	victimId,
+	coreCellIndices,
+	annexerSideIdx,
+	desiredCount,
+) {
+	const points = [];
+	const seen = new Set();
+	const addPoint = (lat, lng) => {
+		const idx = getGridIndex(lat, lng);
+		if (
+			idx === -1 ||
+			seen.has(idx) ||
+			deJureMap[idx] !== victimId ||
+			landMask[idx] === 0
+		)
+			return;
+		seen.add(idx);
+		points.push({ lat, lng, idx });
+	};
+
+	const victimCities = cities
+		.filter((city) => (city.ownerId || city.sovereignId) === victimId)
+		.sort((a, b) => Number(b.isCapital) - Number(a.isCapital));
+	for (const city of victimCities) addPoint(city.lat, city.lng);
+
+	const controlledCells = coreCellIndices.filter(
+		(idx) => dominantSideMap[idx] === annexerSideIdx,
+	);
+	const candidates = controlledCells.length ? controlledCells : coreCellIndices;
+	const targetCount = Math.max(3, Math.min(24, desiredCount || 3));
+	const remaining = Math.max(0, targetCount - points.length);
+	for (let i = 0; i < remaining && candidates.length > 0; i++) {
+		const sampleAt = Math.min(
+			candidates.length - 1,
+			Math.floor(((i + 0.5) * candidates.length) / Math.max(1, remaining)),
+		);
+		const idx = candidates[sampleAt];
+		const y = Math.floor(idx / gridWidth);
+		const x = idx % gridWidth;
+		addPoint(
+			y * CONFIG.GRID_RES - 90 + CONFIG.GRID_RES * 0.5,
+			x * CONFIG.GRID_RES - 180 + CONFIG.GRID_RES * 0.5,
+		);
+	}
+	return points.slice(0, targetCount);
+}
+
 export function registerOccupation(victimId, annexerId) {
 	if (!warEconomyEnabled || victimId <= 0 || annexerId <= 0) return null;
 	const meta = countryMetadata[victimId - 1] || {};
 	let state = countryEconomy.get(victimId);
 	let coreCells = 0;
+	const coreCellIndices = [];
 	for (let i = 0; i < deJureMap.length; i++) {
-		if (deJureMap[i] === victimId && landMask[i] > 0) coreCells++;
+		if (deJureMap[i] === victimId && landMask[i] > 0) {
+			coreCells++;
+			coreCellIndices.push(i);
+		}
 	}
 	const initialCityPop = cities
 		.filter((city) => (city.ownerId || city.sovereignId) === victimId)
@@ -6343,6 +6416,13 @@ export function registerOccupation(victimId, annexerId) {
 		countryEconomy.set(victimId, state);
 	}
 	state.capitulated = true;
+	const requiredGarrison = computeRequiredGarrison(
+		Math.max(
+			3,
+			state.expectedArmyUnits || estimateTerritoryArmyUnits(coreCells),
+		),
+	);
+	const annexerSideIdx = findCountrySideIndex(annexerId);
 	const record = {
 		victimId,
 		annexerId,
@@ -6356,6 +6436,14 @@ export function registerOccupation(victimId, annexerId) {
 		resistance: 0,
 		occupationCoverage: 1,
 		garrisonCoverage: 0,
+		garrisonAssignedCount: 0,
+		requiredGarrison,
+		garrisonPoints: buildOccupationGarrisonPoints(
+			victimId,
+			coreCellIndices,
+			annexerSideIdx,
+			requiredGarrison,
+		),
 		heldRatio: 1,
 		active: false,
 		queued: false,
@@ -6363,6 +6451,7 @@ export function registerOccupation(victimId, annexerId) {
 		cooldownUntilCycle: 0,
 	};
 	occupationEconomies.set(victimId, record);
+	if (annexerSideIdx >= 0) _planReassessNeeded[annexerSideIdx] = true;
 	return record;
 }
 
@@ -6440,10 +6529,10 @@ export function runWarEconomyCycle(force = false) {
 				if (idx !== -1 && deJureMap[idx] === record.victimId) garrisonUnits++;
 			}
 		}
-		const requiredGarrison = Math.max(
-			3,
-			Math.ceil(record.expectedArmyUnits * 0.15),
-		);
+		const requiredGarrison =
+			record.requiredGarrison ||
+			computeRequiredGarrison(record.expectedArmyUnits || 0);
+		record.requiredGarrison = requiredGarrison;
 		record.garrisonCoverage = Math.min(1, garrisonUnits / requiredGarrison);
 		const due =
 			record.baseIncome *
@@ -6560,6 +6649,17 @@ window.economyDebugReport = (countryId = null) => {
 		payCycle: economyPayCycle,
 		countries,
 		occupations,
+		occupationGarrisons: Array.from(_occupationGarrisonPlans.values()).map(
+			(plan) => ({
+				victimId: plan.victimId,
+				annexerId: plan.annexerId,
+				sideIdx: plan.sideIdx,
+				requiredGarrison: plan.requiredGarrison,
+				assignedUnitIds: [...(plan.assignedUnitIds || [])],
+				priority: plan.priority,
+				resistance: plan.resistance,
+			}),
+		),
 		rebellions: Array.from(activeRebellions.values()).map((state) => ({
 			...state,
 		})),
@@ -6721,6 +6821,8 @@ export async function _startWarInner() {
 	warEconomyEnabled = warEconomyCheckbox?.checked !== false;
 	countryEconomy.clear();
 	occupationEconomies.clear();
+	clearOccupationGarrisonAssignments();
+	_occupationGarrisonPlans.clear();
 	activeRebellions.clear();
 	economyEvents.length = 0;
 	economyPayCycle = 0;
@@ -7988,6 +8090,10 @@ export function assignFrontlineSlots() {
 	for (let ui = 0; ui < units.length; ui++) {
 		const u = units[ui];
 		if (u.deployTicks > 0) continue;
+		if (u._occupationGarrisonVictimId != null) {
+			u.frontSlot = null;
+			continue;
+		}
 		const si = u.sideIndex;
 		const fronts = sideFronts[si] || [];
 		if (fronts.length > 0) sideUnits[si].push(u);
@@ -8502,7 +8608,8 @@ function getPlanSignature(sideIdx, planLike) {
 	const target = planLike?.target;
 	const lat = target ? Math.round(target.lat * 2) / 2 : 0;
 	const lng = target ? Math.round(target.lng * 2) / 2 : 0;
-	return `${sideIdx}:${planLike?.type || "UNKNOWN"}:${lat}:${lng}`;
+	const identity = planLike?.victimId != null ? `:${planLike.victimId}` : "";
+	return `${sideIdx}:${planLike?.type || "UNKNOWN"}${identity}:${lat}:${lng}`;
 }
 
 function getProposalMemory(sideIdx, proposal) {
@@ -8579,6 +8686,54 @@ function applyPlanProgressMemory(sideIdx, plan) {
 	plan.progress = Math.max(plan.progress || 0, signal);
 }
 
+function buildOccupationGarrisonProposals(sideIdx) {
+	const proposals = [];
+	for (const record of occupationEconomies.values()) {
+		if (record.active || (record.heldRatio || 0) <= 0) continue;
+		if (findCountrySideIndex(record.annexerId) !== sideIdx) continue;
+		const garrisonPoints = (record.garrisonPoints || []).filter((point) => {
+			const idx = point.idx ?? getGridIndex(point.lat, point.lng);
+			return (
+				idx !== -1 && landMask[idx] > 0 && deJureMap[idx] === record.victimId
+			);
+		});
+		if (garrisonPoints.length === 0) continue;
+		const requiredGarrison =
+			record.requiredGarrison ||
+			computeRequiredGarrison(record.expectedArmyUnits || 0);
+		const currentlyPresent = Math.min(
+			requiredGarrison,
+			Math.round((record.garrisonCoverage || 0) * requiredGarrison),
+		);
+		const garrisonDeficit = Math.max(0, requiredGarrison - currentlyPresent);
+		const victim = countryMetadata[record.victimId - 1];
+		proposals.push({
+			type: "OCCUPATION_GARRISON",
+			target: {
+				lat: garrisonPoints[0].lat,
+				lng: garrisonPoints[0].lng,
+				name: `${victim?.name || `Country ${record.victimId}`} occupation`,
+			},
+			victimId: record.victimId,
+			annexerId: record.annexerId,
+			garrisonPoints,
+			requiredGarrison,
+			garrisonDeficit,
+			garrisonCoverage: record.garrisonCoverage || 0,
+			resistance: record.resistance || 0,
+			heldRatio: record.heldRatio || 0,
+			estimatedForceNeeded: requiredGarrison,
+			geographicData: {
+				frontlineDistSq: 0,
+				reachesTarget: true,
+				minSeaDist: Infinity,
+				minLandDist: 0,
+			},
+		});
+	}
+	return proposals;
+}
+
 /**
  * Proposal Engine: generate every possible plan candidate for a side.
  * Returns an array of lightweight proposal objects — no plan objects created yet.
@@ -8592,6 +8747,7 @@ export function generateAllProposals(sideIdx) {
 
 	const sideUnits = _tickUnitsBySide[sideIdx] || [];
 	const unitCount = sideUnits.filter((u) => u.deployTicks === 0).length;
+	proposals.push(...buildOccupationGarrisonProposals(sideIdx));
 	if (unitCount < 3) return proposals;
 
 	const myAllyIds = new Set(sideCountries.map((c) => c.id));
@@ -9650,6 +9806,21 @@ export function generateAllProposals(sideIdx) {
 export function scoreProposal(proposal, sideIdx) {
 	const strategyProfile = getSideStrategyProfile(sideIdx);
 	const strategy = strategyProfile.dominant;
+	if (proposal.type === "OCCUPATION_GARRISON") {
+		const score = computeOccupationGarrisonPriority({
+			resistance: proposal.resistance,
+			garrisonCoverage: proposal.garrisonCoverage,
+			heldRatio: proposal.heldRatio,
+			requiredGarrison: proposal.requiredGarrison,
+		});
+		proposal.scoreBreakdown = {
+			strategy,
+			garrisonDeficit: proposal.garrisonDeficit,
+			garrisonCoverage: proposal.garrisonCoverage,
+			resistance: proposal.resistance,
+		};
+		return Math.round(score * 100) / 100;
+	}
 	const sideUnits = _tickUnitsBySide[sideIdx] || [];
 	const unitCount = sideUnits.filter((u) => u.deployTicks === 0).length;
 	const enemyUnitCount = units.filter(
@@ -9845,7 +10016,7 @@ export function scoreProposal(proposal, sideIdx) {
  * create actual war plan objects. Returns array of created plan entries.
  * @param {number} sideIdx
  * @param {Array<Object>} scoredProposals - proposals with priority scores
- * @returns {Object} { land1, land2, naval, supply, defend, coastal, garrisons }
+ * @returns {Object} Selected offensive, defensive, naval, and garrison plans.
  */
 export function selectPlans(sideIdx, scoredProposals) {
 	if (!scoredProposals || scoredProposals.length === 0) return {};
@@ -9907,6 +10078,9 @@ export function selectPlans(sideIdx, scoredProposals) {
 	);
 	const garrisons = sorted.filter(
 		(p) => p.type === "NEUTRAL_GARRISON" && (p.priority || 0) > 0,
+	);
+	const occupationGarrisons = sorted.filter(
+		(p) => p.type === "OCCUPATION_GARRISON" && (p.priority || 0) > 0,
 	);
 	const transports = sorted.filter(
 		(p) => p.type === "TRANSPORT" && (p.priority || 0) > 0,
@@ -9977,6 +10151,8 @@ export function selectPlans(sideIdx, scoredProposals) {
 
 	// ── Neutral garrisons ──
 	const selectedGarr = garrisons;
+	// ── Occupation garrisons ──
+	const selectedOccupationGarr = occupationGarrisons;
 
 	// ── Force allocation ──
 	const selectedOff = [land1, land2, naval1, supply1].filter(Boolean);
@@ -10032,6 +10208,9 @@ export function selectPlans(sideIdx, scoredProposals) {
 	for (const p of selectedDef) {
 		if (p.allocatedForce < 3) p.allocatedForce = Math.min(3, defensiveForce);
 	}
+	for (const p of selectedOccupationGarr) {
+		p.allocatedForce = Math.max(1, p.requiredGarrison || 3);
+	}
 
 	// ── Convert to plan objects ──
 	const makePlan = (p, phase) => {
@@ -10050,6 +10229,13 @@ export function selectPlans(sideIdx, scoredProposals) {
 					? _neutralBorderPolys[p.combatantCountryId] || null
 					: null,
 			neutralCountryId: p.neutralCountryId || null,
+			victimId: p.victimId || null,
+			annexerId: p.annexerId || null,
+			garrisonPoints: p.garrisonPoints || null,
+			requiredGarrison: p.requiredGarrison || null,
+			garrisonDeficit: p.garrisonDeficit || 0,
+			garrisonCoverage: p.garrisonCoverage || 0,
+			resistance: p.resistance || 0,
 			startedTick: simFrameCount,
 			lastProgressTick: simFrameCount,
 			progress: 0,
@@ -10081,9 +10267,199 @@ export function selectPlans(sideIdx, scoredProposals) {
 	if (defend1) result.defend = makePlan(defend1, "EXECUTION");
 	result.coastal = selectedCoastal.map((p) => makePlan(p, "EXECUTION"));
 	result.garrisons = selectedGarr.map((p) => makePlan(p, "EXECUTION"));
+	result.occupationGarrisons = selectedOccupationGarr.map((p) =>
+		makePlan(p, "EXECUTION"),
+	);
 	if (transports[0]) result.transport = makePlan(transports[0], "EXECUTION");
 
 	return result;
+}
+
+function clearOccupationGarrisonAssignments(victimId = null) {
+	if (victimId == null) {
+		for (const record of occupationEconomies.values()) {
+			record.garrisonAssignedCount = 0;
+		}
+	} else {
+		const record = occupationEconomies.get(Number(victimId));
+		if (record) record.garrisonAssignedCount = 0;
+	}
+	for (const unit of units) {
+		if (
+			victimId == null ||
+			unit._occupationGarrisonVictimId === Number(victimId)
+		) {
+			unit._occupationGarrisonVictimId = null;
+			unit._occupationGarrisonPointIndex = null;
+		}
+	}
+}
+
+function reconcileOccupationGarrisonPlans(sideIdx, selectedPlans = []) {
+	const selectedVictims = new Set(
+		selectedPlans.map((plan) => Number(plan.victimId)),
+	);
+	for (const [victimId, plan] of _occupationGarrisonPlans) {
+		if (plan.sideIdx !== sideIdx || selectedVictims.has(victimId)) continue;
+		_occupationGarrisonPlans.delete(victimId);
+		clearOccupationGarrisonAssignments(victimId);
+	}
+	for (const selected of selectedPlans) {
+		const victimId = Number(selected.victimId);
+		const existing = _occupationGarrisonPlans.get(victimId);
+		const samePlan =
+			existing &&
+			existing.sideIdx === sideIdx &&
+			existing.signature === selected.signature;
+		_occupationGarrisonPlans.set(victimId, {
+			...(samePlan ? existing : {}),
+			...selected,
+			sideIdx,
+			startedTick: samePlan ? existing.startedTick : selected.startedTick,
+			activeUnitCount: 0,
+			assignedUnitIds: samePlan ? existing.assignedUnitIds || [] : [],
+		});
+	}
+}
+
+export function syncOccupationGarrisonAssignments(sideIdx = null) {
+	for (const [victimId, plan] of Array.from(_occupationGarrisonPlans)) {
+		const record = occupationEconomies.get(victimId);
+		const controllerSide = record ? findCountrySideIndex(record.annexerId) : -1;
+		if (
+			!record ||
+			record.active ||
+			(record.heldRatio || 0) <= 0 ||
+			controllerSide !== plan.sideIdx
+		) {
+			_occupationGarrisonPlans.delete(victimId);
+			clearOccupationGarrisonAssignments(victimId);
+			if (record && !record.active && controllerSide >= 0) {
+				_planReassessNeeded[controllerSide] = true;
+			}
+		}
+	}
+
+	const sideIndices =
+		sideIdx == null
+			? [
+					...new Set(
+						Array.from(_occupationGarrisonPlans.values()).map(
+							(plan) => plan.sideIdx,
+						),
+					),
+				]
+			: [sideIdx];
+	for (const currentSideIdx of sideIndices) {
+		const sidePlans = Array.from(_occupationGarrisonPlans.values())
+			.filter((plan) => plan.sideIdx === currentSideIdx)
+			.sort(
+				(a, b) =>
+					(b.priority || 0) - (a.priority || 0) ||
+					(b.resistance || 0) - (a.resistance || 0) ||
+					(a.victimId || 0) - (b.victimId || 0),
+			);
+		const sideUnits = units.filter(
+			(unit) => unit.sideIndex === currentSideIdx && unit.health > 0,
+		);
+		const previousVictim = new Map();
+		const previousPoint = new Map();
+		for (const unit of sideUnits) {
+			previousVictim.set(unit, unit._occupationGarrisonVictimId ?? null);
+			previousPoint.set(unit, unit._occupationGarrisonPointIndex ?? null);
+			unit._occupationGarrisonVictimId = null;
+			unit._occupationGarrisonPointIndex = null;
+		}
+		const eligibleUnits = sideUnits.filter((unit) => {
+			if (unit.deployTicks > 0 || getRebellionForUnit(unit)) return false;
+			if (getUnitCommandPolicy(unit).returnHome) return false;
+			return !(
+				unit.navalAssigned ||
+				unit.supplyAssigned ||
+				unit.coastalAssigned ||
+				unit.isTransport ||
+				unit._defenderReactTarget
+			);
+		});
+		const usedUnits = new Set();
+		for (const plan of sidePlans) {
+			const points = plan.garrisonPoints || [];
+			const desired = Math.max(1, plan.requiredGarrison || 3);
+			const distanceToPlan = (unit) => {
+				let best = Infinity;
+				for (const point of points) {
+					best = Math.min(
+						best,
+						geoDistSq(unit.lat, unit.lng, point.lat, point.lng),
+					);
+				}
+				return Number.isFinite(best)
+					? best
+					: geoDistSq(
+							unit.lat,
+							unit.lng,
+							plan.target?.lat || 0,
+							plan.target?.lng || 0,
+						);
+			};
+			const candidates = eligibleUnits
+				.filter((unit) => !usedUnits.has(unit))
+				.sort((a, b) => {
+					const stickyA = previousVictim.get(a) === plan.victimId ? -100000 : 0;
+					const stickyB = previousVictim.get(b) === plan.victimId ? -100000 : 0;
+					const neutralPenaltyA = a.garrisonAssigned ? 25 : 0;
+					const neutralPenaltyB = b.garrisonAssigned ? 25 : 0;
+					return (
+						stickyA +
+							neutralPenaltyA +
+							distanceToPlan(a) -
+							(stickyB + neutralPenaltyB + distanceToPlan(b)) ||
+						(a.id || 0) - (b.id || 0)
+					);
+				});
+			const assigned = candidates.slice(0, desired);
+			const pointLoads = new Array(Math.max(1, points.length)).fill(0);
+			for (const unit of assigned) {
+				usedUnits.add(unit);
+				let pointIndex = 0;
+				const oldPoint = previousPoint.get(unit);
+				if (
+					previousVictim.get(unit) === plan.victimId &&
+					Number.isInteger(oldPoint) &&
+					oldPoint >= 0 &&
+					oldPoint < points.length
+				) {
+					pointIndex = oldPoint;
+				} else if (points.length > 0) {
+					let bestScore = Infinity;
+					for (let pi = 0; pi < points.length; pi++) {
+						const point = points[pi];
+						const score =
+							geoDistSq(unit.lat, unit.lng, point.lat, point.lng) +
+							pointLoads[pi] * 25;
+						if (score < bestScore) {
+							bestScore = score;
+							pointIndex = pi;
+						}
+					}
+				}
+				pointLoads[pointIndex]++;
+				unit._occupationGarrisonVictimId = plan.victimId;
+				unit._occupationGarrisonPointIndex = pointIndex;
+				unit._assignedPlanSignature = null;
+				unit._transportPlanSignature = null;
+				unit._planWaypointSignature = null;
+				unit._planWaypointIndex = 0;
+				unit.garrisonAssigned = false;
+				unit.frontSlot = null;
+				unit.mopUpTarget = null;
+			}
+			plan.assignedUnitIds = assigned.map((unit) => unit.id);
+			plan.activeUnitCount = 0;
+			const record = occupationEconomies.get(plan.victimId);
+			if (record) record.garrisonAssignedCount = assigned.length;
+		}
+	}
 }
 
 function shouldReassess(si) {
@@ -10265,6 +10641,9 @@ export function evaluateAllPlans() {
 				}
 			}
 
+			reconcileOccupationGarrisonPlans(si, selected.occupationGarrisons || []);
+			syncOccupationGarrisonAssignments(si);
+
 			// Apply transport plan
 			if (selected.transport) {
 				if (!_transportPlan[si] || forceReplace) {
@@ -10283,6 +10662,7 @@ export function evaluateAllPlans() {
 				selected.naval,
 				selected.defend,
 				selected.transport,
+				...(selected.occupationGarrisons || []),
 			].filter(Boolean);
 			const selectedDebugSignatures = new Set(
 				selectedDebugPlans.map((p) => p.signature || getPlanSignature(si, p)),
@@ -10296,6 +10676,7 @@ export function evaluateAllPlans() {
 					naval: selected.naval || null,
 					defend: selected.defend || null,
 					transport: selected.transport || null,
+					occupationGarrisons: selected.occupationGarrisons || [],
 				},
 				topRejected: proposals
 					.filter((p) => !selectedDebugSignatures.has(getPlanSignature(si, p)))
@@ -10321,6 +10702,10 @@ export function evaluateAllPlans() {
 			_proposalsCache[si] = proposals;
 		}
 	}
+	for (const plan of _occupationGarrisonPlans.values()) {
+		plan.activeUnitCount = 0;
+	}
+	if (_simTickCount % 60 === 0) syncOccupationGarrisonAssignments();
 	window.__perf.proposals =
 		(window.__perf.proposals || 0) + performance.now() - _tp;
 
@@ -13260,7 +13645,12 @@ export function performSimulationTick() {
 			}
 
 			// ── Garrison (moved out of neighbor loop — runs once per unit) ──
-			if (!u.navalAssigned && !u.supplyAssigned && !u.coastalAssigned) {
+			if (
+				u._occupationGarrisonVictimId == null &&
+				!u.navalAssigned &&
+				!u.supplyAssigned &&
+				!u.coastalAssigned
+			) {
 				let bestGP = null;
 				let bestGPDist = Infinity;
 				for (let gsi = _uSideIdx * 10; gsi < _uSideIdx * 10 + 10; gsi++) {
@@ -13626,7 +14016,7 @@ export function performSimulationTick() {
 									}
 								}
 							}
-						} else if (!skipAllyScan) {
+						} else if (!skipAllyScan && u._occupationGarrisonVictimId == null) {
 							// Neutral garrison: station along borders with neutrals
 							let bestGP = null;
 							let bestGPDist = Infinity;
@@ -14251,6 +14641,37 @@ export function performSimulationTick() {
 			}
 		}
 
+		let occupationGarrisonPlan =
+			u._occupationGarrisonVictimId != null
+				? _occupationGarrisonPlans.get(u._occupationGarrisonVictimId)
+				: null;
+		let occupationGarrisonPoint = null;
+		let occupationGarrisonActive = !!(
+			occupationGarrisonPlan &&
+			occupationGarrisonPlan.sideIdx === u.sideIndex &&
+			!commandPolicy.returnHome &&
+			!isAtSea
+		);
+		if (occupationGarrisonActive) {
+			const points = occupationGarrisonPlan.garrisonPoints || [];
+			const pointIndex = Math.max(
+				0,
+				Math.min(points.length - 1, u._occupationGarrisonPointIndex || 0),
+			);
+			occupationGarrisonPoint = points[pointIndex] || null;
+			if (occupationGarrisonPoint) {
+				target = {
+					lat: occupationGarrisonPoint.lat,
+					lng: occupationGarrisonPoint.lng,
+				};
+				u.mopUpTarget = null;
+			}
+		}
+		if (!occupationGarrisonPoint) {
+			occupationGarrisonActive = false;
+			occupationGarrisonPlan = null;
+		}
+
 		const _u3d = _detailedPerfEnabled ? performance.now() : 0;
 		if (_detailedPerfEnabled) window.__perf.unitMopUpSearch += _u3d - _u3c;
 
@@ -14367,16 +14788,24 @@ export function performSimulationTick() {
 					activePlan = null;
 					activePlanSignature = null;
 				}
-				const navalPlan = commandPolicy.refusesOffense
-					? null
-					: _navalPlan[u.sideIndex];
-				const supplyPlan = commandPolicy.refusesOffense
-					? null
-					: _navalSupplyPlan[u.sideIndex];
+				if (occupationGarrisonActive) {
+					activePlan = null;
+					activePlanSignature = null;
+					u._assignedPlanSignature = null;
+				}
+				const navalPlan =
+					commandPolicy.refusesOffense || occupationGarrisonActive
+						? null
+						: _navalPlan[u.sideIndex];
+				const supplyPlan =
+					commandPolicy.refusesOffense || occupationGarrisonActive
+						? null
+						: _navalSupplyPlan[u.sideIndex];
 
 				// Naval plan assignment: if this unit is close to staging coast and
 				// the naval plan needs units, recruit it
 				let isNavalUnit = false;
+				let occupationGarrisonHolding = false;
 				if (
 					navalPlan &&
 					navalPlan.type === "NAVAL_INVASION" &&
@@ -14404,7 +14833,27 @@ export function performSimulationTick() {
 					}
 				}
 
-				if (
+				if (occupationGarrisonActive && occupationGarrisonPoint) {
+					isPlanUnit = true;
+					occupationGarrisonPlan.activeUnitCount =
+						(occupationGarrisonPlan.activeUnitCount || 0) + 1;
+					u.navalAssigned = false;
+					u.supplyAssigned = false;
+					u.isTransport = false;
+					const gdLat = occupationGarrisonPoint.lat - u.lat;
+					let gdLng = occupationGarrisonPoint.lng - u.lng;
+					if (gdLng > 180) gdLng -= 360;
+					else if (gdLng < -180) gdLng += 360;
+					const gd = Math.sqrt(gdLat * gdLat + gdLng * gdLng);
+					occupationGarrisonHolding = gd <= 0.15;
+					if (!occupationGarrisonHolding && gd > 0.01) {
+						planDirLat = gdLat / gd;
+						planDirLng = gdLng / gd;
+					}
+					planSpeedMult = occupationGarrisonHolding ? 0.25 : 1.25;
+					moveDirLat = 0;
+					moveDirLng = 0;
+				} else if (
 					isNavalUnit &&
 					navalPlan &&
 					(navalPlan.activeUnitCount || 0) < (navalPlan.maxAssignedUnits || 0)
@@ -15165,6 +15614,7 @@ export function performSimulationTick() {
 				// Overwhelming force: all units rush the frontline when 10x advantage
 				if (
 					_overwhelmingForce[sideIndex] &&
+					!occupationGarrisonActive &&
 					borderDir &&
 					!isAtSea &&
 					!commandPolicy.refusesOffense
@@ -15205,7 +15655,12 @@ export function performSimulationTick() {
 				}
 
 				// Hive Cohesion & Alignment: Units stick with their squad and move in unison
-				if (groupCentroid && !isAtSea && !activeRetreat) {
+				if (
+					groupCentroid &&
+					!isAtSea &&
+					!activeRetreat &&
+					!occupationGarrisonHolding
+				) {
 					// 1. Cohesion: Pull towards squad center
 					const dCentLat = groupCentroid.lat - u.lat;
 					const dCentLng = groupCentroid.lng - u.lng;
@@ -15239,7 +15694,7 @@ export function performSimulationTick() {
 
 				// Apply allied repulsion to ensure units spread out to borders
 				// Suppression check: Repulsion is disabled during active retreats to prioritize survival
-				if (u.repulsionVector && !activeRetreat) {
+				if (u.repulsionVector && !activeRetreat && !occupationGarrisonHolding) {
 					const rMag = Math.sqrt(
 						u.repulsionVector.lat ** 2 + u.repulsionVector.lng ** 2,
 					);
@@ -17710,6 +18165,8 @@ export function resetToSelection() {
 	bases = [];
 	activeRebellions.clear();
 	occupationEconomies.clear();
+	clearOccupationGarrisonAssignments();
+	_occupationGarrisonPlans.clear();
 	countryEconomy.clear();
 	economyEvents.length = 0;
 	economyPayCycle = 0;
@@ -18236,6 +18693,8 @@ if (quickRestartBtn) {
 		capitalLostCountries = new Set();
 		activeRebellions.clear();
 		occupationEconomies.clear();
+		clearOccupationGarrisonAssignments();
+		_occupationGarrisonPlans.clear();
 		countryEconomy.clear();
 		economyEvents.length = 0;
 		economyPayCycle = 0;
@@ -22090,6 +22549,8 @@ export function resetConflictSetupState() {
 	capitalLostCountries = new Set();
 	activeRebellions.clear();
 	occupationEconomies.clear();
+	clearOccupationGarrisonAssignments();
+	_occupationGarrisonPlans.clear();
 	countryEconomy.clear();
 	economyEvents.length = 0;
 	economyPayCycle = 0;

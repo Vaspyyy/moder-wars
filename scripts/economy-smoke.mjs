@@ -3,6 +3,8 @@ import {
 	COMMAND_BANDS,
 	computeCurrentIncome,
 	computeEconomicStrength,
+	computeOccupationGarrisonPriority,
+	computeRequiredGarrison,
 	computeResistanceDelta,
 	createEconomyState,
 	createHostilityMatrix,
@@ -74,6 +76,21 @@ assert.equal(
 		casualtyPressure: 1,
 	}),
 	100,
+);
+assert.equal(computeRequiredGarrison(0), 3);
+assert.equal(computeRequiredGarrison(20), 3);
+assert.equal(computeRequiredGarrison(21), 4);
+assert.ok(
+	computeOccupationGarrisonPriority({
+		resistance: 80,
+		garrisonCoverage: 0.2,
+		requiredGarrison: 6,
+	}) >
+		computeOccupationGarrisonPriority({
+			resistance: 10,
+			garrisonCoverage: 1,
+			requiredGarrison: 6,
+		}),
 );
 
 const allHostile = new Set(["side-1|side-2", "side-1|side-3"]);

@@ -191,6 +191,25 @@ export function computeResistanceDelta({
 	);
 }
 
+export function computeRequiredGarrison(expectedArmyUnits = 0) {
+	return Math.max(3, Math.ceil(Math.max(0, expectedArmyUnits || 0) * 0.15));
+}
+
+export function computeOccupationGarrisonPriority({
+	resistance = 0,
+	garrisonCoverage = 0,
+	heldRatio = 1,
+	requiredGarrison = 3,
+} = {}) {
+	return (
+		45 +
+		clamp(resistance, 0, 100) * 0.65 +
+		(1 - clamp(garrisonCoverage, 0, 1)) * 35 +
+		clamp(heldRatio, 0, 1) * 5 +
+		Math.min(10, Math.max(0, requiredGarrison || 0) * 0.5)
+	);
+}
+
 export function updateResistance(resistance, inputs) {
 	return clamp(
 		Math.max(0, resistance || 0) + computeResistanceDelta(inputs),
