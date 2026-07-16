@@ -1,0 +1,23 @@
+index.html
+  s_d988332592ff9d::t_5b3dc0716b3832 7
+workers/service-worker.js
+  s_d988332592ff9d::t_5b3dc0716b3832 3
+styles/style.css
+  s_d988332592ff9d::t_5b3dc0716b3832 1976,1980
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "9ef47ff52f8bd279f004fba890fab8bf24c9db22",
+  "prompts": {},
+  "sessions": {
+    "s_d988332592ff9d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f682e-71a0-71b3-b4b0-09d8d476b254",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vaspyyy <lolbautz2@gmail.com>"
+    }
+  }
+}
