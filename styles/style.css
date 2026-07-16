@@ -2654,6 +2654,11 @@ body.use-system-font .scroller-card-name {
 }
 
 /* Commander Mode */
+.menu-v2-link.commander-link,
+.commander-overlay {
+	--commander-beta-accent: #ffb347;
+}
+
 .menu-v2-link.commander-link {
 	color: #ffd166;
 	opacity: 0.95;
@@ -2661,6 +2666,19 @@ body.use-system-font .scroller-card-name {
 
 .menu-v2-link.commander-link:hover {
 	color: #fff0b3;
+}
+
+.commander-beta-badge {
+	padding: 3px 6px;
+	font-family: system-ui, sans-serif;
+	font-size: 8px;
+	font-weight: 900;
+	line-height: 1;
+	letter-spacing: 0.12em;
+	color: #211304;
+	background: var(--commander-beta-accent);
+	border-radius: 3px;
+	box-shadow: 0 0 18px rgba(255, 179, 71, 0.25);
 }
 
 .commander-overlay {
@@ -2727,6 +2745,28 @@ body.use-system-font .scroller-card-name {
 	font-size: 13px;
 	line-height: 1.6;
 	color: #b7c0cd;
+}
+
+.commander-beta-warning {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin: 0 0 14px;
+	padding: 11px 13px;
+	font-family: system-ui, sans-serif;
+	font-size: 12px;
+	line-height: 1.45;
+	color: #f4d8b2;
+	background: rgba(255, 179, 71, 0.09);
+	border: 1px solid rgba(255, 179, 71, 0.38);
+	border-radius: 4px;
+}
+
+.commander-beta-warning strong {
+	flex: 0 0 auto;
+	font-size: 9px;
+	letter-spacing: 0.16em;
+	color: var(--commander-beta-accent);
 }
 
 .commander-framing {
@@ -3064,6 +3104,12 @@ body.commander-active #force-peace-btn {
 
 	.commander-dialog-actions {
 		flex-direction: column-reverse;
+	}
+
+	.commander-beta-warning {
+		align-items: flex-start;
+		flex-direction: column;
+		gap: 5px;
 	}
 
 	.commander-primary-btn,

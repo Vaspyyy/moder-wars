@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://esm.sh 'sha256-UbZTXngprJmMtanNXRwZ5Pi9M0w7gaPwpxlWfxaufYA='; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.websim.ai https://*.websim.com https://*.arcgisonline.com https://*.google.com wss:; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self';">
-    <title>MW-V0.26.49</title>
+    <title>MW-V0.26.50</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous" />
     <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
@@ -254,6 +254,7 @@
                     <div class="nav-separator"></div>
                     <button id="commander-mode-btn" class="menu-v2-link commander-link">
                         <span>COMMANDER</span>
+                        <span class="commander-beta-badge">BETA</span>
                         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2 4 5v6c0 5.05 3.41 9.74 8 11 4.59-1.26 8-5.95 8-11V5l-8-3zm0 4.1 4 1.5V11c0 3.25-1.92 6.49-4 7.74C9.92 17.49 8 14.25 8 11V7.6l4-1.5z"/></svg>
                     </button>
                     <div class="nav-separator"></div>
@@ -304,6 +305,10 @@
         <section class="commander-dialog commander-briefing" role="dialog" aria-modal="true" aria-labelledby="commander-briefing-title">
             <div class="commander-kicker">COMMANDER OPERATION 01</div>
             <h1 id="commander-briefing-title">EASTERN FRONT: HOLD UKRAINE</h1>
+            <div class="commander-beta-warning" role="note" aria-label="Commander Mode beta warning">
+                <strong>BETA BUILD</strong>
+                <span>Commander Mode is still in active development. Expect unfinished balance, bugs, and features that may change between versions.</span>
+            </div>
             <p class="commander-framing">This is an alternate-history simulation inspired by the February 2022 setting. It is not a historical recreation or prediction.</p>
             <div class="commander-briefing-grid">
                 <div>
