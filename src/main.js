@@ -17,6 +17,15 @@ import {
 	updateResistance,
 } from "./economy.js";
 import { fetchJSONWithCache } from "./geo.js";
+import {
+	allocateLargestRemainderQuotas,
+	evaluateCountryCapitulation,
+	evaluateGlobalConflict,
+	selectEligibleCasualtyAttackers,
+	selectMajorityOwnerTransfers,
+	selectOccupationController,
+	updateRebellionFailureCycles,
+} from "./surrender.js";
 
 export function escapeHtml(s) {
 	return String(s)
@@ -2114,7 +2123,7 @@ export const aiCountryState = new Map();
 export let _sidePosture = []; // per-side auto posture (OFFENSIVE/BALANCED/DEFENSIVE)
 export let _sideMomentumHistory = []; // per-side: array of {tick, controlled} entries
 export let _sideWarPhase = []; // per-side: "ADVANCING" | "STALEMATE" | "RETREATING" | "COLLAPSING"
-let _lastCapitulationTick = 0; // simFrameCount of last country capitulation (grace period for territory checks)
+let _lastCapitulationTick = Number.NEGATIVE_INFINITY;
 export let _warPlan = []; // per-side war plan: { type, phase, target, ... }
 export const _navalPlan = []; // per-side naval invasion plan (1 per side max)
 export const _navalSupplyPlan = []; // per-side naval supply run plan (1 per side max)
@@ -6221,8 +6230,13 @@ function processRebellionStates() {
 		const unitCount = units.filter(
 			(unit) => unit.sovereignId === rebellion.rebelId,
 		).length;
-		if (unitCount === 0 && ratio < 0.05) rebellion.failedCycles++;
-		else rebellion.failedCycles = 0;
+		rebellion.failedCycles = updateRebellionFailureCycles(
+			rebellion.failedCycles,
+			{
+				unitCount,
+				controlRatio: ratio,
+			},
+		);
 		if (rebellion.failedCycles >= 3) resolveRebellionFailure(rebellion);
 	}
 
@@ -6843,6 +6857,7 @@ export async function _startWarInner() {
 	gameState = "SIMULATING";
 	isPaused = false;
 	warGraceEndTick = simFrameCount + CONFIG.WAR_GRACE_TICKS;
+	_lastCapitulationTick = Number.NEGATIVE_INFINITY;
 
 	// Hard reset dynamic war-state before building a new theater.
 	// This prevents stale frontline/occupation data from previous wars from
@@ -16306,144 +16321,61 @@ export function performSimulationTick() {
 		}
 	}
 
-	// Check for individual country falls
-	for (let sIdx = 0; sIdx < sides.length; sIdx++) {
-		const side = sides[sIdx];
-		const hasActiveHostility = sides.some(
-			(other, otherIdx) =>
-				otherIdx !== sIdx &&
-				other?.length > 0 &&
-				areSidesHostile(sIdx, otherIdx),
-		);
-		if (!hasActiveHostility) continue;
-		for (let i = side.length - 1; i >= 0; i--) {
-			const country = side[i];
-
-			// Decrement grace period
-			if (country.graceTicks > 0) country.graceTicks--;
-
-			const stats = countryStats.get(country.id);
-			if (!stats) continue;
-
-			const initial = country.initialCells || 1;
-
-			// On non-counting frames, owned/controlled may be cached. For unitless
-			// countries, do a direct ownership pass to avoid stale values blocking annexation.
-			let liveOwnedWarTiles = stats.owned || 0;
-			let exactOwned = 0;
-			if (stats.units === 0) {
-				// Throttle expensive grid scan to every 60 ticks (staggered offset 1)
-				if (simFrameCount % 60 === 1) {
-					exactOwned = 0;
-					for (let idx = 0; idx < worldControlMap.length; idx++) {
-						if (landMask[idx] === 2 && worldControlMap[idx] === country.id)
-							exactOwned++;
-					}
+	// Capitulation is evaluated only on the existing full frontier scan, so all
+	// countries use fresh land data without adding per-country map scans.
+	if (shouldScanFrontier) {
+		for (let sIdx = 0; sIdx < sides.length; sIdx++) {
+			const side = sides[sIdx];
+			const hasActiveHostility = sides.some(
+				(other, otherIdx) =>
+					otherIdx !== sIdx &&
+					other?.length > 0 &&
+					areSidesHostile(sIdx, otherIdx),
+			);
+			if (!hasActiveHostility) continue;
+			for (let i = side.length - 1; i >= 0; i--) {
+				const country = side[i];
+				const stats = countryStats.get(country.id);
+				if (!stats) continue;
+				const decision = evaluateCountryCapitulation({
+					hasFreshTerritoryData: true,
+					isRebel: country.isRebel || activeRebellions.has(country.id),
+					unitCount: stats.units,
+					ownedCells: stats.owned,
+					controlledCells: stats.controlled,
+					initialCells: country.initialCells,
+				});
+				if (!decision.capitulate) continue;
+				console.warn("[MW] CAPITULATION:", country.name, {
+					reason: decision.reason,
+					units: stats.units,
+					controlledPercent: Number(decision.controlPercent.toFixed(2)),
+					owned: stats.owned,
+					initialCells: country.initialCells,
+					threshold: decision.threshold ?? 0,
+				});
+				if (capitulateCountry(country, sIdx)) {
+					// Exit tick early to re-evaluate state with updated sides and units.
+					return false;
 				}
-				liveOwnedWarTiles = exactOwned;
-			}
-
-			// Individual Capitulation criteria:
-			// - If undefended (0 units), capitulate earlier (25% land).
-			// - Otherwise, fight until almost nothing remains (2% land).
-			// - Hard fail-safe: if a country owns zero active war tiles, annex immediately.
-			//   This prevents "ghost" survivors from dragging wars on after total loss.
-			// - For unitless countries, direct-scan dominantSideMap to bypass stale
-			//   influence/cached values that can keep controlPct artificially high.
-			const isProtected = country.graceTicks > 0;
-			let directControlled = stats.controlled;
-			if (stats.units === 0) {
-				directControlled = 0;
-				const scanSIdx = countryToSideMap.get(country.id);
-				if (simFrameCount % 60 === 2) {
-					for (let di = 0; di < worldControlMap.length; di++) {
-						if (
-							landMask[di] === 2 &&
-							worldControlMap[di] === country.id &&
-							dominantSideMap[di] === scanSIdx
-						) {
-							directControlled++;
-						}
-					}
-				}
-			}
-			const controlPct = (directControlled / (country.initialCells || 1)) * 100;
-			const hasNoOwnedWarTiles = liveOwnedWarTiles <= 0;
-			const nearlyErasedNoUnits =
-				stats.units === 0 &&
-				liveOwnedWarTiles <= Math.max(1, Math.floor(initial * 0.003));
-			const heldCities = countryToCityCount.get(country.id) || 0;
-			const noForcesNoCities = stats.units === 0 && heldCities === 0;
-			if (
-				!isProtected &&
-				(hasNoOwnedWarTiles ||
-					nearlyErasedNoUnits ||
-					noForcesNoCities ||
-					(stats.units === 0 && controlPct < 25) ||
-					(controlPct < 2 && stats.units === 0))
-			) {
-				console.warn(
-					"[MW] CAPITULATION:",
-					country.name,
-					"units:",
-					stats.units,
-					"controlled%:",
-					controlPct.toFixed(2),
-					"owned:",
-					stats.owned,
-					"initialCells:",
-					country.initialCells,
-					"triggers:",
-					{
-						hasNoOwnedWarTiles,
-						nearlyErasedNoUnits,
-						noForcesNoCities,
-						unitless25: stats.units === 0 && controlPct < 25,
-						controlPct2: controlPct < 2,
-					},
-				);
-				capitulateCountry(country, sIdx);
-				// Exit tick early to re-evaluate state in next tick with updated sides/units
-				return false;
 			}
 		}
 	}
 
-	// Determine which "poles" still have participating and combat-effective (OFFENSE) countries
+	// Determine which sides still contain participating countries.
 	const activeSideSet = new Set();
-	const effectiveSideSet = new Set();
 	sides.forEach((side, idx) => {
-		if (side.length > 0) {
-			activeSideSet.add(idx);
-			if (side.some((c) => c.role === "OFFENSE")) {
-				effectiveSideSet.add(idx);
-			}
-		}
+		if (side.length > 0) activeSideSet.add(idx);
 	});
 
 	if (gameState === "SIMULATING") {
 		const activeHostilePairs = getActiveHostilePairs();
-		if (activeSideSet.size > 1 && activeHostilePairs.length === 0) {
-			applyTreaty("WHITE_PEACE");
-			return true;
-		}
-		if (activeSideSet.size <= 1) {
-			const winnerIdx = Array.from(activeSideSet)[0] || 0;
-			applyTreaty("FULL_CAPITULATION", winnerIdx);
-			return true;
-		}
-
-		const sidesInHostility = new Set(activeHostilePairs.flat());
-		const effectiveHostileSides = new Set(
-			Array.from(effectiveSideSet).filter((idx) => sidesInHostility.has(idx)),
+		const resolution = evaluateGlobalConflict(
+			Array.from(activeSideSet),
+			activeHostilePairs,
 		);
-		if (
-			effectiveHostileSides.size <= 1 &&
-			activeHostilePairs.length > 0 &&
-			activeSideSet.size > 1
-		) {
-			const winnerIdx = Array.from(effectiveHostileSides)[0] || 0;
-			applyTreaty("FULL_CAPITULATION", winnerIdx);
+		if (resolution) {
+			applyTreaty(resolution.type, resolution.winnerSideIdx);
 			return true;
 		}
 	}
@@ -16481,13 +16413,14 @@ export function performSimulationTick() {
 		sides.length > 1 &&
 		sides[1] &&
 		sides[1].some((c) => units.some((u) => u.sovereignId === c.id));
-	const recentCapitulation = simFrameCount - (_lastCapitulationTick || 0) < 600;
+	const recentCapitulation = _simTickCount - _lastCapitulationTick < 600;
 
 	const primarySidesHostile = sides.length === 2 && areSidesHostile(0, 1);
 	if (
 		primarySidesHostile &&
 		!recentCapitulation &&
 		side0Pct >= 99.9 &&
+		side0HasUnits &&
 		side1HasUnits
 	) {
 		applyTreaty("FULL_CAPITULATION", 0);
@@ -16496,7 +16429,8 @@ export function performSimulationTick() {
 		primarySidesHostile &&
 		!recentCapitulation &&
 		side0Pct <= 0.1 &&
-		side0HasUnits
+		side0HasUnits &&
+		side1HasUnits
 	) {
 		applyTreaty("FULL_CAPITULATION", sides.length > 1 ? 1 : 0);
 		return true;
@@ -17556,23 +17490,7 @@ export function showTreatyOffer(proposerSideIdx, willAccept) {
 
 export function capitulateCountry(country, sideIndex) {
 	const side = sides[sideIndex];
-	if (!side) return;
-
-	_lastCapitulationTick = simFrameCount; // grace period for territory-based capitulation checks
-
-	// Announce the individual fall
-	statusText.innerText = `${country.name} HAS CAPITULATED`;
-	treatyMsg.innerText = "NATION ANNEXED";
-	document.getElementById("treaty-status").innerText =
-		`${country.name} territory has been seized.`;
-	treatyAlert.style.display = "block";
-
-	// Auto-hide the alert after a delay if war is still going
-	setTimeout(() => {
-		if (gameState === "SIMULATING") {
-			treatyAlert.style.display = "none";
-		}
-	}, 4000);
+	if (!side) return false;
 
 	// Build owner -> side index map once for this operation
 	const ownerToSideMap = new Map();
@@ -17582,166 +17500,261 @@ export function capitulateCountry(country, sideIndex) {
 		});
 	});
 
-	// Snapshot all tiles currently owned by the capitulating country so it can be released later
+	const hostileAttackerIds = new Set();
+	for (let otherSideIdx = 0; otherSideIdx < sides.length; otherSideIdx++) {
+		if (!areSidesHostile(sideIndex, otherSideIdx)) continue;
+		for (const attacker of sides[otherSideIdx] || []) {
+			hostileAttackerIds.add(attacker.id);
+		}
+	}
+	if (hostileAttackerIds.size === 0) {
+		console.error("[MW] CAPITULATION ABORTED: no active hostile recipient", {
+			countryId: country.id,
+			countryName: country.name,
+		});
+		return false;
+	}
+
+	const attackerMap = casualtyByAttacker.get(country.id) || new Map();
+	const activeAttackerEntries = Array.from(hostileAttackerIds, (countryId) => ({
+		countryId,
+		casualties: Math.max(0, attackerMap.get(countryId) || 0),
+	}));
+	let selectedAttackers = selectEligibleCasualtyAttackers(
+		activeAttackerEntries,
+	);
+
+	// Snapshot the victim's owned land, find its de-jure center, and count which
+	// active enemies already physically control its de-jure territory.
 	const victimTerritorySnapshot = [];
+	const victimOwnedCells = [];
+	const physicalControlCounts = new Map();
+	let victimLatSum = 0;
+	let victimLngSum = 0;
+	let victimCoreCount = 0;
+	let totalUnoccupied = 0;
 	for (let i = 0; i < worldControlMap.length; i++) {
-		if (worldControlMap[i] === country.id) {
+		if (deJureMap[i] === country.id && landMask[i] > 0) {
+			const y = Math.floor(i / gridWidth);
+			const x = i % gridWidth;
+			victimLatSum += y * CONFIG.GRID_RES - 90;
+			victimLngSum += x * CONFIG.GRID_RES - 180;
+			victimCoreCount++;
+			const controllerId = primaryOccupierMap[i] || worldControlMap[i];
+			if (hostileAttackerIds.has(controllerId)) {
+				physicalControlCounts.set(
+					controllerId,
+					(physicalControlCounts.get(controllerId) || 0) + 1,
+				);
+			}
+		}
+		if (worldControlMap[i] === country.id && landMask[i] > 0) {
 			const y = Math.floor(i / gridWidth);
 			const x = i % gridWidth;
 			victimTerritorySnapshot.push([x, y]);
+			victimOwnedCells.push(i);
+			if (!hostileAttackerIds.has(primaryOccupierMap[i])) totalUnoccupied++;
 		}
 	}
 
-	// Compute casualty-proportional territory split
-	// Find all attackers that dealt >25% of total casualties to this country
-	const attackerMap = casualtyByAttacker.get(country.id) || new Map();
-	let totalCasToVictim = 0;
-	attackerMap.forEach((loss) => {
-		totalCasToVictim += loss;
-	});
-
-	// Build set of active combatant IDs (countries still in the war)
-	const activeCombatantIds = new Set();
-	for (let si = 0; si < sides.length; si++) {
-		const s = sides[si];
-		for (let ci = 0; ci < s.length; ci++) {
-			activeCombatantIds.add(s[ci].id);
-		}
-	}
-
-	// Build list of qualifying attackers: { sovereignId, loss, share }
-	// Only include attackers that are still active combatants
-	const qualifyingAttackers = [];
-	if (totalCasToVictim > 0) {
-		attackerMap.forEach((loss, attackerId) => {
-			if (!activeCombatantIds.has(attackerId)) return;
-			const attackerSideIdx = ownerToSideMap.get(attackerId);
-			if (!areSidesHostile(sideIndex, attackerSideIdx)) return;
-			const share = loss / totalCasToVictim;
-			if (share >= 0.25) {
-				qualifyingAttackers.push({ sovereignId: attackerId, loss, share });
-			}
-		});
-		qualifyingAttackers.sort((a, b) => b.loss - a.loss);
-	}
-
-	// Fallback: if no qualifying attackers (attrition-only death), use any side with units nearby
-	let fallbackWinnerId = 0;
-	if (qualifyingAttackers.length === 0) {
-		for (let j = 0; j < sides.length; j++) {
-			if (areSidesHostile(sideIndex, j) && sides[j].length > 0) {
-				fallbackWinnerId = sides[j][0].id;
-				qualifyingAttackers.push({
-					sovereignId: fallbackWinnerId,
-					loss: 1,
-					share: 1.0,
-				});
-				break;
-			}
-		}
-	}
-
-	// Pre-compute centroid of each qualifying attacker's current territory for proximity assignment
-	const attackerCentroids = new Map();
-	qualifyingAttackers.forEach((qa) => {
-		let sumLat = 0,
-			sumLng = 0,
-			count = 0;
-		for (let i = 0; i < worldControlMap.length; i++) {
-			if (worldControlMap[i] === qa.sovereignId) {
-				const y = Math.floor(i / gridWidth);
-				const x = i % gridWidth;
-				sumLat += y * CONFIG.GRID_RES - 90;
-				sumLng += x * CONFIG.GRID_RES - 180;
-				count++;
-			}
-		}
-		attackerCentroids.set(
-			qa.sovereignId,
-			count > 0
-				? { lat: sumLat / count, lng: sumLng / count }
-				: { lat: 0, lng: 0 },
+	if (selectedAttackers.length === 0) {
+		const physicalController = selectOccupationController(
+			Array.from(physicalControlCounts, ([countryId, controlledCells]) => ({
+				countryId,
+				controlledCells,
+				casualties: attackerMap.get(countryId) || 0,
+			})),
 		);
-	});
-
-	// Assign each unoccupied tile to the nearest qualifying attacker, weighted by casualty share
-	const affectedIndices = [];
-	const attackerTileCounts = new Map();
-	for (let qi = 0; qi < qualifyingAttackers.length; qi++) {
-		attackerTileCounts.set(qualifyingAttackers[qi].sovereignId, 0);
-	}
-
-	// Compute proportional tile quotas
-	const totalUnoccupied = (() => {
-		let n = 0;
-		for (let i = 0; i < worldControlMap.length; i++) {
-			if (worldControlMap[i] === country.id && landMask[i] > 0) n++;
-		}
-		return n;
-	})();
-	const attackerQuotas = new Map();
-	qualifyingAttackers.forEach((qa) => {
-		attackerQuotas.set(
-			qa.sovereignId,
-			Math.max(1, Math.round(qa.share * totalUnoccupied)),
-		);
-	});
-
-	for (let i = 0; i < worldControlMap.length; i++) {
-		if (worldControlMap[i] === country.id && landMask[i] > 0) {
-			const occupierId = primaryOccupierMap[i];
-
-			// Check if already physically occupied by an enemy
-			let occupierOnOpposingSide = false;
-			sides.forEach((s, idx) => {
+		if (physicalController) {
+			selectedAttackers = [
+				{
+					countryId: physicalController.countryId,
+					casualties: physicalController.casualties,
+					share: 1,
+				},
+			];
+		} else {
+			const center = {
+				lat: victimCoreCount > 0 ? victimLatSum / victimCoreCount : 0,
+				lng: victimCoreCount > 0 ? victimLngSum / victimCoreCount : 0,
+			};
+			let nearest = null;
+			let nearestDist = Infinity;
+			for (const unit of units) {
+				if (!hostileAttackerIds.has(unit.sovereignId) || unit.health <= 0)
+					continue;
+				let dLng = unit.lng - center.lng;
+				if (dLng > 180) dLng -= 360;
+				else if (dLng < -180) dLng += 360;
+				const dSq = (unit.lat - center.lat) ** 2 + dLng ** 2;
 				if (
-					areSidesHostile(sideIndex, idx) &&
-					s.some((c) => c.id === occupierId)
+					dSq < nearestDist ||
+					(dSq === nearestDist &&
+						unit.sovereignId < (nearest?.countryId || Infinity))
 				) {
-					occupierOnOpposingSide = true;
+					nearestDist = dSq;
+					nearest = {
+						countryId: unit.sovereignId,
+						casualties: attackerMap.get(unit.sovereignId) || 0,
+						share: 1,
+					};
 				}
-			});
-
-			if (occupierOnOpposingSide) {
-				// Tile already occupied — keep the occupier
-				worldControlMap[i] = occupierId;
-				primaryOccupierMap[i] = occupierId;
-			} else {
-				// Unoccupied tile — assign to nearest qualifying attacker respecting quotas
-				const y = Math.floor(i / gridWidth);
-				const x = i % gridWidth;
-				const tileLat = y * CONFIG.GRID_RES - 90;
-				const tileLng = x * CONFIG.GRID_RES - 180;
-
-				let bestAttacker = qualifyingAttackers[0].sovereignId;
-				let bestDist = Infinity;
-				for (const qa of qualifyingAttackers) {
-					const c = attackerCentroids.get(qa.sovereignId);
-					const dSq = (tileLat - c.lat) ** 2 + (tileLng - c.lng) ** 2;
-					const quota = attackerQuotas.get(qa.sovereignId) || 0;
-					const used = attackerTileCounts.get(qa.sovereignId) || 0;
-					if (used >= quota) continue;
-					if (dSq < bestDist) {
-						bestDist = dSq;
-						bestAttacker = qa.sovereignId;
-					}
-				}
-				worldControlMap[i] = bestAttacker;
-				primaryOccupierMap[i] = bestAttacker;
-				attackerTileCounts.set(
-					bestAttacker,
-					(attackerTileCounts.get(bestAttacker) || 0) + 1,
-				);
 			}
-			affectedIndices.push(i);
+			if (nearest) selectedAttackers = [nearest];
 		}
 	}
 
-	// Determine primary annexer (highest casualty contributor) for releasable transfer
+	if (selectedAttackers.length === 0) {
+		console.error("[MW] CAPITULATION ABORTED: no deterministic recipient", {
+			countryId: country.id,
+			countryName: country.name,
+			hostileAttackerIds: Array.from(hostileAttackerIds),
+		});
+		return false;
+	}
+
+	const quotaEntries = allocateLargestRemainderQuotas(
+		selectedAttackers.map((entry) => ({
+			...entry,
+			weight: entry.casualties || entry.share || 1,
+		})),
+		totalUnoccupied,
+	);
+	const qualifyingAttackers = quotaEntries.map((entry) => ({
+		sovereignId: entry.countryId,
+		loss: entry.casualties || 0,
+		share: entry.share || 0,
+		quota: entry.quota,
+	}));
+	const qualifyingIds = new Set(
+		qualifyingAttackers.map((entry) => entry.sovereignId),
+	);
+
+	// Compute attacker centroids in one map pass.
+	const attackerCentroids = new Map();
+	for (const attacker of qualifyingAttackers) {
+		attackerCentroids.set(attacker.sovereignId, {
+			latSum: 0,
+			lngSum: 0,
+			count: 0,
+		});
+	}
+	for (let i = 0; i < worldControlMap.length; i++) {
+		const ownerId = worldControlMap[i];
+		if (!qualifyingIds.has(ownerId)) continue;
+		const centroid = attackerCentroids.get(ownerId);
+		const y = Math.floor(i / gridWidth);
+		const x = i % gridWidth;
+		centroid.latSum += y * CONFIG.GRID_RES - 90;
+		centroid.lngSum += x * CONFIG.GRID_RES - 180;
+		centroid.count++;
+	}
+	for (const [attackerId, centroid] of attackerCentroids) {
+		if (centroid.count > 0) {
+			attackerCentroids.set(attackerId, {
+				lat: centroid.latSum / centroid.count,
+				lng: centroid.lngSum / centroid.count,
+			});
+		} else {
+			attackerCentroids.set(attackerId, {
+				lat: victimCoreCount > 0 ? victimLatSum / victimCoreCount : 0,
+				lng: victimCoreCount > 0 ? victimLngSum / victimCoreCount : 0,
+			});
+		}
+	}
+
+	const attackerTileCounts = new Map();
+	const attackerQuotas = new Map();
+	for (const attacker of qualifyingAttackers) {
+		attackerTileCounts.set(attacker.sovereignId, 0);
+		attackerQuotas.set(attacker.sovereignId, attacker.quota);
+	}
+	const assignments = new Map();
+	for (const idx of victimOwnedCells) {
+		const occupierId = primaryOccupierMap[idx];
+		if (hostileAttackerIds.has(occupierId)) {
+			assignments.set(idx, occupierId);
+			continue;
+		}
+		const y = Math.floor(idx / gridWidth);
+		const x = idx % gridWidth;
+		const tileLat = y * CONFIG.GRID_RES - 90;
+		const tileLng = x * CONFIG.GRID_RES - 180;
+		let bestAttacker = 0;
+		let bestDist = Infinity;
+		for (const attacker of qualifyingAttackers) {
+			const quota = attackerQuotas.get(attacker.sovereignId) || 0;
+			const used = attackerTileCounts.get(attacker.sovereignId) || 0;
+			if (used >= quota) continue;
+			const centroid = attackerCentroids.get(attacker.sovereignId);
+			let dLng = tileLng - centroid.lng;
+			if (dLng > 180) dLng -= 360;
+			else if (dLng < -180) dLng += 360;
+			const dSq = (tileLat - centroid.lat) ** 2 + dLng ** 2;
+			if (
+				dSq < bestDist ||
+				(dSq === bestDist && attacker.sovereignId < bestAttacker)
+			) {
+				bestDist = dSq;
+				bestAttacker = attacker.sovereignId;
+			}
+		}
+		if (bestAttacker <= 0) {
+			console.error("[MW] CAPITULATION ABORTED: incomplete land quotas", {
+				countryId: country.id,
+				cellIndex: idx,
+				totalUnoccupied,
+			});
+			return false;
+		}
+		assignments.set(idx, bestAttacker);
+		attackerTileCounts.set(
+			bestAttacker,
+			(attackerTileCounts.get(bestAttacker) || 0) + 1,
+		);
+	}
+
+	for (const [idx, recipientId] of assignments) {
+		worldControlMap[idx] = recipientId;
+		primaryOccupierMap[idx] = recipientId;
+	}
+	const affectedIndices = victimOwnedCells;
+
+	const finalControlCounts = new Map();
+	for (let i = 0; i < deJureMap.length; i++) {
+		if (deJureMap[i] !== country.id || landMask[i] === 0) continue;
+		const controllerId = worldControlMap[i];
+		if (!hostileAttackerIds.has(controllerId)) continue;
+		finalControlCounts.set(
+			controllerId,
+			(finalControlCounts.get(controllerId) || 0) + 1,
+		);
+	}
+	const primaryController = selectOccupationController(
+		Array.from(hostileAttackerIds, (countryId) => ({
+			countryId,
+			controlledCells: finalControlCounts.get(countryId) || 0,
+			casualties: attackerMap.get(countryId) || 0,
+		})),
+	);
 	const primaryAnnexerId =
-		qualifyingAttackers.length > 0
-			? qualifyingAttackers[0].sovereignId
-			: fallbackWinnerId;
+		primaryController?.countryId || qualifyingAttackers[0]?.sovereignId || 0;
+	if (primaryAnnexerId <= 0) {
+		console.error("[MW] CAPITULATION ABORTED: no occupation controller", {
+			countryId: country.id,
+		});
+		return false;
+	}
+
+	_lastCapitulationTick = _simTickCount;
+	statusText.innerText = `${country.name} HAS CAPITULATED`;
+	treatyMsg.innerText = "NATION ANNEXED";
+	document.getElementById("treaty-status").innerText =
+		`${country.name} territory has been seized.`;
+	treatyAlert.style.display = "block";
+	setTimeout(() => {
+		if (gameState === "SIMULATING") treatyAlert.style.display = "none";
+	}, 4000);
 
 	// Re-evaluate warzone status for newly annexed tiles so winners can keep pushing
 	affectedIndices.forEach((idx) => {
@@ -17847,6 +17860,7 @@ export function capitulateCountry(country, sideIndex) {
 	recalculateAllBounds();
 	updateSidesUI();
 	influenceLayer.render();
+	return true;
 }
 
 export function applyTreaty(type, winnerPoleOverride = null) {
@@ -17940,14 +17954,13 @@ export function applyTreaty(type, winnerPoleOverride = null) {
 	}
 
 	const countryToSideMap = new Map();
-	const countryToRoleMap = new Map();
 	sides.forEach((side, idx) => {
 		side.forEach((c) => {
 			countryToSideMap.set(c.id, idx);
-			countryToRoleMap.set(c.id, c.role || "OFFENSE");
 		});
 	});
 
+	const treatyTransfers = [];
 	for (let i = 0; i < worldControlMap.length; i++) {
 		if (landMask[i] === 2) {
 			const originalOwner = worldControlMap[i];
@@ -17975,13 +17988,11 @@ export function applyTreaty(type, winnerPoleOverride = null) {
 			if (isTotalCapitulation) {
 				const currentOwner = worldControlMap[i];
 				const currentSideIdx = countryToSideMap.get(currentOwner);
-				const currentRole = countryToRoleMap.get(currentOwner);
 
 				let newOwnerId = 0;
 				if (
 					currentSideIdx !== undefined &&
-					areSidesHostile(winnerSideIdx, currentSideIdx) &&
-					currentRole !== "SUPPORT"
+					areSidesHostile(winnerSideIdx, currentSideIdx)
 				) {
 					newOwnerId =
 						occupierSideIdx !== undefined && occupierSideIdx === winnerSideIdx
@@ -17992,6 +18003,14 @@ export function applyTreaty(type, winnerPoleOverride = null) {
 				if (newOwnerId > 0) {
 					worldControlMap[i] = newOwnerId;
 				}
+			}
+			const deJureOwner = deJureMap[i];
+			const finalOwner = worldControlMap[i];
+			if (deJureOwner > 0 && finalOwner > 0 && deJureOwner !== finalOwner) {
+				treatyTransfers.push({
+					originalOwner: deJureOwner,
+					newOwner: finalOwner,
+				});
 			}
 
 			landMask[i] = 1;
@@ -18008,27 +18027,12 @@ export function applyTreaty(type, winnerPoleOverride = null) {
 		(max, m) => (m ? Math.max(max, m.id) : max),
 		0,
 	);
-	const sideLookup = new Int8Array(maxId + 1).fill(-1);
-	countryToSideMap.forEach((side, id) => {
-		if (id <= maxId) sideLookup[id] = side;
-	});
-
 	// Static buffers to avoid re-allocation in loops
 	const freq = new Uint16Array(maxId + 1);
 	const activeIds = new Uint32Array(9);
 
 	// Transfer Releasables: Move all releasables belonging to defeated countries to their new primary owners
-	const ownerTransferMap = new Map();
-	// Use sample points to find which countries lost land and who took it
-	for (let i = 0; i < worldControlMap.length; i += 500) {
-		if (landMask[i] === 2) {
-			const currentOwner = worldControlMap[i];
-			const originalOwner = deJureMap[i]; // Approximate previous owner
-			if (currentOwner !== originalOwner && originalOwner > 0) {
-				ownerTransferMap.set(originalOwner, currentOwner);
-			}
-		}
-	}
+	const ownerTransferMap = selectMajorityOwnerTransfers(treatyTransfers);
 	countryMetadata.forEach((m) => {
 		if (m?.releasableBy && ownerTransferMap.has(m.releasableBy)) {
 			m.releasableBy = ownerTransferMap.get(m.releasableBy);
@@ -19096,7 +19100,7 @@ export function _signSelectiveSideExit(sideIdx) {
 	const side = sides[sideIdx];
 	if (!side || side.length === 0) return;
 
-	_lastCapitulationTick = simFrameCount; // grace period for territory-based capitulation checks
+	_lastCapitulationTick = _simTickCount;
 	const exitingIds = new Set(side.map((c) => c.id));
 
 	// Clean up territory controlled by exiting side
