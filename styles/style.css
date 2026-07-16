@@ -1973,11 +1973,11 @@ body.use-system-font .scroller-card-name {
 
 .economy-panel {
 	position: absolute;
-	top: 68px;
+	top: 96px;
 	right: 16px;
 	z-index: 1001;
 	width: min(340px, calc(100vw - 32px));
-	max-height: calc(100vh - 150px);
+	max-height: calc(100vh - 178px);
 	background: rgba(12, 12, 14, 0.92);
 	backdrop-filter: blur(8px);
 	border: 1px solid rgba(255, 255, 255, 0.12);
