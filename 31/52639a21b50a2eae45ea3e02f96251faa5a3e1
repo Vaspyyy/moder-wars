@@ -1,0 +1,32 @@
+index.html
+  s_10f053d03b57c2::t_9e9e105fe7d1f3 7
+workers/simulation-worker.js
+  s_10f053d03b57c2::t_2ee68e65e55adf 6-7,24-29,113-115,119,122-127
+src/main.js
+  s_10f053d03b57c2::t_d25b4866781e08 1863
+  s_10f053d03b57c2::t_f59d434e242390 2025-2026,2062-2069,2197,2201-2204
+  s_10f053d03b57c2::t_b9e72129740373 3381-3385,3387-3404,3410-3411,3413,3419-3420,3424-3425,3428-3483
+  s_10f053d03b57c2::t_bc4b7d9c16918a 3405,12047
+  s_10f053d03b57c2::t_1fbb7f2035ba05 11704-11705,12045-12046,12052,12056
+  s_10f053d03b57c2::t_f54c64ca0e2b36 17018-17028,17084-17085
+  s_10f053d03b57c2::t_6a25691c76db7a 6177,6228,6993,17906
+  s_10f053d03b57c2::t_d1f3eab3d78a35 3484,17086
+workers/service-worker.js
+  s_10f053d03b57c2::t_9e9e105fe7d1f3 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "3152639a21b50a2eae45ea3e02f96251faa5a3e1",
+  "prompts": {},
+  "sessions": {
+    "s_10f053d03b57c2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f6a71-9894-7e02-b6ae-5e085eb0bc0f",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Vaspyyy <lolbautz2@gmail.com>"
+    }
+  }
+}
