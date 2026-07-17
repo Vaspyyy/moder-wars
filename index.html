@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://esm.sh 'sha256-UbZTXngprJmMtanNXRwZ5Pi9M0w7gaPwpxlWfxaufYA='; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.websim.ai https://*.websim.com https://*.arcgisonline.com https://*.google.com wss:; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self';">
-    <title>MW-V0.27.1</title>
+    <title>MW-V0.27.2</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous" />
     <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
@@ -468,43 +468,43 @@
             </div>
         </div>
 
-        <div id="game-status" class="status-panel">
+        <div id="game-status" class="status-panel hud-surface hud-surface--soft hud-surface--interactive">
             <div class="status-left">
                 <span id="status-text" data-i18n="SELECT_P1">Select First Country</span>
-                <div id="unit-counts" style="display:none; font-size: 10px; color: #888; margin-top: 4px;">
+                <div id="unit-counts" class="hud-status-meta hud-start-hidden">
                     <span id="unit-counts-display"></span> <span data-i18n="UNITS">UNITS</span>
                 </div>
             </div>
             <div class="status-right">
-                <button id="minimize-status-btn" class="mini-btn" style="background:#555;font-size:14px;padding:2px 8px;margin-right:4px;">−</button>
-                <div class="control-group">
-                    <button id="view-mode-btn" class="mini-btn" title="Toggle View Mode" style="background: #3498db;" data-i18n="POLITICAL">POLITICAL</button>
-                    <label style="display:inline-flex; align-items:center; gap:4px; font-size:9px; color:#ccc; cursor:pointer;">
-                        <input type="checkbox" id="alliance-view-checkbox" style="width:14px;height:14px; accent-color:#16a085;">
+                <button id="minimize-status-btn" class="mini-btn hud-action hud-action--compact hud-action--neutral-alt hud-minimize-action">−</button>
+                <div class="control-group hud-control-group">
+                    <button id="view-mode-btn" class="mini-btn hud-action hud-action--info" title="Toggle View Mode" data-i18n="POLITICAL">POLITICAL</button>
+                    <label class="hud-toggle">
+                        <input type="checkbox" id="alliance-view-checkbox" class="hud-checkbox">
                         <span>ALLIANCE</span>
                     </label>
                 </div>
 
-                <div class="control-group simulation-controls">
-                    <button id="god-mode-btn" class="mini-btn" style="display:none; background: #d35400; font-weight: 900;" data-i18n="GOD">GOD</button>
-                    <button id="god-bomb-btn" class="mini-btn" style="display:none; background: #c0392b; font-weight: 900;">GOD BOMB: OFF</button>
-                    <div id="speed-controls" style="display:none; align-items: center; gap: 4px;">
-                        <button id="pause-btn" class="mini-btn" style="background: #f39c12; min-width: 30px; padding: 5px;">⏸</button>
-                        <button id="speed-down-btn" class="mini-btn" style="padding: 5px 8px;">&lsaquo;</button>
-                        <button id="ff-btn" class="mini-btn" style="min-width: 35px;">1x</button>
-                        <button id="speed-up-btn" class="mini-btn" style="padding: 5px 8px;">&rsaquo;</button>
+                <div class="control-group hud-control-group simulation-controls">
+                    <button id="god-mode-btn" class="mini-btn hud-action hud-action--god hud-start-hidden" data-i18n="GOD">GOD</button>
+                    <button id="god-bomb-btn" class="mini-btn hud-action hud-action--danger hud-start-hidden">GOD BOMB: OFF</button>
+                    <div id="speed-controls" class="hud-control-strip hud-start-hidden">
+                        <button id="pause-btn" class="mini-btn hud-action hud-action--warning hud-action--icon hud-pause-action">⏸</button>
+                        <button id="speed-down-btn" class="mini-btn hud-action hud-speed-step">&lsaquo;</button>
+                        <button id="ff-btn" class="mini-btn hud-action hud-speed-readout">1x</button>
+                        <button id="speed-up-btn" class="mini-btn hud-action hud-speed-step">&rsaquo;</button>
                     </div>
-                    <button id="force-peace-btn" class="mini-btn" style="display:none; background: #27ae60;" data-i18n="DIPLOMACY">DIPLOMACY</button>
+                    <button id="force-peace-btn" class="mini-btn hud-action hud-action--success hud-start-hidden" data-i18n="DIPLOMACY">DIPLOMACY</button>
                 </div>
 
-                <div class="control-group utility-controls" style="gap: 8px;">
-                    <button id="quick-restart-btn" class="start-btn" style="display:none; background: #e67e22; font-size: 10px; padding: 8px 15px; width: auto; border: 2px solid #fff;" title="QUICK RESTART: Instantly reset borders and war state to scenario start (no loading screen)">QUICK RESTART</button>
-                    <button id="restart-scenario-btn" class="mini-btn" style="display:none; background: #c0392b; padding: 8px 10px;" title="FULL RELOAD: Reload the entire scenario from disk (shows loading screen)">FULL RELOAD</button>
-                    <button id="reset-btn" class="mini-btn" style="display:none" title="Reset Simulation">RESET</button>
-                    <button id="main-menu-btn" class="mini-btn" style="background:#444;" title="Return to Main Menu">MENU</button>
-                    <button id="leaderboard-btn" class="mini-btn" style="background:#555;" title="Open Global Leaderboard">RANK</button>
-                    <button id="mute-btn" class="mini-btn" style="min-width: 32px;" title="Toggle Mute">🔊</button>
-                    <button id="ingame-settings-btn" class="mini-btn" title="Open Settings">⚙️</button>
+                <div class="control-group hud-control-group hud-control-group--spaced utility-controls">
+                    <button id="quick-restart-btn" class="start-btn hud-action hud-action--warning hud-action--wide hud-start-hidden" title="QUICK RESTART: Instantly reset borders and war state to scenario start (no loading screen)">QUICK RESTART</button>
+                    <button id="restart-scenario-btn" class="mini-btn hud-action hud-action--danger hud-reload-action hud-start-hidden" title="FULL RELOAD: Reload the entire scenario from disk (shows loading screen)">FULL RELOAD</button>
+                    <button id="reset-btn" class="mini-btn hud-action hud-start-hidden" title="Reset Simulation">RESET</button>
+                    <button id="main-menu-btn" class="mini-btn hud-action hud-action--neutral" title="Return to Main Menu">MENU</button>
+                    <button id="leaderboard-btn" class="mini-btn hud-action hud-action--neutral-alt" title="Open Global Leaderboard">RANK</button>
+                    <button id="mute-btn" class="mini-btn hud-action hud-action--icon" title="Toggle Mute">🔊</button>
+                    <button id="ingame-settings-btn" class="mini-btn hud-action hud-action--icon" title="Open Settings">⚙️</button>
                 </div>
             </div>
         </div>
@@ -617,9 +617,9 @@
             </div>
         </div>
 
-        <div id="game-date-display" class="game-date-display" style="display:none;">0000/00/00</div>
+        <div id="game-date-display" class="game-date-display hud-readout hud-start-hidden">0000/00/00</div>
 
-        <aside id="commander-hud" class="commander-hud" style="display:none" aria-label="Commander status">
+        <aside id="commander-hud" class="commander-hud hud-surface hud-surface--commander hud-surface--interactive hud-start-hidden" aria-label="Commander status">
             <div class="commander-hud-header">
                 <div>
                     <span class="commander-kicker">OPERATION</span>
@@ -666,17 +666,17 @@
             <div id="commander-medal-preview" class="commander-medal-preview"></div>
         </aside>
 
-        <div id="casualty-panel" class="casualty-panel" style="display:none">
+        <div id="casualty-panel" class="casualty-panel hud-surface hud-start-hidden">
             <div class="casualty-title">CASUALTIES &amp; MANPOWER</div>
             <div id="casualty-lists-container"></div>
         </div>
 
-        <div id="economy-panel" class="economy-panel" style="display:none">
-            <div class="economy-panel-header">
+        <div id="economy-panel" class="economy-panel hud-surface hud-surface--strong hud-surface--interactive hud-start-hidden">
+            <div class="economy-panel-header hud-panel-header">
                 <span>WAR ECONOMY</span>
-                <div class="economy-panel-actions">
-                    <button id="economy-force-cycle-btn" class="mini-btn" style="display:none" title="God Mode: immediately settle one pay cycle">PAY NOW</button>
-                    <button id="minimize-economy-btn" class="mini-btn" title="Minimize economy panel">−</button>
+                <div class="economy-panel-actions hud-panel-actions">
+                    <button id="economy-force-cycle-btn" class="mini-btn hud-action hud-start-hidden" title="God Mode: immediately settle one pay cycle">PAY NOW</button>
+                    <button id="minimize-economy-btn" class="mini-btn hud-action hud-action--compact" title="Minimize economy panel">−</button>
                 </div>
             </div>
             <div id="economy-panel-content">
@@ -686,17 +686,17 @@
             </div>
         </div>
 
-        <div id="stats-panel" class="stats-panel" style="display:none">
-            <div id="treaty-alert" class="treaty-alert" style="display:none; margin-bottom: 15px;">
+        <div id="stats-panel" class="stats-panel hud-surface hud-surface--report hud-surface--interactive hud-start-hidden">
+            <div id="treaty-alert" class="treaty-alert hud-start-hidden">
                 <div class="treaty-content">
                     <div id="treaty-msg">Peace Proposal Offered</div>
-                    <div id="treaty-status" style="font-size: 10px; color: #888; margin-top: 5px;">Negotiating...</div>
+                    <div id="treaty-status" class="hud-event-status">Negotiating...</div>
                 </div>
             </div>
 
-            <div class="stats-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="stats-header hud-panel-header">
                 <span>COMBAT OPERATIONS REPORT</span>
-                <button id="minimize-stats-btn" class="mini-btn" style="background: #444; font-size: 14px; padding: 2px 8px;">−</button>
+                <button id="minimize-stats-btn" class="mini-btn hud-action hud-action--compact hud-action--neutral">−</button>
             </div>
             
             <div id="stats-grid" class="stats-grid">
@@ -706,8 +706,8 @@
             </div>
         </div>
 
-        <div class="bottom-controls">
-            <div class="coordinates-display" id="coords">0.0000, 0.0000</div>
+        <div class="bottom-controls hud-footer">
+            <div class="coordinates-display hud-surface hud-surface--soft hud-readout" id="coords">0.0000, 0.0000</div>
         </div>
     </div>
 

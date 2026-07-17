@@ -3502,7 +3502,6 @@ export function rebuildStatsPanel() {
 
 	let gridHtml = "";
 	activeSides.forEach((s, pos) => {
-		const color = sideColors[s.idx].replace(rgbaRe, "1)");
 		const main = s.countries[0];
 		const name =
 			s.countries.length > 1
@@ -3510,18 +3509,25 @@ export function rebuildStatsPanel() {
 				: main.name || `Side ${String.fromCharCode(65 + s.idx)}`;
 		if (pos > 0) gridHtml += `<div class="stats-vs">VS</div>`;
 		gridHtml += `<div class="side-stats" data-side-idx="${s.idx}">
-            <div class="stat-name" style="color:${color};" data-sidename="${s.idx}">${name}</div>
+			<div class="stat-name hud-side-accent" data-sidename="${s.idx}">${name}</div>
             <div class="stat-metrics">
-                <div class="metric"><span class="metric-label">PERSONNEL</span><span class="metric-value" data-sidesoldiers="${s.idx}" style="color:${color};">0</span></div>
+				<div class="metric"><span class="metric-label">PERSONNEL</span><span class="metric-value hud-side-accent" data-sidesoldiers="${s.idx}">0</span></div>
                 <div class="metric"><span class="metric-label">CITIES</span><span class="metric-value" data-sidecities="${s.idx}">0</span></div>
                 <div class="metric"><span class="metric-label">ARMOR</span><span class="metric-value" data-sidearmor="${s.idx}">0</span></div>
                 <div class="metric"><span class="metric-label">FTR</span><span class="metric-value" data-sidefighters="${s.idx}">0</span></div>
                 <div class="metric"><span class="metric-label">STRIKE</span><span class="metric-value" data-sidestrike="${s.idx}">0</span></div>
-                <div class="metric"><span class="metric-label">MOMENTUM</span><span class="metric-value" data-sidemomentum="${s.idx}" style="color:#f39c12;">◆ STALEMATE</span></div>
+				<div class="metric"><span class="metric-label">MOMENTUM</span><span class="metric-value metric-value--momentum" data-sidemomentum="${s.idx}">◆ STALEMATE</span></div>
             </div>
         </div>`;
 	});
 	statsGrid.innerHTML = gridHtml;
+	for (const s of activeSides) {
+		const sideStats = statsGrid.querySelector(`[data-side-idx="${s.idx}"]`);
+		sideStats?.style.setProperty(
+			"--side-color",
+			sideColors[s.idx].replace(rgbaRe, "1)"),
+		);
+	}
 
 	_cachedSoldierEls = [];
 	_cachedCityEls = [];
@@ -3564,12 +3570,16 @@ export function rebuildStatsPanel() {
 		for (let i = 0; i < sides.length; i++) {
 			if (i > 0) {
 				const vs = document.createElement("span");
-				vs.style.color = "#888";
+				vs.className = "hud-vs-separator";
 				vs.textContent = " vs ";
 				unitCountsDisplay.appendChild(vs);
 			}
 			const span = document.createElement("span");
-			span.style.color = sideColors[i].replace(rgbaRe, "1)");
+			span.className = "hud-side-accent";
+			span.style.setProperty(
+				"--side-color",
+				sideColors[i].replace(rgbaRe, "1)"),
+			);
 			span.textContent = "0";
 			unitCountsDisplay.appendChild(span);
 			spans[i] = span;
@@ -3579,16 +3589,32 @@ export function rebuildStatsPanel() {
 
 	let tugHtml = '<div class="tug-bar">';
 	activeSides.forEach((s) => {
-		const color = sideColors[s.idx].replace(rgbaRe, "0.85)");
-		tugHtml += `<div class="tug-segment" data-tugsegment="${s.idx}" style="background:${color};width:${Math.floor(100 / activeSides.length)}%;"></div>`;
+		tugHtml += `<div class="tug-segment" data-tugsegment="${s.idx}"></div>`;
 	});
 	tugHtml += '</div><div class="tug-labels">';
 	activeSides.forEach((s) => {
-		const color = sideColors[s.idx].replace(rgbaRe, "1)");
-		tugHtml += `<span class="control-pct" data-sidecontrol="${s.idx}" style="color:${color};">${Math.floor(100 / activeSides.length)}%</span>`;
+		tugHtml += `<span class="control-pct hud-side-accent" data-sidecontrol="${s.idx}">${Math.floor(100 / activeSides.length)}%</span>`;
 	});
 	tugHtml += "</div>";
 	tugOfWarContainer.innerHTML = tugHtml;
+	for (const s of activeSides) {
+		const segment = tugOfWarContainer.querySelector(
+			`[data-tugsegment="${s.idx}"]`,
+		);
+		segment?.style.setProperty(
+			"--side-color",
+			sideColors[s.idx].replace(rgbaRe, "0.85)"),
+		);
+		if (segment)
+			segment.style.width = `${Math.floor(100 / activeSides.length)}%`;
+		const label = tugOfWarContainer.querySelector(
+			`[data-sidecontrol="${s.idx}"]`,
+		);
+		label?.style.setProperty(
+			"--side-color",
+			sideColors[s.idx].replace(rgbaRe, "1)"),
+		);
+	}
 }
 export const treatyAlert = document.getElementById("treaty-alert");
 
@@ -19837,7 +19863,7 @@ export function updateLoop(now) {
 		if (mel) {
 			const phase = _sideWarPhase[si] || "STALEMATE";
 			const pc = PHASE_CONFIG[phase] || PHASE_CONFIG.STALEMATE;
-			mel.style.color = pc.color;
+			mel.style.setProperty("--momentum-color", pc.color);
 			mel.textContent = `${pc.symbol} ${phase}`;
 		}
 		const armorEl = _cachedArmorEls[si];
@@ -19918,7 +19944,6 @@ export function updateLoop(now) {
 					html += `<div class="casualty-side-list">`;
 				}
 				const isPrimary = sidePos === 0 && !isDefeated;
-				const sideColor = sideColors[currentSide].replace(rgbaRe, "1)");
 				const meta = countryMetadata[e.id - 1];
 				let flagSrc = meta?.flagUrl || "";
 				if (meta?.tempFlag instanceof HTMLCanvasElement) {
@@ -19927,18 +19952,27 @@ export function updateLoop(now) {
 					} catch (_e) {}
 				}
 				const safeFlagSrc = escapeHtml(flagSrc);
-				html += `<div class="casualty-item ${isPrimary ? "primary" : "secondary"}" style="opacity: ${isDefeated ? 0.45 : 1};" data-ctype="cas-item" data-cid="${e.id}">
-                    <img src="${safeFlagSrc}" class="cas-flag ${isPrimary ? "" : "small"}" alt="" loading="lazy" decoding="async" style="${isDefeated ? "filter: grayscale(1);" : ""}">
-                    <div class="cas-value" data-cval="${e.id}" style="font-size: ${isPrimary ? "18px" : "12px"}; color: ${sideColor};">${formatted}</div>`;
+				html += `<div class="casualty-item ${isPrimary ? "primary" : "secondary"} ${isDefeated ? "is-defeated" : ""}" data-ctype="cas-item" data-cid="${e.id}" data-side="${currentSide}">
+					<img src="${safeFlagSrc}" class="cas-flag ${isPrimary ? "" : "small"}" alt="" loading="lazy" decoding="async">
+					<div class="cas-value hud-side-accent" data-cval="${e.id}">${formatted}</div>`;
 				if (isPrimary) {
 					const mpRemaining = Math.max(0, sideSoldiers[currentSide]);
-					html += `<span class="cas-side-mp" data-sidemp="${currentSide}" style="font-size: ${isPrimary ? "18px" : "12px"}; color: ${sideColor};">${influenceLayer.formatSoldiers(mpRemaining)}</span>`;
+					html += `<span class="cas-side-mp hud-side-accent" data-sidemp="${currentSide}">${influenceLayer.formatSoldiers(mpRemaining)}</span>`;
 				}
 				html += `</div>`;
 				sidePos++;
 			}
 			if (currentSide !== -1) html += `</div>`;
 			casualtyContainer.innerHTML = html;
+			casualtyContainer
+				.querySelectorAll(".casualty-item[data-side]")
+				.forEach((item) => {
+					const sideIdx = Number(item.getAttribute("data-side"));
+					item.style.setProperty(
+						"--side-color",
+						sideColors[sideIdx].replace(rgbaRe, "1)"),
+					);
+				});
 			_casualtyValueEls = {};
 			casualtyContainer.querySelectorAll("[data-cval]").forEach((el) => {
 				_casualtyValueEls[el.getAttribute("data-cval")] = el;
