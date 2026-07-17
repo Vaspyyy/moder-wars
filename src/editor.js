@@ -2,8 +2,10 @@ import { CONFIG } from "./config.js";
 import { _geoCacheGet, _geoCachePut, fetchJSONWithCache } from "./geo.js";
 import {
 	activeScenarioId,
+	airPowerEnabled,
 	applyEarthDeserts,
 	applyWorldBounds,
+	armorEnabled,
 	biomeMask,
 	brushSize,
 	cities,
@@ -30,6 +32,8 @@ import {
 	editorUpdateBtn,
 	findCodeByName,
 	gameState,
+	gameTimeDate,
+	gameTimeEnabled,
 	generateProvinces,
 	getCookie,
 	getCountryColor,
@@ -82,6 +86,8 @@ import {
 	resetConflictSetupState,
 	resetSideInfluenceMaps,
 	setAdjacencyCache,
+	setAirPowerEnabled,
+	setArmorEnabled,
 	setBombsDisabled,
 	setCities,
 	setCountryMetadata,
@@ -117,6 +123,10 @@ import {
 	statusText,
 	terrainMask,
 	terrainTypeSelect,
+	timeDayInput,
+	timeMonthInput,
+	timeSystemCheckbox,
+	timeYearInput,
 	updateRefHandles,
 	updateRestartVisibility,
 	updateSidesUI,
@@ -967,6 +977,15 @@ function generatePresetData(name) {
 			allies: Array.isArray(m.allies) ? m.allies : [],
 			gdp: Number.isFinite(m.gdp) ? m.gdp : 0,
 			pop: Number.isFinite(m.pop) ? m.pop : 0,
+			armoredVehicles: Number.isFinite(m.armoredVehicles)
+				? m.armoredVehicles
+				: null,
+			fighters: Number.isFinite(m.fighters) ? m.fighters : null,
+			strikeAircraft: Number.isFinite(m.strikeAircraft)
+				? m.strikeAircraft
+				: null,
+			armorQuality: Number.isFinite(m.armorQuality) ? m.armorQuality : null,
+			airQuality: Number.isFinite(m.airQuality) ? m.airQuality : null,
 		}));
 
 	// Persist city data (custom + any edited capitals)
@@ -997,6 +1016,17 @@ function generatePresetData(name) {
 		worldHeightDeg: worldHeightDeg,
 		missilesEnabled: missilesEnabled,
 		warEconomyEnabled: warEconomyEnabled,
+		armorEnabled: armorEnabled,
+		airPowerEnabled: airPowerEnabled,
+		timeEnabled: gameTimeEnabled || timeSystemCheckbox?.checked === true,
+		startDate:
+			gameTimeDate || timeSystemCheckbox?.checked
+				? {
+						year: Number(gameTimeDate?.year || timeYearInput?.value || 1936),
+						month: Number(gameTimeDate?.month || timeMonthInput?.value || 1),
+						day: Number(gameTimeDate?.day || timeDayInput?.value || 1),
+					}
+				: null,
 		// Reference image persistence
 		referenceImageUrl: referenceImageUrl || null,
 		refImageOpacity: typeof refOpacity === "number" ? refOpacity : 0.5,
@@ -1103,6 +1133,18 @@ async function performPresetLoad(fileOrBlob, targetMode = "EDITOR") {
 		}
 		setBombsDisabled(disableBombsCheckbox?.checked || !missilesEnabled);
 		setWarEconomyEnabled(data.warEconomyEnabled !== false);
+		setArmorEnabled(data.armorEnabled !== false);
+		setAirPowerEnabled(data.airPowerEnabled !== false);
+		if (timeSystemCheckbox) {
+			timeSystemCheckbox.checked = data.timeEnabled === true;
+		}
+		if (data.startDate) {
+			if (timeYearInput)
+				timeYearInput.value = String(data.startDate.year || 1936);
+			if (timeMonthInput)
+				timeMonthInput.value = String(data.startDate.month || 1);
+			if (timeDayInput) timeDayInput.value = String(data.startDate.day || 1);
+		}
 
 		// Restore Custom Overlays
 		if (data.customSatelliteUrl) {

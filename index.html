@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://esm.sh 'sha256-UbZTXngprJmMtanNXRwZ5Pi9M0w7gaPwpxlWfxaufYA='; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.websim.ai https://*.websim.com https://*.arcgisonline.com https://*.google.com wss:; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self';">
-    <title>MW-V0.27.0</title>
+    <title>MW-V0.27.1</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous" />
     <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
@@ -546,13 +546,13 @@
                     </div>
                 </div>
                 <div class="option-row" style="margin-top: 10px;">
-                    <label style="font-size: 12px; color: #ccc;" title="Optional in‑game calendar that advances as the war runs (purely cosmetic).">Time System</label>
+                    <label style="font-size: 12px; color: #ccc;" title="Optional in-game calendar. The starting year controls historical equipment availability and the date advances during war.">Time System</label>
                     <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: flex-end;">
                         <label style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #ccc; cursor: pointer;" title="Toggle the calendar on/off for this conflict.">
                             <input type="checkbox" id="enable-time-checkbox" style="width: 16px; height: 16px; accent-color: #f1c40f; cursor: pointer;">
                             <span>Enable</span>
                         </label>
-                        <input id="time-year-input" type="number" placeholder="1936" style="width: 70px; padding: 4px 6px; background:#2a2a30;border:1px solid #444;border-radius:4px;color:#fff;font-size:11px;" title="Starting year for the war (for flavor only, not mechanics)." />
+                        <input id="time-year-input" type="number" placeholder="1936" style="width: 70px; padding: 4px 6px; background:#2a2a30;border:1px solid #444;border-radius:4px;color:#fff;font-size:11px;" title="Starting year controls historical armor, aircraft, and missile availability." />
                         <span style="color:#777;font-size:11px;">/</span>
                         <input id="time-month-input" type="number" min="1" max="12" placeholder="1" style="width: 40px; padding: 4px 6px; background:#2a2a30;border:1px solid #444;border-radius:4px;color:#fff;font-size:11px;" title="Starting month of the conflict." />
                         <span style="color:#777;font-size:11px;">/</span>
@@ -564,6 +564,17 @@
                     <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%;" title="Countries collect budget, pay recurring army payroll, and fund occupations. Unpaid armies can refuse orders, desert, and mutiny.">
                         <input type="checkbox" id="war-economy-checkbox" style="width: 18px; height: 18px; accent-color: #2ecc71; cursor: pointer;" checked>
                         <span style="font-size: 12px; color: #ccc;">WAR ECONOMY, MUTINIES &amp; REBELLIONS</span>
+                    </label>
+                </div>
+
+                <div class="option-row" style="margin-top: 5px; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;" title="Enable armored formations. Scenario counts override the historical 1916 gate.">
+                        <input type="checkbox" id="armor-enabled-checkbox" style="width:16px; height:16px; accent-color:#c98b3c; cursor:pointer;" checked>
+                        <span style="font-size:11px; color:#ccc;">ARMORED FORCES</span>
+                    </label>
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;" title="Enable fighters, strike aircraft, and destructible airfields. Scenario counts override the historical 1914 gate.">
+                        <input type="checkbox" id="air-power-enabled-checkbox" style="width:16px; height:16px; accent-color:#5dade2; cursor:pointer;" checked>
+                        <span style="font-size:11px; color:#ccc;">AIR POWER</span>
                     </label>
                 </div>
 
@@ -1266,6 +1277,17 @@
                 <button id="inspect-buff-btn" class="mini-btn" style="width: 100%; margin-bottom: 10px; background:#444; font-size:10px; padding:6px 8px;">
                     BUFF: NONE
                 </button>
+                <div id="combined-arms-editor-section" style="margin-bottom:10px; padding:8px; border-radius:6px; background:rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.06);">
+                    <label style="font-size:9px; color:#888; display:block; margin-bottom:6px; text-transform:uppercase; letter-spacing:1px;">Combined Arms</label>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px;">
+                        <label style="font-size:8px; color:#777;">ARMOR<input id="inspect-armored-vehicles" type="number" min="0" placeholder="AUTO" style="width:100%; margin-top:2px; padding:4px; background:#202126; border:1px solid #444; color:#fff; border-radius:3px;"></label>
+                        <label style="font-size:8px; color:#777;">ARMOR QUALITY<input id="inspect-armor-quality" type="number" min="0" max="100" placeholder="50" style="width:100%; margin-top:2px; padding:4px; background:#202126; border:1px solid #444; color:#fff; border-radius:3px;"></label>
+                        <label style="font-size:8px; color:#777;">FIGHTERS<input id="inspect-fighters" type="number" min="0" placeholder="AUTO" style="width:100%; margin-top:2px; padding:4px; background:#202126; border:1px solid #444; color:#fff; border-radius:3px;"></label>
+                        <label style="font-size:8px; color:#777;">STRIKE AIRCRAFT<input id="inspect-strike-aircraft" type="number" min="0" placeholder="AUTO" style="width:100%; margin-top:2px; padding:4px; background:#202126; border:1px solid #444; color:#fff; border-radius:3px;"></label>
+                        <label style="font-size:8px; color:#777; grid-column:1 / -1;">AIR QUALITY<input id="inspect-air-quality" type="number" min="0" max="100" placeholder="50" style="width:100%; margin-top:2px; padding:4px; background:#202126; border:1px solid #444; color:#fff; border-radius:3px;"></label>
+                    </div>
+                    <small style="display:block; margin-top:5px; color:#666; font-size:8px;">Blank uses the deterministic scenario fallback. Zero disables that asset.</small>
+                </div>
                 <div id="vassal-status-display" style="font-size: 10px; color: #f1c40f; margin-bottom: 8px; text-transform: uppercase; display: none;">
                     Vassal of: <span id="overlord-name-disp">None</span>
                 </div>

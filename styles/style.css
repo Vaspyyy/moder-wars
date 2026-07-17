@@ -966,6 +966,20 @@ body.use-system-font .scroller-card-name {
 	gap: 4px;
 }
 
+.side-stats .stat-metrics {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	column-gap: 6px;
+	row-gap: 4px;
+}
+
+.side-stats .metric-value {
+	font-size: 10px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
 .metric {
 	display: flex;
 	flex-direction: column;
@@ -2070,6 +2084,7 @@ body.use-system-font .scroller-card-name {
 
 .economy-god-actions {
 	margin-top: 6px;
+	flex-wrap: wrap;
 }
 
 .economy-god-actions button {

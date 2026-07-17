@@ -1,11 +1,42 @@
 import JSZip from "jszip";
 
 import L from "leaflet";
+import {
+	AIR_WING_STATES,
+	createAirPowerRuntime,
+	evacuateDefeatedWings,
+	findEligibleAirfield,
+	runAirPowerTick,
+} from "./air-power.js";
+import {
+	advanceAirfieldRepair,
+	airInfrastructureIsAvailable,
+	allocateAirWingMarkers,
+	COMBINED_ARMS_CONFIG,
+	captureAirfield,
+	computeAirOperationsCost,
+	computeArmorPayroll,
+	computeEquipmentPersonnel,
+	computeReplacementPurchase,
+	countryMayDeployStrategicEquipment,
+	getAirfieldCapacity,
+	getArmorCombatMultiplier,
+	getArmorInfluenceMultiplier,
+	getArmorSpeedMultiplier,
+	getQualityMultiplier,
+	groupEquipment,
+	isCombinedArmsFullyFunded,
+	resolveEquipmentProfile,
+	selectAirfieldSites,
+	unitCountsAsOccupationGarrison,
+	unitCountsForCapitulation,
+} from "./combined-arms.js";
 import { CONFIG } from "./config.js";
 import {
 	COMMAND_BANDS,
 	commandRefusalShare,
 	computeCurrentIncome,
+	computeEconomicStrength,
 	computeOccupationGarrisonPriority,
 	computeRequiredGarrison,
 	createEconomyState,
@@ -1817,7 +1848,12 @@ export let paintMaskId = -1; // -1 means no mask, >= 0 restricts painting to tha
 export let peaceTreatiesDisabled = false;
 export let bombsDisabled = false;
 export let warEconomyEnabled = true;
+export let armorEnabled = true;
+export let airPowerEnabled = true;
 export const countryEconomy = new Map();
+export const countryEquipment = new Map();
+export const airfields = [];
+export const airWings = [];
 export const occupationEconomies = new Map();
 export const activeRebellions = new Map();
 export const economyEvents = [];
@@ -1838,6 +1874,9 @@ export let animationFrameId = null;
 export let backgroundTickId = null;
 export let simFrameCount = 0;
 let _simTickCount = 0; // per-simulation-tick counter (unlike simFrameCount which is per-visual-frame)
+const _airPowerRuntime = createAirPowerRuntime();
+let _nextAirfieldId = 1;
+let _nextAirWingId = 1;
 let warGraceEndTick = 0;
 export let simSpeed = 3.0;
 let _perfLastTime = 0;
@@ -1852,12 +1891,18 @@ export let _cachedP1T = 0,
 export let _cachedSoldierEls = [];
 export let _cachedSideUnitCounts = [];
 export let _cachedSideSoldierEsts = [];
+export let _cachedSideArmorCounts = [];
+export let _cachedSideFighterCounts = [];
+export let _cachedSideStrikeCounts = [];
 export let _cachedSideTerritoryCounts = [];
 export let _cachedSideTerritoryPcts = [];
 export let _cachedCityEls = [];
 export let _cachedUnitCountSpans = [];
 export let _cachedTerritoryCtrlEls = [];
 export let _cachedMomentumEls = [];
+export let _cachedArmorEls = [];
+export let _cachedFighterEls = [];
+export let _cachedStrikeEls = [];
 export let _cachedTerritorySegEls = [];
 export const _cachedManpowerSpans = [];
 
@@ -2091,6 +2136,8 @@ const PERF_COUNTER_DEFAULTS = {
 	unitGarrisonTarget: 0,
 	unitCombatMove: 0,
 	economy: 0,
+	armor: 0,
+	airPower: 0,
 	// Water avoidance debug counters
 	coastDeflectHalved: 0,
 	knockbackBlocked: 0,
@@ -2685,6 +2732,19 @@ export const inspectAnnexClickBtn = document.getElementById(
 export const shareCountryBtn = document.getElementById("share-country-btn");
 export const closeInspectorBtn = document.getElementById("close-inspector-btn");
 export const inspectBuffBtn = document.getElementById("inspect-buff-btn");
+export const inspectArmoredVehiclesInput = document.getElementById(
+	"inspect-armored-vehicles",
+);
+export const inspectArmorQualityInput = document.getElementById(
+	"inspect-armor-quality",
+);
+export const inspectFightersInput = document.getElementById("inspect-fighters");
+export const inspectStrikeAircraftInput = document.getElementById(
+	"inspect-strike-aircraft",
+);
+export const inspectAirQualityInput = document.getElementById(
+	"inspect-air-quality",
+);
 export const annexCountryInput = document.getElementById("annex-country-input");
 export const annexCountryBtn = document.getElementById("annex-country-btn");
 export const addAllyBtn = document.getElementById("add-ally-btn");
@@ -3454,6 +3514,9 @@ export function rebuildStatsPanel() {
             <div class="stat-metrics">
                 <div class="metric"><span class="metric-label">PERSONNEL</span><span class="metric-value" data-sidesoldiers="${s.idx}" style="color:${color};">0</span></div>
                 <div class="metric"><span class="metric-label">CITIES</span><span class="metric-value" data-sidecities="${s.idx}">0</span></div>
+                <div class="metric"><span class="metric-label">ARMOR</span><span class="metric-value" data-sidearmor="${s.idx}">0</span></div>
+                <div class="metric"><span class="metric-label">FTR</span><span class="metric-value" data-sidefighters="${s.idx}">0</span></div>
+                <div class="metric"><span class="metric-label">STRIKE</span><span class="metric-value" data-sidestrike="${s.idx}">0</span></div>
                 <div class="metric"><span class="metric-label">MOMENTUM</span><span class="metric-value" data-sidemomentum="${s.idx}" style="color:#f39c12;">◆ STALEMATE</span></div>
             </div>
         </div>`;
@@ -3465,6 +3528,9 @@ export function rebuildStatsPanel() {
 	_cachedTerritoryCtrlEls = [];
 	_cachedTerritorySegEls = [];
 	_cachedMomentumEls = [];
+	_cachedArmorEls = [];
+	_cachedFighterEls = [];
+	_cachedStrikeEls = [];
 	for (const s of activeSides) {
 		_cachedSoldierEls[s.idx] = document.querySelector(
 			`[data-sidesoldiers="${s.idx}"]`,
@@ -3480,6 +3546,15 @@ export function rebuildStatsPanel() {
 		);
 		_cachedMomentumEls[s.idx] = document.querySelector(
 			`[data-sidemomentum="${s.idx}"]`,
+		);
+		_cachedArmorEls[s.idx] = document.querySelector(
+			`[data-sidearmor="${s.idx}"]`,
+		);
+		_cachedFighterEls[s.idx] = document.querySelector(
+			`[data-sidefighters="${s.idx}"]`,
+		);
+		_cachedStrikeEls[s.idx] = document.querySelector(
+			`[data-sidestrike="${s.idx}"]`,
 		);
 	}
 
@@ -4767,9 +4842,6 @@ export function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
 		const mountainIntensity =
 			mountainsEnabled && gridIdx !== -1 ? terrainMask[gridIdx] : 0;
 
-		// Naval units exert less influence on territory capture than land units
-		if (isAtSea) teamMult *= 0.4;
-
 		if (mountainIntensity > 0) {
 			// Nerf advancement size (radius) and expansion rate (influence power) in mountains
 			// Higher intensity mountains require units to be significantly closer to the border to flip it
@@ -4802,6 +4874,11 @@ export function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
 		if (u.victoryBoostTicks > 0) {
 			teamMult *= 3.0; // Buffed influence capture power
 			r *= 1.4; // Increased capture radius
+		}
+		// Naval units exert less influence on territory capture than land units.
+		if (isAtSea) teamMult *= 0.4;
+		if (u.kind === "armor") {
+			teamMult *= getArmorInfluenceMultiplier(!!u._armorSupported);
 		}
 
 		// Organic Push: Randomize push intensity per unit to create ragged, non-linear salients
@@ -5991,6 +6068,7 @@ export function spawnSingleUnit(
 	const unitCommandBand = economyState?.commandBand || COMMAND_BANDS.PAID;
 	units.push({
 		id: unitId,
+		kind: "army",
 		lat,
 		lng,
 		sideIndex: sideIdx,
@@ -6037,6 +6115,497 @@ function estimateTerritoryArmyUnits(cellCount) {
 			Math.floor(cells * CONFIG.UNIT_DENSITY_FACTOR * densityScale),
 		),
 	);
+}
+
+export function setArmorEnabled(value) {
+	armorEnabled = value !== false;
+	const checkbox = document.getElementById("armor-enabled-checkbox");
+	if (checkbox) checkbox.checked = armorEnabled;
+}
+
+export function setAirPowerEnabled(value) {
+	airPowerEnabled = value !== false;
+	const checkbox = document.getElementById("air-power-enabled-checkbox");
+	if (checkbox) checkbox.checked = airPowerEnabled;
+}
+
+function clearCombinedArmsState() {
+	countryEquipment.clear();
+	airfields.length = 0;
+	airWings.length = 0;
+	_nextAirfieldId = 1;
+	_nextAirWingId = 1;
+	_airPowerRuntime.lastMissionTick = 0;
+	_airPowerRuntime.lastUpdateMs = 0;
+}
+
+function equipmentStateForCountry(countryId) {
+	return countryEquipment.get(countryId) || null;
+}
+
+function activeAirWingMarkerCount() {
+	let count = 0;
+	for (const wing of airWings) {
+		if (wing.state !== AIR_WING_STATES.EVACUATED && wing.equipment > 0) count++;
+	}
+	return count;
+}
+
+function summarizeLiveEquipment() {
+	const summary = new Map();
+	const ensure = (countryId) => {
+		let entry = summary.get(countryId);
+		if (!entry) {
+			entry = {
+				armor: 0,
+				fighters: 0,
+				strike: 0,
+				operationalFighters: 0,
+				operationalStrike: 0,
+			};
+			summary.set(countryId, entry);
+		}
+		return entry;
+	};
+	for (const unit of units) {
+		if (unit.kind !== "armor" || unit.health <= 0) continue;
+		ensure(unit.sovereignId).armor += Math.max(0, unit.equipment || 0);
+	}
+	for (const wing of airWings) {
+		if (wing.equipment <= 0) continue;
+		const entry = ensure(wing.sovereignId);
+		if (wing.role === "FIGHTER") {
+			entry.fighters += wing.equipment;
+			if (wing.state !== AIR_WING_STATES.EVACUATED) {
+				entry.operationalFighters += wing.equipment;
+			}
+		} else {
+			entry.strike += wing.equipment;
+			if (wing.state !== AIR_WING_STATES.EVACUATED) {
+				entry.operationalStrike += wing.equipment;
+			}
+		}
+	}
+	for (const [countryId, state] of countryEquipment) {
+		const entry = ensure(countryId);
+		entry.armor += Math.max(0, state.reserveArmor || 0);
+		entry.fighters += Math.max(0, state.reserveFighters || 0);
+		entry.strike += Math.max(0, state.reserveStrike || 0);
+		state.currentArmor = entry.armor;
+		state.currentFighters = entry.fighters;
+		state.currentStrike = entry.strike;
+	}
+	return summary;
+}
+
+function countryFallbackAirfield(countryId, indices) {
+	if (!indices?.length) return null;
+	let rowSum = 0;
+	let columnSum = 0;
+	for (const cellIndex of indices) {
+		rowSum += Math.floor(cellIndex / gridWidth);
+		columnSum += cellIndex % gridWidth;
+	}
+	const centroidRow = rowSum / indices.length;
+	const centroidColumn = columnSum / indices.length;
+	let idx = indices[0];
+	let bestDistance = Infinity;
+	for (const cellIndex of indices) {
+		const row = Math.floor(cellIndex / gridWidth);
+		const column = cellIndex % gridWidth;
+		const distance = (row - centroidRow) ** 2 + (column - centroidColumn) ** 2;
+		if (distance < bestDistance) {
+			bestDistance = distance;
+			idx = cellIndex;
+		}
+	}
+	const y = Math.floor(idx / gridWidth);
+	const x = idx % gridWidth;
+	return {
+		name: `${countryMetadata[countryId - 1]?.name || "National"} Airbase`,
+		lat: y * CONFIG.GRID_RES - 90 + CONFIG.GRID_RES / 2,
+		lng: x * CONFIG.GRID_RES - 180 + CONFIG.GRID_RES / 2,
+	};
+}
+
+function createArmorFormationAtIndex({
+	countryId,
+	sideIdx,
+	equipment,
+	maxEquipment = equipment,
+	quality,
+	cellIndex,
+	frontVector = null,
+}) {
+	if (cellIndex < 0 || equipment <= 0) return null;
+	const y = Math.floor(cellIndex / gridWidth);
+	const x = cellIndex % gridWidth;
+	const pushBack = frontVector ? CONFIG.GRID_RES * 1.25 : 0;
+	const unitId = Math.random();
+	const unit = {
+		id: unitId,
+		kind: "armor",
+		lat:
+			y * CONFIG.GRID_RES -
+			90 +
+			CONFIG.GRID_RES / 2 +
+			(frontVector?.vy || 0) * pushBack,
+		lng:
+			x * CONFIG.GRID_RES -
+			180 +
+			CONFIG.GRID_RES / 2 +
+			(frontVector?.vx || 0) * pushBack,
+		sideIndex: sideIdx,
+		sovereignId: countryId,
+		beneficiaryId: countryId,
+		isAlpenjager: false,
+		health: CONFIG.UNIT_HEALTH,
+		equipment,
+		maxEquipment,
+		quality,
+		lastAttack: 0,
+		deployTicks: 45,
+		_cachedTarget: null,
+		_cachedScanKx: -999,
+		_cachedScanKy: -999,
+		_lastFullScanTick: 0,
+		_discipline: getUnitDiscipline({ id: unitId, sovereignId: countryId }),
+		_commandBand: COMMAND_BANDS.PAID,
+		_refusesOffense: false,
+		_armorSupported: false,
+	};
+	units.push(unit);
+	return unit;
+}
+
+function initializeCombinedArms(
+	countryToSideMap,
+	countryIndices,
+	frontlineIndices,
+) {
+	clearCombinedArmsState();
+	const profiles = [];
+	const sideFormationCounts = new Int32Array(MAX_SIDES);
+	for (const unit of units) {
+		if (unit.sideIndex >= 0 && unit.sideIndex < MAX_SIDES) {
+			sideFormationCounts[unit.sideIndex]++;
+		}
+	}
+	for (const country of sides.flat().filter(Boolean)) {
+		if (!countryMayDeployStrategicEquipment(country)) continue;
+		const sideIdx = countryToSideMap.get(country.id);
+		if (sideIdx === undefined) continue;
+		const meta = countryMetadata[country.id - 1] || country;
+		const indices = countryIndices.get(country.id) || [];
+		const expectedArmyUnits = estimateTerritoryArmyUnits(indices.length);
+		const economicStrength = computeEconomicStrength({
+			gdp: meta.gdp || 0,
+			pop: meta.pop || 0,
+			territoryUnits: expectedArmyUnits,
+		});
+		const profile = resolveEquipmentProfile({
+			metadata: meta,
+			expectedArmyUnits,
+			economicStrength,
+			timeEnabled: gameTimeEnabled,
+			startDate: gameTimeDate,
+			armorEnabled,
+			airPowerEnabled,
+		});
+		const state = {
+			countryId: country.id,
+			armorCapacity: profile.armoredVehicles,
+			fighterCapacity: profile.fighters,
+			strikeCapacity: profile.strikeAircraft,
+			currentArmor: profile.armoredVehicles,
+			currentFighters: profile.fighters,
+			currentStrike: profile.strikeAircraft,
+			reserveArmor: profile.armoredVehicles,
+			reserveFighters: profile.fighters,
+			reserveStrike: profile.strikeAircraft,
+			armorQuality: profile.armorQuality,
+			airQuality: profile.airQuality,
+			airOperationsDue: 0,
+			airOperationsCoverage: 1,
+			replacementSpent: 0,
+		};
+		countryEquipment.set(country.id, state);
+		profiles.push({ country, sideIdx, state, indices });
+
+		if (
+			airInfrastructureIsAvailable({
+				airPowerEnabled,
+				timeEnabled: gameTimeEnabled,
+				startDate: gameTimeDate,
+				aircraftCapacity: profile.fighters + profile.strikeAircraft,
+			})
+		) {
+			const countryCities = activeTheaterCities.filter(
+				(city) => (city.ownerId || city.sovereignId) === country.id,
+			);
+			const sites = selectAirfieldSites(
+				countryCities,
+				countryFallbackAirfield(country.id, indices),
+			);
+			for (const site of sites) {
+				airfields.push({
+					id: `airfield-${_nextAirfieldId++}`,
+					name: site.name || "Airbase",
+					lat: site.lat,
+					lng: site.lng,
+					ownerId: country.id,
+					controllerId: country.id,
+					sideIndex: sideIdx,
+					isCapital: !!site.isCapital,
+					health: COMBINED_ARMS_CONFIG.AIRFIELD_MAX_HEALTH,
+					disabled: false,
+					captureRepairCycles:
+						COMBINED_ARMS_CONFIG.AIRFIELD_CAPTURE_REPAIR_CYCLES,
+				});
+			}
+		}
+	}
+
+	if (armorEnabled) {
+		for (const profile of profiles) {
+			if (!profile.indices.length) continue;
+			const groups = groupEquipment(
+				profile.state.armorCapacity,
+				COMBINED_ARMS_CONFIG.ARMOR_GROUP_SIZE,
+				COMBINED_ARMS_CONFIG.MAX_ARMOR_GROUPS_PER_COUNTRY,
+			);
+			const fronts = frontlineIndices.get(profile.country.id) || [];
+			for (let groupIndex = 0; groupIndex < groups.length; groupIndex++) {
+				if (sideFormationCounts[profile.sideIdx] >= CONFIG.MAX_UNITS_PER_SIDE)
+					break;
+				const front = fronts.length ? fronts[groupIndex % fronts.length] : null;
+				const cellIndex =
+					front?.idx ?? profile.indices[groupIndex % profile.indices.length];
+				const formation = createArmorFormationAtIndex({
+					countryId: profile.country.id,
+					sideIdx: profile.sideIdx,
+					equipment: groups[groupIndex],
+					quality: profile.state.armorQuality,
+					cellIndex,
+					frontVector: front,
+				});
+				if (!formation) continue;
+				profile.state.reserveArmor -= groups[groupIndex];
+				sideFormationCounts[profile.sideIdx]++;
+			}
+		}
+	}
+
+	if (airPowerEnabled) {
+		const allocation = allocateAirWingMarkers(
+			profiles.flatMap(({ country, state }) => [
+				{
+					countryId: country.id,
+					role: "FIGHTER",
+					count: state.fighterCapacity,
+				},
+				{ countryId: country.id, role: "STRIKE", count: state.strikeCapacity },
+			]),
+		);
+		const fieldOccupancy = new Map();
+		for (const marker of allocation.markers) {
+			const state = countryEquipment.get(marker.countryId);
+			const field = airfields.find((candidate) => {
+				if (candidate.controllerId !== marker.countryId) return false;
+				const used = fieldOccupancy.get(candidate.id) || 0;
+				return used < getAirfieldCapacity(candidate);
+			});
+			if (!state || !field) continue;
+			fieldOccupancy.set(field.id, (fieldOccupancy.get(field.id) || 0) + 1);
+			if (marker.role === "FIGHTER") state.reserveFighters -= marker.equipment;
+			else state.reserveStrike -= marker.equipment;
+			airWings.push({
+				id: `air-wing-${_nextAirWingId++}`,
+				role: marker.role,
+				sovereignId: marker.countryId,
+				sideIndex: field.sideIndex,
+				equipment: marker.equipment,
+				maxEquipment: marker.equipment,
+				quality: state.airQuality,
+				airfieldId: field.id,
+				lat: field.lat,
+				lng: field.lng,
+				state:
+					marker.role === "FIGHTER"
+						? AIR_WING_STATES.PATROL
+						: AIR_WING_STATES.GROUNDED,
+				cooldownTicks:
+					marker.role === "STRIKE"
+						? (marker.countryId * 37 + airWings.length * 13) % 120
+						: 0,
+				rearmTicks: 0,
+				enduranceTicks: 0,
+			});
+		}
+	}
+	summarizeLiveEquipment();
+}
+
+function initializeMidWarCombinedArms(
+	country,
+	sideIdx,
+	indices,
+	fronts,
+	countryCities,
+) {
+	if (
+		!countryMayDeployStrategicEquipment(country) ||
+		countryEquipment.has(country.id) ||
+		!indices.length
+	)
+		return;
+	const meta = countryMetadata[country.id - 1] || country;
+	const expectedArmyUnits = estimateTerritoryArmyUnits(indices.length);
+	const profile = resolveEquipmentProfile({
+		metadata: meta,
+		expectedArmyUnits,
+		economicStrength: computeEconomicStrength({
+			gdp: meta.gdp || 0,
+			pop: meta.pop || 0,
+			territoryUnits: expectedArmyUnits,
+		}),
+		timeEnabled: gameTimeEnabled,
+		startDate: gameTimeDate,
+		armorEnabled,
+		airPowerEnabled,
+	});
+	const state = {
+		countryId: country.id,
+		armorCapacity: profile.armoredVehicles,
+		fighterCapacity: profile.fighters,
+		strikeCapacity: profile.strikeAircraft,
+		currentArmor: profile.armoredVehicles,
+		currentFighters: profile.fighters,
+		currentStrike: profile.strikeAircraft,
+		reserveArmor: profile.armoredVehicles,
+		reserveFighters: profile.fighters,
+		reserveStrike: profile.strikeAircraft,
+		armorQuality: profile.armorQuality,
+		airQuality: profile.airQuality,
+		airOperationsDue: 0,
+		airOperationsCoverage: 1,
+		replacementSpent: 0,
+	};
+	countryEquipment.set(country.id, state);
+	if (
+		airInfrastructureIsAvailable({
+			airPowerEnabled,
+			timeEnabled: gameTimeEnabled,
+			startDate: gameTimeDate,
+			aircraftCapacity: state.fighterCapacity + state.strikeCapacity,
+		})
+	) {
+		const sites = selectAirfieldSites(
+			countryCities,
+			countryFallbackAirfield(country.id, indices),
+		);
+		for (const site of sites) {
+			airfields.push({
+				id: `airfield-${_nextAirfieldId++}`,
+				name: site.name || "Airbase",
+				lat: site.lat,
+				lng: site.lng,
+				ownerId: country.id,
+				controllerId: country.id,
+				sideIndex: sideIdx,
+				isCapital: !!site.isCapital,
+				health: COMBINED_ARMS_CONFIG.AIRFIELD_MAX_HEALTH,
+				disabled: false,
+				captureRepairCycles:
+					COMBINED_ARMS_CONFIG.AIRFIELD_CAPTURE_REPAIR_CYCLES,
+			});
+		}
+	}
+	if (armorEnabled) {
+		const groups = groupEquipment(
+			state.armorCapacity,
+			COMBINED_ARMS_CONFIG.ARMOR_GROUP_SIZE,
+			COMBINED_ARMS_CONFIG.MAX_ARMOR_GROUPS_PER_COUNTRY,
+		);
+		let sideFormationCount = units.reduce(
+			(count, unit) => count + Number(unit.sideIndex === sideIdx),
+			0,
+		);
+		for (let index = 0; index < groups.length; index++) {
+			if (sideFormationCount >= CONFIG.MAX_UNITS_PER_SIDE) break;
+			const front = fronts.length ? fronts[index % fronts.length] : null;
+			const formation = createArmorFormationAtIndex({
+				countryId: country.id,
+				sideIdx,
+				equipment: groups[index],
+				quality: state.armorQuality,
+				cellIndex: front?.idx ?? indices[index % indices.length],
+				frontVector: front,
+			});
+			if (!formation) continue;
+			state.reserveArmor -= groups[index];
+			sideFormationCount++;
+		}
+	}
+	if (
+		airPowerEnabled &&
+		airfields.some((field) => field.ownerId === country.id)
+	) {
+		const room = Math.max(
+			0,
+			COMBINED_ARMS_CONFIG.MAX_ACTIVE_AIR_WINGS - activeAirWingMarkerCount(),
+		);
+		const allocation = allocateAirWingMarkers(
+			[
+				{
+					countryId: country.id,
+					role: "FIGHTER",
+					count: state.fighterCapacity,
+				},
+				{ countryId: country.id, role: "STRIKE", count: state.strikeCapacity },
+			],
+			room,
+		);
+		for (const marker of allocation.markers) {
+			const probe = {
+				sovereignId: country.id,
+				sideIndex: sideIdx,
+				lat: countryCities[0]?.lat || 0,
+				lng: countryCities[0]?.lng || 0,
+			};
+			const field = findEligibleAirfield({
+				wing: probe,
+				airfields,
+				wings: airWings,
+				allowAllied: false,
+				ferryRangeKm: Number.POSITIVE_INFINITY,
+			});
+			if (!field) continue;
+			const reserveKey =
+				marker.role === "FIGHTER" ? "reserveFighters" : "reserveStrike";
+			state[reserveKey] -= marker.equipment;
+			airWings.push({
+				id: `air-wing-${_nextAirWingId++}`,
+				role: marker.role,
+				sovereignId: country.id,
+				sideIndex: sideIdx,
+				equipment: marker.equipment,
+				maxEquipment: marker.equipment,
+				quality: state.airQuality,
+				airfieldId: field.id,
+				lat: field.lat,
+				lng: field.lng,
+				state:
+					marker.role === "FIGHTER"
+						? AIR_WING_STATES.PATROL
+						: AIR_WING_STATES.GROUNDED,
+				cooldownTicks: 0,
+				rearmTicks: 0,
+				enduranceTicks: 0,
+			});
+		}
+	}
+	summarizeLiveEquipment();
 }
 
 function findCountrySideIndex(countryId) {
@@ -6103,6 +6672,7 @@ export function updateEconomyPanel() {
 		economyPanel.style.display = "none";
 		return;
 	}
+	summarizeLiveEquipment();
 	economyPanel.style.display = "flex";
 	const activeIds = new Set(
 		sides
@@ -6115,13 +6685,18 @@ export function updateEconomyPanel() {
 		.sort((a, b) => b.arrearsCycles - a.arrearsCycles)
 		.map((state) => {
 			const meta = countryMetadata[state.countryId - 1];
+			const equipment = equipmentStateForCountry(state.countryId);
 			const bandClass = state.commandBand.toLowerCase();
 			const godActions = godModeActive
-				? `<div class="economy-god-actions"><button data-economy-action="fund" data-country-id="${state.countryId}">+$</button><button data-economy-action="clear" data-country-id="${state.countryId}">CLEAR</button></div>`
+				? `<div class="economy-god-actions"><button data-economy-action="fund" data-country-id="${state.countryId}">+$</button><button data-economy-action="clear" data-country-id="${state.countryId}">CLEAR</button>${equipment ? `<button title="Add 100 armored vehicles" data-economy-action="armor-add" data-country-id="${state.countryId}">+ARM</button><button title="Remove 100 armored vehicles" data-economy-action="armor-remove" data-country-id="${state.countryId}">−ARM</button><button title="Add 24 fighters" data-economy-action="fighter-add" data-country-id="${state.countryId}">+FTR</button><button title="Remove 24 fighters" data-economy-action="fighter-remove" data-country-id="${state.countryId}">−FTR</button><button title="Add 24 strike aircraft" data-economy-action="strike-add" data-country-id="${state.countryId}">+STR</button><button title="Remove 24 strike aircraft" data-economy-action="strike-remove" data-country-id="${state.countryId}">−STR</button><button data-economy-action="replacement-cycle" data-country-id="${state.countryId}">REPLACE</button><button data-economy-action="restore-equipment" data-country-id="${state.countryId}">RESTORE</button><button data-economy-action="repair-field" data-country-id="${state.countryId}">REPAIR FIELD</button><button data-economy-action="disable-field" data-country-id="${state.countryId}">DISABLE FIELD</button><button data-economy-action="strike-now" data-country-id="${state.countryId}">STRIKE</button>` : ""}</div>`
+				: "";
+			const equipmentMetrics = equipment
+				? `<div class="economy-metrics economy-equipment-metrics"><span title="Armored vehicles">ARM ${Math.round(equipment.currentArmor)}/${Math.round(equipment.armorCapacity)}</span><span title="Fighters">FTR ${Math.round(equipment.currentFighters)}/${Math.round(equipment.fighterCapacity)}</span><span title="Strike aircraft">STR ${Math.round(equipment.currentStrike)}/${Math.round(equipment.strikeCapacity)}</span><span title="Air operations funding">AIR ${Math.round((equipment.airOperationsCoverage ?? 1) * 100)}%</span><span title="Replacement spending">REP ${formatBudget(equipment.replacementSpent || 0)}</span></div>`
 				: "";
 			return `<div class="economy-row">
 				<div class="economy-row-heading"><span>${escapeHtml(meta?.name || `Country ${state.countryId}`)}</span><span class="economy-band ${bandClass}">${state.commandBand}</span></div>
 				<div class="economy-metrics"><span title="Treasury">$ ${formatBudget(state.treasury)}</span><span title="Income">+${formatBudget(state.income + state.occupationYield)}</span><span title="Payroll">PAY ${formatBudget(state.payrollDue)} @ ${Math.round(state.payrollCoverage * 100)}%</span><span title="Occupation costs">OCC ${formatBudget(state.occupationDue)}</span><span title="Payroll arrears">AR ${state.arrearsCycles.toFixed(1)}</span></div>
+				${equipmentMetrics}
 				${godActions}
 			</div>`;
 		});
@@ -6183,13 +6758,21 @@ function initializeWarEconomy() {
 			initialCoreCells: country.initialCells || 0,
 			initialCityPop: cityPopByCountry.get(country.id) || 0,
 		});
-		state.expectedArmyUnits = Math.max(
-			territoryUnits,
-			units.filter((u) => u.sovereignId === country.id).length,
+		const startingUnits = units.filter(
+			(unit) => unit.sovereignId === country.id,
+		);
+		state.expectedArmyUnits = Math.max(territoryUnits, startingUnits.length);
+		const startingMandatoryPayroll = startingUnits.reduce(
+			(total, unit) =>
+				total +
+				(unit.kind === "armor"
+					? computeArmorPayroll(unit.equipment || 0)
+					: ECONOMY_CONFIG.PAYROLL_PER_UNIT),
+			0,
 		);
 		state.baseIncome = Math.max(
 			state.baseIncome,
-			state.expectedArmyUnits / ECONOMY_CONFIG.TARGET_STARTING_PAYROLL_SHARE,
+			startingMandatoryPayroll / ECONOMY_CONFIG.TARGET_STARTING_PAYROLL_SHARE,
 		);
 		state.income = state.baseIncome;
 		state.treasury = state.baseIncome * ECONOMY_CONFIG.STARTING_RESERVE_CYCLES;
@@ -6203,6 +6786,416 @@ function initializeWarEconomy() {
 	}
 	emitEconomyEvent("War economy initialized");
 	updateEconomyPanel();
+}
+
+function reinforceEquipmentFromReserves(countryId) {
+	const state = countryEquipment.get(countryId);
+	if (!state) return;
+	for (const unit of units) {
+		if (
+			unit.kind !== "armor" ||
+			unit.sovereignId !== countryId ||
+			state.reserveArmor <= 0
+		)
+			continue;
+		const missing = Math.max(
+			0,
+			(unit.maxEquipment || 0) - (unit.equipment || 0),
+		);
+		const transfer = Math.min(missing, state.reserveArmor);
+		if (transfer <= 0) continue;
+		unit.equipment += transfer;
+		state.reserveArmor -= transfer;
+		unit.health = Math.max(
+			unit.health,
+			CONFIG.UNIT_HEALTH * (unit.equipment / Math.max(1, unit.maxEquipment)),
+		);
+	}
+	for (const wing of airWings) {
+		if (wing.sovereignId !== countryId) continue;
+		const reserveKey =
+			wing.role === "FIGHTER" ? "reserveFighters" : "reserveStrike";
+		const reserve = state[reserveKey] || 0;
+		if (reserve <= 0) continue;
+		const missing = Math.max(0, wing.maxEquipment - wing.equipment);
+		const transfer = Math.min(missing, reserve);
+		wing.equipment += transfer;
+		state[reserveKey] -= transfer;
+	}
+
+	const sideIdx = findCountrySideIndex(countryId);
+	if (sideIdx < 0) return;
+	const sideFormationCount = units.reduce(
+		(count, unit) => count + Number(unit.sideIndex === sideIdx),
+		0,
+	);
+	const armorFormations = units.filter(
+		(unit) => unit.kind === "armor" && unit.sovereignId === countryId,
+	).length;
+	const desiredArmorFormations = Math.min(
+		COMBINED_ARMS_CONFIG.MAX_ARMOR_GROUPS_PER_COUNTRY,
+		Math.ceil(
+			state.armorCapacity / Math.max(1, COMBINED_ARMS_CONFIG.ARMOR_GROUP_SIZE),
+		),
+	);
+	if (
+		state.reserveArmor > 0 &&
+		armorFormations < desiredArmorFormations &&
+		sideFormationCount < CONFIG.MAX_UNITS_PER_SIDE
+	) {
+		const home = findCountryHomeTarget(countryId, sideIdx);
+		const cellIndex = home ? getGridIndex(home.lat, home.lng) : -1;
+		if (cellIndex >= 0) {
+			const targetSize = Math.ceil(
+				state.armorCapacity / Math.max(1, desiredArmorFormations),
+			);
+			const equipment = Math.min(targetSize, state.reserveArmor);
+			if (
+				createArmorFormationAtIndex({
+					countryId,
+					sideIdx,
+					equipment,
+					maxEquipment: targetSize,
+					quality: state.armorQuality,
+					cellIndex,
+				})
+			) {
+				state.reserveArmor -= equipment;
+			}
+		}
+	}
+
+	for (const role of ["FIGHTER", "STRIKE"]) {
+		const reserveKey = role === "FIGHTER" ? "reserveFighters" : "reserveStrike";
+		const capacityKey =
+			role === "FIGHTER" ? "fighterCapacity" : "strikeCapacity";
+		const currentWings = airWings.filter(
+			(wing) => wing.sovereignId === countryId && wing.role === role,
+		);
+		const desiredWings = Math.min(
+			COMBINED_ARMS_CONFIG.MAX_WINGS_PER_ROLE_PER_COUNTRY,
+			Math.ceil(
+				state[capacityKey] / Math.max(1, COMBINED_ARMS_CONFIG.AIR_WING_SIZE),
+			),
+		);
+		if ((state[reserveKey] || 0) <= 0 || currentWings.length >= desiredWings)
+			continue;
+		if (activeAirWingMarkerCount() >= COMBINED_ARMS_CONFIG.MAX_ACTIVE_AIR_WINGS)
+			continue;
+		const probe = {
+			sovereignId: countryId,
+			sideIndex: sideIdx,
+			lat: currentWings[0]?.lat || 0,
+			lng: currentWings[0]?.lng || 0,
+		};
+		const field = findEligibleAirfield({
+			wing: probe,
+			airfields,
+			wings: airWings,
+			ferryRangeKm: Number.POSITIVE_INFINITY,
+		});
+		if (!field) continue;
+		const targetSize = Math.ceil(
+			state[capacityKey] / Math.max(1, desiredWings),
+		);
+		const equipment = Math.min(targetSize, state[reserveKey]);
+		state[reserveKey] -= equipment;
+		airWings.push({
+			id: `air-wing-${_nextAirWingId++}`,
+			role,
+			sovereignId: countryId,
+			sideIndex: sideIdx,
+			equipment,
+			maxEquipment: targetSize,
+			quality: state.airQuality,
+			airfieldId: field.id,
+			lat: field.lat,
+			lng: field.lng,
+			state:
+				role === "FIGHTER" ? AIR_WING_STATES.PATROL : AIR_WING_STATES.GROUNDED,
+			cooldownTicks: 0,
+			rearmTicks: 0,
+			enduranceTicks: 0,
+		});
+	}
+}
+
+function ensureCountryAirfields(countryId) {
+	if (airfields.some((field) => field.controllerId === countryId)) return true;
+	const sideIdx = findCountrySideIndex(countryId);
+	if (sideIdx < 0) return false;
+	const indices = [];
+	for (let index = 0; index < worldControlMap.length; index++) {
+		if (
+			landMask[index] > 0 &&
+			worldControlMap[index] === countryId &&
+			dominantSideMap[index] === sideIdx
+		) {
+			indices.push(index);
+		}
+	}
+	if (!indices.length) return false;
+	const countryCities = cities.filter((city) => {
+		if ((city.ownerId || city.sovereignId) !== countryId) return false;
+		const index = getGridIndex(city.lat, city.lng);
+		return index >= 0 && dominantSideMap[index] === sideIdx;
+	});
+	const sites = selectAirfieldSites(
+		countryCities,
+		countryFallbackAirfield(countryId, indices),
+	);
+	for (const site of sites) {
+		airfields.push({
+			id: `airfield-${_nextAirfieldId++}`,
+			name: site.name || "Airbase",
+			lat: site.lat,
+			lng: site.lng,
+			ownerId: countryId,
+			controllerId: countryId,
+			sideIndex: sideIdx,
+			isCapital: !!site.isCapital,
+			health: COMBINED_ARMS_CONFIG.AIRFIELD_MAX_HEALTH,
+			disabled: false,
+			captureRepairCycles: COMBINED_ARMS_CONFIG.AIRFIELD_CAPTURE_REPAIR_CYCLES,
+		});
+	}
+	return sites.length > 0;
+}
+
+function adjustCountryEquipment(countryId, category, delta) {
+	const state = countryEquipment.get(countryId);
+	if (!state || !Number.isFinite(delta) || delta === 0) return false;
+	const config = {
+		armor: {
+			capacity: "armorCapacity",
+			reserve: "reserveArmor",
+			role: null,
+		},
+		fighter: {
+			capacity: "fighterCapacity",
+			reserve: "reserveFighters",
+			role: "FIGHTER",
+		},
+		strike: {
+			capacity: "strikeCapacity",
+			reserve: "reserveStrike",
+			role: "STRIKE",
+		},
+	}[category];
+	if (!config) return false;
+	if (delta > 0) {
+		state[config.capacity] += delta;
+		state[config.reserve] += delta;
+		if (category !== "armor") ensureCountryAirfields(countryId);
+		reinforceEquipmentFromReserves(countryId);
+		summarizeLiveEquipment();
+		return true;
+	}
+
+	let remaining = Math.min(Math.abs(delta), state[config.capacity]);
+	state[config.capacity] = Math.max(0, state[config.capacity] - remaining);
+	const reserveRemoval = Math.min(remaining, state[config.reserve] || 0);
+	state[config.reserve] -= reserveRemoval;
+	remaining -= reserveRemoval;
+	if (category === "armor") {
+		for (let index = units.length - 1; index >= 0 && remaining > 0; index--) {
+			const unit = units[index];
+			if (unit.kind !== "armor" || unit.sovereignId !== countryId) continue;
+			const removed = Math.min(remaining, unit.equipment || 0);
+			unit.equipment -= removed;
+			remaining -= removed;
+			unit.health =
+				unit.equipment > 0
+					? CONFIG.UNIT_HEALTH *
+						(unit.equipment / Math.max(1, unit.maxEquipment || unit.equipment))
+					: 0;
+			if (unit.equipment <= 0) units.splice(index, 1);
+		}
+	} else {
+		for (
+			let index = airWings.length - 1;
+			index >= 0 && remaining > 0;
+			index--
+		) {
+			const wing = airWings[index];
+			if (wing.sovereignId !== countryId || wing.role !== config.role) continue;
+			const removed = Math.min(remaining, wing.equipment || 0);
+			wing.equipment -= removed;
+			remaining -= removed;
+			if (wing.equipment <= 0) airWings.splice(index, 1);
+		}
+	}
+	summarizeLiveEquipment();
+	return true;
+}
+
+function restoreCountryEquipmentCapacity(countryId) {
+	const state = countryEquipment.get(countryId);
+	if (!state) return false;
+	const live = summarizeLiveEquipment().get(countryId) || {
+		armor: 0,
+		fighters: 0,
+		strike: 0,
+	};
+	state.reserveArmor += Math.max(0, state.armorCapacity - live.armor);
+	state.reserveFighters += Math.max(0, state.fighterCapacity - live.fighters);
+	state.reserveStrike += Math.max(0, state.strikeCapacity - live.strike);
+	reinforceEquipmentFromReserves(countryId);
+	summarizeLiveEquipment();
+	return true;
+}
+
+function forceCountryStrike(countryId) {
+	const wing = airWings.find(
+		(candidate) =>
+			candidate.sovereignId === countryId &&
+			candidate.role === "STRIKE" &&
+			candidate.equipment > 0 &&
+			candidate.state !== AIR_WING_STATES.EVACUATED,
+	);
+	if (!wing) return false;
+	wing.cooldownTicks = 0;
+	wing.rearmTicks = 0;
+	wing.state = AIR_WING_STATES.GROUNDED;
+	wing.forceMission = true;
+	return true;
+}
+
+function updateEquipmentShortageState(countryId, equipment, live) {
+	const shortage = [
+		["armor", equipment.armorCapacity, live.armor],
+		["fighters", equipment.fighterCapacity, live.fighters],
+		["strike aircraft", equipment.strikeCapacity, live.strike],
+	]
+		.filter(
+			([, capacity, current]) => capacity > 0 && current / capacity < 0.25,
+		)
+		.map(([label]) => label);
+	const key = shortage.join("|");
+	if (key === (equipment._majorShortageKey || "")) return;
+	const name = countryMetadata[countryId - 1]?.name || `Country ${countryId}`;
+	if (shortage.length > 0) {
+		emitEconomyEvent(
+			`${name}: critical ${shortage.join(", ")} shortage`,
+			"danger",
+		);
+	} else if (equipment._majorShortageKey) {
+		emitEconomyEvent(`${name}: strategic equipment recovered`, "recovery");
+	}
+	equipment._majorShortageKey = key;
+}
+
+function settleCombinedArmsCycle(countryId, economyState, liveSummary) {
+	const equipment = countryEquipment.get(countryId);
+	if (!equipment) return;
+	if (activeRebellions.has(countryId)) {
+		equipment.airOperationsDue = 0;
+		equipment.airOperationsCoverage = 0;
+		equipment.replacementSpent = 0;
+		return;
+	}
+	const live = liveSummary.get(countryId) || {
+		armor: 0,
+		fighters: 0,
+		strike: 0,
+		operationalFighters: 0,
+		operationalStrike: 0,
+	};
+	const airOperationsDue = computeAirOperationsCost({
+		fighters: live.operationalFighters,
+		strikeAircraft: live.operationalStrike,
+	});
+	equipment.airOperationsDue = airOperationsDue;
+	const canOperate = isCombinedArmsFullyFunded(economyState);
+	const operationsSpend = canOperate
+		? Math.min(economyState.treasury, airOperationsDue)
+		: 0;
+	economyState.treasury -= operationsSpend;
+	equipment.airOperationsCoverage =
+		airOperationsDue > 0 ? operationsSpend / airOperationsDue : 1;
+	const wasGrounded = equipment._airGrounded === true;
+	equipment._airGrounded = equipment.airOperationsCoverage < 0.25;
+	if (wasGrounded !== equipment._airGrounded) {
+		const name = countryMetadata[countryId - 1]?.name || `Country ${countryId}`;
+		emitEconomyEvent(
+			`${name}: aircraft ${equipment._airGrounded ? "grounded" : "operations restored"}`,
+			equipment._airGrounded ? "warning" : "recovery",
+		);
+	}
+
+	const fullyFunded = canOperate && equipment.airOperationsCoverage >= 0.999;
+	if (fullyFunded) {
+		for (let index = 0; index < airfields.length; index++) {
+			const field = airfields[index];
+			if (field.controllerId !== countryId || field.health >= 100) continue;
+			const repair = advanceAirfieldRepair(field, {
+				fullyFunded,
+				budget: economyState.treasury,
+			});
+			if (repair.spent <= 0) continue;
+			Object.assign(field, repair.field);
+			economyState.treasury -= repair.spent;
+		}
+	}
+
+	equipment.replacementSpent = 0;
+	if (!fullyFunded) {
+		updateEquipmentShortageState(countryId, equipment, live);
+		summarizeLiveEquipment();
+		return;
+	}
+	const purchases = [
+		{
+			capacity: equipment.armorCapacity,
+			current: live.armor,
+			cost: COMBINED_ARMS_CONFIG.ARMOR_REPLACEMENT_COST,
+			reserveKey: "reserveArmor",
+		},
+		{
+			capacity: equipment.fighterCapacity,
+			current: live.fighters,
+			cost: COMBINED_ARMS_CONFIG.FIGHTER_REPLACEMENT_COST,
+			reserveKey: "reserveFighters",
+		},
+		{
+			capacity: equipment.strikeCapacity,
+			current: live.strike,
+			cost: COMBINED_ARMS_CONFIG.STRIKE_REPLACEMENT_COST,
+			reserveKey: "reserveStrike",
+		},
+	];
+	for (const offer of purchases) {
+		const purchase = computeReplacementPurchase({
+			capacity: offer.capacity,
+			current: offer.current,
+			unitCost: offer.cost,
+			budget: economyState.treasury,
+		});
+		if (purchase.purchased <= 0) continue;
+		equipment[offer.reserveKey] += purchase.purchased;
+		economyState.treasury -= purchase.spent;
+		equipment.replacementSpent += purchase.spent;
+	}
+	reinforceEquipmentFromReserves(countryId);
+	const nextLive = summarizeLiveEquipment().get(countryId) || live;
+	updateEquipmentShortageState(countryId, equipment, nextLive);
+}
+
+function runFreeCombinedArmsMaintenanceCycle() {
+	const live = summarizeLiveEquipment();
+	for (const countryId of countryEquipment.keys()) {
+		if (findCountrySideIndex(countryId) < 0) continue;
+		settleCombinedArmsCycle(
+			countryId,
+			{
+				treasury: Number.POSITIVE_INFINITY,
+				payrollCoverage: 1,
+				occupationCoverage: 1,
+				arrearsCycles: 0,
+			},
+			live,
+		);
+	}
 }
 
 function findCountryHomeTarget(countryId, sideIdx) {
@@ -6280,9 +7273,28 @@ function applyDesertion() {
 		unit.health -= healthLoss;
 		const sideIdx = unit.sideIndex;
 		if (sideIdx >= 0 && sideIdx < MAX_SIDES) {
-			const soldierLoss =
-				(healthLoss / Math.max(1, CONFIG.UNIT_HEALTH)) *
-				(soldiersPerUnit[sideIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO);
+			let soldierLoss;
+			if (unit.kind === "armor") {
+				const beforeEquipment = Math.max(0, unit.equipment || 0);
+				const nextEquipment = Math.min(
+					beforeEquipment,
+					Math.max(
+						0,
+						Math.ceil(
+							(unit.maxEquipment || beforeEquipment) *
+								(unit.health / CONFIG.UNIT_HEALTH),
+						),
+					),
+				);
+				unit.equipment = nextEquipment;
+				soldierLoss =
+					(beforeEquipment - nextEquipment) *
+					COMBINED_ARMS_CONFIG.ARMOR_CREW_PER_VEHICLE;
+			} else {
+				soldierLoss =
+					(healthLoss / Math.max(1, CONFIG.UNIT_HEALTH)) *
+					(soldiersPerUnit[sideIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO);
+			}
 			sideSoldiers[sideIdx] = Math.max(0, sideSoldiers[sideIdx] - soldierLoss);
 		}
 		if (unit.health > 1) survivingUnits.push(unit);
@@ -6440,6 +7452,7 @@ function launchRebellion(record) {
 		const unitId = Math.random();
 		units.push({
 			id: unitId,
+			kind: "army",
 			lat:
 				y * CONFIG.GRID_RES -
 				90 +
@@ -6511,6 +7524,39 @@ function launchRebellion(record) {
 	return true;
 }
 
+function returnEvacuatedAircraftToNationalReserve(countryId) {
+	const equipment = countryEquipment.get(countryId);
+	if (!equipment) return;
+	for (let index = airWings.length - 1; index >= 0; index--) {
+		const wing = airWings[index];
+		if (
+			wing.sovereignId !== countryId ||
+			wing.state !== AIR_WING_STATES.EVACUATED
+		)
+			continue;
+		if (wing.role === "FIGHTER") {
+			equipment.reserveFighters += Math.max(0, wing.equipment || 0);
+		} else {
+			equipment.reserveStrike += Math.max(0, wing.equipment || 0);
+		}
+		airWings.splice(index, 1);
+	}
+	summarizeLiveEquipment();
+}
+
+function restoreNationalAirfields(countryId, sideIdx) {
+	for (const field of airfields) {
+		if (field.ownerId !== countryId) continue;
+		Object.assign(
+			field,
+			captureAirfield(field, {
+				controllerId: countryId,
+				sideIndex: sideIdx,
+			}),
+		);
+	}
+}
+
 function resolveRebellionSuccess(rebellion) {
 	const record = occupationEconomies.get(rebellion.rebelId);
 	const rebelSideIdx = findCountrySideIndex(rebellion.rebelId);
@@ -6546,6 +7592,8 @@ function resolveRebellionSuccess(rebellion) {
 		country.strategy = "DEFENSIVE";
 	}
 	activeRebellions.delete(rebellion.rebelId);
+	restoreNationalAirfields(rebellion.rebelId, rebelSideIdx);
+	returnEvacuatedAircraftToNationalReserve(rebellion.rebelId);
 	occupationEconomies.delete(rebellion.rebelId);
 	_occupationGarrisonPlans.delete(rebellion.rebelId);
 	clearOccupationGarrisonAssignments(rebellion.rebelId);
@@ -6681,6 +7729,8 @@ function restoreCountryPeacefully(record) {
 		state.arrearsCycles = 0;
 		state.commandBand = COMMAND_BANDS.PAID;
 	}
+	restoreNationalAirfields(record.victimId, sideIdx);
+	returnEvacuatedAircraftToNationalReserve(record.victimId);
 	occupationEconomies.delete(record.victimId);
 	_occupationGarrisonPlans.delete(record.victimId);
 	clearOccupationGarrisonAssignments(record.victimId);
@@ -6868,7 +7918,10 @@ export function runWarEconomyCycle(force = false) {
 	if (!force && _simTickCount % ECONOMY_CONFIG.PAY_CYCLE_TICKS !== 0) return;
 	const started = performance.now();
 	if (!warEconomyEnabled) {
+		runFreeCombinedArmsMaintenanceCycle();
 		updateEconomyPanel();
+		window.__perf.economy =
+			(window.__perf.economy || 0) + performance.now() - started;
 		return;
 	}
 	economyPayCycle++;
@@ -6879,14 +7932,19 @@ export function runWarEconomyCycle(force = false) {
 			countryToSide.set(country.id, sideIdx);
 		}
 	}
-	const unitCounts = new Map();
+	const payrollDueByCountry = new Map();
 	for (const unit of units) {
-		unitCounts.set(
+		const payroll =
+			unit.kind === "armor"
+				? computeArmorPayroll(unit.equipment || 0)
+				: ECONOMY_CONFIG.PAYROLL_PER_UNIT;
+		payrollDueByCountry.set(
 			unit.sovereignId,
-			(unitCounts.get(unit.sovereignId) || 0) + 1,
+			(payrollDueByCountry.get(unit.sovereignId) || 0) + payroll,
 		);
 		getUnitDiscipline(unit);
 	}
+	const liveEquipment = summarizeLiveEquipment();
 	const controlledCore = new Map();
 	const occupiedCore = new Map();
 	for (let i = 0; i < deJureMap.length; i++) {
@@ -6934,6 +7992,7 @@ export function runWarEconomyCycle(force = false) {
 		if (annexerSideIdx !== undefined) {
 			for (const unit of units) {
 				if (unit.sideIndex !== annexerSideIdx) continue;
+				if (!unitCountsAsOccupationGarrison(unit)) continue;
 				const idx = getGridIndex(unit.lat, unit.lng);
 				if (idx !== -1 && deJureMap[idx] === record.victimId) garrisonUnits++;
 			}
@@ -6992,8 +8051,7 @@ export function runWarEconomyCycle(force = false) {
 		const settled = settleEconomyCycle(state, {
 			income,
 			occupationYield: occupationYieldByAnnexer.get(countryId) || 0,
-			payrollDue:
-				(unitCounts.get(countryId) || 0) * ECONOMY_CONFIG.PAYROLL_PER_UNIT,
+			payrollDue: payrollDueByCountry.get(countryId) || 0,
 			occupationDue: occupationDueByAnnexer.get(countryId) || 0,
 		});
 		settled.coreControlRatio = coreControlRatio;
@@ -7013,6 +8071,7 @@ export function runWarEconomyCycle(force = false) {
 			const country = sides[sideIdx]?.find((c) => c.id === countryId);
 			if (country) country.isSurging = false;
 		}
+		settleCombinedArmsCycle(countryId, settled, liveEquipment);
 	}
 
 	for (const record of occupationEconomies.values()) {
@@ -7058,6 +8117,11 @@ window.economyDebugReport = (countryId = null) => {
 		payCycle: economyPayCycle,
 		countries,
 		occupations,
+		equipment: Array.from(countryEquipment.values()).map((state) => ({
+			...state,
+		})),
+		airfields: airfields.map((field) => ({ ...field })),
+		airWings: airWings.map((wing) => ({ ...wing })),
 		occupationGarrisons: Array.from(_occupationGarrisonPlans.values()).map(
 			(plan) => ({
 				victimId: plan.victimId,
@@ -7776,7 +8840,12 @@ export async function _startWarInner() {
 	const _attackers = sides[0] || [];
 	const _defenders = sides[1] || [];
 	warEconomyEnabled = warEconomyCheckbox?.checked !== false;
+	armorEnabled =
+		document.getElementById("armor-enabled-checkbox")?.checked !== false;
+	airPowerEnabled =
+		document.getElementById("air-power-enabled-checkbox")?.checked !== false;
 	countryEconomy.clear();
+	clearCombinedArmsState();
 	occupationEconomies.clear();
 	clearOccupationGarrisonAssignments();
 	_occupationGarrisonPlans.clear();
@@ -8202,6 +9271,8 @@ export async function _startWarInner() {
 	}
 
 	// Efficient spawn based on pre-collected indices
+	initializeCombinedArms(countryToSideMap, countryIndices, frontlineIndices);
+
 	sides.forEach((side, sideIdx) => {
 		// Track how many units this side already has so we can enforce CONFIG.MAX_UNITS_PER_SIDE strictly.
 		let sideCurrentUnits = units.filter((u) => u.sideIndex === sideIdx).length;
@@ -8302,6 +9373,7 @@ export async function _startWarInner() {
 
 				units.push({
 					id: Math.random(),
+					kind: "army",
 					lat,
 					lng,
 					sideIndex: sideIdx,
@@ -8863,6 +9935,12 @@ export function activateCountryMidWar(country, sideIdx) {
 			u._cachedScanKy = -999;
 		}
 	});
+	for (const wing of airWings) {
+		if (wing.sovereignId === countryId) wing.sideIndex = sideIdx;
+	}
+	for (const field of airfields) {
+		if (field.controllerId === countryId) field.sideIndex = sideIdx;
+	}
 
 	let cellCount = 0;
 	const theaterIndices = [];
@@ -8963,11 +10041,31 @@ export function activateCountryMidWar(country, sideIdx) {
 	// Diminishing Density: Large countries have lower unit density to prevent overcrowding
 	const sizeFactor = Math.max(1, theaterIndices.length / 1500);
 	const densityScale = 1.0 / sizeFactor ** 0.45;
+	initializeMidWarCombinedArms(
+		country,
+		sideIdx,
+		theaterIndices,
+		frontlines,
+		newCities,
+	);
 
 	let count = Math.floor(
 		theaterIndices.length * CONFIG.UNIT_DENSITY_FACTOR * densityScale,
 	);
-	count = Math.max(4, Math.min(count, CONFIG.MAX_UNITS_PER_SIDE));
+	const remainingFormationSlots = Math.max(
+		0,
+		CONFIG.MAX_UNITS_PER_SIDE -
+			units.reduce(
+				(total, unit) => total + Number(unit.sideIndex === sideIdx),
+				0,
+			),
+	);
+	count = theaterIndices.length
+		? Math.min(
+				remainingFormationSlots,
+				Math.max(4, Math.min(count, CONFIG.MAX_UNITS_PER_SIDE)),
+			)
+		: 0;
 
 	for (let j = 0; j < count; j++) {
 		let fData;
@@ -8994,6 +10092,7 @@ export function activateCountryMidWar(country, sideIdx) {
 		const unitId = Math.random();
 		units.push({
 			id: unitId,
+			kind: "army",
 			lat:
 				y * CONFIG.GRID_RES -
 				90 +
@@ -9018,9 +10117,9 @@ export function activateCountryMidWar(country, sideIdx) {
 	}
 	if (warEconomyEnabled && !countryEconomy.has(countryId)) {
 		const territoryUnits = estimateTerritoryArmyUnits(cellCount);
-		const actualUnits = units.filter(
+		const actualFormations = units.filter(
 			(unit) => unit.sovereignId === countryId,
-		).length;
+		);
 		const state = createEconomyState({
 			countryId,
 			gdp: meta?.gdp || 0,
@@ -9032,10 +10131,18 @@ export function activateCountryMidWar(country, sideIdx) {
 				0,
 			),
 		});
-		state.expectedArmyUnits = Math.max(territoryUnits, actualUnits);
+		state.expectedArmyUnits = Math.max(territoryUnits, actualFormations.length);
+		const mandatoryPayroll = actualFormations.reduce(
+			(total, unit) =>
+				total +
+				(unit.kind === "armor"
+					? computeArmorPayroll(unit.equipment || 0)
+					: ECONOMY_CONFIG.PAYROLL_PER_UNIT),
+			0,
+		);
 		state.baseIncome = Math.max(
 			state.baseIncome,
-			state.expectedArmyUnits / ECONOMY_CONFIG.TARGET_STARTING_PAYROLL_SHARE,
+			mandatoryPayroll / ECONOMY_CONFIG.TARGET_STARTING_PAYROLL_SHARE,
 		);
 		state.income = state.baseIncome;
 		state.treasury = state.baseIncome * ECONOMY_CONFIG.STARTING_RESERVE_CYCLES;
@@ -11412,6 +12519,7 @@ export function syncOccupationGarrisonAssignments(sideIdx = null) {
 			unit._occupationGarrisonPointIndex = null;
 		}
 		const eligibleUnits = sideUnits.filter((unit) => {
+			if (!unitCountsAsOccupationGarrison(unit)) return false;
 			if (unit.deployTicks > 0 || getRebellionForUnit(unit)) return false;
 			if (getUnitCommandPolicy(unit).returnHome) return false;
 			return !(
@@ -11767,7 +12875,10 @@ export function evaluateAllPlans() {
 		if (_warPlan[_ri]) _warPlan[_ri].activeUnitCount = 0;
 		const _l2 = _ri + sides.length;
 		if (_warPlan[_l2]) _warPlan[_l2].activeUnitCount = 0;
-		if (_navalPlan[_ri]) _navalPlan[_ri].activeUnitCount = 0;
+		if (_navalPlan[_ri]) {
+			_navalPlan[_ri].activeUnitCount = 0;
+			_navalPlan[_ri].activeArmorCount = 0;
+		}
 		if (_navalSupplyPlan[_ri]) _navalSupplyPlan[_ri].activeUnitCount = 0;
 		if (_transportPlan[_ri]) _transportPlan[_ri].activeUnitCount = 0;
 		if (_defenderReactionPlan[_ri])
@@ -12680,6 +13791,174 @@ export function evaluateAllPlans() {
 	window.__perf.eval = (window.__perf.eval || 0) + performance.now() - _te;
 }
 
+function recordCountryCombatLoss(victimId, loss, attackerId = null) {
+	if (!Number.isFinite(loss) || loss <= 0 || victimId <= 0) return;
+	countryCasualties.set(
+		victimId,
+		(countryCasualties.get(victimId) || 0) + loss,
+	);
+	if (attackerId && attackerId !== victimId) {
+		let victimMap = casualtyByAttacker.get(victimId);
+		if (!victimMap) {
+			victimMap = new Map();
+			casualtyByAttacker.set(victimId, victimMap);
+		}
+		victimMap.set(attackerId, (victimMap.get(attackerId) || 0) + loss);
+	}
+}
+
+function applyLandUnitDamage(targetUnit, damage, attacker = null) {
+	if (
+		!targetUnit ||
+		!Number.isFinite(damage) ||
+		damage <= 0 ||
+		!Number.isFinite(targetUnit.health) ||
+		targetUnit.health <= 0
+	)
+		return 0;
+	const effectiveDamage = Math.min(targetUnit.health, damage);
+	const attackerId = attacker?.sovereignId || Number(attacker) || null;
+	let personnelLoss = 0;
+	if (targetUnit.kind === "armor") {
+		const beforeEquipment = Math.max(0, targetUnit.equipment || 0);
+		const nextHealth = Math.max(0, targetUnit.health - damage);
+		const nextEquipment = Math.min(
+			beforeEquipment,
+			Math.max(
+				0,
+				Math.ceil(
+					(targetUnit.maxEquipment || beforeEquipment) *
+						(nextHealth / CONFIG.UNIT_HEALTH),
+				),
+			),
+		);
+		const vehiclesLost = beforeEquipment - nextEquipment;
+		targetUnit.equipment = nextEquipment;
+		personnelLoss = vehiclesLost * COMBINED_ARMS_CONFIG.ARMOR_CREW_PER_VEHICLE;
+	} else {
+		const sideIdx = targetUnit.sideIndex;
+		const ratio =
+			sideIdx >= 0 && sideIdx < MAX_SIDES
+				? soldiersPerUnit[sideIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO
+				: CONFIG.UNIT_TO_SOLDIER_RATIO;
+		personnelLoss = (effectiveDamage / CONFIG.UNIT_HEALTH) * ratio;
+	}
+	targetUnit.health -= damage;
+	recordCountryCombatLoss(targetUnit.sovereignId, personnelLoss, attackerId);
+	return personnelLoss;
+}
+
+function combinedArmsDamage(
+	baseDamage,
+	attacker,
+	target,
+	{ mountain = false, urban = false } = {},
+) {
+	const landingMultiplier =
+		attacker?.kind === "armor" &&
+		(attacker._armorLandingPenaltyUntilTick || 0) > _simTickCount
+			? 0.3
+			: 1;
+	return (
+		baseDamage *
+		getArmorCombatMultiplier(attacker?.kind, target?.kind, {
+			mountain,
+			urban,
+			supported: !!attacker?._armorSupported,
+		}) *
+		(attacker?.kind === "armor" ? getQualityMultiplier(attacker.quality) : 1) *
+		landingMultiplier
+	);
+}
+
+function applyAirEquipmentLoss(wing, loss, attackerId = null) {
+	const equipmentLoss = Math.min(
+		Math.max(0, wing.equipment || 0),
+		Math.max(0, Math.round(loss || 0)),
+	);
+	if (equipmentLoss <= 0) return;
+	wing.equipment -= equipmentLoss;
+	recordCountryCombatLoss(
+		wing.sovereignId,
+		equipmentLoss * COMBINED_ARMS_CONFIG.AIRCREW_PER_AIRCRAFT,
+		attackerId,
+	);
+}
+
+function applyStrategicStrike(target, damage, wing) {
+	if (target.unit) {
+		applyLandUnitDamage(target.unit, damage, wing);
+		return;
+	}
+	if (!target.field) return;
+	const field = target.field;
+	const wasOperational = field.health > 0;
+	field.health = Math.max(0, field.health - damage);
+	field.disabled = field.health <= 0;
+	if (field.disabled && wasOperational) {
+		emitEconomyEvent(`${field.name}: airfield destroyed`, "danger");
+		for (const basedWing of airWings) {
+			if (basedWing.airfieldId !== field.id || basedWing.equipment <= 0)
+				continue;
+			applyAirEquipmentLoss(
+				basedWing,
+				Math.max(1, Math.round(damage * 0.25)),
+				wing.sovereignId,
+			);
+		}
+	}
+}
+
+function updateAirfieldControllers() {
+	for (const field of airfields) {
+		const idx = getGridIndex(field.lat, field.lng);
+		if (idx < 0 || landMask[idx] === 0) continue;
+		const nextSide = dominantSideMap[idx];
+		if (nextSide < 0 || nextSide === field.sideIndex) continue;
+		const physicalOccupierId = primaryOccupierMap[idx];
+		const controllerId =
+			findCountrySideIndex(physicalOccupierId) === nextSide
+				? physicalOccupierId
+				: sides[nextSide]?.[0]?.id || field.controllerId;
+		Object.assign(
+			field,
+			captureAirfield(field, {
+				controllerId,
+				sideIndex: nextSide,
+			}),
+		);
+		emitEconomyEvent(
+			`${field.name}: airfield captured and disabled`,
+			"warning",
+		);
+	}
+}
+
+function runCombinedArmsSimulationTick() {
+	if (!airPowerEnabled) return;
+	if (_simTickCount % COMBINED_ARMS_CONFIG.AIR_MISSION_INTERVAL === 0) {
+		updateAirfieldControllers();
+	}
+	if (airWings.length === 0) return;
+	runAirPowerTick({
+		tick: _simTickCount,
+		wings: airWings,
+		airfields,
+		units,
+		countryEquipment,
+		countryEconomy,
+		areSidesHostile,
+		applyStrikeDamage: applyStrategicStrike,
+		applyAirLoss: applyAirEquipmentLoss,
+		onEvent: emitEconomyEvent,
+		runtime: _airPowerRuntime,
+	});
+	if (window.__perf) {
+		window.__perf.airPower =
+			(window.__perf.airPower || 0) + (_airPowerRuntime.lastUpdateMs || 0);
+	}
+}
+
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = createPerfState();
@@ -12728,6 +14007,8 @@ export function performSimulationTick() {
 		"unitGarrisonTarget",
 		"unitCombatMove",
 		"economy",
+		"armor",
+		"airPower",
 	];
 	if (_perfEnabled) {
 		for (const k of _perfKeys) _perfSnap[k] = window.__perf[k] || 0;
@@ -12770,6 +14051,7 @@ export function performSimulationTick() {
 	// If in God Mode but the war hasn't started yet, don't tick simulation mechanics
 	if (godModeActive && preGodModeState !== "SIMULATING") return false;
 	runWarEconomyCycle();
+	runCombinedArmsSimulationTick();
 
 	_tickAllCombatants = sides.flat();
 	const _allCombatants = _tickAllCombatants;
@@ -12804,26 +14086,7 @@ export function performSimulationTick() {
 			return;
 		}
 
-		const effectiveDmg = Math.min(targetUnit.health, dmg);
-		const sIdx = targetUnit.sideIndex;
-		const ratio =
-			sIdx >= 0 && sIdx < MAX_SIDES
-				? soldiersPerUnit[sIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO
-				: CONFIG.UNIT_TO_SOLDIER_RATIO;
-		const loss = (effectiveDmg / CONFIG.UNIT_HEALTH) * ratio;
-
-		const currentTotal = countryCasualties.get(targetUnit.sovereignId) || 0;
-		countryCasualties.set(targetUnit.sovereignId, currentTotal + loss);
-
-		if (attackerUnit && attackerUnit.sovereignId !== targetUnit.sovereignId) {
-			const victimMap = casualtyByAttacker.get(targetUnit.sovereignId);
-			if (victimMap) {
-				const prev = victimMap.get(attackerUnit.sovereignId) || 0;
-				victimMap.set(attackerUnit.sovereignId, prev + loss);
-			}
-		}
-
-		targetUnit.health -= dmg;
+		applyLandUnitDamage(targetUnit, dmg, attackerUnit);
 	};
 
 	// Random War Mode mid‑simulation has been disabled to avoid corrupting existing wars.
@@ -12857,10 +14120,11 @@ export function performSimulationTick() {
 	let p2UnitsCount = 0;
 	for (let i = 0; i < units.length; i++) {
 		const u = units[i];
-		if (u.sideIndex === 0) p1UnitsCount++;
-		else if (u.sideIndex === 1) p2UnitsCount++;
+		const countsAsLandFormation = unitCountsForCapitulation(u);
+		if (countsAsLandFormation && u.sideIndex === 0) p1UnitsCount++;
+		else if (countsAsLandFormation && u.sideIndex === 1) p2UnitsCount++;
 		const s = countryStats.get(u.sovereignId);
-		if (s) s.units++;
+		if (s && countsAsLandFormation) s.units++;
 	}
 
 	// 1. Update territory
@@ -13089,6 +14353,7 @@ export function performSimulationTick() {
 			// Skip if already marked for removal or already at max merged strength
 			if (
 				unitsToRemove.has(u) ||
+				u.kind === "armor" ||
 				u.health >= maxMergedHealth ||
 				u.deployTicks > 0
 			)
@@ -13112,6 +14377,7 @@ export function performSimulationTick() {
 				if (
 					other === u ||
 					unitsToRemove.has(other) ||
+					other.kind === "armor" ||
 					(CONFIG.ENABLE_SIDE_HASH_COMBAT
 						? false
 						: other.sideIndex === u.sideIndex) ||
@@ -14419,6 +15685,11 @@ export function performSimulationTick() {
 		const unitRebellion = getRebellionForUnit(u);
 		const isRebelUnit = !!unitRebellion;
 		const _isAlpen = !!u.isAlpenjager;
+		if (u.kind === "armor") {
+			u._armorSupported =
+				_simTickCount - (u._armorSupportLastTick ?? Number.NEGATIVE_INFINITY) <=
+				12;
+		}
 
 		const kx = Math.floor((u.lng + 180) / HASH_SIZE);
 		const ky = Math.floor((u.lat + 90) / HASH_SIZE);
@@ -14497,10 +15768,29 @@ export function performSimulationTick() {
 									);
 									proximityDamage *= 0.85;
 								}
-								recordDamage(cached, proximityDamage, u);
+								recordDamage(
+									cached,
+									combinedArmsDamage(proximityDamage, u, cached, {
+										mountain: isMountain || cached.mountainIntensity > 0,
+										urban:
+											_cityIdxSetTick.has(gridIdxNow) ||
+											_cityIdxSetTick.has(eIdx),
+									}),
+									u,
+								);
 								recordDamage(
 									u,
-									proximityDamage * 0.8 * damageTakenMult,
+									combinedArmsDamage(
+										proximityDamage * 0.8 * damageTakenMult,
+										cached,
+										u,
+										{
+											mountain: isMountain || cached.mountainIntensity > 0,
+											urban:
+												_cityIdxSetTick.has(gridIdxNow) ||
+												_cityIdxSetTick.has(eIdx),
+										},
+									),
 									cached,
 								);
 								u.lastCombatTick = simFrameCount;
@@ -14651,8 +15941,31 @@ export function performSimulationTick() {
 											);
 											proximityDamage *= 0.85;
 										}
-										recordDamage(e, proximityDamage, u);
-										recordDamage(u, proximityDamage * 0.8 * damageTakenMult, e);
+										recordDamage(
+											e,
+											combinedArmsDamage(proximityDamage, u, e, {
+												mountain: isMountain || e.mountainIntensity > 0,
+												urban:
+													_cityIdxSetTick.has(gridIdxNow) ||
+													_cityIdxSetTick.has(_unitGridIdx.get(e) ?? -1),
+											}),
+											u,
+										);
+										recordDamage(
+											u,
+											combinedArmsDamage(
+												proximityDamage * 0.8 * damageTakenMult,
+												e,
+												u,
+												{
+													mountain: isMountain || e.mountainIntensity > 0,
+													urban:
+														_cityIdxSetTick.has(gridIdxNow) ||
+														_cityIdxSetTick.has(_unitGridIdx.get(e) ?? -1),
+												},
+											),
+											e,
+										);
 										u.lastCombatTick = simFrameCount;
 										e.lastCombatTick = simFrameCount;
 										if (e.health <= 0) u.victoryBoostTicks = 240;
@@ -14896,6 +16209,16 @@ export function performSimulationTick() {
 							else if (deLng < -180) deLng += 360;
 							const dSq = (u.lat - e.lat) ** 2 + deLng ** 2;
 							if (dSq < tacticalRadiusSq) {
+								if (
+									u.kind === "armor" &&
+									e.kind !== "armor" &&
+									e.sideIndex === u.sideIndex &&
+									!getUnitCommandPolicy(e).refusesOffense &&
+									dSq < COMBINED_ARMS_CONFIG.ARMOR_SUPPORT_RADIUS_DEG ** 2
+								) {
+									u._armorSupported = true;
+									u._armorSupportLastTick = _simTickCount;
+								}
 								let aWeight = 1;
 								const aSideIdx = countryToSideMap.get(e.sovereignId);
 								const aCountry =
@@ -15043,8 +16366,31 @@ export function performSimulationTick() {
 										proximityDamage *= 0.85;
 									}
 
-									recordDamage(e, proximityDamage, u);
-									recordDamage(u, proximityDamage * 0.8 * damageTakenMult, e);
+									recordDamage(
+										e,
+										combinedArmsDamage(proximityDamage, u, e, {
+											mountain: isMountain || e.mountainIntensity > 0,
+											urban:
+												_cityIdxSetTick.has(gridIdxNow) ||
+												_cityIdxSetTick.has(_unitGridIdx.get(e) ?? -1),
+										}),
+										u,
+									);
+									recordDamage(
+										u,
+										combinedArmsDamage(
+											proximityDamage * 0.8 * damageTakenMult,
+											e,
+											u,
+											{
+												mountain: isMountain || e.mountainIntensity > 0,
+												urban:
+													_cityIdxSetTick.has(gridIdxNow) ||
+													_cityIdxSetTick.has(_unitGridIdx.get(e) ?? -1),
+											},
+										),
+										e,
+									);
 
 									u.lastCombatTick = simFrameCount;
 									e.lastCombatTick = simFrameCount;
@@ -15251,6 +16597,16 @@ export function performSimulationTick() {
 						} else {
 							// Allies logic
 							if (dSq < tacticalRadiusSq) {
+								if (
+									u.kind === "armor" &&
+									e.kind !== "armor" &&
+									e.sideIndex === u.sideIndex &&
+									!getUnitCommandPolicy(e).refusesOffense &&
+									dSq < COMBINED_ARMS_CONFIG.ARMOR_SUPPORT_RADIUS_DEG ** 2
+								) {
+									u._armorSupported = true;
+									u._armorSupportLastTick = _simTickCount;
+								}
 								let aWeight = 1;
 								const aSideIdx = countryToSideMap.get(e.sovereignId);
 								const aCountry =
@@ -15796,7 +17152,15 @@ export function performSimulationTick() {
 
 			if (dist > 0.05) {
 				// Movement logic
-				const baseSpeed = isAtSea ? CONFIG.UNIT_NAVAL_SPEED : CONFIG.UNIT_SPEED;
+				let baseSpeed = isAtSea ? CONFIG.UNIT_NAVAL_SPEED : CONFIG.UNIT_SPEED;
+				if (u.kind === "armor") {
+					const isUrban = _cityIdxSetTick.has(gridIdxNow);
+					baseSpeed *= getArmorSpeedMultiplier({
+						urban: isUrban,
+						mountain: isMountain,
+						atSea: isAtSea,
+					});
+				}
 
 				// Roaming Prevention: Removed exploratory wiggle to force a focused linear push
 				const landSpeedBuff =
@@ -15865,6 +17229,14 @@ export function performSimulationTick() {
 					activePlan = null;
 					activePlanSignature = null;
 				}
+				if (
+					u.kind === "armor" &&
+					!u._armorSupported &&
+					["CAPTURE_CITY", "ENCIRCLE", "PUSH_FRONT"].includes(activePlan?.type)
+				) {
+					activePlan = null;
+					activePlanSignature = null;
+				}
 				if (occupationGarrisonActive) {
 					activePlan = null;
 					activePlanSignature = null;
@@ -15890,7 +17262,11 @@ export function performSimulationTick() {
 					!retreatVector &&
 					!isEngaged &&
 					!u.garrisonAssigned &&
-					(navalPlan.activeUnitCount || 0) < (navalPlan.maxAssignedUnits || 0)
+					(navalPlan.activeUnitCount || 0) <
+						(navalPlan.maxAssignedUnits || 0) &&
+					(u.kind !== "armor" ||
+						(navalPlan.activeArmorCount || 0) <
+							Math.floor((navalPlan.maxAssignedUnits || 0) * 0.2))
 				) {
 					if (u.navalAssigned) {
 						isNavalUnit = true;
@@ -15937,6 +17313,9 @@ export function performSimulationTick() {
 				) {
 					isPlanUnit = true;
 					navalPlan.activeUnitCount = (navalPlan.activeUnitCount || 0) + 1;
+					if (u.kind === "armor") {
+						navalPlan.activeArmorCount = (navalPlan.activeArmorCount || 0) + 1;
+					}
 					u.isTransport = true;
 
 					if (navalPlan.phase === "GATHERING") {
@@ -16062,6 +17441,9 @@ export function performSimulationTick() {
 							if (uGI !== -1 && landMask[uGI] !== 0) {
 								u.navalAssigned = false;
 								u._landedAt = simFrameCount;
+								if (u.kind === "armor") {
+									u._armorLandingPenaltyUntilTick = _simTickCount + 600;
+								}
 							}
 						}
 						planSpeedMult = 1.5;
@@ -17277,6 +18659,7 @@ export function performSimulationTick() {
 
 				// Strategic Depth: Units defending their own de jure (historical) territory get a defense boost.
 				let defenseBonus = 1.0;
+				let isUrbanCombat = false;
 				const currentIdx = gridIdxNow;
 				const isDeJureLand =
 					currentIdx !== -1 && deJureMap[currentIdx] === u.sovereignId;
@@ -17304,20 +18687,54 @@ export function performSimulationTick() {
 					}
 					if (nearbyCity) {
 						defenseBonus *= 0.45; // Significant defense boost in urban centers
+						isUrbanCombat = true;
 					}
 				}
+				const targetGridIdx = getGridIndex(target.lat, target.lng);
+				if (_cityIdxSetTick.has(targetGridIdx)) isUrbanCombat = true;
+				const armorTerrain = {
+					urban: isUrbanCombat,
+					mountain:
+						isMountain ||
+						(targetGridIdx >= 0 && terrainMask[targetGridIdx] > 0),
+				};
 
 				// War of Attrition: In long wars, units defending "dig in", taking less damage
 				// but making it harder for the attacker to break through without high losses.
 				const longWarDefense = simFrameCount > 6000 ? 0.75 : 1.0;
+				const attackerLandingMultiplier =
+					u.kind === "armor" &&
+					(u._armorLandingPenaltyUntilTick || 0) > _simTickCount
+						? 0.3
+						: 1;
+				const defenderLandingMultiplier =
+					target.kind === "armor" &&
+					(target._armorLandingPenaltyUntilTick || 0) > _simTickCount
+						? 0.3
+						: 1;
 
-				const tDmg = CONFIG.COMBAT_DAMAGE * damageDealtMult * 0.7;
+				const tDmg =
+					CONFIG.COMBAT_DAMAGE *
+					damageDealtMult *
+					0.7 *
+					getArmorCombatMultiplier(u.kind, target.kind, {
+						...armorTerrain,
+						supported: !!u._armorSupported,
+					}) *
+					(u.kind === "armor" ? getQualityMultiplier(u.quality) : 1) *
+					attackerLandingMultiplier;
 				const uDmg =
 					CONFIG.COMBAT_DAMAGE *
 					0.8 *
 					damageTakenMult *
 					defenseBonus *
-					longWarDefense;
+					longWarDefense *
+					getArmorCombatMultiplier(target.kind, u.kind, {
+						...armorTerrain,
+						supported: !!target._armorSupported,
+					}) *
+					(target.kind === "armor" ? getQualityMultiplier(target.quality) : 1) *
+					defenderLandingMultiplier;
 
 				if (
 					simFrameCount > 100 &&
@@ -17433,15 +18850,24 @@ export function performSimulationTick() {
 			u.lastCombatTick = 0;
 		}
 
-		if (u.health <= 0) {
+		if (u.health <= 0 || (u.kind === "armor" && (u.equipment || 0) <= 0)) {
 			// Units are already being counted for casualties per-hit during simulation.
 			// This just cleans them up when they reach 0 health.
+			if (u.kind === "armor") {
+				emitEconomyEvent(
+					`${countryMetadata[u.sovereignId - 1]?.name || "Country"}: armored formation destroyed`,
+					"danger",
+				);
+			}
 			units.splice(i, 1);
 		}
 
 		// ── unitLoop sub-timer: end combatMove ──
 		if (_detailedPerfEnabled && _u4 !== undefined)
 			window.__perf.unitCombatMove += performance.now() - _u4;
+		if (_detailedPerfEnabled && u.kind === "armor") {
+			window.__perf.armor += performance.now() - _u1;
+		}
 	}
 
 	// NOTE: even if sideSoldiers reach 0, sides remain on the field and can still recruit.
@@ -17751,17 +19177,47 @@ export function performSimulationTick() {
 	const numSides = sides.length;
 	const unitCounts = new Array(numSides).fill(0);
 	const soldierEsts = new Array(numSides).fill(0);
+	const armorCounts = new Array(numSides).fill(0);
+	const fighterCounts = new Array(numSides).fill(0);
+	const strikeCounts = new Array(numSides).fill(0);
+	const activeFighterCrew = new Array(numSides).fill(0);
+	const activeStrikeCrew = new Array(numSides).fill(0);
 	for (let i = 0; i < units.length; i++) {
 		const u = units[i];
 		const si = u.sideIndex;
 		if (si >= 0 && si < numSides) {
 			unitCounts[si]++;
-			const sp = soldiersPerUnit[si] || CONFIG.UNIT_TO_SOLDIER_RATIO;
-			soldierEsts[si] += (u.health / CONFIG.UNIT_HEALTH) * sp;
+			if (u.kind === "armor") {
+				const vehicles = Math.max(0, Math.round(u.equipment || 0));
+				armorCounts[si] += vehicles;
+			} else {
+				const sp = soldiersPerUnit[si] || CONFIG.UNIT_TO_SOLDIER_RATIO;
+				soldierEsts[si] += (u.health / CONFIG.UNIT_HEALTH) * sp;
+			}
 		}
+	}
+	for (const wing of airWings) {
+		const si = wing.sideIndex;
+		if (si < 0 || si >= numSides || wing.equipment <= 0) continue;
+		const aircraft = Math.max(0, Math.round(wing.equipment));
+		if (wing.role === "FIGHTER") fighterCounts[si] += aircraft;
+		else strikeCounts[si] += aircraft;
+		if (wing.state === AIR_WING_STATES.EVACUATED) continue;
+		if (wing.role === "FIGHTER") activeFighterCrew[si] += aircraft;
+		else activeStrikeCrew[si] += aircraft;
+	}
+	for (let si = 0; si < numSides; si++) {
+		soldierEsts[si] += computeEquipmentPersonnel({
+			armoredVehicles: armorCounts[si],
+			fighters: activeFighterCrew[si],
+			strikeAircraft: activeStrikeCrew[si],
+		});
 	}
 	_cachedSideUnitCounts = unitCounts;
 	_cachedSideSoldierEsts = soldierEsts;
+	_cachedSideArmorCounts = armorCounts;
+	_cachedSideFighterCounts = fighterCounts;
+	_cachedSideStrikeCounts = strikeCounts;
 
 	window.__perf.post += performance.now() - _t4;
 	const _tickMs = performance.now() - _t0;
@@ -18384,6 +19840,12 @@ export function updateLoop(now) {
 			mel.style.color = pc.color;
 			mel.textContent = `${pc.symbol} ${phase}`;
 		}
+		const armorEl = _cachedArmorEls[si];
+		if (armorEl) armorEl.textContent = _cachedSideArmorCounts[si] || 0;
+		const fighterEl = _cachedFighterEls[si];
+		if (fighterEl) fighterEl.textContent = _cachedSideFighterCounts[si] || 0;
+		const strikeEl = _cachedStrikeEls[si];
+		if (strikeEl) strikeEl.textContent = _cachedSideStrikeCounts[si] || 0;
 	}
 
 	if (_cachedUnitCountSpans.length) {
@@ -18652,6 +20114,52 @@ export function showTreatyOffer(proposerSideIdx, willAccept) {
 			}, 1500);
 		}
 	}, 2000);
+}
+
+function resolveCapitulatedEquipment(countryId, sideIndex) {
+	const state = countryEquipment.get(countryId);
+	if (state) state.reserveArmor = 0;
+	const reserveAircraftLost = Math.max(
+		0,
+		(state?.reserveFighters || 0) + (state?.reserveStrike || 0),
+	);
+	if (state) {
+		state.reserveFighters = 0;
+		state.reserveStrike = 0;
+	}
+	const evacuation = evacuateDefeatedWings({
+		countryId,
+		sideIndex,
+		wings: airWings,
+		airfields,
+	});
+	const evacuatedAircraft = evacuation.evacuatedAircraft;
+	const lostAircraft = reserveAircraftLost + evacuation.lostAircraft;
+	if (state) {
+		state.currentArmor = 0;
+		state.currentFighters = airWings
+			.filter(
+				(wing) => wing.sovereignId === countryId && wing.role === "FIGHTER",
+			)
+			.reduce((sum, wing) => sum + Math.max(0, wing.equipment || 0), 0);
+		state.currentStrike = airWings
+			.filter(
+				(wing) => wing.sovereignId === countryId && wing.role === "STRIKE",
+			)
+			.reduce((sum, wing) => sum + Math.max(0, wing.equipment || 0), 0);
+	}
+	if (evacuatedAircraft > 0) {
+		emitEconomyEvent(
+			`${countryMetadata[countryId - 1]?.name || "Country"}: ${evacuatedAircraft} aircraft evacuated into allied storage`,
+			"warning",
+		);
+	}
+	if (lostAircraft > 0) {
+		emitEconomyEvent(
+			`${countryMetadata[countryId - 1]?.name || "Country"}: ${lostAircraft} aircraft lost during capitulation`,
+			"danger",
+		);
+	}
 }
 
 export function capitulateCountry(country, sideIndex) {
@@ -18992,6 +20500,7 @@ export function capitulateCountry(country, sideIndex) {
 	// Preserve the defeated nation's economic identity. The annexer receives a
 	// partial occupation yield and owes occupation costs through the war economy.
 	if (primaryAnnexerId > 0) registerOccupation(country.id, primaryAnnexerId);
+	resolveCapitulatedEquipment(country.id, sideIndex);
 
 	// Remove the country from its alliance list
 	const cIdx = side.indexOf(country);
@@ -19741,6 +21250,49 @@ if (economyPanelBody) {
 			state.commandBand = COMMAND_BANDS.PAID;
 			state.payrollCoverage = 1;
 			updateUnitCommandState(countryId, previousBand, state.commandBand);
+		} else if (action === "armor-add") {
+			adjustCountryEquipment(countryId, "armor", 100);
+		} else if (action === "armor-remove") {
+			adjustCountryEquipment(countryId, "armor", -100);
+		} else if (action === "fighter-add") {
+			adjustCountryEquipment(countryId, "fighter", 24);
+		} else if (action === "fighter-remove") {
+			adjustCountryEquipment(countryId, "fighter", -24);
+		} else if (action === "strike-add") {
+			adjustCountryEquipment(countryId, "strike", 24);
+		} else if (action === "strike-remove") {
+			adjustCountryEquipment(countryId, "strike", -24);
+		} else if (action === "replacement-cycle" && state) {
+			settleCombinedArmsCycle(countryId, state, summarizeLiveEquipment());
+		} else if (action === "restore-equipment") {
+			restoreCountryEquipmentCapacity(countryId);
+		} else if (action === "repair-field") {
+			const field = airfields.find(
+				(candidate) =>
+					candidate.controllerId === countryId && candidate.health < 100,
+			);
+			if (field) {
+				field.health = 100;
+				field.disabled = false;
+				field.captureRepairCycles =
+					COMBINED_ARMS_CONFIG.AIRFIELD_CAPTURE_REPAIR_CYCLES;
+			}
+		} else if (action === "disable-field") {
+			const field = airfields.find(
+				(candidate) =>
+					candidate.controllerId === countryId && candidate.health > 0,
+			);
+			if (field) {
+				field.health = 0;
+				field.disabled = true;
+			}
+		} else if (action === "strike-now") {
+			if (forceCountryStrike(countryId)) {
+				emitEconomyEvent(
+					`${countryMetadata[countryId - 1]?.name || "Country"}: strike mission forced`,
+					"info",
+				);
+			}
 		} else if (action === "resist" && occupation) {
 			occupation.resistance = Math.min(100, occupation.resistance + 25);
 		} else if (action === "rebel" && occupation) {
@@ -22420,6 +23972,14 @@ export function openInspector(id) {
 	inspectNameInput.value = inspectorDisplayName;
 	inspectNameInput.disabled = isWar;
 	inspectColorSwatch.style.backgroundColor = meta.color;
+	const setOptionalNumberInput = (input, value) => {
+		if (input) input.value = Number.isFinite(value) ? String(value) : "";
+	};
+	setOptionalNumberInput(inspectArmoredVehiclesInput, meta.armoredVehicles);
+	setOptionalNumberInput(inspectArmorQualityInput, meta.armorQuality);
+	setOptionalNumberInput(inspectFightersInput, meta.fighters);
+	setOptionalNumberInput(inspectStrikeAircraftInput, meta.strikeAircraft);
+	setOptionalNumberInput(inspectAirQualityInput, meta.airQuality);
 
 	// Initialize Buff button state for this country (visible + hidden)
 	if (inspectBuffBtn) {
@@ -22480,6 +24040,7 @@ export function _placeDivisionAt(latlng, sovereignId) {
 
 	units.push({
 		id: Math.random(),
+		kind: "army",
 		lat: latlng.lat,
 		lng: latlng.lng,
 		sideIndex: sideIdx,
@@ -22902,6 +24463,38 @@ inspectColorPicker.addEventListener("input", (e) => {
 		influenceLayer.render();
 	}
 });
+
+function bindCombinedArmsMetadataInput(
+	input,
+	key,
+	max = Number.POSITIVE_INFINITY,
+) {
+	input?.addEventListener("input", (event) => {
+		if (editingCountryId <= 0) return;
+		const meta = countryMetadata[editingCountryId - 1];
+		if (!meta) return;
+		if (event.target.value === "") {
+			delete meta[key];
+			return;
+		}
+		const value = Number(event.target.value);
+		if (!Number.isFinite(value)) return;
+		meta[key] = Math.max(0, Math.min(max, Math.round(value)));
+		const state = countryEquipment.get(editingCountryId);
+		if (!state) return;
+		if (key === "armoredVehicles") state.armorCapacity = meta[key];
+		else if (key === "fighters") state.fighterCapacity = meta[key];
+		else if (key === "strikeAircraft") state.strikeCapacity = meta[key];
+		else if (key === "armorQuality") state.armorQuality = meta[key];
+		else if (key === "airQuality") state.airQuality = meta[key];
+	});
+}
+
+bindCombinedArmsMetadataInput(inspectArmoredVehiclesInput, "armoredVehicles");
+bindCombinedArmsMetadataInput(inspectArmorQualityInput, "armorQuality", 100);
+bindCombinedArmsMetadataInput(inspectFightersInput, "fighters");
+bindCombinedArmsMetadataInput(inspectStrikeAircraftInput, "strikeAircraft");
+bindCombinedArmsMetadataInput(inspectAirQualityInput, "airQuality", 100);
 
 shareCountryBtn.addEventListener("click", () => {
 	if (editingCountryId <= 0) return;
