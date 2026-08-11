@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://esm.sh 'sha256-UbZTXngprJmMtanNXRwZ5Pi9M0w7gaPwpxlWfxaufYA='; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.websim.ai https://*.websim.com https://*.arcgisonline.com https://*.google.com wss:; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self';">
-    <title>MW-V0.27.2</title>
+    <title>MW-V0.27.3</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous" />
     <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
@@ -261,6 +261,10 @@
                     <button id="main-settings-btn" class="menu-v2-link">SETTINGS</button>
                     <div class="nav-separator"></div>
                     <button id="benchmark-btn" class="menu-v2-link">BENCHMARK</button>
+                    <div class="nav-separator"></div>
+                    <button id="war-archive-btn" class="menu-v2-link" data-i18n="WAR_ARCHIVE">
+                        WAR ARCHIVE
+                    </button>
                 </div>
 
                 <!-- New Integrated Scenario Scroller -->
@@ -509,113 +513,275 @@
             </div>
         </div>
         
-        <div id="setup-panel" class="setup-panel">
-            <div class="setup-resize-grip"></div>
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                <h3 class="setup-title" style="margin: 0;" data-i18n="CONFLICT_SETUP">Conflict Setup</h3>
-                <div style="display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end;">
-                    <button id="random-war-btn" class="mini-btn" style="background: #9b59b6;" data-i18n="RANDOM_WAR_OFF" title="Periodically spawns extra AI wars between random neighboring countries during the simulation.">Random War: OFF</button>
-                    <button id="add-side-btn" class="mini-btn" style="background: #8e44ad;" data-i18n="ADD_SIDE" title="Add another faction column so more teams can join this conflict.">+ Side</button>
-                    <button id="ffa-toggle-btn" class="mini-btn" style="background: #e67e22;" data-i18n="FFA" title="Free‑for‑all: each side fights everyone else instead of two big alliances.">FFA</button>
-                    <button id="minimize-setup-btn" class="mini-btn" style="background: #555; font-size: 14px; padding: 2px 8px;">−</button>
+        <section
+            id="setup-panel"
+            class="setup-panel hud-surface hud-surface--interactive"
+            aria-labelledby="experiment-setup-title"
+        >
+            <div class="setup-resize-grip" aria-hidden="true"></div>
+            <header class="experiment-setup-header">
+                <div>
+                    <span class="experiment-kicker" data-i18n="EXPERIMENT_SANDBOX">SIMULATION SANDBOX</span>
+                    <h3
+                        id="experiment-setup-title"
+                        class="setup-title"
+                        data-i18n="CONFLICT_SETUP"
+                    >
+                        Conflict Setup
+                    </h3>
+                </div>
+                <button
+                    id="minimize-setup-btn"
+                    class="mini-btn experiment-icon-btn"
+                    type="button"
+                    aria-label="Collapse experiment setup"
+                    title="Collapse experiment setup"
+                >
+                    −
+                </button>
+            </header>
+
+            <div id="setup-basic" class="experiment-basic" aria-label="Basic experiment setup">
+                <div class="experiment-basic-grid">
+                    <div class="experiment-field experiment-field--wide">
+                        <span id="experiment-seed-label" data-i18n="EXPERIMENT_SEED">Seed</span>
+                        <div class="experiment-inline-control">
+                            <input
+                                id="experiment-seed-input"
+                                type="number"
+                                min="0"
+                                max="4294967295"
+                                step="1"
+                                inputmode="numeric"
+                                placeholder="Random"
+                                aria-describedby="experiment-seed-status"
+                                aria-labelledby="experiment-seed-label"
+                            >
+                            <button
+                                id="randomize-seed-btn"
+                                class="mini-btn experiment-secondary-btn"
+                                type="button"
+                                data-i18n="EXPERIMENT_RANDOMIZE"
+                            >
+                                Randomize
+                            </button>
+                        </div>
+                    </div>
+                    <p id="experiment-seed-status" class="experiment-field-note">
+                        A fresh 32-bit seed will be generated when the experiment starts.
+                    </p>
+
+                    <label class="experiment-field" for="force-mode-select">
+                        <span data-i18n="EXPERIMENT_FORCE_MODE">Force Mode</span>
+                        <select id="force-mode-select">
+                            <option value="AUTO" selected>Scenario Strength</option>
+                            <option value="BALANCED">Balanced Sides</option>
+                            <option value="CUSTOM">Custom Totals</option>
+                        </select>
+                    </label>
+                    <label class="experiment-field" for="setup-posture-select">
+                        <span data-i18n="EXPERIMENT_AI_POSTURE">AI Posture</span>
+                        <select id="setup-posture-select">
+                            <option value="ADAPTIVE" selected>Adaptive</option>
+                            <option value="AGGRESSIVE">Aggressive</option>
+                            <option value="CAUTIOUS">Cautious</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div id="estimated-force-balance" class="force-balance-card" role="status" aria-live="polite">
+                    <span data-i18n="EXPERIMENT_FORCE_BALANCE">Estimated Force Balance</span>
+                    <strong>Select countries to compare the sides.</strong>
                 </div>
             </div>
-            
-            <div id="sides-container" class="setup-sides" style="overflow-x: auto; padding-bottom: 10px; align-items: flex-start;">
+
+            <div id="sides-container" class="setup-sides">
                 <!-- Sides will be injected here -->
             </div>
 
-            <div id="setup-prompt" style="text-align: center; font-size: 11px; color: #666; margin: 10px 0;" data-i18n="SETUP_PROMPT">
+            <div id="setup-prompt" class="experiment-setup-prompt" data-i18n="SETUP_PROMPT">
                 Select a side, then click countries on the map to recruit them.
             </div>
-            
-            <div id="setup-options" class="setup-options" style="display:none; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
-                <div class="option-row" style="margin-top: 8px;">
-                    <label style="font-size: 11px; color: #ccc;" title="Optional: set total manpower (soldiers) each alliance starts with. Leave empty for automatic scaling based on territory.">
-                        Alliance Manpower (Optional)
-                    </label>
-                    <div id="manpower-inputs-container" style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; align-items:center;">
-                        <div style="display:flex; flex-direction:column; gap:2px;">
-                            <span style="font-size:9px; color:#ff4757; text-transform:uppercase; letter-spacing:0.5px;">Side A</span>
-                            <input id="manpower-side-a" type="number" min="0" placeholder="auto" style="width:110px; padding:4px 6px; background:#2a2a30; border:1px solid #444; border-radius:4px; color:#fff; font-size:11px;" title="Total soldiers for Side A (e.g. 2000000).">
-                        </div>
-                        <div style="display:flex; flex-direction:column; gap:2px;">
-                            <span style="font-size:9px; color:#2e86de; text-transform:uppercase; letter-spacing:0.5px;">Side B</span>
-                            <input id="manpower-side-b" type="number" min="0" placeholder="auto" style="width:110px; padding:4px 6px; background:#2a2a30; border:1px solid #444; border-radius:4px; color:#fff; font-size:11px;" title="Total soldiers for Side B (e.g. 1500000).">
-                        </div>
+
+            <div id="setup-options" class="setup-options" style="display: none">
+                <details id="advanced-setup" class="experiment-advanced">
+                    <summary data-i18n="EXPERIMENT_ADVANCED_SETUP">Advanced Setup</summary>
+                    <div class="experiment-advanced-groups">
+                        <details id="advanced-sides-ai" class="experiment-detail-group">
+                            <summary data-i18n="EXPERIMENT_SIDES_AI">Sides &amp; AI</summary>
+                            <div class="experiment-detail-content experiment-button-grid">
+                                <button
+                                    id="add-side-btn"
+                                    class="mini-btn experiment-secondary-btn"
+                                    type="button"
+                                    data-i18n="ADD_SIDE"
+                                    title="Add another faction column so more teams can join this conflict."
+                                >
+                                    + Side
+                                </button>
+                                <button
+                                    id="ffa-toggle-btn"
+                                    class="mini-btn experiment-secondary-btn"
+                                    type="button"
+                                    data-i18n="FFA"
+                                    title="Free-for-all: each side fights everyone else instead of two big alliances."
+                                >
+                                    FFA
+                                </button>
+                                <button
+                                    id="random-war-btn"
+                                    class="mini-btn experiment-secondary-btn experiment-button-grid--wide"
+                                    type="button"
+                                    data-i18n="RANDOM_WAR_OFF"
+                                    title="Periodically spawns extra AI wars between random neighboring countries during the simulation."
+                                >
+                                    Random War: OFF
+                                </button>
+                            </div>
+                        </details>
+
+                        <details id="advanced-forces-date" class="experiment-detail-group">
+                            <summary data-i18n="EXPERIMENT_FORCES_DATE">Forces &amp; Date</summary>
+                            <div class="experiment-detail-content">
+                                <div class="experiment-option-block">
+                                    <span class="experiment-option-label">Alliance Manpower (Optional)</span>
+                                    <div id="manpower-inputs-container" class="experiment-manpower-inputs">
+                                        <label>
+                                            <span>Side A</span>
+                                            <input
+                                                id="manpower-side-a"
+                                                type="number"
+                                                min="0"
+                                                placeholder="auto"
+                                                title="Total soldiers for Side A (e.g. 2000000)."
+                                            >
+                                        </label>
+                                        <label>
+                                            <span>Side B</span>
+                                            <input
+                                                id="manpower-side-b"
+                                                type="number"
+                                                min="0"
+                                                placeholder="auto"
+                                                title="Total soldiers for Side B (e.g. 1500000)."
+                                            >
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="experiment-option-block">
+                                    <label class="experiment-check" title="Toggle the calendar on or off for this conflict.">
+                                        <input type="checkbox" id="enable-time-checkbox">
+                                        <span>Time System</span>
+                                    </label>
+                                    <div class="experiment-date-inputs" aria-label="Starting date">
+                                        <input
+                                            id="time-year-input"
+                                            type="number"
+                                            placeholder="1936"
+                                            aria-label="Starting year"
+                                            title="Starting year controls historical armor, aircraft, and missile availability."
+                                        >
+                                        <span>/</span>
+                                        <input
+                                            id="time-month-input"
+                                            type="number"
+                                            min="1"
+                                            max="12"
+                                            placeholder="1"
+                                            aria-label="Starting month"
+                                        >
+                                        <span>/</span>
+                                        <input
+                                            id="time-day-input"
+                                            type="number"
+                                            min="1"
+                                            max="31"
+                                            placeholder="1"
+                                            aria-label="Starting day"
+                                        >
+                                    </div>
+                                </div>
+                            </div>
+                        </details>
+
+                        <details id="advanced-simulation-systems" class="experiment-detail-group">
+                            <summary data-i18n="EXPERIMENT_SYSTEMS">Simulation Systems</summary>
+                            <div class="experiment-detail-content experiment-check-grid">
+                                <label
+                                    class="experiment-check experiment-check--wide"
+                                    title="Countries collect budget, pay army payroll, and fund occupations."
+                                >
+                                    <input type="checkbox" id="war-economy-checkbox" checked>
+                                    <span>War Economy, Mutinies &amp; Rebellions</span>
+                                </label>
+                                <label class="experiment-check" title="Enable armored formations.">
+                                    <input type="checkbox" id="armor-enabled-checkbox" checked>
+                                    <span>Armored Forces</span>
+                                </label>
+                                <label class="experiment-check" title="Enable fighters, strike aircraft, and destructible airfields.">
+                                    <input type="checkbox" id="air-power-enabled-checkbox" checked>
+                                    <span>Air Power</span>
+                                </label>
+                            </div>
+                        </details>
+
+                        <details id="advanced-rules-capture" class="experiment-detail-group">
+                            <summary data-i18n="EXPERIMENT_RULES_CAPTURE">Rules &amp; Capture</summary>
+                            <div class="experiment-detail-content experiment-check-grid">
+                                <label
+                                    class="experiment-check experiment-check--wide"
+                                    title="The AI never offers peace; war ends only when one side is defeated."
+                                >
+                                    <input type="checkbox" id="no-peace-checkbox">
+                                    <span data-i18n="FIGHT_TO_DEATH">Fight to the Death (No Peace)</span>
+                                </label>
+                                <label class="experiment-check experiment-check--wide" title="Disable long-range missile and bomb attacks.">
+                                    <input type="checkbox" id="disable-bombs-checkbox">
+                                    <span data-i18n="DISABLE_MISSILES">Disable Long-Range Missiles</span>
+                                </label>
+                                <label class="experiment-check" title="Ignore mountain movement penalties and mountain darkening.">
+                                    <input type="checkbox" id="setup-disable-mountains-checkbox">
+                                    <span data-i18n="DISABLE_MT">Disable Mountains</span>
+                                </label>
+                                <label class="experiment-check" title="Prevent overlords from automatically calling vassals into the war.">
+                                    <input type="checkbox" id="disable-puppets-checkbox" checked>
+                                    <span data-i18n="DISABLE_PUPPETS">Disable Puppets</span>
+                                </label>
+                                <label
+                                    class="experiment-check experiment-check--wide experiment-check--capture"
+                                    title="Hide most UI during war and record a local video."
+                                >
+                                    <input type="checkbox" id="cinematic-mode-checkbox">
+                                    <span>Cinematic Mode (Record War)</span>
+                                </label>
+                                <button
+                                    id="rebellion-btn"
+                                    class="mini-btn experiment-secondary-btn experiment-button-grid--wide"
+                                    type="button"
+                                    disabled
+                                    data-i18n="REBELLION"
+                                    title="Launch an internal independence war against an empire that annexed other nations."
+                                >
+                                    Start Rebellion
+                                </button>
+                            </div>
+                        </details>
                     </div>
-                </div>
-                <div class="option-row" style="margin-top: 10px;">
-                    <label style="font-size: 12px; color: #ccc;" title="Optional in-game calendar. The starting year controls historical equipment availability and the date advances during war.">Time System</label>
-                    <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: flex-end;">
-                        <label style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #ccc; cursor: pointer;" title="Toggle the calendar on/off for this conflict.">
-                            <input type="checkbox" id="enable-time-checkbox" style="width: 16px; height: 16px; accent-color: #f1c40f; cursor: pointer;">
-                            <span>Enable</span>
-                        </label>
-                        <input id="time-year-input" type="number" placeholder="1936" style="width: 70px; padding: 4px 6px; background:#2a2a30;border:1px solid #444;border-radius:4px;color:#fff;font-size:11px;" title="Starting year controls historical armor, aircraft, and missile availability." />
-                        <span style="color:#777;font-size:11px;">/</span>
-                        <input id="time-month-input" type="number" min="1" max="12" placeholder="1" style="width: 40px; padding: 4px 6px; background:#2a2a30;border:1px solid #444;border-radius:4px;color:#fff;font-size:11px;" title="Starting month of the conflict." />
-                        <span style="color:#777;font-size:11px;">/</span>
-                        <input id="time-day-input" type="number" min="1" max="31" placeholder="1" style="width: 40px; padding: 4px 6px; background:#2a2a30;border:1px solid #444;border-radius:4px;color:#fff;font-size:11px;" title="Starting day of the conflict." />
-                    </div>
-                </div>
-
-                <div class="option-row" style="margin-top: 10px;">
-                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%;" title="Countries collect budget, pay recurring army payroll, and fund occupations. Unpaid armies can refuse orders, desert, and mutiny.">
-                        <input type="checkbox" id="war-economy-checkbox" style="width: 18px; height: 18px; accent-color: #2ecc71; cursor: pointer;" checked>
-                        <span style="font-size: 12px; color: #ccc;">WAR ECONOMY, MUTINIES &amp; REBELLIONS</span>
-                    </label>
-                </div>
-
-                <div class="option-row" style="margin-top: 5px; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;" title="Enable armored formations. Scenario counts override the historical 1916 gate.">
-                        <input type="checkbox" id="armor-enabled-checkbox" style="width:16px; height:16px; accent-color:#c98b3c; cursor:pointer;" checked>
-                        <span style="font-size:11px; color:#ccc;">ARMORED FORCES</span>
-                    </label>
-                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;" title="Enable fighters, strike aircraft, and destructible airfields. Scenario counts override the historical 1914 gate.">
-                        <input type="checkbox" id="air-power-enabled-checkbox" style="width:16px; height:16px; accent-color:#5dade2; cursor:pointer;" checked>
-                        <span style="font-size:11px; color:#ccc;">AIR POWER</span>
-                    </label>
-                </div>
-
-                <div class="option-row" style="margin-top: 5px;">
-                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%;" title="When enabled, the AI will never offer peace; the war only ends when one side is fully defeated.">
-                        <input type="checkbox" id="no-peace-checkbox" style="width: 18px; height: 18px; accent-color: #ff4757; cursor: pointer;">
-                        <span style="font-size: 12px; color: #ccc;" data-i18n="FIGHT_TO_DEATH">FIGHT TO THE DEATH (NO PEACE)</span>
-                    </label>
-                </div>
-                <div class="option-row" style="margin-top: 5px;">
-                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%;" title="Turns off long‑range missile/bomb animations and their extra casualties.">
-                        <input type="checkbox" id="disable-bombs-checkbox" style="width: 18px; height: 18px; accent-color: #f39c12; cursor: pointer;">
-                        <span style="font-size: 12px; color: #ccc;" data-i18n="DISABLE_MISSILES">DISABLE LONG-RANGE MISSILES</span>
-                    </label>
-                </div>
-                <div class="option-row" style="margin-top: 5px;">
-                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%;" title="If checked, units ignore mountain movement penalties and mountain darkening.">
-                        <input type="checkbox" id="setup-disable-mountains-checkbox" style="width: 18px; height: 18px; accent-color: #f1c40f; cursor: pointer;">
-                        <span style="font-size: 12px; color: #ccc;" data-i18n="DISABLE_MT">DISABLE MOUNTAINS</span>
-                    </label>
-                </div>
-
-                <div class="option-row" style="margin-top: 5px;">
-                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%;" title="Prevents overlord nations from automatically calling their vassals into the war.">
-                        <input type="checkbox" id="disable-puppets-checkbox" style="width: 18px; height: 18px; accent-color: #9b59b6; cursor: pointer;" checked>
-                        <span style="font-size: 12px; color: #ccc;" data-i18n="DISABLE_PUPPETS">DISABLE PUPPETS (NO VASSAL CALL)</span>
-                    </label>
-                </div>
-
-                <div class="option-row" style="margin-top: 5px; background: rgba(255,255,255,0.03); padding: 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);">
-                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; width: 100%;" title="Cinematic mode hides most UI during war and records a video of the conflict to save locally when it ends.">
-                        <input type="checkbox" id="cinematic-mode-checkbox" style="width: 18px; height: 18px; accent-color: #f1c40f; cursor: pointer;">
-                        <span style="font-size: 12px; color: #f1c40f; font-weight: 900; letter-spacing: 1px;">CINEMATIC MODE (RECORD WAR)</span>
-                    </label>
-                </div>
-                <div style="display: flex; gap: 10px; margin-top: 15px;">
-                    <button id="start-btn" class="start-btn" style="flex: 2;" data-i18n="INAUGURATE" title="Lock in the setup and start the war simulation with the chosen sides and options.">Inaugurate Conflict</button>
-                    <button id="rebellion-btn" class="start-btn" style="flex: 1; background: #95a5a6; font-size: 11px;" disabled data-i18n="REBELLION" title="If enabled, launches an internal independence war against an empire that has annexed other nations.">Start Rebellion</button>
-                </div>
+                </details>
             </div>
-        </div>
+
+            <footer class="experiment-start-bar">
+                <button
+                    id="start-btn"
+                    class="start-btn"
+                    type="button"
+                    data-i18n="START_EXPERIMENT"
+                    title="Lock in this configuration and start the experiment."
+                >
+                    Start Experiment
+                </button>
+            </footer>
+        </section>
 
         <div id="game-date-display" class="game-date-display hud-readout hud-start-hidden">0000/00/00</div>
 
@@ -666,6 +832,179 @@
             <div id="commander-medal-preview" class="commander-medal-preview"></div>
         </aside>
 
+        <aside
+            id="war-desk"
+            class="war-desk hud-surface hud-surface--strong hud-surface--interactive hud-start-hidden"
+            aria-labelledby="war-desk-title"
+        >
+            <header class="war-desk-header hud-panel-header">
+                <div>
+                    <span class="experiment-kicker" data-i18n="LIVE_EXPERIMENT">LIVE EXPERIMENT</span>
+                    <strong id="war-desk-title" data-i18n="WAR_DESK">War Desk</strong>
+                </div>
+                <button
+                    id="war-desk-toggle-btn"
+                    class="mini-btn hud-action hud-action--compact"
+                    type="button"
+                    aria-expanded="true"
+                    aria-controls="war-desk-body"
+                    title="Collapse War Desk"
+                >
+                    −
+                </button>
+            </header>
+
+            <div id="war-desk-body" class="war-desk-body">
+                <div class="war-desk-tabs" role="tablist" aria-label="War Desk sections">
+                    <button
+                        id="war-desk-overview-tab"
+                        class="war-desk-tab active"
+                        type="button"
+                        role="tab"
+                        aria-selected="true"
+                        aria-controls="war-desk-overview-panel"
+                    >
+                        <span data-i18n="WAR_DESK_OVERVIEW">Overview</span>
+                    </button>
+                    <button
+                        id="war-desk-economy-tab"
+                        class="war-desk-tab"
+                        type="button"
+                        role="tab"
+                        aria-selected="false"
+                        aria-controls="war-desk-economy-panel"
+                        tabindex="-1"
+                    >
+                        <span data-i18n="WAR_DESK_ECONOMY">Economy</span>
+                    </button>
+                    <button
+                        id="war-desk-events-tab"
+                        class="war-desk-tab"
+                        type="button"
+                        role="tab"
+                        aria-selected="false"
+                        aria-controls="war-desk-events-panel"
+                        tabindex="-1"
+                    >
+                        <span data-i18n="WAR_DESK_EVENTS">Events</span>
+                    </button>
+                    <button
+                        id="war-desk-intervene-tab"
+                        class="war-desk-tab"
+                        type="button"
+                        role="tab"
+                        aria-selected="false"
+                        aria-controls="war-desk-intervene-panel"
+                        tabindex="-1"
+                    >
+                        <span data-i18n="WAR_DESK_INTERVENE">Intervene</span>
+                    </button>
+                </div>
+
+                <section
+                    id="war-desk-overview-panel"
+                    class="war-desk-panel active"
+                    role="tabpanel"
+                    aria-labelledby="war-desk-overview-tab"
+                >
+                    <div id="war-desk-advantage" class="war-desk-advantage" role="status" aria-live="polite">
+                        <span>Current Advantage</span>
+                        <strong>Awaiting frontline telemetry</strong>
+                    </div>
+                    <div id="war-desk-phase" class="war-desk-phase">PHASE · OPENING MOVES</div>
+                    <p id="war-desk-summary" class="war-desk-summary">
+                        Territory, city, personnel, economy, and equipment signals will appear here.
+                    </p>
+                    <div id="war-desk-overview-metrics" class="war-desk-metrics"></div>
+                </section>
+
+                <section
+                    id="war-desk-economy-panel"
+                    class="war-desk-panel"
+                    role="tabpanel"
+                    aria-labelledby="war-desk-economy-tab"
+                    hidden
+                >
+                    <div id="war-desk-economy-content" class="war-desk-scroll-list">
+                        <p class="war-desk-empty">Economic telemetry will appear after mobilization.</p>
+                    </div>
+                </section>
+
+                <section
+                    id="war-desk-events-panel"
+                    class="war-desk-panel"
+                    role="tabpanel"
+                    aria-labelledby="war-desk-events-tab"
+                    hidden
+                >
+                    <ol id="war-desk-events-list" class="war-desk-event-list" aria-live="polite">
+                        <li class="war-desk-empty">No pivotal events recorded yet.</li>
+                    </ol>
+                </section>
+
+                <section
+                    id="war-desk-intervene-panel"
+                    class="war-desk-panel"
+                    role="tabpanel"
+                    aria-labelledby="war-desk-intervene-tab"
+                    hidden
+                >
+                    <p class="intervention-warning">
+                        Opening this desk pauses the experiment. Every applied action marks the run Modified.
+                    </p>
+                    <div class="intervention-fields">
+                        <label for="intervention-country-select">
+                            <span>Country</span>
+                            <select id="intervention-country-select">
+                                <option value="">Select country</option>
+                            </select>
+                        </label>
+                        <label for="intervention-posture-select">
+                            <span>Posture</span>
+                            <select id="intervention-posture-select">
+                                <option value="ADAPTIVE">Adaptive</option>
+                                <option value="AGGRESSIVE">Aggressive</option>
+                                <option value="DEFENSIVE">Defensive</option>
+                                <option value="RETREAT">Retreat</option>
+                            </select>
+                        </label>
+                        <label for="intervention-amount-input">
+                            <span>Amount</span>
+                            <input
+                                id="intervention-amount-input"
+                                type="number"
+                                min="0"
+                                step="1"
+                                inputmode="numeric"
+                                placeholder="0"
+                            >
+                        </label>
+                        <label for="intervention-side-select">
+                            <span>Side</span>
+                            <select id="intervention-side-select">
+                                <option value="">Select side</option>
+                            </select>
+                        </label>
+                    </div>
+
+                    <div class="intervention-actions" aria-label="Director interventions">
+                        <button id="intervention-apply-posture-btn" type="button" data-i18n="APPLY_POSTURE">Apply Posture</button>
+                        <button id="intervention-add-funds-btn" type="button" data-i18n="ADD_FUNDS">Add Funds</button>
+                        <button id="intervention-clear-arrears-btn" type="button" data-i18n="CLEAR_ARREARS">Clear Arrears</button>
+                        <button id="intervention-add-manpower-btn" type="button" data-i18n="ADD_MANPOWER">Add Manpower</button>
+                        <button id="intervention-add-armor-btn" type="button" data-i18n="ADD_ARMOR">Add Armor</button>
+                        <button id="intervention-add-fighters-btn" type="button" data-i18n="ADD_FIGHTERS">Add Fighters</button>
+                        <button id="intervention-add-strike-btn" type="button" data-i18n="ADD_STRIKE_AIRCRAFT">Add Strike Aircraft</button>
+                        <button id="intervention-join-side-btn" type="button" data-i18n="JOIN_SIDE">Join Side</button>
+                        <button id="intervention-withdraw-btn" type="button" data-i18n="WITHDRAW">Withdraw</button>
+                        <button id="intervention-rebellion-btn" type="button" data-i18n="REBELLION">Start Rebellion</button>
+                        <button id="intervention-peace-btn" class="intervention-danger" type="button" data-i18n="ENFORCE_PEACE">Enforce Peace</button>
+                    </div>
+                    <div id="intervention-status" class="intervention-status" role="status" aria-live="polite"></div>
+                </section>
+            </div>
+        </aside>
+
         <div id="casualty-panel" class="casualty-panel hud-surface hud-start-hidden">
             <div class="casualty-title">CASUALTIES &amp; MANPOWER</div>
             <div id="casualty-lists-container"></div>
@@ -709,7 +1048,98 @@
         <div class="bottom-controls hud-footer">
             <div class="coordinates-display hud-surface hud-surface--soft hud-readout" id="coords">0.0000, 0.0000</div>
         </div>
+
+        <button
+            id="reopen-report-btn"
+            class="reopen-report-btn hud-surface hud-surface--interactive hud-start-hidden"
+            type="button"
+            aria-haspopup="dialog"
+        >
+            <span data-i18n="REOPEN_REPORT">Reopen Report</span>
+        </button>
     </div>
+
+    <section
+        id="after-action-report"
+        class="experiment-fullscreen-overlay after-action-report"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="after-action-headline"
+        style="display: none"
+    >
+        <div class="experiment-report-shell">
+            <header class="after-action-header">
+                <div>
+                    <span class="experiment-kicker" data-i18n="AFTER_ACTION_REPORT">AFTER ACTION REPORT</span>
+                    <h1 id="after-action-headline" data-i18n="EXPERIMENT_COMPLETE">Experiment Complete</h1>
+                    <div id="after-action-meta" class="after-action-meta"></div>
+                </div>
+            </header>
+
+            <div class="after-action-grid">
+                <section class="report-section report-section--factors" aria-labelledby="after-action-factors-title">
+                    <h2 id="after-action-factors-title" data-i18n="OBSERVED_CONTRIBUTORS">Observed Contributors</h2>
+                    <div id="after-action-factors" class="after-action-factors"></div>
+                </section>
+                <section class="report-section report-section--timeline" aria-labelledby="after-action-timeline-title">
+                    <h2 id="after-action-timeline-title" data-i18n="PIVOTAL_EVENTS">Pivotal Events</h2>
+                    <ol id="after-action-timeline" class="after-action-timeline"></ol>
+                </section>
+                <section class="report-section report-section--metrics" aria-labelledby="after-action-metrics-title">
+                    <h2 id="after-action-metrics-title" data-i18n="FINAL_SIDE_METRICS">Final Side Metrics</h2>
+                    <div id="after-action-side-metrics" class="after-action-side-metrics"></div>
+                </section>
+                <section class="report-section" aria-labelledby="after-action-interventions-title">
+                    <h2 id="after-action-interventions-title" data-i18n="INTERVENTIONS">Interventions</h2>
+                    <div id="after-action-interventions" class="after-action-interventions"></div>
+                </section>
+                <section class="report-section" aria-labelledby="after-action-comparison-title">
+                    <h2 id="after-action-comparison-title" data-i18n="COMPARISON">Comparison</h2>
+                    <div id="after-action-comparison" class="after-action-comparison"></div>
+                </section>
+            </div>
+
+            <footer class="after-action-actions">
+                <button id="inspect-final-map-btn" class="report-secondary-action" type="button" data-i18n="INSPECT_FINAL_MAP">Inspect Final Map</button>
+                <button id="fresh-rematch-btn" type="button" title="Restore the same pre-war scenario and configuration with a new seed." data-i18n="FRESH_REMATCH">Fresh Rematch</button>
+                <button id="repeat-seed-btn" type="button" title="Restore comparable starting conditions with the same seed. Async scheduling means this is not an exact replay." data-i18n="REPEAT_SEED">Repeat Seed</button>
+                <button id="modify-setup-btn" type="button" title="Restore this configuration and seed, then return to setup without starting." data-i18n="MODIFY_SETUP">Modify Setup</button>
+                <button id="continue-world-btn" class="report-secondary-action" type="button" data-i18n="CONTINUE_WORLD">Continue World</button>
+                <button id="after-action-main-menu-btn" class="report-secondary-action" type="button" data-i18n="MAIN_MENU">Main Menu</button>
+            </footer>
+        </div>
+    </section>
+
+    <section
+        id="war-archive-overlay"
+        class="experiment-fullscreen-overlay war-archive-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="war-archive-title"
+        style="display: none"
+    >
+        <div class="experiment-report-shell war-archive-shell">
+            <header class="war-archive-header">
+                <div>
+                    <span class="experiment-kicker" data-i18n="LOCAL_RECORDS">LOCAL RECORDS</span>
+                    <h1 id="war-archive-title" data-i18n="WAR_ARCHIVE">War Archive</h1>
+                    <p>Latest 25 finalized experiments stored in this browser.</p>
+                </div>
+                <button id="war-archive-close-btn" class="report-secondary-action" type="button" aria-label="Close War Archive">
+                    <span data-i18n="CLOSE">Close</span>
+                </button>
+            </header>
+            <div class="war-archive-layout">
+                <nav id="war-archive-list" class="war-archive-list" aria-label="Archived experiments"></nav>
+                <article id="war-archive-detail" class="war-archive-detail" aria-live="polite">
+                    <div class="war-archive-empty">
+                        <strong>No archived report selected</strong>
+                        <span>Choose an experiment to review its outcome and configuration.</span>
+                    </div>
+                </article>
+            </div>
+        </div>
+    </section>
 
     <!-- Editor Choice Modal -->
     <div id="editor-choice-modal" class="settings-overlay" style="display:none">

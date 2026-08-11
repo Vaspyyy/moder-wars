@@ -47,6 +47,19 @@ import {
 	settleEconomyCycle,
 	updateResistance,
 } from "./economy.js";
+import {
+	appendWarCheckpoint,
+	appendWarEvent,
+	createExperimentRecorder,
+	createRandomSeed,
+	createSeededRng,
+	finalizeWarReport,
+	hashScenarioContent,
+	normalizeSeed,
+	persistWarReport,
+	readWarArchive,
+} from "./experiment.js";
+import { initExperimentUi } from "./experiment-ui.js";
 import { fetchJSONWithCache } from "./geo.js";
 import {
 	cacheMopUpCell,
@@ -74,6 +87,27 @@ import {
 	selectOccupationController,
 	updateRebellionFailureCycles,
 } from "./surrender.js";
+
+let _experimentSeed = normalizeSeed(createRandomSeed());
+let _gameplayRng = createSeededRng(_experimentSeed);
+
+export function setExperimentSeed(seed) {
+	_experimentSeed = normalizeSeed(seed);
+	_gameplayRng = createSeededRng(_experimentSeed);
+	return _experimentSeed;
+}
+
+export function getExperimentSeed() {
+	return _experimentSeed;
+}
+
+export function getGameplayRngState() {
+	return _gameplayRng.getState();
+}
+
+export function gameplayRandom() {
+	return _gameplayRng.next();
+}
 
 export function escapeHtml(s) {
 	return String(s)
@@ -169,6 +203,52 @@ export const TRANSLATIONS = {
 		DISABLE_MT: "DISABLE MOUNTAINS",
 		DISABLE_PUPPETS: "DISABLE PUPPETS (NO VASSAL CALL)",
 		INAUGURATE: "Inaugurate Conflict",
+		START_EXPERIMENT: "Start Experiment",
+		EXPERIMENT_SANDBOX: "Simulation Sandbox",
+		EXPERIMENT_SEED: "Seed",
+		EXPERIMENT_RANDOMIZE: "Randomize",
+		EXPERIMENT_FORCE_MODE: "Force Mode",
+		EXPERIMENT_AI_POSTURE: "AI Posture",
+		EXPERIMENT_FORCE_BALANCE: "Estimated Force Balance",
+		EXPERIMENT_ADVANCED_SETUP: "Advanced Setup",
+		EXPERIMENT_SIDES_AI: "Sides & AI",
+		EXPERIMENT_FORCES_DATE: "Forces & Date",
+		EXPERIMENT_SYSTEMS: "Simulation Systems",
+		EXPERIMENT_RULES_CAPTURE: "Rules & Capture",
+		WAR_DESK: "War Desk",
+		LIVE_EXPERIMENT: "Live Experiment",
+		WAR_DESK_OVERVIEW: "Overview",
+		WAR_DESK_ECONOMY: "Economy",
+		WAR_DESK_EVENTS: "Events",
+		WAR_DESK_INTERVENE: "Intervene",
+		AFTER_ACTION_REPORT: "After Action Report",
+		EXPERIMENT_COMPLETE: "Experiment Complete",
+		OBSERVED_CONTRIBUTORS: "Observed Contributors",
+		PIVOTAL_EVENTS: "Pivotal Events",
+		FINAL_SIDE_METRICS: "Final Side Metrics",
+		INTERVENTIONS: "Interventions",
+		COMPARISON: "Comparison",
+		INSPECT_FINAL_MAP: "Inspect Final Map",
+		FRESH_REMATCH: "Fresh Rematch",
+		REPEAT_SEED: "Repeat Seed",
+		MODIFY_SETUP: "Modify Setup",
+		CONTINUE_WORLD: "Continue World",
+		MAIN_MENU: "Main Menu",
+		WAR_ARCHIVE: "War Archive",
+		LOCAL_RECORDS: "Local Records",
+		CLOSE: "Close",
+		REOPEN_REPORT: "Reopen Report",
+		RERUN_EXPERIMENT: "Rerun Experiment",
+		APPLY_POSTURE: "Apply Posture",
+		ADD_FUNDS: "Add Funds",
+		CLEAR_ARREARS: "Clear Arrears",
+		ADD_MANPOWER: "Add Manpower",
+		ADD_ARMOR: "Add Armor",
+		ADD_FIGHTERS: "Add Fighters",
+		ADD_STRIKE_AIRCRAFT: "Add Strike Aircraft",
+		JOIN_SIDE: "Join Side",
+		WITHDRAW: "Withdraw",
+		ENFORCE_PEACE: "Enforce Peace",
 		REBELLION: "Start Rebellion",
 		POLITICAL: "POLITICAL",
 		ARROWS: "ARROWS (BUGGY)",
@@ -297,6 +377,7 @@ export const TRANSLATIONS = {
 		DISABLE_MT: "БЕЗ ГОР",
 		DISABLE_PUPPETS: "БЕЗ ВАССАЛОВ",
 		INAUGURATE: "Начать конфликт",
+		START_EXPERIMENT: "Запустить эксперимент",
 		REBELLION: "Восстание",
 		POLITICAL: "ПОЛИТИЧЕСКАЯ",
 		ARROWS: "СТРЕЛКИ",
@@ -428,6 +509,7 @@ export const TRANSLATIONS = {
 		DISABLE_MT: "山岳無効",
 		DISABLE_PUPPETS: "傀儡国無効",
 		INAUGURATE: "紛争開始",
+		START_EXPERIMENT: "実験を開始",
 		REBELLION: "反乱開始",
 		POLITICAL: "政治地図",
 		ARROWS: "進撃矢印",
@@ -549,6 +631,7 @@ export const TRANSLATIONS = {
 		DISABLE_MT: "DESACTIVAR MONTAÑAS",
 		DISABLE_PUPPETS: "DESACTIVAR PUPPETS",
 		INAUGURATE: "Inaugurar Conflicto",
+		START_EXPERIMENT: "Iniciar experimento",
 		REBELLION: "Iniciar Rebelión",
 		POLITICAL: "POLÍTICO",
 		ARROWS: "FLECHAS",
@@ -667,6 +750,7 @@ export const TRANSLATIONS = {
 		FIGHT_TO_DEATH: "GUERRE À MORT (PAS DE PAIX)",
 		DISABLE_MISSILES: "DÉSACTIVER MISSILES",
 		INAUGURATE: "Inaugurer le Conflit",
+		START_EXPERIMENT: "Lancer l’expérience",
 		REBELLION: "Lancer Rébellion",
 		POLITICAL: "POLITIQUE",
 		ARROWS: "FLÈCHES",
@@ -786,6 +870,7 @@ export const TRANSLATIONS = {
 		FIGHT_TO_DEATH: "KAMPF BIS ZUM TOD (KEIN FRIEDEN)",
 		DISABLE_MISSILES: "RAKETEN DEAKTIVIEREN",
 		INAUGURATE: "Konflikt eröffnen",
+		START_EXPERIMENT: "Experiment starten",
 		REBELLION: "Rebellion starten",
 		POLITICAL: "POLITISCH",
 		ARROWS: "PFEILE",
@@ -904,6 +989,7 @@ export const TRANSLATIONS = {
 		FIGHT_TO_DEATH: "LUTA ATÉ A MORTE (SEM PAZ)",
 		DISABLE_MISSILES: "DESATIVAR MÍSSEIS",
 		INAUGURATE: "Inaugurar Conflito",
+		START_EXPERIMENT: "Iniciar experimento",
 		REBELLION: "Iniciar Rebelião",
 		POLITICAL: "POLÍTICO",
 		ARROWS: "SETAS",
@@ -1060,8 +1146,9 @@ export function applyLanguage(lang) {
 	const dict = TRANSLATIONS[lang] || TRANSLATIONS.en;
 	document.querySelectorAll("[data-i18n]").forEach((el) => {
 		const key = el.getAttribute("data-i18n");
-		if (dict[key]) {
-			el.innerText = dict[key];
+		const value = dict[key] || TRANSLATIONS.en[key];
+		if (value) {
+			el.innerText = value;
 		}
 	});
 
@@ -1117,9 +1204,9 @@ export function getTranslation(
 ) {
 	const dict = TRANSLATIONS[lang] || TRANSLATIONS.en;
 	if (subDict && dict[subDict]) {
-		return dict[subDict][key] || key;
+		return dict[subDict][key] || TRANSLATIONS.en[subDict]?.[key] || key;
 	}
-	return dict[key] || key;
+	return dict[key] || TRANSLATIONS.en[key] || key;
 }
 
 document.getElementById("language-select")?.addEventListener("change", (e) => {
@@ -2079,6 +2166,45 @@ export let buffedSideIdx;
 export let preGodModeState = "SIMULATING";
 export const latestCountryStats = new Map();
 export let disableFullscreen = getCookie("mw_disable_fullscreen") === "true";
+
+// Experiment Loop state is kept apart from the mutable simulation objects.
+// Specs and reports retain serializable ids, uids, options, metrics, and events
+// so rematches reconstruct a clean runtime instead of retaining live objects.
+export let activeExperimentSpec = null;
+export let activeExperimentRecorder = null;
+export let latestWarReport = null;
+let _experimentUi = null;
+let _experimentParentReport = null;
+let _experimentPreviousPhases = [];
+let _experimentPreviousCapitalLosses = new Set();
+let _experimentPreviousCityControllers = new Map();
+let _experimentInterventionPauseState = null;
+let _experimentWarDeskLastUpdate = -Infinity;
+let _experimentRestoredSideUids = null;
+let _experimentRestoredHostilities = null;
+let _warLifecycleToken = 0;
+const _warLifecycleTimers = new Set();
+
+function invalidateWarLifecycleTimers() {
+	_warLifecycleToken++;
+	for (const timer of _warLifecycleTimers) clearTimeout(timer);
+	_warLifecycleTimers.clear();
+	return _warLifecycleToken;
+}
+
+function scheduleWarLifecycleCallback(
+	callback,
+	delay,
+	token = _warLifecycleToken,
+) {
+	const timer = setTimeout(() => {
+		_warLifecycleTimers.delete(timer);
+		if (token !== _warLifecycleToken) return;
+		callback();
+	}, delay);
+	_warLifecycleTimers.add(timer);
+	return timer;
+}
 
 const PERF_COUNTER_DEFAULTS = {
 	_version: "V0.26.1",
@@ -4689,6 +4815,7 @@ export function updateSidesUI() {
 
 	rebuildManpowerInputs();
 	rebuildStatsPanel();
+	updateEstimatedExperimentBalance();
 }
 
 addSideBtn.onclick = () => {
@@ -4765,7 +4892,7 @@ export function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
 			Math.floor(smoothingBase / optimizationFactor),
 		);
 		for (let s = 0; s < smoothingSamples; s++) {
-			const idx = Math.floor(Math.random() * landMask.length);
+			const idx = Math.floor(gameplayRandom() * landMask.length);
 			if (landMask[idx] !== 2) continue;
 
 			const y = Math.floor(idx / gridWidth);
@@ -5603,7 +5730,7 @@ export function handleCountryClick(
 			let fromLat, fromLng;
 
 			if (myBases.length > 0) {
-				const b = myBases[Math.floor(Math.random() * myBases.length)];
+				const b = myBases[Math.floor(gameplayRandom() * myBases.length)];
 				fromLat = b.lat;
 				fromLng = b.lng;
 			} else if (senderMeta?.stableCenter) {
@@ -6029,11 +6156,11 @@ export function spawnSingleUnit(
 
 		const pick =
 			frontlineCities.length > 0 && !supplyFailed
-				? frontlineCities[Math.floor(Math.random() * frontlineCities.length)]
-				: friendlyCities[Math.floor(Math.random() * friendlyCities.length)];
+				? frontlineCities[Math.floor(gameplayRandom() * frontlineCities.length)]
+				: friendlyCities[Math.floor(gameplayRandom() * friendlyCities.length)];
 
-		lat = pick.lat + (Math.random() - 0.5) * CONFIG.GRID_RES * 0.8;
-		lng = pick.lng + (Math.random() - 0.5) * CONFIG.GRID_RES * 0.8;
+		lat = pick.lat + (gameplayRandom() - 0.5) * CONFIG.GRID_RES * 0.8;
+		lng = pick.lng + (gameplayRandom() - 0.5) * CONFIG.GRID_RES * 0.8;
 
 		// Validate: ensure still within friendly territory
 		const vIdx = getGridIndex(lat, lng);
@@ -6068,7 +6195,7 @@ export function spawnSingleUnit(
 		}
 
 		const idx =
-			theaterIndices[Math.floor(Math.random() * theaterIndices.length)];
+			theaterIndices[Math.floor(gameplayRandom() * theaterIndices.length)];
 		const y = Math.floor(idx / gridWidth);
 		const x = idx % gridWidth;
 		lat = y * CONFIG.GRID_RES - 90 + CONFIG.GRID_RES / 2;
@@ -6079,7 +6206,7 @@ export function spawnSingleUnit(
 	const isMountainCell =
 		terrainMask && finalIdx >= 0 ? terrainMask[finalIdx] > 0.35 : false;
 	// Alpenjägers: mostly drawn from mountainous recruitment cells
-	const isAlpen = isMountainCell && Math.random() < 0.4;
+	const isAlpen = isMountainCell && gameplayRandom() < 0.4;
 
 	// Base health for this new unit
 	let unitHealth =
@@ -6089,7 +6216,7 @@ export function spawnSingleUnit(
 		unitHealth *= 0.4; // 60% health penalty
 	}
 
-	const unitId = Math.random();
+	const unitId = gameplayRandom();
 	const unitDiscipline = getUnitDiscipline({ id: unitId, sovereignId });
 	const unitCommandBand = economyState?.commandBand || COMMAND_BANDS.PAID;
 	units.push({
@@ -6267,7 +6394,7 @@ function createArmorFormationAtIndex({
 	const y = Math.floor(cellIndex / gridWidth);
 	const x = cellIndex % gridWidth;
 	const pushBack = frontVector ? CONFIG.GRID_RES * 1.25 : 0;
-	const unitId = Math.random();
+	const unitId = gameplayRandom();
 	const unit = {
 		id: unitId,
 		kind: "armor",
@@ -6657,8 +6784,12 @@ function allocateIndependentSide(country, hostileSideIdx = -1) {
 		sideIdx = sides.length;
 		sides.push([]);
 	}
-	ensureSideIdentities();
 	clearSideHostilities(sideIdx);
+	// An empty slot may belong to a side that was eliminated earlier in the run.
+	// A restored neutral or rebellion is a new side and needs a distinct stable UID
+	// so reports do not overwrite the eliminated side's history.
+	sideUids[sideIdx] = `side-${_nextSideUid++}`;
+	ensureSideIdentities();
 	sides[sideIdx] = [country];
 	if (hostileSideIdx >= 0) setSidesHostile(sideIdx, hostileSideIdx, true);
 	else rebuildHostilityMatrix();
@@ -6673,6 +6804,14 @@ function emitEconomyEvent(message, level = "info") {
 		level,
 	});
 	if (economyEvents.length > 8) economyEvents.length = 8;
+	recordExperimentEvent("ECONOMY_EVENT", {
+		source: "economy",
+		evidence: {
+			economyCycle: economyPayCycle,
+			level,
+			message,
+		},
+	});
 }
 
 function formatBudget(value) {
@@ -7098,15 +7237,50 @@ function updateEquipmentShortageState(countryId, equipment, live) {
 		)
 		.map(([label]) => label);
 	const key = shortage.join("|");
-	if (key === (equipment._majorShortageKey || "")) return;
+	const previousKey = equipment._majorShortageKey || "";
+	if (key === previousKey) return;
 	const name = countryMetadata[countryId - 1]?.name || `Country ${countryId}`;
+	const sideIdx = findCountrySideIndex(countryId);
+	const ratios = {
+		armor:
+			equipment.armorCapacity > 0 ? live.armor / equipment.armorCapacity : null,
+		fighters:
+			equipment.fighterCapacity > 0
+				? live.fighters / equipment.fighterCapacity
+				: null,
+		strikeAircraft:
+			equipment.strikeCapacity > 0
+				? live.strike / equipment.strikeCapacity
+				: null,
+	};
 	if (shortage.length > 0) {
 		emitEconomyEvent(
 			`${name}: critical ${shortage.join(", ")} shortage`,
 			"danger",
 		);
-	} else if (equipment._majorShortageKey) {
+		recordExperimentEvent("EQUIPMENT_SHORTAGE", {
+			source: "economy",
+			actorCountryId: countryId,
+			actorSideUid: sideUids[sideIdx] || null,
+			evidence: {
+				categories: shortage,
+				previousCategories: previousKey.split("|").filter(Boolean),
+				ratios,
+				threshold: 0.25,
+			},
+		});
+	} else if (previousKey) {
 		emitEconomyEvent(`${name}: strategic equipment recovered`, "recovery");
+		recordExperimentEvent("EQUIPMENT_RECOVERED", {
+			source: "economy",
+			actorCountryId: countryId,
+			actorSideUid: sideUids[sideIdx] || null,
+			evidence: {
+				previousCategories: previousKey.split("|").filter(Boolean),
+				ratios,
+				threshold: 0.25,
+			},
+		});
 	}
 	equipment._majorShortageKey = key;
 }
@@ -7245,7 +7419,7 @@ function findCountryHomeTarget(countryId, sideIdx) {
 		)
 			continue;
 		seen++;
-		if (Math.floor(Math.random() * seen) === 0) chosen = i;
+		if (Math.floor(gameplayRandom() * seen) === 0) chosen = i;
 	}
 	if (chosen < 0) return null;
 	return {
@@ -7284,6 +7458,19 @@ function updateUnitCommandState(countryId, previousBand, nextBand) {
 		[COMMAND_BANDS.MUTINY]: "army mutiny; self-defense orders only",
 	};
 	emitEconomyEvent(`${name}: ${transitionMessages[nextBand]}`, severity);
+	const economyState = countryEconomy.get(countryId);
+	recordExperimentEvent("ECONOMY_BAND_CHANGED", {
+		source: "economy",
+		actorCountryId: countryId,
+		actorSideUid: sideUids[sideIdx] || null,
+		evidence: {
+			previousBand,
+			nextBand,
+			arrearsCycles: economyState?.arrearsCycles || 0,
+			payrollCoverage: economyState?.payrollCoverage ?? 1,
+			treasury: economyState?.treasury || 0,
+		},
+	});
 }
 
 function applyDesertion() {
@@ -7353,7 +7540,7 @@ function pickRebellionSeed(record, annexerSideIdx) {
 		seen++;
 		if (candidates.length < 256) candidates.push(i);
 		else {
-			const replacement = Math.floor(Math.random() * seen);
+			const replacement = Math.floor(gameplayRandom() * seen);
 			if (replacement < candidates.length) candidates[replacement] = i;
 		}
 	}
@@ -7475,7 +7662,7 @@ function launchRebellion(record) {
 		const idx = foothold[i % foothold.length];
 		const y = Math.floor(idx / gridWidth);
 		const x = idx % gridWidth;
-		const unitId = Math.random();
+		const unitId = gameplayRandom();
 		units.push({
 			id: unitId,
 			kind: "army",
@@ -7483,12 +7670,12 @@ function launchRebellion(record) {
 				y * CONFIG.GRID_RES -
 				90 +
 				CONFIG.GRID_RES / 2 +
-				(Math.random() - 0.5) * CONFIG.GRID_RES * 0.4,
+				(gameplayRandom() - 0.5) * CONFIG.GRID_RES * 0.4,
 			lng:
 				x * CONFIG.GRID_RES -
 				180 +
 				CONFIG.GRID_RES / 2 +
-				(Math.random() - 0.5) * CONFIG.GRID_RES * 0.4,
+				(gameplayRandom() - 0.5) * CONFIG.GRID_RES * 0.4,
 			sideIndex: rebelSideIdx,
 			sovereignId: record.victimId,
 			beneficiaryId: record.victimId,
@@ -7541,6 +7728,27 @@ function launchRebellion(record) {
 		failedCycles: 0,
 	};
 	activeRebellions.set(record.victimId, rebellion);
+	const seedRow = Math.floor(seed / gridWidth);
+	const seedColumn = seed % gridWidth;
+	recordExperimentEvent("REBELLION_STARTED", {
+		source: "economy",
+		major: true,
+		actorCountryId: record.victimId,
+		actorSideUid: sideUids[rebelSideIdx] || null,
+		targetCountryId: record.annexerId,
+		targetSideUid: sideUids[annexerSideIdx] || null,
+		location: {
+			lat: seedRow * CONFIG.GRID_RES - 90 + CONFIG.GRID_RES / 2,
+			lng: seedColumn * CONFIG.GRID_RES - 180 + CONFIG.GRID_RES / 2,
+			gridIndex: seed,
+		},
+		evidence: {
+			economyCycle: economyPayCycle,
+			footholdCells: foothold.length,
+			spawnedUnits: spawnCount,
+			resistance: record.resistance || 0,
+		},
+	});
 	emitEconomyEvent(`${country.name}: rebellion has begun`, "danger");
 	generateProvinces();
 	recalculateAllBounds();
@@ -7588,6 +7796,8 @@ function resolveRebellionSuccess(rebellion) {
 	const rebelSideIdx = findCountrySideIndex(rebellion.rebelId);
 	const annexerSideIdx = findCountrySideIndex(rebellion.annexerId);
 	if (!record || rebelSideIdx < 0) return;
+	const rebelSideUid = sideUids[rebelSideIdx] || null;
+	const annexerSideUid = sideUids[annexerSideIdx] || null;
 	for (let i = 0; i < deJureMap.length; i++) {
 		if (deJureMap[i] !== rebellion.rebelId || landMask[i] === 0) continue;
 		if (
@@ -7623,6 +7833,18 @@ function resolveRebellionSuccess(rebellion) {
 	occupationEconomies.delete(rebellion.rebelId);
 	_occupationGarrisonPlans.delete(rebellion.rebelId);
 	clearOccupationGarrisonAssignments(rebellion.rebelId);
+	recordExperimentEvent("REBELLION_SUCCEEDED", {
+		source: "economy",
+		major: true,
+		actorCountryId: rebellion.rebelId,
+		actorSideUid: rebelSideUid,
+		targetCountryId: rebellion.annexerId,
+		targetSideUid: annexerSideUid,
+		evidence: {
+			economyCycle: economyPayCycle,
+			durationCycles: Math.max(0, economyPayCycle - rebellion.startCycle),
+		},
+	});
 	emitEconomyEvent(
 		`${meta?.name || "Rebels"}: independence restored`,
 		"recovery",
@@ -7639,6 +7861,8 @@ function resolveRebellionFailure(rebellion) {
 	if (!record) return;
 	const rebelSideIdx = findCountrySideIndex(rebellion.rebelId);
 	const annexerSideIdx = findCountrySideIndex(record.annexerId);
+	const rebelSideUid = sideUids[rebelSideIdx] || null;
+	const annexerSideUid = sideUids[annexerSideIdx] || null;
 	for (let i = 0; i < deJureMap.length; i++) {
 		if (deJureMap[i] !== rebellion.rebelId || landMask[i] === 0) continue;
 		if (dominantSideMap[i] === rebelSideIdx) {
@@ -7673,6 +7897,20 @@ function resolveRebellionFailure(rebellion) {
 	record.cooldownUntilCycle = economyPayCycle + 10;
 	activeRebellions.delete(rebellion.rebelId);
 	if (annexerSideIdx >= 0) _planReassessNeeded[annexerSideIdx] = true;
+	recordExperimentEvent("REBELLION_FAILED", {
+		source: "economy",
+		major: true,
+		actorCountryId: rebellion.rebelId,
+		actorSideUid: rebelSideUid,
+		targetCountryId: record.annexerId,
+		targetSideUid: annexerSideUid,
+		evidence: {
+			economyCycle: economyPayCycle,
+			durationCycles: Math.max(0, economyPayCycle - rebellion.startCycle),
+			failedCycles: rebellion.failedCycles,
+			resistanceAfterDefeat: record.resistance,
+		},
+	});
 	emitEconomyEvent(`${meta?.name || "Rebels"}: rebellion defeated`, "warning");
 	generateProvinces();
 	recalculateAllBounds();
@@ -8822,6 +9060,1241 @@ export function deepClone(obj) {
 	}
 }
 
+function getExperimentBuildId() {
+	return document.title?.replace(/^MW-/i, "") || "development";
+}
+
+function getExperimentDateValue() {
+	return gameTimeDate
+		? {
+				year: gameTimeDate.year,
+				month: gameTimeDate.month,
+				day: gameTimeDate.day,
+			}
+		: null;
+}
+
+function getExperimentDateLabel() {
+	const value = getExperimentDateValue();
+	return value
+		? `${String(value.year).padStart(4, "0")}-${String(value.month).padStart(2, "0")}-${String(value.day).padStart(2, "0")}`
+		: null;
+}
+
+function getExperimentScenarioHash() {
+	const world = initialWorldControlMapSnapshot || worldControlMap;
+	const deJure = initialDeJureMapSnapshot || deJureMap;
+	const scenarioCities = initialCitiesSnapshot || cities || [];
+	const scenarioCountries =
+		initialCountryMetadataSnapshot || countryMetadata || [];
+	return hashScenarioContent({
+		gridResolution: CONFIG.GRID_RES,
+		world: world ? hashScenarioContent(world) : "missing",
+		deJure: deJure ? hashScenarioContent(deJure) : "missing",
+		cities: scenarioCities.map((city) => ({
+			id: city?.id ?? null,
+			name: city?.name ?? null,
+			lat: city?.lat ?? null,
+			lng: city?.lng ?? null,
+			pop: city?.pop ?? 0,
+			isCapital: !!city?.isCapital,
+			ownerId: city?.ownerId ?? null,
+		})),
+		countries: scenarioCountries.filter(Boolean).map((country) => ({
+			id: country.id,
+			name: country.name,
+			pop: country.pop ?? 0,
+			overlordId: country.overlordId ?? null,
+			releasableBy: country.releasableBy ?? null,
+		})),
+	});
+}
+
+function getSideDisplayName(sideIndex, sideCountries = sides[sideIndex] || []) {
+	const first = sideCountries[0];
+	if (!first) return `Side ${String.fromCharCode(65 + sideIndex)}`;
+	return sideCountries.length > 1
+		? `${first.name} Allies`
+		: first.name || `Side ${String.fromCharCode(65 + sideIndex)}`;
+}
+
+function readExperimentSeedFromSetup() {
+	const input = document.getElementById("experiment-seed-input");
+	const raw = input?.value?.trim();
+	const seed = raw === "" ? createRandomSeed() : normalizeSeed(raw);
+	setExperimentSeed(seed);
+	_experimentUi?.setSetupSeed(
+		seed,
+		`Seed ${seed} is locked for comparable starting conditions.`,
+		"ready",
+	);
+	return seed;
+}
+
+function captureExperimentOptions() {
+	const manpower = [];
+	for (let sideIndex = 0; sideIndex < sides.length; sideIndex++) {
+		const value = Number(
+			document.getElementById(`manpower-side-${sideIndex}`)?.value,
+		);
+		manpower.push(Number.isFinite(value) && value > 0 ? value : null);
+	}
+	return {
+		airPower:
+			document.getElementById("air-power-enabled-checkbox")?.checked !== false,
+		armor: document.getElementById("armor-enabled-checkbox")?.checked !== false,
+		cinematic: !!document.getElementById("cinematic-mode-checkbox")?.checked,
+		disableMountains: !!setupDisableMountainsCheckbox?.checked,
+		disablePuppets: !!disablePuppetsCheckbox?.checked,
+		ffa: ffaMode,
+		forceMode: document.getElementById("force-mode-select")?.value || "AUTO",
+		gameTime: {
+			enabled: !!timeSystemCheckbox?.checked,
+			year: Number(timeYearInput?.value) || null,
+			month: Number(timeMonthInput?.value) || null,
+			day: Number(timeDayInput?.value) || null,
+		},
+		invisibleBuffs: invisibleBuffsEnabled,
+		manpower,
+		mapResolution: document.getElementById("map-res-select")?.value || null,
+		gridResolution: document.getElementById("grid-res-select")?.value || null,
+		missiles: !disableBombsCheckbox?.checked,
+		noPeace: !!noPeaceCheckbox?.checked,
+		posture:
+			document.getElementById("setup-posture-select")?.value || "ADAPTIVE",
+		randomWar: randomWarMode,
+		recruitModel:
+			document.getElementById("recruit-model-select")?.value || null,
+		simulationSpeed: simSpeed,
+		unitLimit: document.getElementById("unit-limit-select")?.value || null,
+		warEconomy: warEconomyCheckbox?.checked !== false,
+	};
+}
+
+function serializeExperimentSides() {
+	ensureSideIdentities();
+	return sides.map((side, sideIndex) => ({
+		uid: sideUids[sideIndex],
+		label: getSideDisplayName(sideIndex, side),
+		color: sideColors[sideIndex],
+		countries: side.filter(Boolean).map((country) => ({
+			countryId: country.id,
+			name: country.name,
+			role: country.role || "OFFENSE",
+			strategy: country.strategy || "BALANCED",
+			buffState: country.buffState || "none",
+			hiddenBuffState: country.hiddenBuffState || "none",
+		})),
+	}));
+}
+
+function createCurrentExperimentSpec(seed) {
+	const scenarioHash = getExperimentScenarioHash();
+	const serializedSides = serializeExperimentSides();
+	const hostilities = Array.from(hostileSidePairs, (pair) => {
+		const [attackerSideUid, defenderSideUid] = pair.split("|");
+		return { attackerSideUid, defenderSideUid };
+	});
+	return {
+		schemaVersion: 1,
+		buildVersion: getExperimentBuildId(),
+		scenarioId:
+			currentScenarioContext?.id || activeScenarioId || mapName || "local-map",
+		scenarioName: currentScenarioContext?.name || mapName || "Local Scenario",
+		scenarioHash,
+		scenario: {
+			id:
+				currentScenarioContext?.id ||
+				activeScenarioId ||
+				mapName ||
+				"local-map",
+			name: currentScenarioContext?.name || mapName || "Local Scenario",
+			hash: scenarioHash,
+		},
+		sides: serializedSides,
+		hostilities,
+		options: captureExperimentOptions(),
+		seed: normalizeSeed(seed),
+		parentReportId: _experimentParentReport?.id || null,
+		runMode: _experimentParentReport
+			? normalizeSeed(seed) === normalizeSeed(_experimentParentReport.seed)
+				? "REPEAT_SEED"
+				: "REMATCH"
+			: "FRESH",
+		createdAt: new Date().toISOString(),
+	};
+}
+
+function experimentSideDefinitions(spec = activeExperimentSpec) {
+	const initialDefinitions = Array.isArray(spec?.sides) ? spec.sides : [];
+	const definitions = initialDefinitions.map((side, sideIndex) => {
+		const runtimeSideIndex = sideUids.indexOf(side.uid);
+		return {
+			...side,
+			initialSideIndex: sideIndex,
+			runtimeSideIndex: runtimeSideIndex >= 0 ? runtimeSideIndex : null,
+		};
+	});
+	const knownUids = new Set(
+		definitions.map((side) => side.uid).filter(Boolean),
+	);
+	for (
+		let runtimeSideIndex = 0;
+		runtimeSideIndex < sides.length;
+		runtimeSideIndex++
+	) {
+		const runtimeSide = sides[runtimeSideIndex] || [];
+		const uid =
+			sideUids[runtimeSideIndex] ||
+			initialDefinitions[runtimeSideIndex]?.uid ||
+			`side-${runtimeSideIndex + 1}`;
+		if (knownUids.has(uid)) continue;
+		definitions.push({
+			uid,
+			label: getSideDisplayName(runtimeSideIndex, runtimeSide),
+			color: sideColors[runtimeSideIndex],
+			countries: runtimeSide.filter(Boolean).map((country) => ({
+				countryId: country.id,
+				name: country.name,
+				role: country.role || "OFFENSE",
+				strategy: country.strategy || "BALANCED",
+			})),
+			initialSideIndex: null,
+			runtimeSideIndex,
+		});
+		knownUids.add(uid);
+	}
+	const observedSides = new Map();
+	for (const event of activeExperimentRecorder?.events || []) {
+		for (const [uid, countryId] of [
+			[event.actorSideUid, event.actorCountryId],
+			[event.targetSideUid, event.targetCountryId],
+		]) {
+			if (!uid || knownUids.has(uid)) continue;
+			let observed = observedSides.get(uid);
+			if (!observed) {
+				observed = { uid, countryIds: new Set() };
+				observedSides.set(uid, observed);
+			}
+			if (Number.isInteger(countryId) && countryId > 0) {
+				observed.countryIds.add(countryId);
+			}
+		}
+	}
+	for (const observed of observedSides.values()) {
+		const observedCountries = Array.from(observed.countryIds, (countryId) => {
+			const meta = countryMetadata[countryId - 1];
+			return {
+				countryId,
+				name: meta?.name || `Country ${countryId}`,
+				role: "OFFENSE",
+				strategy: "BALANCED",
+			};
+		});
+		definitions.push({
+			uid: observed.uid,
+			label: observedCountries[0]?.name || observed.uid,
+			color: null,
+			countries: observedCountries,
+			initialSideIndex: null,
+			runtimeSideIndex: null,
+		});
+		knownUids.add(observed.uid);
+	}
+	return definitions.length ? definitions : serializeExperimentSides();
+}
+
+function countryIdsForExperimentSide(side) {
+	return (side?.countries || [])
+		.map((country) => Number(country?.countryId ?? country?.id))
+		.filter((countryId) => Number.isInteger(countryId) && countryId > 0);
+}
+
+function captureExperimentMetrics({ scanWorld = true } = {}) {
+	const definitions = experimentSideDefinitions();
+	const countryToMetric = new Map();
+	const runtimeSideToMetric = new Map();
+	for (const [metricIndex, side] of definitions.entries()) {
+		for (const countryId of countryIdsForExperimentSide(side)) {
+			countryToMetric.set(countryId, metricIndex);
+		}
+	}
+	const sideUidToMetric = new Map(
+		definitions.map((side, metricIndex) => [side.uid, metricIndex]),
+	);
+	for (const event of activeExperimentRecorder?.events || []) {
+		for (const [uid, countryId] of [
+			[event.actorSideUid, event.actorCountryId],
+			[event.targetSideUid, event.targetCountryId],
+		]) {
+			const metricIndex = sideUidToMetric.get(uid);
+			if (
+				metricIndex !== undefined &&
+				Number.isInteger(countryId) &&
+				countryId > 0
+			) {
+				countryToMetric.set(countryId, metricIndex);
+			}
+		}
+	}
+	const metrics = definitions.map((side, metricIndex) => {
+		const runtimeSideIndex = Number.isInteger(side.runtimeSideIndex)
+			? side.runtimeSideIndex
+			: sideUids.indexOf(side.uid);
+		const runtimeSide =
+			runtimeSideIndex >= 0 ? sides[runtimeSideIndex] || [] : [];
+		if (runtimeSideIndex >= 0)
+			runtimeSideToMetric.set(runtimeSideIndex, metricIndex);
+		for (const country of runtimeSide) {
+			if (country?.id > 0) countryToMetric.set(country.id, metricIndex);
+		}
+		const activeCountries = runtimeSide.length;
+		const initialSideIndex = Number.isInteger(side.initialSideIndex)
+			? side.initialSideIndex
+			: runtimeSideIndex;
+		return {
+			sideUid:
+				side.uid ||
+				sideUids[runtimeSideIndex] ||
+				`side-${runtimeSideIndex + 1}`,
+			sideIndex: runtimeSideIndex >= 0 ? runtimeSideIndex : initialSideIndex,
+			name:
+				activeCountries > 0
+					? getSideDisplayName(runtimeSideIndex, runtimeSide)
+					: side.label || `Side ${String.fromCharCode(65 + metricIndex)}`,
+			territory: 0,
+			territoryPercent: 0,
+			cities: 0,
+			capitals: 0,
+			personnel: activeCountries
+				? Math.max(0, sideSoldiers[runtimeSideIndex] || 0)
+				: 0,
+			initialPersonnel:
+				runtimeSideIndex >= 0
+					? Math.max(0, initialSideSoldiers[runtimeSideIndex] || 0)
+					: 0,
+			casualties:
+				runtimeSideIndex >= 0
+					? Math.max(0, sideCasualties[runtimeSideIndex] || 0)
+					: 0,
+			formations: 0,
+			economy: 0,
+			income: 0,
+			arrears: 0,
+			equipment: 0,
+			armor: 0,
+			fighters: 0,
+			strikeAircraft: 0,
+			phase:
+				runtimeSideIndex >= 0
+					? _sideWarPhase[runtimeSideIndex] || "STALEMATE"
+					: "ELIMINATED",
+			warPhase:
+				runtimeSideIndex >= 0
+					? _sideWarPhase[runtimeSideIndex] || "STALEMATE"
+					: "ELIMINATED",
+			activeCountries,
+		};
+	});
+
+	for (const unit of units) {
+		const metricIndex = Number.isInteger(unit.sideIndex)
+			? runtimeSideToMetric.get(unit.sideIndex)
+			: countryToMetric.get(unit.sovereignId);
+		if (metrics[metricIndex]) metrics[metricIndex].formations++;
+	}
+	for (const [countryId, economy] of countryEconomy) {
+		const metric = metrics[countryToMetric.get(countryId)];
+		if (!metric) continue;
+		metric.economy += Number(economy.treasury) || 0;
+		metric.income +=
+			(Number(economy.income) || 0) + (Number(economy.occupationYield) || 0);
+		metric.arrears += Number(economy.arrearsCycles) || 0;
+	}
+	for (const [countryId, equipment] of countryEquipment) {
+		const metric = metrics[countryToMetric.get(countryId)];
+		if (!metric) continue;
+		metric.armor +=
+			(Number(equipment.currentArmor) || 0) +
+			(Number(equipment.reserveArmor) || 0);
+		metric.fighters +=
+			(Number(equipment.currentFighters) || 0) +
+			(Number(equipment.reserveFighters) || 0);
+		metric.strikeAircraft +=
+			(Number(equipment.currentStrike) || 0) +
+			(Number(equipment.reserveStrike) || 0);
+		metric.equipment = metric.armor + metric.fighters + metric.strikeAircraft;
+	}
+
+	if (scanWorld && worldControlMap) {
+		for (let index = 0; index < worldControlMap.length; index++) {
+			let metricIndex = countryToMetric.get(worldControlMap[index]);
+			if (
+				landMask?.[index] === 2 &&
+				dominantSideMap?.[index] >= 0 &&
+				runtimeSideToMetric.has(dominantSideMap[index])
+			) {
+				metricIndex = runtimeSideToMetric.get(dominantSideMap[index]);
+			}
+			if (metrics[metricIndex]) metrics[metricIndex].territory++;
+		}
+	} else {
+		for (const [runtimeSideIndex, metricIndex] of runtimeSideToMetric) {
+			metrics[metricIndex].territory =
+				_cachedSideTerritoryCounts[runtimeSideIndex] || 0;
+		}
+	}
+
+	for (const city of activeTheaterCities.length
+		? activeTheaterCities
+		: cities) {
+		const index = getGridIndex(city.lat, city.lng);
+		if (index < 0) continue;
+		let controllerId = worldControlMap[index];
+		if (landMask[index] === 2 && primaryOccupierMap[index] > 0) {
+			controllerId = primaryOccupierMap[index];
+		}
+		let metricIndex = countryToMetric.get(controllerId);
+		if (landMask[index] === 2 && dominantSideMap[index] >= 0) {
+			metricIndex = runtimeSideToMetric.get(dominantSideMap[index]);
+		}
+		if (!metrics[metricIndex]) continue;
+		metrics[metricIndex].cities++;
+		if (city.isCapital) metrics[metricIndex].capitals++;
+	}
+
+	const totalTerritory = metrics.reduce(
+		(total, metric) => total + metric.territory,
+		0,
+	);
+	for (const metric of metrics) {
+		metric.territoryPercent =
+			totalTerritory > 0 ? (metric.territory / totalTerritory) * 100 : 0;
+		metric.economy = Math.round(metric.economy);
+		metric.income = Math.round(metric.income);
+		metric.equipment = Math.round(metric.equipment);
+	}
+	return metrics;
+}
+
+function createExperimentSnapshot(reason, options = {}) {
+	return {
+		reason,
+		tick: _simTickCount,
+		date: getExperimentDateValue(),
+		rngState: getGameplayRngState(),
+		sides: captureExperimentMetrics(options),
+	};
+}
+
+export function recordExperimentCheckpoint(reason, details = {}) {
+	if (!activeExperimentRecorder) return null;
+	const evidence =
+		details.evidence ||
+		Object.fromEntries(
+			Object.entries(details).filter(
+				([key]) => !["sideMetrics", "metrics", "date", "tick"].includes(key),
+			),
+		);
+	const checkpoint = {
+		...createExperimentSnapshot(reason, { scanWorld: false }),
+		date: getExperimentDateLabel(),
+		sideMetrics: captureExperimentMetrics({ scanWorld: false }),
+		...details,
+		evidence,
+	};
+	return appendWarCheckpoint(activeExperimentRecorder, checkpoint);
+}
+
+export function recordExperimentEvent(type, details = {}) {
+	if (!activeExperimentRecorder) return null;
+	const actorCountryId = Number(details.actorCountryId) || null;
+	const targetCountryId = Number(details.targetCountryId) || null;
+	const findSideUid = (countryId, explicitSideIndex) => {
+		if (Number.isInteger(explicitSideIndex)) {
+			return (
+				sideUids[explicitSideIndex] ||
+				activeExperimentSpec?.sides?.[explicitSideIndex]?.uid ||
+				null
+			);
+		}
+		if (!countryId) return null;
+		const runtimeSideIndex = sides.findIndex((side) =>
+			side?.some((country) => country.id === countryId),
+		);
+		if (runtimeSideIndex >= 0) return sideUids[runtimeSideIndex] || null;
+		const initialSideIndex = activeExperimentSpec?.sides?.findIndex((side) =>
+			countryIdsForExperimentSide(side).includes(countryId),
+		);
+		return initialSideIndex >= 0
+			? activeExperimentSpec.sides[initialSideIndex].uid
+			: null;
+	};
+	const event = {
+		type,
+		source: details.source || "simulation",
+		tick: _simTickCount,
+		date: getExperimentDateLabel(),
+		actorCountryId,
+		targetCountryId,
+		actorSideUid:
+			details.actorSideUid ||
+			findSideUid(actorCountryId, details.actorSideIndex),
+		targetSideUid:
+			details.targetSideUid ||
+			findSideUid(targetCountryId, details.targetSideIndex),
+		location: details.location || null,
+		evidence: details.evidence || {},
+		summary: details.message || details.summary || type,
+		intervention: type === "INTERVENTION" || !!details.intervention,
+		major: !!details.major,
+	};
+	const recorded = appendWarEvent(activeExperimentRecorder, event);
+	if (type === "INTERVENTION" || details.intervention) {
+		activeExperimentRecorder.modified = true;
+		activeExperimentRecorder.interventions ||= [];
+		if (!activeExperimentRecorder.interventions.includes(recorded)) {
+			activeExperimentRecorder.interventions.push(recorded || event);
+		}
+	}
+	if (details.major) recordExperimentCheckpoint(type, details.checkpoint || {});
+	return recorded;
+}
+
+function preserveSetupManpowerValues() {
+	return sides.map(
+		(_, sideIndex) =>
+			document.getElementById(`manpower-side-${sideIndex}`)?.value ?? "",
+	);
+}
+
+function restoreSetupManpowerValues(values = []) {
+	for (let sideIndex = 0; sideIndex < sides.length; sideIndex++) {
+		const input = document.getElementById(`manpower-side-${sideIndex}`);
+		if (input) input.value = values[sideIndex] ?? "";
+	}
+}
+
+function applyBroadSetupPosture(posture) {
+	const strategy = {
+		ADAPTIVE: "BALANCED",
+		AGGRESSIVE: "AGGRESSIVE",
+		CAUTIOUS: "DEFENSIVE",
+	}[posture];
+	if (!strategy) return;
+	for (const country of sides.flat()) {
+		if (country) country.strategy = strategy;
+	}
+	document
+		.querySelectorAll("#sides-container .strategy-select")
+		.forEach((select) => {
+			select.value = strategy;
+		});
+}
+
+function estimatedSetupSideStrengths() {
+	return sides.map((side, sideIndex) => ({
+		sideIndex,
+		label: getSideDisplayName(sideIndex, side),
+		value: side.reduce(
+			(total, country) =>
+				total + Math.max(0, estimateUnitsForCountry(country.id)),
+			0,
+		),
+	}));
+}
+
+function updateEstimatedExperimentBalance() {
+	const strengths = estimatedSetupSideStrengths().filter(
+		(side) => side.value > 0,
+	);
+	if (strengths.length < 2) {
+		_experimentUi?.setEstimatedForceBalance({
+			statement: "Select countries on at least two sides to compare forces.",
+			sides: strengths,
+		});
+		return;
+	}
+	const ordered = [...strengths].sort(
+		(left, right) => right.value - left.value,
+	);
+	const ratio = ordered[0].value / Math.max(1, ordered[1].value);
+	const statement =
+		ratio < 1.1
+			? "The two strongest sides begin near parity."
+			: `${ordered[0].label} is estimated at ${ratio.toFixed(1)}× the force of ${ordered[1].label}.`;
+	_experimentUi?.setEstimatedForceBalance({
+		statement,
+		sides: strengths,
+	});
+}
+
+function applyExperimentForceMode(forceMode) {
+	const inputs = sides.map((_, sideIndex) =>
+		document.getElementById(`manpower-side-${sideIndex}`),
+	);
+	const advancedForces = document.getElementById("advanced-forces-date");
+	if (forceMode === "AUTO") {
+		for (const input of inputs) if (input) input.value = "";
+		return;
+	}
+	if (forceMode === "BALANCED") {
+		const estimates = estimatedSetupSideStrengths()
+			.filter((side) => sides[side.sideIndex]?.length)
+			.map((side) => side.value);
+		const target = Math.max(1, ...estimates);
+		for (let sideIndex = 0; sideIndex < inputs.length; sideIndex++) {
+			if (inputs[sideIndex] && sides[sideIndex]?.length) {
+				inputs[sideIndex].value = String(target);
+			}
+		}
+		return;
+	}
+	if (forceMode === "CUSTOM" && advancedForces) advancedForces.open = true;
+}
+
+function prepareExperimentSetupForStart() {
+	if (gameMode !== "CONQUEST") return getExperimentSeed();
+	const values = _experimentUi?.getSetupValues() || {};
+	applyBroadSetupPosture(values.posture || "ADAPTIVE");
+	if (values.forceMode && values.forceMode !== "CUSTOM") {
+		applyExperimentForceMode(values.forceMode);
+	}
+	_experimentUi?.hideAfterActionReport();
+	_experimentUi?.hideReportReopenButton();
+	_experimentUi?.hideWarArchive();
+	latestWarReport = null;
+	activeExperimentRecorder = null;
+	activeExperimentSpec = null;
+	return readExperimentSeedFromSetup();
+}
+
+function experimentAdvantageFromMetrics(metrics) {
+	const active = metrics.filter((metric) => metric.activeCountries > 0);
+	if (active.length < 2) {
+		return {
+			statement: active[0]
+				? `${active[0].name} is the only side still fielding countries.`
+				: "No active side remains.",
+			tone: "decisive",
+		};
+	}
+	const totals = {
+		cities: active.reduce((sum, metric) => sum + metric.cities, 0),
+		economy: active.reduce(
+			(sum, metric) => sum + Math.max(0, metric.economy),
+			0,
+		),
+		equipment: active.reduce(
+			(sum, metric) => sum + Math.max(0, metric.equipment),
+			0,
+		),
+		personnel: active.reduce(
+			(sum, metric) => sum + Math.max(0, metric.personnel),
+			0,
+		),
+		territory: active.reduce((sum, metric) => sum + metric.territory, 0),
+	};
+	const scored = active
+		.map((metric) => ({
+			metric,
+			score:
+				(metric.territory / Math.max(1, totals.territory)) * 0.3 +
+				(metric.cities / Math.max(1, totals.cities)) * 0.2 +
+				(metric.personnel / Math.max(1, totals.personnel)) * 0.2 +
+				(Math.max(0, metric.economy) / Math.max(1, totals.economy)) * 0.15 +
+				(Math.max(0, metric.equipment) / Math.max(1, totals.equipment)) * 0.15,
+		}))
+		.sort((left, right) => right.score - left.score);
+	const collapsing = scored.find(({ metric }) => metric.phase === "COLLAPSING");
+	const retreating = scored.find(({ metric }) => metric.phase === "RETREATING");
+	const leader = scored[0];
+	if (collapsing) {
+		const opposingLeader = scored.find(
+			({ metric }) => metric.sideUid !== collapsing.metric.sideUid,
+		);
+		return {
+			statement: opposingLeader
+				? `${opposingLeader.metric.name} holds the advantage while ${collapsing.metric.name} is collapsing.`
+				: `${collapsing.metric.name} is in a recorded collapse state.`,
+			tone: "decisive",
+		};
+	}
+	if (retreating) {
+		const opposingLeader = scored.find(
+			({ metric }) => metric.sideUid !== retreating.metric.sideUid,
+		);
+		return {
+			statement: opposingLeader
+				? `${opposingLeader.metric.name} holds the advantage while ${retreating.metric.name} is retreating.`
+				: `${retreating.metric.name} is in a recorded retreat state.`,
+			tone: "warning",
+		};
+	}
+	const gap = leader.score - scored[1].score;
+	return gap < 0.045
+		? {
+				statement: "No clear advantage is visible in the current evidence.",
+				tone: "neutral",
+			}
+		: {
+				statement: `${leader.metric.name} currently holds the observable advantage.`,
+				tone: gap > 0.18 ? "decisive" : "positive",
+			};
+}
+
+function warDeskEconomyRows() {
+	if (!warEconomyEnabled) return ["War economy is disabled for this run."];
+	return Array.from(countryEconomy.values())
+		.sort((left, right) => (right.treasury || 0) - (left.treasury || 0))
+		.slice(0, 12)
+		.map((state) => ({
+			label:
+				countryMetadata[state.countryId - 1]?.name ||
+				`Country ${state.countryId}`,
+			value: `$${Math.round(state.treasury || 0).toLocaleString()} · ${state.commandBand || "PAID"} · arrears ${(state.arrearsCycles || 0).toFixed(1)}`,
+			tone:
+				state.commandBand === COMMAND_BANDS.PAID
+					? "positive"
+					: state.commandBand === COMMAND_BANDS.MUTINY
+						? "danger"
+						: "warning",
+		}));
+}
+
+function updateExperimentWarDesk(force = false) {
+	if (!activeExperimentRecorder || gameMode !== "CONQUEST") return;
+	const now = performance.now();
+	if (!force && now - _experimentWarDeskLastUpdate < 500) return;
+	_experimentWarDeskLastUpdate = now;
+	const metrics = captureExperimentMetrics({
+		scanWorld: force && _cachedSideTerritoryCounts.length === 0,
+	});
+	const advantage = experimentAdvantageFromMetrics(metrics);
+	const strongestPhase = metrics.some((metric) => metric.phase === "COLLAPSING")
+		? "COLLAPSE"
+		: metrics.some((metric) => metric.phase === "RETREATING")
+			? "RETREAT"
+			: metrics.some((metric) => metric.phase === "ADVANCING")
+				? "MOBILE WAR"
+				: "STALEMATE";
+	_experimentUi?.updateWarDesk({
+		advantage,
+		phase: strongestPhase,
+		summary:
+			"Advantage combines territory, cities and capitals, personnel, economy, equipment, and the current war phase.",
+		metrics: metrics.map((metric) => ({
+			label: metric.name,
+			value: `${metric.territoryPercent.toFixed(1)}% territory · ${Math.round(metric.personnel).toLocaleString()} personnel · ${metric.cities} cities · ${metric.phase}`,
+			tone:
+				metric.phase === "COLLAPSING"
+					? "danger"
+					: metric.phase === "RETREATING"
+						? "warning"
+						: metric.phase === "ADVANCING"
+							? "positive"
+							: "neutral",
+		})),
+		economy: warDeskEconomyRows(),
+		events: activeExperimentRecorder.events.slice(-15).reverse(),
+	});
+}
+
+function endingReasonForTreaty(type, winnerName = "") {
+	const reasons = {
+		ANNEXATION: winnerName
+			? `${winnerName} completed a total annexation.`
+			: "The conflict ended in total annexation.",
+		FULL_CAPITULATION: winnerName
+			? `${winnerName} was the final hostile side standing.`
+			: "All hostile opposition capitulated.",
+		PEACE_TREATY: "The remaining combatants accepted a negotiated peace.",
+		WHITE_PEACE: "The conflict ended without a surviving military resolution.",
+	};
+	return (
+		reasons[type] ||
+		`The simulation ended with ${String(type).replaceAll("_", " ").toLowerCase()}.`
+	);
+}
+
+function finalizeActiveExperiment({
+	type,
+	winnerSideIndex,
+	winnerName,
+	endingReason,
+	preTreaty,
+	postTreaty,
+}) {
+	if (!activeExperimentRecorder) return null;
+	const finalMetrics = captureExperimentMetrics({ scanWorld: true });
+	recordExperimentEvent("FINAL_STATE_CAPTURED", {
+		source: "experiment",
+		message: "Final side metrics captured before runtime cleanup.",
+		evidence: { sideMetrics: finalMetrics },
+	});
+	recordExperimentEvent("WAR_ENDED", {
+		source: "treaty",
+		message: endingReason,
+		major: true,
+		evidence: {
+			endingType: type,
+			preTreaty,
+			postTreaty,
+			winnerSideIndex,
+		},
+	});
+	appendWarCheckpoint(activeExperimentRecorder, {
+		date: getExperimentDateLabel(),
+		reason: "FINAL",
+		sideMetrics: finalMetrics,
+		tick: _simTickCount,
+	});
+	const isCompetitiveVictory =
+		type === "FULL_CAPITULATION" || type === "ANNEXATION";
+	const winnerSideUid = isCompetitiveVictory
+		? sideUids[winnerSideIndex] ||
+			activeExperimentSpec?.sides?.[winnerSideIndex]?.uid ||
+			null
+		: null;
+	const survivingSideUids = sides
+		.map((side, sideIndex) =>
+			side?.length
+				? sideUids[sideIndex] ||
+					activeExperimentSpec?.sides?.[sideIndex]?.uid ||
+					null
+				: null,
+		)
+		.filter(Boolean);
+	const report = finalizeWarReport(activeExperimentRecorder, {
+		durationTicks: _simTickCount,
+		finalMetrics,
+		outcome: {
+			type,
+			endingReason,
+			winnerSideUid,
+			survivingSideUids,
+		},
+		parentReport: _experimentParentReport,
+	});
+	report.buildVersion =
+		activeExperimentSpec?.buildVersion || getExperimentBuildId();
+	report.completedAt = report.finishedAt;
+	report.exactEndingReason = endingReason;
+	report.scenarioName =
+		activeExperimentSpec?.scenarioName ||
+		currentScenarioContext?.name ||
+		mapName;
+	report.outcome.winnerSideName = winnerSideUid ? winnerName : null;
+	report.preTreatySnapshot = preTreaty;
+	report.postTreatySnapshot = postTreaty;
+	latestWarReport = report;
+	persistWarReport(report);
+	_experimentUi?.hideWarDesk();
+	_experimentUi?.hideReportReopenButton();
+	_experimentUi?.showAfterActionReport(report);
+	return report;
+}
+
+function applyExperimentOptionsToSetup(spec) {
+	const options = spec?.options || {};
+	const setChecked = (id, checked) => {
+		const element = document.getElementById(id);
+		if (element && typeof checked === "boolean") element.checked = checked;
+	};
+	setChecked("war-economy-checkbox", options.warEconomy);
+	setChecked("armor-enabled-checkbox", options.armor);
+	setChecked("air-power-enabled-checkbox", options.airPower);
+	setChecked("cinematic-mode-checkbox", options.cinematic);
+	setChecked("no-peace-checkbox", options.noPeace);
+	setChecked("disable-bombs-checkbox", options.missiles === false);
+	setChecked("setup-disable-mountains-checkbox", options.disableMountains);
+	setChecked("disable-puppets-checkbox", options.disablePuppets);
+	setChecked("enable-time-checkbox", options.gameTime?.enabled);
+	if (typeof options.invisibleBuffs === "boolean") {
+		invisibleBuffsEnabled = options.invisibleBuffs;
+		if (disableInvisibleBuffsCheckbox) {
+			disableInvisibleBuffsCheckbox.checked = !invisibleBuffsEnabled;
+		}
+	}
+	if (timeYearInput) timeYearInput.value = options.gameTime?.year ?? "";
+	if (timeMonthInput) timeMonthInput.value = options.gameTime?.month ?? "";
+	if (timeDayInput) timeDayInput.value = options.gameTime?.day ?? "";
+	const forceMode = document.getElementById("force-mode-select");
+	if (forceMode) forceMode.value = options.forceMode || "AUTO";
+	const posture = document.getElementById("setup-posture-select");
+	if (posture) posture.value = options.posture || "ADAPTIVE";
+	for (const [id, value] of [
+		["map-res-select", options.mapResolution],
+		["grid-res-select", options.gridResolution],
+		["unit-limit-select", options.unitLimit],
+		["recruit-model-select", options.recruitModel],
+	]) {
+		const select = document.getElementById(id);
+		if (select && value != null) select.value = String(value);
+	}
+	ffaMode = !!options.ffa;
+	randomWarMode = !!options.randomWar;
+	randomWarBtn.innerText = randomWarMode ? "Random War: ON" : "Random War: OFF";
+	randomWarBtn.style.background = randomWarMode ? "#8e44ad" : "#9b59b6";
+	ffaToggleBtn.style.border = ffaMode ? "2px solid #fff" : "none";
+	ffaToggleBtn.innerText = ffaMode ? "FFA: ON" : "FFA Mode";
+	warEconomyEnabled = options.warEconomy !== false;
+	peaceTreatiesDisabled = !!options.noPeace;
+	missilesEnabled = options.missiles !== false;
+	mountainsEnabled = !options.disableMountains;
+}
+
+function restoreExperimentSides(spec) {
+	const definitions = spec?.sides || [];
+	sides = definitions.map((side) =>
+		(side.countries || []).map((country) => {
+			const countryId = Number(country.id ?? country.countryId);
+			const meta = countryMetadata[countryId - 1];
+			return {
+				id: countryId,
+				name: meta?.name || country.name || `Country ${countryId}`,
+				color: meta?.color || country.color || "rgba(128,128,128,0.5)",
+				role: country.role || "OFFENSE",
+				strategy: country.strategy || "BALANCED",
+				buffState: country.buffState || "none",
+				hiddenBuffState: country.hiddenBuffState || "none",
+				overlordId: meta?.overlordId || null,
+				flag: meta?.tempFlag || null,
+			};
+		}),
+	);
+	while (sides.length < 2) sides.push([]);
+	_attackers = sides[0];
+	_defenders = sides[1];
+	sideUids = definitions.map((side, index) => side.uid || `side-${index + 1}`);
+	hostileSidePairs.clear();
+	for (const hostility of spec.hostilities || []) {
+		const attacker = hostility.attackerSideUid || hostility.attacker;
+		const defender = hostility.defenderSideUid || hostility.defender;
+		if (attacker && defender)
+			hostileSidePairs.add(sidePairKey(attacker, defender));
+	}
+	if (!hostileSidePairs.size) {
+		for (let left = 0; left < sides.length; left++) {
+			for (let right = left + 1; right < sides.length; right++) {
+				if (sides[left]?.length && sides[right]?.length) {
+					hostileSidePairs.add(sidePairKey(sideUids[left], sideUids[right]));
+				}
+			}
+		}
+	}
+	_experimentRestoredSideUids = [...sideUids];
+	_experimentRestoredHostilities = Array.from(hostileSidePairs);
+	rebuildHostilityMatrix();
+	activeSideIndex = 0;
+	updateSidesUI();
+	applyExperimentOptionsToSetup(spec);
+	restoreSetupManpowerValues(spec.options?.manpower || []);
+	_experimentUi?.setSetupSeed(
+		spec.seed,
+		`Seed ${spec.seed} preserved. Repeat-seed runs compare starting conditions; they are not exact replays.`,
+		"ready",
+	);
+	updateEstimatedExperimentBalance();
+}
+
+function pristineScenarioMatchesReport(report) {
+	const expected = report?.configuration?.scenarioHash;
+	if (!expected || expected === "unknown") return true;
+	return getExperimentScenarioHash() === expected;
+}
+
+async function restoreReportConfiguration(
+	report,
+	{ start = false, freshSeed = false } = {},
+) {
+	if (!report?.configuration) return false;
+	if (!pristineScenarioMatchesReport(report)) {
+		alert(
+			"This scenario has changed since the report was created. Load the matching scenario before rerunning it.",
+		);
+		return false;
+	}
+	quickRestartBtn?.click();
+	const spec = deepClone(report.configuration);
+	spec.parentReportId = report.id;
+	spec.seed = freshSeed ? createRandomSeed() : normalizeSeed(report.seed);
+	spec.runMode = freshSeed ? "REMATCH" : "REPEAT_SEED";
+	_experimentParentReport = report;
+	activeExperimentRecorder = null;
+	activeExperimentSpec = null;
+	latestWarReport = null;
+	_experimentUi?.hideWarArchive();
+	_experimentUi?.hideAfterActionReport();
+	_experimentUi?.hideReportReopenButton();
+	restoreExperimentSides(spec);
+	if (start) await startWar();
+	return true;
+}
+
+function populateExperimentInterventionOptions() {
+	if (!_experimentUi) return;
+	const countries = countryMetadata
+		.filter((meta) => meta?.id > 0)
+		.map((meta) => {
+			const sideIndex = sides.findIndex((side) =>
+				side.some((country) => country.id === meta.id),
+			);
+			return {
+				countryId: meta.id,
+				countryName: meta.name || `Country ${meta.id}`,
+				sideName:
+					sideIndex >= 0 ? getSideDisplayName(sideIndex) : "Not in conflict",
+			};
+		})
+		.sort((left, right) => left.countryName.localeCompare(right.countryName));
+	const sideOptions = sides.map((side, sideIndex) => ({
+		sideUid: sideUids[sideIndex],
+		sideName: getSideDisplayName(sideIndex, side),
+	}));
+	_experimentUi.setInterventionOptions({ countries, sides: sideOptions });
+}
+
+function pauseForExperimentIntervention() {
+	if (gameState !== "SIMULATING") return;
+	_experimentInterventionPauseState = isPaused;
+	isPaused = true;
+	if (pauseBtn) {
+		pauseBtn.innerText = "▶";
+		pauseBtn.style.background = "#27ae60";
+	}
+	statusText.innerText = "Experiment paused for director intervention";
+	populateExperimentInterventionOptions();
+	_experimentUi?.setInterventionStatus(
+		"Paused. Applying any action will mark this report Modified.",
+		"warning",
+	);
+}
+
+function selectedInterventionCountry(values) {
+	const countryId = Number(values?.countryId);
+	if (!Number.isInteger(countryId) || countryId <= 0) return null;
+	const sideIndex = sides.findIndex((side) =>
+		side.some((country) => country.id === countryId),
+	);
+	return {
+		countryId,
+		meta: countryMetadata[countryId - 1],
+		sideIndex,
+		country:
+			sideIndex >= 0
+				? sides[sideIndex].find((candidate) => candidate.id === countryId)
+				: null,
+	};
+}
+
+function finishExperimentIntervention(action, selected, evidence = {}) {
+	const countryName =
+		selected?.meta?.name || selected?.country?.name || "Selected country";
+	const message = `${action}: ${countryName}`;
+	recordExperimentEvent("INTERVENTION", {
+		source: "war-desk",
+		actorCountryId: selected?.countryId || null,
+		actorSideIndex: selected?.sideIndex,
+		message,
+		evidence: { action, ...evidence },
+		intervention: true,
+		major: true,
+	});
+	_experimentUi?.setInterventionStatus(message, "modified");
+	populateExperimentInterventionOptions();
+	updateEconomyPanel();
+	updateExperimentWarDesk(true);
+}
+
+function requireInterventionCountry(values) {
+	const selected = selectedInterventionCountry(values);
+	if (!selected?.meta) {
+		_experimentUi?.setInterventionStatus("Select a country first.", "danger");
+		return null;
+	}
+	return selected;
+}
+
+function handlePostureIntervention(values) {
+	const selected = requireInterventionCountry(values);
+	if (!selected?.country) {
+		_experimentUi?.setInterventionStatus(
+			"That country is not currently in the conflict.",
+			"danger",
+		);
+		return;
+	}
+	const posture = values.posture || "ADAPTIVE";
+	selected.country.strategy =
+		{
+			ADAPTIVE: "BALANCED",
+			AGGRESSIVE: "AGGRESSIVE",
+			DEFENSIVE: "DEFENSIVE",
+			RETREAT: "TURTLE",
+		}[posture] || "BALANCED";
+	const profile = aiCountryState.get(selected.countryId);
+	if (profile && posture === "RETREAT") profile.forceDefensive = true;
+	finishExperimentIntervention("POSTURE_CHANGED", selected, { posture });
+}
+
+function handleFundsIntervention(values) {
+	const selected = requireInterventionCountry(values);
+	if (!selected) return;
+	const state = countryEconomy.get(selected.countryId);
+	if (!state) {
+		_experimentUi?.setInterventionStatus(
+			"War economy is disabled or unavailable for that country.",
+			"danger",
+		);
+		return;
+	}
+	const amount = Math.max(
+		1,
+		Number(values.amount) || state.baseIncome * 3 || 1,
+	);
+	state.treasury += amount;
+	finishExperimentIntervention("FUNDS_GRANTED", selected, { amount });
+}
+
+function handleClearArrearsIntervention(values) {
+	const selected = requireInterventionCountry(values);
+	if (!selected) return;
+	const state = countryEconomy.get(selected.countryId);
+	if (!state) {
+		_experimentUi?.setInterventionStatus(
+			"No arrears state is available.",
+			"danger",
+		);
+		return;
+	}
+	const previousBand = state.commandBand;
+	state.arrearsCycles = 0;
+	state.mutinyRecoveryCycles = 0;
+	state.commandBand = COMMAND_BANDS.PAID;
+	state.payrollCoverage = 1;
+	updateUnitCommandState(selected.countryId, previousBand, state.commandBand);
+	finishExperimentIntervention("ARREARS_CLEARED", selected, { previousBand });
+}
+
+function handleManpowerIntervention(values) {
+	const selected = requireInterventionCountry(values);
+	if (!selected || selected.sideIndex < 0) {
+		_experimentUi?.setInterventionStatus(
+			"The country must be in the conflict to receive manpower.",
+			"danger",
+		);
+		return;
+	}
+	const amount = Math.max(1, Math.round(Number(values.amount) || 100000));
+	sideSoldiers[selected.sideIndex] += amount;
+	finishExperimentIntervention("MANPOWER_GRANTED", selected, { amount });
+}
+
+function handleEquipmentIntervention(values, category, defaultAmount, action) {
+	const selected = requireInterventionCountry(values);
+	if (!selected) return;
+	const amount = Math.max(
+		1,
+		Math.round(Number(values.amount) || defaultAmount),
+	);
+	if (!adjustCountryEquipment(selected.countryId, category, amount)) {
+		_experimentUi?.setInterventionStatus(
+			"Equipment is disabled or unavailable for that country.",
+			"danger",
+		);
+		return;
+	}
+	finishExperimentIntervention(action, selected, { amount, category });
+}
+
+function handleJoinSideIntervention(values) {
+	const selected = requireInterventionCountry(values);
+	if (!selected) return;
+	const targetSideIndex = sideUids.indexOf(values.sideUid);
+	if (targetSideIndex < 0) {
+		_experimentUi?.setInterventionStatus(
+			"Select a destination side.",
+			"danger",
+		);
+		return;
+	}
+	const oldSideIndex = selected.sideIndex;
+	if (oldSideIndex === targetSideIndex) {
+		_experimentUi?.setInterventionStatus(
+			"That country already belongs to the selected side.",
+			"danger",
+		);
+		return;
+	}
+	recruitNeutralMidWar(selected.countryId, targetSideIndex);
+	selected.sideIndex = targetSideIndex;
+	finishExperimentIntervention("SIDE_JOINED", selected, {
+		fromSideUid: oldSideIndex >= 0 ? sideUids[oldSideIndex] : null,
+		toSideUid: sideUids[targetSideIndex],
+	});
+}
+
+function handleWithdrawIntervention(values) {
+	const selected = requireInterventionCountry(values);
+	if (!selected?.country || selected.sideIndex < 0) {
+		_experimentUi?.setInterventionStatus(
+			"That country is not currently in the conflict.",
+			"danger",
+		);
+		return;
+	}
+	const sideUid = sideUids[selected.sideIndex];
+	recordExperimentEvent("INTERVENTION", {
+		source: "war-desk",
+		actorCountryId: selected.countryId,
+		actorSideIndex: selected.sideIndex,
+		message: `WITHDREW_FROM_WAR: ${selected.meta?.name || selected.country.name}`,
+		evidence: { action: "WITHDREW_FROM_WAR", sideUid },
+		intervention: true,
+		major: true,
+	});
+	unilateralExitConflict(selected.country, selected.sideIndex);
+	_experimentUi?.setInterventionStatus(
+		"Country withdrawn; report marked Modified.",
+		"modified",
+	);
+	populateExperimentInterventionOptions();
+	updateExperimentWarDesk(true);
+}
+
+function handleRebellionIntervention(values) {
+	const selected = requireInterventionCountry(values);
+	if (!selected) return;
+	const occupation = occupationEconomies.get(selected.countryId);
+	if (!occupation) {
+		_experimentUi?.setInterventionStatus(
+			"That country has no active occupation capable of rebellion.",
+			"danger",
+		);
+		return;
+	}
+	occupation.resistance = 100;
+	occupation.cooldownUntilCycle = 0;
+	occupation.queuedAtCycle = economyPayCycle;
+	finishExperimentIntervention("REBELLION_FORCED", selected, {
+		annexerCountryId: occupation.annexerId,
+	});
+	processRebellionStates();
+}
+
+function handlePeaceIntervention() {
+	if (gameState !== "SIMULATING") return;
+	recordExperimentEvent("INTERVENTION", {
+		source: "war-desk",
+		message: "PEACE_ENFORCED: Director imposed a negotiated peace.",
+		evidence: { action: "PEACE_ENFORCED" },
+		intervention: true,
+		major: true,
+	});
+	applyTreaty("PEACE_TREATY");
+}
+
 export async function startWar() {
 	const activeSides = sides.filter((s) => s.length > 0);
 	if (activeSides.length < 2) {
@@ -8846,6 +10319,11 @@ export async function startWar() {
 }
 
 export async function _startWarInner() {
+	invalidateWarLifecycleTimers();
+	const experimentSeed =
+		gameMode === "CONQUEST"
+			? prepareExperimentSetupForStart()
+			: getExperimentSeed();
 	initAudio().then(() => {
 		playWarAmbiance();
 	});
@@ -8878,7 +10356,19 @@ export async function _startWarInner() {
 	activeRebellions.clear();
 	economyEvents.length = 0;
 	economyPayCycle = 0;
-	resetSideHostilities();
+	if (_experimentRestoredSideUids) {
+		sideUids = [..._experimentRestoredSideUids];
+		hostileSidePairs.clear();
+		for (const pair of _experimentRestoredHostilities || []) {
+			hostileSidePairs.add(pair);
+		}
+		ensureSideIdentities();
+		rebuildHostilityMatrix();
+		_experimentRestoredSideUids = null;
+		_experimentRestoredHostilities = null;
+	} else {
+		resetSideHostilities();
+	}
 
 	// Initialize time system for this war
 	setGameTimeFromInputs();
@@ -8894,6 +10384,7 @@ export async function _startWarInner() {
 
 	gameState = "SIMULATING";
 	isPaused = false;
+	_simTickCount = 0;
 	warGraceEndTick = simFrameCount + CONFIG.WAR_GRACE_TICKS;
 	_lastCapitulationTick = Number.NEGATIVE_INFINITY;
 
@@ -9192,10 +10683,13 @@ export async function _startWarInner() {
 
 		// Base plan quality; underdogs get a small bias towards better plans.
 		// Overall values are kept modest so "cracked" generals are rare.
-		let planQuality = Math.random();
+		let planQuality = gameplayRandom();
 		if (isUnderdog) {
 			// Pull slightly towards the upper half but keep a lot of randomness.
-			planQuality = Math.min(1, planQuality * 0.3 + 0.3 + Math.random() * 0.2);
+			planQuality = Math.min(
+				1,
+				planQuality * 0.3 + 0.3 + gameplayRandom() * 0.2,
+			);
 		}
 
 		const general = {
@@ -9349,7 +10843,7 @@ export async function _startWarInner() {
 				if (
 					fronts &&
 					fronts.length > 0 &&
-					Math.random() < AI_MOBILIZATION.START_FROM_FRONT_CHANCE
+					gameplayRandom() < AI_MOBILIZATION.START_FROM_FRONT_CHANCE
 				) {
 					// Cycle-based frontline distribution
 					const fIdx = j % fronts.length;
@@ -9359,12 +10853,16 @@ export async function _startWarInner() {
 					// Prefer spawning near friendly cities if available
 					if (friendlyCities.length > 0) {
 						const pick =
-							friendlyCities[Math.floor(Math.random() * friendlyCities.length)];
+							friendlyCities[
+								Math.floor(gameplayRandom() * friendlyCities.length)
+							];
 						const cIdx = getGridIndex(pick.lat, pick.lng);
 						fData = { idx: cIdx, vx: 0, vy: 0 };
 					} else {
 						const tidx =
-							theaterIndices[Math.floor(Math.random() * theaterIndices.length)];
+							theaterIndices[
+								Math.floor(gameplayRandom() * theaterIndices.length)
+							];
 						fData = { idx: tidx, vx: 0, vy: 0 };
 					}
 				}
@@ -9379,12 +10877,12 @@ export async function _startWarInner() {
 				let lat =
 					py * CONFIG.GRID_RES -
 					90 +
-					(Math.random() - 0.5) * jitterRange +
+					(gameplayRandom() - 0.5) * jitterRange +
 					fData.vy * pushBack;
 				let lng =
 					px * CONFIG.GRID_RES -
 					180 +
-					(Math.random() - 0.5) * jitterRange +
+					(gameplayRandom() - 0.5) * jitterRange +
 					fData.vx * pushBack;
 
 				// Validation: Ensure final coordinate is within the country's sovereign grid
@@ -9395,10 +10893,10 @@ export async function _startWarInner() {
 				}
 
 				const isMountainCell = terrainMask && terrainMask[fData.idx] > 0.35;
-				const isAlpen = isMountainCell && Math.random() < 0.4;
+				const isAlpen = isMountainCell && gameplayRandom() < 0.4;
 
 				units.push({
-					id: Math.random(),
+					id: gameplayRandom(),
 					kind: "army",
 					lat,
 					lng,
@@ -9478,7 +10976,7 @@ export async function _startWarInner() {
 
 					// Pick a random cell belonging to the weaker ally
 					const cellIdx =
-						weakCells[Math.floor(Math.random() * weakCells.length)];
+						weakCells[Math.floor(gameplayRandom() * weakCells.length)];
 					const cy = Math.floor(cellIdx / gridWidth);
 					const cx = cellIdx % gridWidth;
 					const baseLat = cy * CONFIG.GRID_RES - 90;
@@ -9487,9 +10985,9 @@ export async function _startWarInner() {
 					// Slight jitter inside the target cell, but keep the unit firmly inside ally territory
 					const jitter = CONFIG.GRID_RES * 0.4;
 					unit.lat =
-						baseLat + CONFIG.GRID_RES / 2 + (Math.random() - 0.5) * jitter;
+						baseLat + CONFIG.GRID_RES / 2 + (gameplayRandom() - 0.5) * jitter;
 					unit.lng =
-						baseLng + CONFIG.GRID_RES / 2 + (Math.random() - 0.5) * jitter;
+						baseLng + CONFIG.GRID_RES / 2 + (gameplayRandom() - 0.5) * jitter;
 
 					// Make sure longitude stays normalized
 					if (unit.lng > 180) unit.lng -= 360;
@@ -9516,7 +11014,7 @@ export async function _startWarInner() {
 			);
 			for (let i = 0; i < baseCount; i++) {
 				const randIdx =
-					validIndices[Math.floor(Math.random() * validIndices.length)];
+					validIndices[Math.floor(gameplayRandom() * validIndices.length)];
 				const y = Math.floor(randIdx / gridWidth);
 				const x = randIdx % gridWidth;
 				bases.push({
@@ -9644,6 +11142,54 @@ export async function _startWarInner() {
 
 	initializeWarEconomy();
 
+	if (gameMode === "CONQUEST") {
+		activeExperimentSpec = createCurrentExperimentSpec(experimentSeed);
+		const baseline = captureExperimentMetrics({ scanWorld: true });
+		activeExperimentRecorder = createExperimentRecorder(activeExperimentSpec, {
+			initialMetrics: baseline,
+		});
+		activeExperimentSpec = activeExperimentRecorder.spec;
+		appendWarCheckpoint(activeExperimentRecorder, {
+			baseline: true,
+			date: getExperimentDateLabel(),
+			reason: "BASELINE",
+			rngState: getGameplayRngState(),
+			sideMetrics: baseline,
+			tick: 0,
+		});
+		recordExperimentEvent("CONFIGURATION_LOCKED", {
+			source: "experiment",
+			message: `${activeExperimentSpec.sides.length} sides locked with seed ${experimentSeed}.`,
+			evidence: {
+				sideUids: activeExperimentSpec.sides.map((side) => side.uid),
+				hostilities: activeExperimentSpec.hostilities,
+				options: activeExperimentSpec.options,
+			},
+		});
+		recordExperimentEvent("BASELINE_RECORDED", {
+			source: "experiment",
+			message:
+				"Baseline recorded after economy, equipment, allies, and deployments initialized.",
+			evidence: { sideMetrics: baseline },
+		});
+		recordExperimentEvent("WAR_STARTED", {
+			source: "experiment",
+			message: `Experiment started with seed ${experimentSeed}.`,
+			evidence: {
+				buildVersion: activeExperimentSpec.buildVersion,
+				scenarioHash: activeExperimentSpec.scenarioHash,
+				seed: experimentSeed,
+			},
+		});
+		_experimentPreviousPhases = [..._sideWarPhase];
+		_experimentPreviousCapitalLosses = new Set(capitalLostCountries);
+		_experimentPreviousCityControllers.clear();
+		document.body.classList.add("experiment-loop-active");
+		_experimentUi?.showWarDesk();
+		populateExperimentInterventionOptions();
+		updateExperimentWarDesk(true);
+	}
+
 	requestAnimationFrame(updateLoop);
 }
 
@@ -9680,7 +11226,14 @@ export function triggerRandomWar() {
 
 	// Never start a random war while a major conflict is already simulating,
 	// to avoid corrupting existing sides and soft‑locking the game.
-	if (gameState === "SIMULATING" || gameState === "WAR_OVER") return;
+	if (!["SELECTING_P1", "SELECTING_P2"].includes(gameState)) return;
+	const freshSeed = createRandomSeed();
+	setExperimentSeed(freshSeed);
+	_experimentUi?.setSetupSeed(
+		freshSeed,
+		`Fresh Random War seed ${freshSeed} generated.`,
+		"ready",
+	);
 
 	if (!adjacencyCache) adjacencyCache = computeAdjacency();
 
@@ -9705,7 +11258,7 @@ export function triggerRandomWar() {
 		idB = -1;
 	const shuffledEligible = eligibleCountries
 		.slice()
-		.sort(() => Math.random() - 0.5);
+		.sort(() => gameplayRandom() - 0.5);
 
 	for (const candidateA of shuffledEligible) {
 		const neighborsSet = adjacencyCache.get(candidateA);
@@ -9721,7 +11274,7 @@ export function triggerRandomWar() {
 		if (neighborIds.length === 0) continue;
 
 		idA = candidateA;
-		idB = neighborIds[Math.floor(Math.random() * neighborIds.length)];
+		idB = neighborIds[Math.floor(gameplayRandom() * neighborIds.length)];
 		break;
 	}
 
@@ -9754,7 +11307,7 @@ export function triggerRandomWar() {
 	const combatantIds = new Set([idA, idB]);
 	let addProb = 0.5;
 	while (sides.length < MAX_SIDES && addProb > 0.01) {
-		if (Math.random() >= addProb) break;
+		if (gameplayRandom() >= addProb) break;
 		addProb /= 2;
 		const candidates = [];
 		for (const cid of combatantIds) {
@@ -9767,7 +11320,7 @@ export function triggerRandomWar() {
 			}
 		}
 		if (candidates.length === 0) break;
-		const pick = candidates[Math.floor(Math.random() * candidates.length)];
+		const pick = candidates[Math.floor(gameplayRandom() * candidates.length)];
 		const meta = countryMetadata[pick - 1];
 		if (!meta) break;
 		combatantIds.add(pick);
@@ -10096,12 +11649,12 @@ export function activateCountryMidWar(country, sideIdx) {
 	for (let j = 0; j < count; j++) {
 		let fData;
 		let fromFront = false;
-		if (frontlines.length > 0 && Math.random() < 0.95) {
-			fData = frontlines[Math.floor(Math.random() * frontlines.length)];
+		if (frontlines.length > 0 && gameplayRandom() < 0.95) {
+			fData = frontlines[Math.floor(gameplayRandom() * frontlines.length)];
 			fromFront = true;
 		} else {
 			const idx =
-				theaterIndices[Math.floor(Math.random() * theaterIndices.length)];
+				theaterIndices[Math.floor(gameplayRandom() * theaterIndices.length)];
 			fData = { idx, vx: 0, vy: 0 };
 		}
 
@@ -10113,21 +11666,21 @@ export function activateCountryMidWar(country, sideIdx) {
 
 		const spawnIdx = fData.idx;
 		const isMountainCell = terrainMask && terrainMask[spawnIdx] > 0.35;
-		const isAlpen = isMountainCell && Math.random() < 0.4;
+		const isAlpen = isMountainCell && gameplayRandom() < 0.4;
 
-		const unitId = Math.random();
+		const unitId = gameplayRandom();
 		units.push({
 			id: unitId,
 			kind: "army",
 			lat:
 				y * CONFIG.GRID_RES -
 				90 +
-				(Math.random() - 0.5) * CONFIG.GRID_RES * 1.2 +
+				(gameplayRandom() - 0.5) * CONFIG.GRID_RES * 1.2 +
 				fData.vy * pushBack,
 			lng:
 				x * CONFIG.GRID_RES -
 				180 +
-				(Math.random() - 0.5) * CONFIG.GRID_RES * 1.2 +
+				(gameplayRandom() - 0.5) * CONFIG.GRID_RES * 1.2 +
 				fData.vx * pushBack,
 			sideIndex: sideIdx,
 			sovereignId: countryId,
@@ -10180,7 +11733,7 @@ export function activateCountryMidWar(country, sideIdx) {
 
 export function launchBomb(fromLat, fromLng, toLat, toLng, sideIdx) {
 	bombs.push({
-		id: Math.random(),
+		id: gameplayRandom(),
 		startLat: fromLat,
 		startLng: fromLng,
 		targetLat: toLat,
@@ -10193,7 +11746,7 @@ export function launchBomb(fromLat, fromLng, toLat, toLng, sideIdx) {
 		sideIndex: sideIdx,
 		state: "rising",
 		trail: [],
-		peakAlt: 1.5 + Math.random() * 2.5,
+		peakAlt: 1.5 + gameplayRandom() * 2.5,
 	});
 }
 
@@ -10632,6 +12185,47 @@ function recordPlanOutcome(sideIdx, plan, outcome) {
 		lastOutcome: outcome,
 	};
 	_aiPlanMemory.set(key, next);
+	const eventType = {
+		started: "AI_PLAN_STARTED",
+		success: "AI_PLAN_SUCCEEDED",
+		failed: "AI_PLAN_FAILED",
+		replaced: "AI_PLAN_REPLACED",
+	}[outcome];
+	if (eventType) {
+		const actorCountryId =
+			plan.actorCountryId || plan.countryId || sides[sideIdx]?.[0]?.id || null;
+		const targetCountryId =
+			plan.victimId || plan.target?.sovereignId || plan.target?.ownerId || null;
+		const targetSideIdx = targetCountryId
+			? findCountrySideIndex(targetCountryId)
+			: -1;
+		recordExperimentEvent(eventType, {
+			source: "ai",
+			actorCountryId,
+			actorSideUid: sideUids[sideIdx] || null,
+			targetCountryId,
+			targetSideUid: sideUids[targetSideIdx] || null,
+			location: plan.target
+				? {
+						name: plan.target.name || "",
+						lat: plan.target.lat,
+						lng: plan.target.lng,
+					}
+				: null,
+			evidence: {
+				planType: plan.type || "UNKNOWN",
+				phase: plan.phase || null,
+				signature: key,
+				targetName: plan.target?.name || next.targetName || "",
+				priority: plan.priority || 0,
+				allocatedForce: plan.maxAssignedUnits || 0,
+				activeUnitCount: plan.activeUnitCount || 0,
+				progress: plan.progress || 0,
+				scoreBreakdown: plan.scoreBreakdown || null,
+				riskAssessment: plan.riskAssessment || null,
+			},
+		});
+	}
 }
 
 function measurePlanProgressSignal(sideIdx, plan) {
@@ -13918,11 +15512,32 @@ function applyStrategicStrike(target, damage, wing) {
 	}
 	if (!target.field) return;
 	const field = target.field;
+	const healthBefore = field.health;
 	const wasOperational = field.health > 0;
 	field.health = Math.max(0, field.health - damage);
 	field.disabled = field.health <= 0;
 	if (field.disabled && wasOperational) {
 		emitEconomyEvent(`${field.name}: airfield destroyed`, "danger");
+		recordExperimentEvent("AIRFIELD_DESTROYED", {
+			source: "air_power",
+			actorCountryId: wing.sovereignId,
+			actorSideUid: sideUids[wing.sideIndex] || null,
+			targetCountryId: field.controllerId || field.ownerId || null,
+			targetSideUid: sideUids[field.sideIndex] || null,
+			location: {
+				name: field.name || "Airfield",
+				lat: field.lat,
+				lng: field.lng,
+			},
+			evidence: {
+				airfieldId: field.id,
+				damage,
+				healthBefore,
+				healthAfter: field.health,
+				wingRole: wing.role,
+				wingEquipment: wing.equipment,
+			},
+		});
 		for (const basedWing of airWings) {
 			if (basedWing.airfieldId !== field.id || basedWing.equipment <= 0)
 				continue;
@@ -13941,6 +15556,8 @@ function updateAirfieldControllers() {
 		if (idx < 0 || landMask[idx] === 0) continue;
 		const nextSide = dominantSideMap[idx];
 		if (nextSide < 0 || nextSide === field.sideIndex) continue;
+		const previousControllerId = field.controllerId;
+		const previousSideIdx = field.sideIndex;
 		const physicalOccupierId = primaryOccupierMap[idx];
 		const controllerId =
 			findCountrySideIndex(physicalOccupierId) === nextSide
@@ -13957,6 +15574,29 @@ function updateAirfieldControllers() {
 			`${field.name}: airfield captured and disabled`,
 			"warning",
 		);
+		recordExperimentEvent("AIRFIELD_CAPTURED", {
+			source: "territory",
+			actorCountryId: controllerId,
+			actorSideUid: sideUids[nextSide] || null,
+			targetCountryId: previousControllerId || field.ownerId || null,
+			targetSideUid: sideUids[previousSideIdx] || null,
+			location: {
+				name: field.name || "Airfield",
+				lat: field.lat,
+				lng: field.lng,
+				gridIndex: idx,
+			},
+			evidence: {
+				airfieldId: field.id,
+				ownerCountryId: field.ownerId,
+				previousControllerCountryId: previousControllerId,
+				controllerCountryId: controllerId,
+				previousSideUid: sideUids[previousSideIdx] || null,
+				controllerSideUid: sideUids[nextSide] || null,
+				disabled: field.disabled,
+				captureRepairCycles: field.captureRepairCycles,
+			},
+		});
 	}
 }
 
@@ -14164,7 +15804,7 @@ export function performSimulationTick() {
 		const sampleCount = 5000;
 		const modified = [];
 		for (let s = 0; s < sampleCount; s++) {
-			const idx = Math.floor(Math.random() * primaryOccupierMap.length);
+			const idx = Math.floor(gameplayRandom() * primaryOccupierMap.length);
 			if (landMask[idx] !== 2 || primaryOccupierMap[idx] === 0) continue;
 
 			const myId = primaryOccupierMap[idx];
@@ -14232,7 +15872,7 @@ export function performSimulationTick() {
 			Math.floor(integBase / optimizationFactor),
 		);
 		for (let s = 0; s < integSamples; s++) {
-			const idx = Math.floor(Math.random() * landMask.length);
+			const idx = Math.floor(gameplayRandom() * landMask.length);
 			if (landMask[idx] !== 2) continue;
 			const dsIdx = dominantSideMap[idx];
 			if (dsIdx < 0) continue;
@@ -14695,6 +16335,10 @@ export function performSimulationTick() {
 	const countryToCityCount = _tickCountryToCityCount;
 	_tickCountryCapitalLost.clear();
 	const countryCapitalLost = _tickCountryCapitalLost;
+	const experimentCityControllers = shouldCountLand ? new Map() : null;
+	const experimentCapitalTransitionsRecorded = shouldCountLand
+		? new Set()
+		: null;
 
 	activeTheaterCities.forEach((city) => {
 		const idx = getGridIndex(city.lat, city.lng);
@@ -14716,7 +16360,119 @@ export function performSimulationTick() {
 				countryCapitalLost.set(originalSovereignId, true);
 			}
 		}
+
+		if (shouldCountLand) {
+			const cityKey =
+				city.id != null
+					? `id:${city.id}`
+					: `${originalSovereignId || 0}:${city.isCapital ? "capital" : "city"}:${city.name || ""}:${Number(city.lat).toFixed(4)}:${Number(city.lng).toFixed(4)}`;
+			const controllerCountryId = ownerId > 0 ? ownerId : null;
+			experimentCityControllers.set(cityKey, controllerCountryId);
+			if (
+				_experimentPreviousCityControllers.has(cityKey) &&
+				_experimentPreviousCityControllers.get(cityKey) !== controllerCountryId
+			) {
+				const previousControllerCountryId =
+					_experimentPreviousCityControllers.get(cityKey);
+				const controllerSideIdx = dominantSideMap[idx];
+				const originalSideIdx = countryToSideMap.get(originalSovereignId) ?? -1;
+				let eventType = "CITY_CONTROLLER_CHANGED";
+				if (city.isCapital) {
+					const wasLost =
+						_experimentPreviousCapitalLosses.has(originalSovereignId);
+					const isLost = countryCapitalLost.has(originalSovereignId);
+					if (!wasLost && isLost) eventType = "CAPITAL_LOST";
+					else if (wasLost && !isLost) eventType = "CAPITAL_RECOVERED";
+					else eventType = "CAPITAL_CONTROLLER_CHANGED";
+					if (wasLost !== isLost) {
+						experimentCapitalTransitionsRecorded.add(originalSovereignId);
+					}
+				}
+				const previousControllerSideIdx = previousControllerCountryId
+					? findCountrySideIndex(previousControllerCountryId)
+					: -1;
+				recordExperimentEvent(eventType, {
+					source: "territory_scan",
+					major:
+						eventType === "CAPITAL_LOST" || eventType === "CAPITAL_RECOVERED",
+					actorCountryId: controllerCountryId,
+					actorSideUid: sideUids[controllerSideIdx] || null,
+					targetCountryId: originalSovereignId || null,
+					targetSideUid: sideUids[originalSideIdx] || null,
+					location: {
+						name: city.name || (city.isCapital ? "Capital" : "City"),
+						lat: city.lat,
+						lng: city.lng,
+						gridIndex: idx,
+					},
+					evidence: {
+						isCapital: !!city.isCapital,
+						population: city.pop || 0,
+						originalSovereignCountryId: originalSovereignId || null,
+						previousControllerCountryId,
+						controllerCountryId,
+						previousControllerSideUid:
+							sideUids[previousControllerSideIdx] || null,
+						controllerSideUid: sideUids[controllerSideIdx] || null,
+					},
+				});
+			}
+		}
 	});
+	if (shouldCountLand) {
+		const hasPreviousCitySnapshot = _experimentPreviousCityControllers.size > 0;
+		if (hasPreviousCitySnapshot) {
+			const capitalTransitions = new Set([
+				..._experimentPreviousCapitalLosses,
+				...countryCapitalLost.keys(),
+			]);
+			for (const countryId of capitalTransitions) {
+				const wasLost = _experimentPreviousCapitalLosses.has(countryId);
+				const isLost = countryCapitalLost.has(countryId);
+				if (
+					wasLost === isLost ||
+					experimentCapitalTransitionsRecorded.has(countryId)
+				)
+					continue;
+				const capital = activeTheaterCities.find(
+					(city) => city.isCapital && city.sovereignId === countryId,
+				);
+				const capitalIdx = capital
+					? getGridIndex(capital.lat, capital.lng)
+					: -1;
+				const controllerCountryId =
+					capitalIdx >= 0 && primaryOccupierMap[capitalIdx] > 0
+						? primaryOccupierMap[capitalIdx]
+						: null;
+				const controllerSideIdx =
+					capitalIdx >= 0 ? dominantSideMap[capitalIdx] : -1;
+				const originalSideIdx = countryToSideMap.get(countryId) ?? -1;
+				recordExperimentEvent(isLost ? "CAPITAL_LOST" : "CAPITAL_RECOVERED", {
+					source: "territory_scan",
+					major: true,
+					actorCountryId: controllerCountryId,
+					actorSideUid: sideUids[controllerSideIdx] || null,
+					targetCountryId: countryId,
+					targetSideUid: sideUids[originalSideIdx] || null,
+					location: capital
+						? {
+								name: capital.name || "Capital",
+								lat: capital.lat,
+								lng: capital.lng,
+								gridIndex: capitalIdx,
+							}
+						: null,
+					evidence: {
+						originalSovereignCountryId: countryId,
+						controllerCountryId,
+						controllerSideUid: sideUids[controllerSideIdx] || null,
+					},
+				});
+			}
+		}
+		_experimentPreviousCityControllers = experimentCityControllers;
+		_experimentPreviousCapitalLosses = new Set(countryCapitalLost.keys());
+	}
 	// Expose capital-loss state globally so recruitment/spawn logic can react to supply failure
 	capitalLostCountries = new Set(countryCapitalLost.keys());
 
@@ -14927,6 +16683,33 @@ export function performSimulationTick() {
 			} else {
 				_sideWarPhase[si] = "STALEMATE";
 			}
+		}
+
+		for (let si = 0; si < sides.length; si++) {
+			if (!sides[si] || sides[si].length === 0) continue;
+			const nextPhase = _sideWarPhase[si] || "STALEMATE";
+			const previousPhase = _experimentPreviousPhases[si];
+			if (previousPhase && previousPhase !== nextPhase) {
+				const history = _sideMomentumHistory[si] || [];
+				const controlledBefore = history[0]?.controlled || 0;
+				const controlledNow = history.at(-1)?.controlled || 0;
+				recordExperimentEvent("WAR_PHASE_CHANGED", {
+					source: "territory_scan",
+					actorCountryId: sides[si][0]?.id || null,
+					actorSideUid: sideUids[si] || null,
+					evidence: {
+						previousPhase,
+						nextPhase,
+						countryIds: sides[si].map((country) => country.id),
+						controlledBefore,
+						controlledNow,
+						controlledDelta: controlledNow - controlledBefore,
+						personnel: sideSoldiers[si] || 0,
+						initialPersonnel: initialSideSoldiers[si] || 0,
+					},
+				});
+			}
+			_experimentPreviousPhases[si] = nextPhase;
 		}
 	}
 
@@ -15272,7 +17055,7 @@ export function performSimulationTick() {
 					spawnsThisTick = 3;
 				}
 				for (let sp = 0; sp < spawnsThisTick; sp++) {
-					if (Math.random() < recruitmentChance) {
+					if (gameplayRandom() < recruitmentChance) {
 						spawnSingleUnit(sIdx, country.id);
 					}
 				}
@@ -15489,7 +17272,7 @@ export function performSimulationTick() {
 		if (isAtSea && countryObj) {
 			const stats = countryStats.get(u.sovereignId);
 			if (stats && stats.controlled === 0) {
-				if (Math.random() < 0.02) {
+				if (gameplayRandom() < 0.02) {
 					units.splice(i, 1);
 					continue;
 				}
@@ -15648,14 +17431,14 @@ export function performSimulationTick() {
 				) {
 					u.beneficiaryId =
 						offensiveAllies[
-							Math.floor(Math.random() * offensiveAllies.length)
+							Math.floor(gameplayRandom() * offensiveAllies.length)
 						].id;
 				}
 			} else if (alliesMetadata.length > 0) {
 				if (!u.beneficiaryId || u.beneficiaryId === u.sovereignId) {
 					u.beneficiaryId =
 						alliesMetadata[
-							Math.floor(Math.random() * alliesMetadata.length)
+							Math.floor(gameplayRandom() * alliesMetadata.length)
 						].id;
 				}
 			} else {
@@ -15673,12 +17456,14 @@ export function performSimulationTick() {
 			// Significantly reduced probability to wander to an ally's territory (0.02% per frame)
 			if (
 				!beingOverrun &&
-				Math.random() < 0.0002 &&
+				gameplayRandom() < 0.0002 &&
 				alliesMetadata.length > 0
 			) {
 				u.beneficiaryId =
-					alliesMetadata[Math.floor(Math.random() * alliesMetadata.length)].id;
-			} else if (Math.random() < 0.12 || !u.beneficiaryId) {
+					alliesMetadata[
+						Math.floor(gameplayRandom() * alliesMetadata.length)
+					].id;
+			} else if (gameplayRandom() < 0.12 || !u.beneficiaryId) {
 				// High chance to reset to sovereign target to ensure focus on the main theater
 				u.beneficiaryId = u.sovereignId;
 			}
@@ -16735,8 +18520,8 @@ export function performSimulationTick() {
 						if (dSq < bestCentroidDist) {
 							bestCentroidDist = dSq;
 							// Add scatter to avoid blob: ±1° random offset
-							const scatterLat = (Math.random() - 0.5) * 2;
-							const scatterLng = (Math.random() - 0.5) * 2;
+							const scatterLat = (gameplayRandom() - 0.5) * 2;
+							const scatterLng = (gameplayRandom() - 0.5) * 2;
 							target = {
 								lat: c.lat + scatterLat,
 								lng: c.lng + scatterLng,
@@ -16978,7 +18763,7 @@ export function performSimulationTick() {
 						lng: x * CONFIG.GRID_RES - 180 + CONFIG.GRID_RES * 0.5,
 					};
 					u.mopUpTargetId = targetId;
-					u.targetSearchCooldown = 15 + Math.floor(Math.random() * 20);
+					u.targetSearchCooldown = 15 + Math.floor(gameplayRandom() * 20);
 				} else {
 					u.mopUpTarget = null;
 					u.mopUpTargetId = 0;
@@ -18454,8 +20239,8 @@ export function performSimulationTick() {
 						const desperationLat = moveDirLat * 0.3;
 						const desperationLng = moveDirLng * 0.3;
 						// Add jitter to avoid all units trying the same blocked path
-						moveDirLat = desperationLat + (Math.random() - 0.5) * 0.4;
-						moveDirLng = desperationLng + (Math.random() - 0.5) * 0.4;
+						moveDirLat = desperationLat + (gameplayRandom() - 0.5) * 0.4;
+						moveDirLng = desperationLng + (gameplayRandom() - 0.5) * 0.4;
 						const dMag = Math.sqrt(moveDirLat ** 2 + moveDirLng ** 2);
 						if (dMag > 0) {
 							moveDirLat /= dMag;
@@ -18936,6 +20721,33 @@ export function performSimulationTick() {
 					initialCells: country.initialCells,
 				});
 				if (!decision.capitulate) continue;
+				const capitulatingSideUid = sideUids[sIdx] || null;
+				const capitulationEvidence = {
+					reason: decision.reason,
+					units: stats.units,
+					controlledCells: stats.controlled,
+					controlledPercent: Number(decision.controlPercent.toFixed(2)),
+					ownedCells: stats.owned,
+					initialCells: country.initialCells,
+					threshold: decision.threshold ?? 0,
+					personnel: sideSoldiers[sIdx] || 0,
+					initialPersonnel: initialSideSoldiers[sIdx] || 0,
+					warPhase: _sideWarPhase[sIdx] || "STALEMATE",
+				};
+				recordExperimentCheckpoint("PRE_CAPITULATION", {
+					countryId: country.id,
+					sideUid: capitulatingSideUid,
+					decision: capitulationEvidence,
+				});
+				recordExperimentEvent("CAPITULATION_TRIGGERED", {
+					source: "surrender",
+					actorCountryId: country.id,
+					actorSideUid: capitulatingSideUid,
+					evidence: {
+						...capitulationEvidence,
+						preMutation: true,
+					},
+				});
 				console.warn("[MW] CAPITULATION:", country.name, {
 					reason: decision.reason,
 					units: stats.units,
@@ -18945,6 +20757,12 @@ export function performSimulationTick() {
 					threshold: decision.threshold ?? 0,
 				});
 				if (capitulateCountry(country, sIdx)) {
+					recordExperimentEvent("COUNTRY_CAPITULATED", {
+						source: "surrender",
+						actorCountryId: country.id,
+						actorSideUid: capitulatingSideUid,
+						evidence: capitulationEvidence,
+					});
 					// Exit tick early to re-evaluate state with updated sides and units.
 					return false;
 				}
@@ -18989,6 +20807,12 @@ export function performSimulationTick() {
 			}
 		}
 		_cachedSideTerritoryPcts = pcts;
+		if (activeExperimentRecorder) {
+			recordExperimentCheckpoint("TERRITORY_SCAN", {
+				sideMetrics: captureExperimentMetrics({ scanWorld: false }),
+			});
+			updateExperimentWarDesk();
+		}
 	}
 	const totalTerritory = sideTerritoryCounts.reduce((a, b) => a + b, 0);
 	const side0Pct =
@@ -19047,8 +20871,8 @@ export function performSimulationTick() {
 						maxPressure * 5,
 					));
 
-			if (Math.random() < proposalChance) {
-				const proposerSideIdx = Math.floor(Math.random() * sides.length);
+			if (gameplayRandom() < proposalChance) {
+				const proposerSideIdx = Math.floor(gameplayRandom() * sides.length);
 				if (sides[proposerSideIdx] && sides[proposerSideIdx].length > 0) {
 					const receiverSideIdx = sides.findIndex(
 						(s, i) =>
@@ -19070,7 +20894,7 @@ export function performSimulationTick() {
 						acceptChance = Math.max(0.05, Math.min(0.95, acceptChance));
 						showTreatyOffer(
 							proposerSideIdx,
-							Math.random() < acceptChance,
+							gameplayRandom() < acceptChance,
 							proposerSideIdx,
 						);
 					}
@@ -19162,24 +20986,24 @@ export function performSimulationTick() {
 			.filter((x) => x.s.length > 0);
 
 		if (activeSideList.length >= 2) {
-			if (bases.length > 0 && Math.random() < 0.01) {
+			if (bases.length > 0 && gameplayRandom() < 0.01) {
 				const launcherEntry =
-					activeSideList[Math.floor(Math.random() * activeSideList.length)];
+					activeSideList[Math.floor(gameplayRandom() * activeSideList.length)];
 				const launcherSideIdx = launcherEntry.idx;
 				const enemyEntries = activeSideList.filter((x) =>
 					areSidesHostile(launcherSideIdx, x.idx),
 				);
 				if (enemyEntries.length > 0) {
 					const targetEntry =
-						enemyEntries[Math.floor(Math.random() * enemyEntries.length)];
+						enemyEntries[Math.floor(gameplayRandom() * enemyEntries.length)];
 					const targetSideIdx = targetEntry.idx;
 					const myBases = bases.filter((b) => b.sideIndex === launcherSideIdx);
 					const enemyUnits = _tickUnitsBySide[targetSideIdx] || [];
 					if (myBases.length > 0 && enemyUnits.length > 0) {
 						const launcher =
-							myBases[Math.floor(Math.random() * myBases.length)];
+							myBases[Math.floor(gameplayRandom() * myBases.length)];
 						const target =
-							enemyUnits[Math.floor(Math.random() * enemyUnits.length)];
+							enemyUnits[Math.floor(gameplayRandom() * enemyUnits.length)];
 						launchBomb(
 							launcher.lat,
 							launcher.lng,
@@ -19905,6 +21729,7 @@ export function updateLoop(now) {
 	// Throttled Combatants UI update
 	if (simFrameCount % 30 === 0) {
 		updateCombatantsUI();
+		updateExperimentWarDesk();
 	}
 
 	// Update Casualty UI (Every 5 frames for "live" counting effect)
@@ -20128,26 +21953,66 @@ export function showTreatyOffer(proposerSideIdx, willAccept) {
 	treatyAlert.style.display = "block";
 	document.getElementById("treaty-status").innerText =
 		"Considering proposal...";
+	recordExperimentEvent("PEACE_OFFERED", {
+		source: "diplomacy",
+		actorCountryId: sides[proposerSideIdx]?.[0]?.id || null,
+		actorSideIndex: proposerSideIdx,
+		message: `${name} requested peace.`,
+		evidence: {
+			proposerSideIndex: proposerSideIdx,
+			anticipatedAcceptance: !!willAccept,
+		},
+	});
 
-	setTimeout(() => {
-		if (willAccept) {
-			document.getElementById("treaty-status").innerText = "Treaty Accepted";
-			setTimeout(() => {
-				// Multi-side war: proposer's side exits, war continues for remaining sides
-				if (sides.length > 2) {
-					_signSelectiveSideExit(proposerSideIdx);
-				} else {
-					applyTreaty("PEACE_TREATY");
-				}
-			}, 1500);
-		} else {
-			document.getElementById("treaty-status").innerText = "Proposal Rejected";
-			setTimeout(() => {
-				treatyAlert.style.display = "none";
-				lastTreatyTime = Date.now();
-			}, 1500);
-		}
-	}, 2000);
+	const lifecycleToken = _warLifecycleToken;
+	scheduleWarLifecycleCallback(
+		() => {
+			if (gameState !== "SIMULATING") return;
+			if (willAccept) {
+				recordExperimentEvent("PEACE_ACCEPTED", {
+					source: "diplomacy",
+					actorCountryId: sides[proposerSideIdx]?.[0]?.id || null,
+					actorSideIndex: proposerSideIdx,
+					message: `${name}'s peace proposal was accepted.`,
+					major: true,
+				});
+				document.getElementById("treaty-status").innerText = "Treaty Accepted";
+				scheduleWarLifecycleCallback(
+					() => {
+						if (gameState !== "SIMULATING") return;
+						// Multi-side war: proposer's side exits, war continues for remaining sides
+						if (sides.length > 2) {
+							_signSelectiveSideExit(proposerSideIdx);
+						} else {
+							applyTreaty("PEACE_TREATY");
+						}
+					},
+					1500,
+					lifecycleToken,
+				);
+			} else {
+				recordExperimentEvent("PEACE_REJECTED", {
+					source: "diplomacy",
+					actorCountryId: sides[proposerSideIdx]?.[0]?.id || null,
+					actorSideIndex: proposerSideIdx,
+					message: `${name}'s peace proposal was rejected.`,
+				});
+				document.getElementById("treaty-status").innerText =
+					"Proposal Rejected";
+				scheduleWarLifecycleCallback(
+					() => {
+						if (gameState !== "SIMULATING") return;
+						treatyAlert.style.display = "none";
+						lastTreatyTime = Date.now();
+					},
+					1500,
+					lifecycleToken,
+				);
+			}
+		},
+		2000,
+		lifecycleToken,
+	);
 }
 
 function resolveCapitulatedEquipment(countryId, sideIndex) {
@@ -20460,7 +22325,7 @@ export function capitulateCountry(country, sideIndex) {
 	document.getElementById("treaty-status").innerText =
 		`${country.name} territory has been seized.`;
 	treatyAlert.style.display = "block";
-	setTimeout(() => {
+	scheduleWarLifecycleCallback(() => {
 		if (gameState === "SIMULATING") treatyAlert.style.display = "none";
 	}, 4000);
 
@@ -20569,7 +22434,11 @@ export function capitulateCountry(country, sideIndex) {
 	return true;
 }
 
-export function applyTreaty(type, winnerPoleOverride = null) {
+export function applyTreaty(
+	type,
+	winnerPoleOverride = null,
+	endingReasonOverride = null,
+) {
 	if (
 		gameMode === "OPERATION" &&
 		activeOperationDefinition &&
@@ -20580,6 +22449,24 @@ export function applyTreaty(type, winnerPoleOverride = null) {
 			winnerPoleOverride === activeOperationDefinition.playerSideIdx;
 		finishOperation(playerWon ? "EARLY_VICTORY" : "DEFEAT");
 		return;
+	}
+	if (gameState === "WAR_OVER") return;
+	invalidateWarLifecycleTimers();
+	const preTreatySnapshot = activeExperimentRecorder
+		? createExperimentSnapshot("PRE_TREATY", { scanWorld: true })
+		: null;
+	if (activeExperimentRecorder) {
+		appendWarCheckpoint(activeExperimentRecorder, {
+			date: getExperimentDateLabel(),
+			reason: "PRE_TREATY",
+			sideMetrics: preTreatySnapshot.sides,
+			tick: _simTickCount,
+		});
+		recordExperimentEvent("ENDING_TRIGGERED", {
+			source: "treaty",
+			message: `Ending sequence triggered: ${type.replaceAll("_", " ").toLowerCase()}.`,
+			evidence: { endingType: type, preTreaty: preTreatySnapshot },
+		});
 	}
 	gameState = "WAR_OVER";
 	updateEconomyPanel();
@@ -20793,32 +22680,26 @@ export function applyTreaty(type, winnerPoleOverride = null) {
 		}
 		worldControlMap.set(tempMap);
 	}
+	adjacencyCache = null;
 
-	units = [];
-	unitSpatialHash.clear();
-	for (let si = 0; si < unitHashBySide.length; si++) unitHashBySide[si].clear();
-	aiCountryState.clear();
-	_warPlan = [];
-	_sideMomentumHistory = [];
-	_sideWarPhase = [];
-	_frontIntelBySide = [];
-	_aiDebugPlans = [];
-	_aiPlanMemory.clear();
-	activeBattles = [];
-	_battleHash.clear();
-	bombs = [];
-	explosions = [];
-	bases = [];
 	recalculateAllBounds();
 	influenceLayer.render();
-
-	setTimeout(() => {
-		treatyAlert.style.display = "none";
-		resetToSelection();
-		if (randomWarMode) {
-			setTimeout(triggerRandomWar, 1500);
-		}
-	}, 2500);
+	animationFrameId = null;
+	stopWarAmbiance();
+	treatyAlert.style.display = "none";
+	const postTreatySnapshot = activeExperimentRecorder
+		? createExperimentSnapshot("POST_TREATY", { scanWorld: true })
+		: null;
+	const endingReason =
+		endingReasonOverride || endingReasonForTreaty(type, winnerName);
+	finalizeActiveExperiment({
+		type,
+		winnerSideIndex: winnerSideIdx,
+		winnerName,
+		endingReason,
+		preTreaty: preTreatySnapshot,
+		postTreaty: postTreatySnapshot,
+	});
 }
 
 export function handleRebellionPeace(rebelId = null) {
@@ -20829,8 +22710,14 @@ export function handleRebellionPeace(rebelId = null) {
 }
 
 export function resetToSelection() {
+	invalidateWarLifecycleTimers();
 	countryLabelAnchors.clear();
 	stopWarAmbiance();
+	_experimentUi?.hideWarDesk();
+	document.body.classList.remove("experiment-loop-active");
+	_experimentPreviousPhases = [];
+	_experimentPreviousCapitalLosses = new Set();
+	_experimentPreviousCityControllers = new Map();
 	// Stop in‑game time progression but keep the last war date visible in the setup
 	gameTimeEnabled = false;
 	gameTimeAccumulatorMs = 0;
@@ -20920,6 +22807,7 @@ export function resetToSelection() {
 }
 
 export async function resetGame() {
+	invalidateWarLifecycleTimers();
 	cancelAnimationFrame(animationFrameId);
 
 	// Scenario-specific reset: Reload the original preset if available
@@ -21379,6 +23267,14 @@ restartScenarioBtn.addEventListener("click", resetGame);
 // QUICK RESTART: instant in‑memory reset back to scenario start without loading overlay
 if (quickRestartBtn) {
 	quickRestartBtn.addEventListener("click", () => {
+		invalidateWarLifecycleTimers();
+		_experimentUi?.hideWarDesk();
+		_experimentUi?.hideAfterActionReport();
+		if (latestWarReport) _experimentUi?.showReportReopenButton();
+		document.body.classList.remove("experiment-loop-active");
+		activeExperimentRecorder = null;
+		activeExperimentSpec = null;
+		_experimentParentReport = null;
 		// If we never captured a snapshot (e.g. user hits quick restart before a war),
 		// just fall back to the heavy reset.
 		if (
@@ -21449,6 +23345,9 @@ if (quickRestartBtn) {
 		occupationMap.fill(0);
 		resetSideInfluenceMaps();
 		primaryOccupierMap.fill(0);
+		units = [];
+		unitSpatialHash.clear();
+		for (const sideHash of unitHashBySide) sideHash.clear();
 		bombs = [];
 		explosions = [];
 		bases = [];
@@ -21460,6 +23359,7 @@ if (quickRestartBtn) {
 		clearOccupationGarrisonAssignments();
 		_occupationGarrisonPlans.clear();
 		countryEconomy.clear();
+		clearCombinedArmsState();
 		economyEvents.length = 0;
 		economyPayCycle = 0;
 		countryCasualties.clear();
@@ -21494,6 +23394,7 @@ if (quickRestartBtn) {
 		setupOptions.style.display = "none";
 		statsPanel.style.display = "none";
 		casualtyPanel.style.display = "none";
+		if (economyPanel) economyPanel.style.display = "none";
 		document.getElementById("speed-controls").style.display = "none";
 		godModeBtn.style.display = gameMode === "CONQUEST" ? "block" : "none";
 		forcePeaceBtn.style.display = "none";
@@ -21522,6 +23423,7 @@ resetBtn.addEventListener("click", resetGame);
 
 // In‑game MENU button: return to main menu without full page reload
 mainMenuBtn.addEventListener("click", () => {
+	invalidateWarLifecycleTimers();
 	// Stop any running simulation loops
 	if (animationFrameId !== null) {
 		cancelAnimationFrame(animationFrameId);
@@ -21533,6 +23435,13 @@ mainMenuBtn.addEventListener("click", () => {
 	}
 	stopWarAmbiance();
 	clearOperationUi();
+	_experimentUi?.hideWarDesk();
+	_experimentUi?.hideAfterActionReport();
+	_experimentUi?.hideReportReopenButton();
+	document.body.classList.remove("experiment-loop-active");
+	activeExperimentRecorder = null;
+	activeExperimentSpec = null;
+	_experimentParentReport = null;
 
 	// Reset high‑level state to menu
 	gameState = "MAIN_MENU";
@@ -21790,6 +23699,17 @@ forcePeaceBtn.addEventListener("click", () => {
 
 export function unilateralExitConflict(country, sideIdx) {
 	if (sideIdx === -1) return;
+	recordExperimentCheckpoint("PRE_SEPARATE_EXIT", {
+		countryId: country.id,
+		sideUid: sideUids[sideIdx] || null,
+	});
+	recordExperimentEvent("COUNTRY_WITHDREW", {
+		source: "diplomacy",
+		actorCountryId: country.id,
+		actorSideIndex: sideIdx,
+		message: `${country.name} withdrew from the conflict.`,
+		major: true,
+	});
 
 	for (let i = 0; i < worldControlMap.length; i++) {
 		if (landMask[i] !== 2) continue;
@@ -21860,6 +23780,18 @@ export function unilateralExitConflict(country, sideIdx) {
 export function _signSelectiveSideExit(sideIdx) {
 	const side = sides[sideIdx];
 	if (!side || side.length === 0) return;
+	recordExperimentCheckpoint("PRE_SEPARATE_SIDE_PEACE", {
+		sideUid: sideUids[sideIdx] || null,
+		countryIds: side.map((country) => country.id),
+	});
+	recordExperimentEvent("SIDE_SIGNED_SEPARATE_PEACE", {
+		source: "diplomacy",
+		actorCountryId: side[0]?.id || null,
+		actorSideIndex: sideIdx,
+		message: `${getSideDisplayName(sideIdx, side)} signed a separate peace.`,
+		evidence: { countryIds: side.map((country) => country.id) },
+		major: true,
+	});
 
 	_lastCapitulationTick = _simTickCount;
 	const exitingIds = new Set(side.map((c) => c.id));
@@ -21949,6 +23881,20 @@ export function _signSelectivePeace(exiter, target) {
 		requestAnimationFrame(updateLoop);
 		return;
 	}
+	recordExperimentCheckpoint("PRE_SEPARATE_PEACE", {
+		exiterCountryId: exiter.id,
+		targetCountryId: target.id,
+		targetSideUid: sideUids[targetSideIdx] || null,
+	});
+	recordExperimentEvent("COUNTRY_SIGNED_SEPARATE_PEACE", {
+		source: "diplomacy",
+		actorCountryId: target.id,
+		actorSideIndex: targetSideIdx,
+		targetCountryId: exiter.id,
+		targetSideIndex: exiterSideIdx,
+		message: `${target.name} signed a separate peace with ${exiter.name}.`,
+		major: true,
+	});
 
 	// The 'target' (second nation clicked) is the one exiting the specific conflict engagement
 	for (let i = 0; i < worldControlMap.length; i++) {
@@ -23777,18 +25723,123 @@ export function recruitNewSideMidWar(id) {
 }
 
 export function recruitNeutralMidWar(id, sideIdx) {
-	// 1. Remove from existing side if present (handle mid-war switching)
-	let oldSideIdx = -1;
-	sides.forEach((side, sIdx) => {
-		const idx = side.findIndex((c) => c.id === id);
-		if (idx > -1) {
-			oldSideIdx = sIdx;
-			side.splice(idx, 1);
-		}
-	});
-
 	const meta = countryMetadata[id - 1];
 	if (!meta) return;
+	const oldSideIdx = findCountrySideIndex(id);
+	if (oldSideIdx === sideIdx) return;
+	const oldSideName =
+		oldSideIdx >= 0 ? getSideDisplayName(oldSideIdx) : "Not in conflict";
+	if (oldSideIdx >= 0) {
+		const country = sides[oldSideIdx].find((candidate) => candidate.id === id);
+		const sourceCountryCount = Math.max(1, sides[oldSideIdx].length);
+		const sourceFormationCount = units.reduce(
+			(total, unit) => total + Number(unit.sideIndex === oldSideIdx),
+			0,
+		);
+		const countryFormationCount = units.reduce(
+			(total, unit) => total + Number(unit.sovereignId === id),
+			0,
+		);
+		const transferShare = Math.min(
+			1,
+			sourceFormationCount > 0
+				? countryFormationCount / sourceFormationCount
+				: 1 / sourceCountryCount,
+		);
+		const transferredPersonnel = Math.round(
+			Math.max(0, sideSoldiers[oldSideIdx] || 0) * transferShare,
+		);
+		const transferredInitialPersonnel = Math.round(
+			Math.max(0, initialSideSoldiers[oldSideIdx] || 0) * transferShare,
+		);
+		const transferredCasualties = Math.min(
+			Math.max(0, sideCasualties[oldSideIdx] || 0),
+			Math.max(0, countryCasualties.get(id) || 0),
+		);
+
+		const oldCountryIndex = sides[oldSideIdx].findIndex(
+			(candidate) => candidate.id === id,
+		);
+		if (oldCountryIndex >= 0) sides[oldSideIdx].splice(oldCountryIndex, 1);
+		if (!sides[sideIdx]) sides[sideIdx] = [];
+		if (country && !sides[sideIdx].some((candidate) => candidate.id === id)) {
+			sides[sideIdx].push(country);
+		}
+		sideSoldiers[oldSideIdx] = Math.max(
+			0,
+			sideSoldiers[oldSideIdx] - transferredPersonnel,
+		);
+		sideSoldiers[sideIdx] += transferredPersonnel;
+		initialSideSoldiers[oldSideIdx] = Math.max(
+			0,
+			initialSideSoldiers[oldSideIdx] - transferredInitialPersonnel,
+		);
+		initialSideSoldiers[sideIdx] += transferredInitialPersonnel;
+		sideCasualties[oldSideIdx] = Math.max(
+			0,
+			sideCasualties[oldSideIdx] - transferredCasualties,
+		);
+		sideCasualties[sideIdx] += transferredCasualties;
+
+		for (const unit of units) {
+			if (unit.sovereignId !== id) continue;
+			unit.sideIndex = sideIdx;
+			clearUnitCommandAssignments(unit);
+			unit._cachedTarget = null;
+			unit._cachedScanKx = -999;
+			unit._cachedScanKy = -999;
+		}
+		for (const wing of airWings) {
+			if (wing.sovereignId === id) wing.sideIndex = sideIdx;
+		}
+		for (const field of airfields) {
+			if (field.controllerId === id) field.sideIndex = sideIdx;
+		}
+		for (let index = 0; index < worldControlMap.length; index++) {
+			if (
+				dominantSideMap[index] !== oldSideIdx ||
+				(worldControlMap[index] !== id && primaryOccupierMap[index] !== id)
+			)
+				continue;
+			const previousInfluence = sideInfluenceMaps[oldSideIdx]?.[index] || 0;
+			if (sideInfluenceMaps[oldSideIdx]) {
+				sideInfluenceMaps[oldSideIdx][index] = 0;
+			}
+			if (sideInfluenceMaps[sideIdx]) {
+				sideInfluenceMaps[sideIdx][index] = Math.max(
+					sideInfluenceMaps[sideIdx][index],
+					previousInfluence,
+					1,
+				);
+			}
+			syncOccupationFromSideInfluence(index);
+		}
+		unitSpatialHash.clear();
+		for (const sideHash of unitHashBySide) sideHash.clear();
+		adjacencyCache = null;
+		rebuildHostilityMatrix();
+		invalidateFrontlineField();
+		recalculateAllBounds();
+		updateSidesUI();
+		updateEconomyPanel();
+		influenceLayer.render();
+		statusText.innerText = `${country?.name || meta.name} HAS SWITCHED TO ${getSideDisplayName(sideIdx)}`;
+		recordExperimentEvent("SIDE_CHANGED", {
+			source: "diplomacy",
+			actorCountryId: id,
+			actorSideIndex: sideIdx,
+			message: `${country?.name || meta.name} switched from ${oldSideName} to ${getSideDisplayName(sideIdx)}.`,
+			evidence: {
+				previousSideUid: sideUids[oldSideIdx] || null,
+				newSideUid: sideUids[sideIdx] || null,
+				transferredFormations: countryFormationCount,
+				transferredPersonnel,
+			},
+			major: true,
+		});
+		playWarStartSound();
+		return;
+	}
 
 	const newCountry = {
 		id: id,
@@ -23808,11 +25859,18 @@ export function recruitNeutralMidWar(id, sideIdx) {
 	influenceLayer.render();
 
 	const sideLabel = String.fromCharCode(65 + sideIdx);
-	if (oldSideIdx !== -1) {
-		statusText.innerText = `${newCountry.name} HAS SWITCHED TO SIDE ${sideLabel}`;
-	} else {
-		statusText.innerText = `${newCountry.name} HAS DEPLOYED TO SIDE ${sideLabel}`;
-	}
+	statusText.innerText = `${newCountry.name} HAS DEPLOYED TO SIDE ${sideLabel}`;
+	recordExperimentEvent("COUNTRY_JOINED_WAR", {
+		source: "diplomacy",
+		actorCountryId: id,
+		actorSideIndex: sideIdx,
+		message: `${newCountry.name} joined ${getSideDisplayName(sideIdx)}.`,
+		evidence: {
+			previousSideUid: null,
+			newSideUid: sideUids[sideIdx] || null,
+		},
+		major: true,
+	});
 
 	// Play sound if possible
 	playWarStartSound();
@@ -24070,10 +26128,10 @@ export function _placeDivisionAt(latlng, sovereignId) {
 
 	const idx = getGridIndex(latlng.lat, latlng.lng);
 	const isMountainCell = idx !== -1 && terrainMask && terrainMask[idx] > 0.35;
-	const isAlpen = isMountainCell && Math.random() < 0.4;
+	const isAlpen = isMountainCell && gameplayRandom() < 0.4;
 
 	units.push({
-		id: Math.random(),
+		id: gameplayRandom(),
 		kind: "army",
 		lat: latlng.lat,
 		lng: latlng.lng,
@@ -25367,6 +27425,15 @@ editorSaveBtn.addEventListener("click", () => {
 });
 
 export function resetConflictSetupState() {
+	invalidateWarLifecycleTimers();
+	_experimentUi?.hideWarDesk();
+	_experimentUi?.hideAfterActionReport();
+	_experimentUi?.hideReportReopenButton();
+	document.body.classList.remove("experiment-loop-active");
+	activeExperimentRecorder = null;
+	activeExperimentSpec = null;
+	latestWarReport = null;
+	_experimentParentReport = null;
 	sides = [[], []];
 	_attackers = sides[0];
 	_defenders = sides[1];
@@ -25409,11 +27476,13 @@ export function resetConflictSetupState() {
 	unitCountsDiv.style.display = "none";
 	statsPanel.style.display = "none";
 	casualtyPanel.style.display = "none";
+	if (economyPanel) economyPanel.style.display = "none";
 	document.getElementById("speed-controls").style.display = "none";
 	godModeBtn.style.display = gameMode === "CONQUEST" ? "block" : "none";
 	forcePeaceBtn.style.display = "none";
 	resetBtn.style.display = "block";
 	restartScenarioBtn.style.display = "block";
+	updateSidesUI();
 	updateRestartVisibility();
 }
 
@@ -27067,3 +29136,114 @@ document.addEventListener("visibilitychange", () => {
 		}
 	}
 });
+
+_experimentUi = initExperimentUi({
+	onSeedChanged(values) {
+		const seed =
+			values.seed === "" ? createRandomSeed() : normalizeSeed(values.seed);
+		_experimentUi.setSetupSeed(
+			seed,
+			`Seed ${seed} will be used for comparable starting conditions.`,
+			"ready",
+		);
+	},
+	onRandomizeSeed() {
+		const seed = createRandomSeed();
+		_experimentUi.setSetupSeed(seed, `Fresh seed ${seed} generated.`, "ready");
+	},
+	onForceModeChanged(values) {
+		applyExperimentForceMode(values.forceMode);
+		updateEstimatedExperimentBalance();
+	},
+	onSetupPostureChanged(values) {
+		const manpower = preserveSetupManpowerValues();
+		applyBroadSetupPosture(values.posture);
+		restoreSetupManpowerValues(manpower);
+		updateEstimatedExperimentBalance();
+	},
+	onOpenArchive() {
+		const archive = readWarArchive();
+		_experimentUi.showWarArchive(archive, latestWarReport?.id);
+	},
+	onInterventionOpened() {
+		pauseForExperimentIntervention();
+	},
+	onApplyPosture: handlePostureIntervention,
+	onAddFunds: handleFundsIntervention,
+	onClearArrears: handleClearArrearsIntervention,
+	onAddManpower: handleManpowerIntervention,
+	onAddArmor(values) {
+		handleEquipmentIntervention(values, "armor", 100, "ARMOR_GRANTED");
+	},
+	onAddFighters(values) {
+		handleEquipmentIntervention(values, "fighter", 24, "FIGHTERS_GRANTED");
+	},
+	onAddStrikeAircraft(values) {
+		handleEquipmentIntervention(
+			values,
+			"strike",
+			24,
+			"STRIKE_AIRCRAFT_GRANTED",
+		);
+	},
+	onJoinSide: handleJoinSideIntervention,
+	onWithdraw: handleWithdrawIntervention,
+	onStartRebellion: handleRebellionIntervention,
+	onEnforcePeace: handlePeaceIntervention,
+	onInspectFinalMap(report) {
+		if (!report) return;
+		_experimentUi.hideAfterActionReport();
+		_experimentUi.showReportReopenButton();
+	},
+	onFreshRematch(report) {
+		restoreReportConfiguration(report, { freshSeed: true, start: true });
+	},
+	onRepeatSeed(report) {
+		restoreReportConfiguration(report, { freshSeed: false, start: true });
+	},
+	onModifySetup(report) {
+		restoreReportConfiguration(report, { freshSeed: false, start: false });
+	},
+	onContinueWorld() {
+		_experimentUi.hideAfterActionReport();
+		if (latestWarReport) _experimentUi.showReportReopenButton();
+		activeExperimentRecorder = null;
+		activeExperimentSpec = null;
+		_experimentParentReport = null;
+		document.body.classList.remove("experiment-loop-active");
+		const continueRandomWars = randomWarMode;
+		resetToSelection();
+		const nextSeed = createRandomSeed();
+		setExperimentSeed(nextSeed);
+		_experimentUi.setSetupSeed(
+			nextSeed,
+			`Fresh seed ${nextSeed} generated for the next experiment.`,
+			"ready",
+		);
+		if (continueRandomWars) {
+			scheduleWarLifecycleCallback(() => triggerRandomWar(), 500);
+		}
+	},
+	onAfterActionMainMenu() {
+		_experimentUi.hideAfterActionReport();
+		_experimentUi.hideReportReopenButton();
+		activeExperimentRecorder = null;
+		activeExperimentSpec = null;
+		latestWarReport = null;
+		_experimentParentReport = null;
+		document.body.classList.remove("experiment-loop-active");
+		mainMenuBtn.click();
+	},
+	onReopenReport(report) {
+		if (report) _experimentUi.showAfterActionReport(report);
+	},
+});
+
+const initialExperimentSeed = createRandomSeed();
+_experimentUi.setSetupSeed(
+	initialExperimentSeed,
+	`Fresh seed ${initialExperimentSeed} generated.`,
+	"ready",
+);
+setExperimentSeed(initialExperimentSeed);
+updateEstimatedExperimentBalance();

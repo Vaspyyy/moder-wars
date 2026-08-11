@@ -1,6 +1,6 @@
 # Modern Wars
 
-A browser-based grand strategy war simulation played on a real-world map. Start from the current modern-day world map or load a custom scenario, assign countries to opposing sides, and watch organic frontlines form as AI armies capture territory, react to threats, and execute war plans.
+A browser-based grand strategy war simulation played on a real-world map. Configure a war experiment, observe organic frontlines and AI war plans, optionally intervene, then review the outcome and rerun the same setup with a fresh or repeated seed.
 
 ## Status
 
@@ -26,7 +26,9 @@ The current **Choose Era** menu exposes one playable era:
 
 ## What You Can Do
 
-- **PLAY** opens the 2022 Modern Day era and starts conquest setup.
+- **PLAY** opens the 2022 Modern Day era and starts the experiment setup. The Basic panel covers sides, force balance, AI posture, and seed; existing simulation controls remain available under Advanced.
+- **War Desk** consolidates live military, economic, and event analysis and provides logged director interventions without replacing God Mode's map-editing tools.
+- **After Action Reports** preserve the final map, explain observed contributors, compare linked reruns, and keep the latest 25 report summaries in the browser-local War Archive.
 - **EDITOR** redraws borders, creates countries, manages cities, and saves or loads scenarios.
 - **COMMUNITY** browses, uploads, remixes, and downloads shared scenarios or countries.
 - **SETTINGS** changes simulation speed, map display, audio, language, and related options.
@@ -40,6 +42,7 @@ Modern Wars can load custom scenario files and community scenarios. This is sepa
 
 - Click-and-drag to pan, scroll to zoom
 - Click a country to inspect it and assign it during setup
+- Use **Fresh Rematch** for the same setup with a new seed, or **Repeat Seed** for comparable starting conditions. Async scheduling means repeat-seed runs are not claimed as exact replays.
 
 ## Known State
 
@@ -51,6 +54,7 @@ Older era data, thumbnails, hidden cards, dormant click handlers, and import pre
 - Serve the repo as static files during local development.
 - The service worker caches aggressively. After source changes, hard-refresh the browser or bump `CACHE_VERSION`.
 - Game version appears in both `index.html` and `workers/service-worker.js`; keep them in sync.
+- War Archive data stays local to the browser. It stores report summaries and serialized configurations, not complete world snapshots.
 
 ## Tech
 
