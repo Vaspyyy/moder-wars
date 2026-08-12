@@ -3356,10 +3356,11 @@ body.commander-active #force-peace-btn {
 .setup-panel {
 	--hud-surface-background: rgba(9, 10, 13, 0.94);
 	--hud-surface-border: var(--hud-color-border-strong);
+	--setup-content-width: 390px;
 	top: 88px;
-	width: 360px;
+	width: min(var(--setup-content-width), calc(100vw - 32px));
 	min-width: 0;
-	max-width: min(360px, calc(100vw - 32px));
+	max-width: min(1200px, calc(100vw - 32px));
 	max-height: calc(100vh - 112px);
 	padding: 0;
 	overflow-x: hidden;
@@ -3536,7 +3537,7 @@ body.commander-active #force-peace-btn {
 }
 
 .setup-panel .side-col {
-	flex-basis: 145px;
+	flex-basis: 160px;
 	gap: 7px;
 }
 
@@ -4593,6 +4594,22 @@ body.commander-active #reopen-report-btn {
 }
 
 @media (max-width: 480px) {
+	.setup-panel .setup-sides {
+		align-items: stretch;
+		flex-direction: column;
+		overflow-x: hidden;
+	}
+
+	.setup-panel .side-col {
+		width: 100%;
+		flex-basis: auto;
+	}
+
+	.setup-panel .vs-divider {
+		align-self: center;
+		padding: 1px 0;
+	}
+
 	.experiment-basic-grid,
 	.intervention-fields {
 		grid-template-columns: 1fr;
