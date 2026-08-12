@@ -19,6 +19,7 @@ import {
 	getQualityMultiplier,
 	groupEquipment,
 	isCombinedArmsFullyFunded,
+	normalizeAirPriorityAreas,
 	resolveEquipmentProfile,
 	selectAirfieldSites,
 	selectStrikeTarget,
@@ -329,6 +330,75 @@ const target = selectStrikeTarget(
 	{ isHostile: (sideIndex) => sideIndex === 1 },
 );
 assert.equal(target.target.id, 2);
+assert.deepEqual(normalizeAirPriorityAreas([{ lat: 1, lng: 2 }]), [
+	{ lat: 1, lng: 2, radiusKm: 300 },
+]);
+assert.deepEqual(
+	normalizeAirPriorityAreas([
+		{ lat: null, lng: 0 },
+		{ lat: 91, lng: 0 },
+		{ lat: 0, lng: 181 },
+		{ lat: 0, lng: 0, radiusKm: 0 },
+	]),
+	[],
+);
+const prioritizedStrikeTarget = selectStrikeTarget(
+	{ lat: 0, lng: 0 },
+	[
+		{ id: 1, type: "ARMY", sideIndex: 1, lat: 1, lng: 1 },
+		{
+			id: 2,
+			type: "ARMOR",
+			sideIndex: 1,
+			lat: 0.2,
+			lng: 0,
+			equipment: 50,
+		},
+	],
+	{
+		isHostile: (sideIndex) => sideIndex === 1,
+		priorityAreas: [{ lat: 1, lng: 1, radiusKm: 50 }],
+	},
+);
+assert.equal(prioritizedStrikeTarget.target.id, 1);
+const neutralSectorTarget = selectStrikeTarget(
+	{ lat: 0, lng: 0 },
+	[
+		{ id: 1, type: "ARMY", sideIndex: 2, lat: 1, lng: 1 },
+		{
+			id: 2,
+			type: "ARMOR",
+			sideIndex: 1,
+			lat: 0.2,
+			lng: 0,
+			equipment: 50,
+		},
+	],
+	{
+		isHostile: (sideIndex) => sideIndex === 1,
+		priorityAreas: [{ lat: 1, lng: 1, radiusKm: 50 }],
+	},
+);
+assert.equal(neutralSectorTarget.target.id, 2);
+const outOfRangeSectorTarget = selectStrikeTarget(
+	{ lat: 0, lng: 0 },
+	[
+		{ id: 1, type: "ARMY", sideIndex: 1, lat: 20, lng: 0 },
+		{
+			id: 2,
+			type: "ARMOR",
+			sideIndex: 1,
+			lat: 0.2,
+			lng: 0,
+			equipment: 50,
+		},
+	],
+	{
+		isHostile: (sideIndex) => sideIndex === 1,
+		priorityAreas: [{ lat: 20, lng: 0, radiusKm: 50 }],
+	},
+);
+assert.equal(outOfRangeSectorTarget.target.id, 2);
 
 const nationalField = {
 	id: "national",
@@ -499,6 +569,183 @@ assert.equal(
 	combatWings.find((wing) => wing.id === "neutral-strike").equipment,
 	24,
 );
+
+const opposingSidesAreHostile = (a, b) =>
+	(a === 0 && b === 1) || (a === 1 && b === 0);
+const makePriorityFighterWings = () => [
+	{
+		id: "priority-interceptor",
+		role: "FIGHTER",
+		sovereignId: 1,
+		sideIndex: 0,
+		lat: 0,
+		lng: 0,
+		equipment: 24,
+		maxEquipment: 24,
+		quality: 50,
+		airfieldId: "fighter-base",
+		state: AIR_WING_STATES.PATROL,
+		forceMission: true,
+	},
+	{
+		id: "default-hostile-strike",
+		role: "STRIKE",
+		sovereignId: 2,
+		sideIndex: 1,
+		lat: 0.25,
+		lng: 0,
+		equipment: 24,
+		maxEquipment: 24,
+		quality: 50,
+		state: AIR_WING_STATES.ATTACKING,
+	},
+	{
+		id: "sector-hostile-fighter",
+		role: "FIGHTER",
+		sovereignId: 2,
+		sideIndex: 1,
+		lat: 1,
+		lng: 0,
+		equipment: 24,
+		maxEquipment: 24,
+		quality: 50,
+		state: AIR_WING_STATES.PATROL,
+	},
+	{
+		id: "sector-neutral-fighter",
+		role: "FIGHTER",
+		sovereignId: 3,
+		sideIndex: 2,
+		lat: 2,
+		lng: 0,
+		equipment: 24,
+		maxEquipment: 24,
+		quality: 50,
+		state: AIR_WING_STATES.PATROL,
+	},
+	{
+		id: "sector-out-of-range-fighter",
+		role: "FIGHTER",
+		sovereignId: 2,
+		sideIndex: 1,
+		lat: 10,
+		lng: 0,
+		equipment: 24,
+		maxEquipment: 24,
+		quality: 50,
+		state: AIR_WING_STATES.PATROL,
+	},
+];
+const runPriorityFighterSelection = (priorityAreasBySide = null) => {
+	const wings = makePriorityFighterWings();
+	runAirPowerTick({
+		tick: 0,
+		wings,
+		airfields: combatFields,
+		units: [],
+		countryEquipment: equipmentStates,
+		countryEconomy: economyStates,
+		areSidesHostile: opposingSidesAreHostile,
+		applyStrikeDamage: () => {},
+		applyAirLoss: () => {},
+		onEvent: () => {},
+		runtime: { lastMissionTick: 0, lastUpdateMs: 0 },
+		priorityAreasBySide,
+	});
+	return wings[0];
+};
+assert.equal(
+	runPriorityFighterSelection().targetId,
+	"default-hostile-strike",
+);
+assert.equal(
+	runPriorityFighterSelection(
+		new Map([[0, [{ lat: 1, lng: 0, radiusKm: 50 }]]]),
+	).targetId,
+	"sector-hostile-fighter",
+);
+assert.equal(
+	runPriorityFighterSelection(
+		new Map([[0, [{ lat: 2, lng: 0, radiusKm: 25 }]]]),
+	).targetId,
+	"default-hostile-strike",
+);
+assert.equal(
+	runPriorityFighterSelection(
+		new Map([[0, [{ lat: 10, lng: 0, radiusKm: 25 }]]]),
+	).targetId,
+	"default-hostile-strike",
+);
+
+const priorityStrikeUnits = [
+	{
+		id: "default-armor",
+		kind: "armor",
+		sideIndex: 1,
+		lat: 0.2,
+		lng: 0,
+		health: 100,
+		equipment: 50,
+	},
+	{
+		id: "sector-army",
+		kind: "army",
+		sideIndex: 1,
+		lat: 1,
+		lng: 0,
+		health: 100,
+	},
+];
+const runPriorityStrikeSelection = ({
+	priorityAreasBySide = null,
+	commandBand = "PAID",
+} = {}) => {
+	const wing = {
+		id: "priority-strike",
+		role: "STRIKE",
+		sovereignId: 1,
+		sideIndex: 0,
+		lat: 0,
+		lng: 0,
+		equipment: 24,
+		maxEquipment: 24,
+		quality: 50,
+		airfieldId: "fighter-base",
+		state: AIR_WING_STATES.GROUNDED,
+		cooldownTicks: 0,
+		forceMission: true,
+	};
+	runAirPowerTick({
+		tick: 0,
+		wings: [wing],
+		airfields: combatFields,
+		units: priorityStrikeUnits,
+		countryEquipment: equipmentStates,
+		countryEconomy: new Map([[1, { commandBand }]]),
+		areSidesHostile: opposingSidesAreHostile,
+		applyStrikeDamage: () => {},
+		applyAirLoss: () => {},
+		onEvent: () => {},
+		runtime: { lastMissionTick: 0, lastUpdateMs: 0 },
+		priorityAreasBySide,
+	});
+	return wing;
+};
+assert.equal(runPriorityStrikeSelection().targetId, "default-armor");
+assert.equal(
+	runPriorityStrikeSelection({
+		priorityAreasBySide: new Map([
+			[0, [{ lat: 1, lng: 0, radiusKm: 50 }]],
+		]),
+	}).targetId,
+	"sector-army",
+);
+const commandBlockedPriorityStrike = runPriorityStrikeSelection({
+	priorityAreasBySide: new Map([[0, [{ lat: 1, lng: 0, radiusKm: 50 }]]]),
+	commandBand: "STRAINED",
+});
+assert.equal(commandBlockedPriorityStrike.targetId, undefined);
+assert.equal(commandBlockedPriorityStrike.state, AIR_WING_STATES.GROUNDED);
 
 const persistentStrikeWing = {
 	id: "persistent-strike",

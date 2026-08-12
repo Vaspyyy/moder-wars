@@ -3890,6 +3890,116 @@ body.commander-active #reopen-report-btn {
 	line-height: 1.5;
 }
 
+.war-desk-ai-operations {
+	margin: 8px 0;
+	padding: 7px;
+	background: rgba(230, 126, 34, 0.045);
+	border: 1px solid var(--hud-color-border);
+	border-left: 2px solid var(--hud-color-warning);
+	border-radius: var(--hud-radius-sm);
+}
+
+.war-desk-ai-operations-header {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	align-items: center;
+	gap: 8px;
+}
+
+.war-desk-ai-operations-header label {
+	color: var(--hud-color-warning);
+	font: 900 8px var(--hud-font-mono);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.war-desk-ai-operations-header select {
+	min-width: 0;
+	height: 28px;
+	padding: 3px 24px 3px 7px;
+	color: var(--hud-color-text-soft);
+	background: var(--hud-color-control);
+	border: 1px solid var(--hud-color-border-strong);
+	border-radius: var(--hud-radius-sm);
+	font: 800 9px var(--hud-font-mono);
+}
+
+.war-desk-ai-operations-content {
+	display: grid;
+	gap: 4px;
+	margin-top: 7px;
+}
+
+.war-desk-ai-operations-content > .war-desk-empty {
+	padding: 6px 2px 2px;
+}
+
+.ai-operations-status,
+.ai-operation-row {
+	display: grid;
+	gap: 2px;
+}
+
+.ai-operations-status {
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: baseline;
+	padding-bottom: 4px;
+	border-bottom: 1px solid var(--hud-color-border);
+}
+
+.ai-operations-status strong,
+.ai-operation-row-heading strong {
+	min-width: 0;
+	overflow: hidden;
+	color: var(--hud-color-text-soft);
+	font-size: 9px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.ai-operations-status span,
+.ai-operation-row-heading span,
+.ai-operation-row small,
+.ai-operations-more,
+.ai-operations-intel {
+	color: var(--hud-color-dim);
+	font: 700 8px var(--hud-font-mono);
+}
+
+.ai-operation-row {
+	padding: 5px 6px;
+	background: rgba(255, 255, 255, 0.025);
+	border-radius: var(--hud-radius-sm);
+}
+
+.ai-operation-row-heading {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 8px;
+}
+
+.ai-operation-row-heading span {
+	color: var(--hud-color-warning);
+	text-transform: uppercase;
+}
+
+.ai-operation-row small {
+	overflow: hidden;
+	line-height: 1.35;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.ai-operations-more,
+.ai-operations-intel {
+	margin: 1px 2px 0;
+}
+
+.ai-operations-intel {
+	color: var(--hud-color-warning);
+	letter-spacing: 0.04em;
+}
+
 .war-desk-metrics,
 .war-desk-scroll-list {
 	display: grid;
@@ -4536,6 +4646,7 @@ body.commander-active #reopen-report-btn {
 	.war-desk-tab,
 	.intervention-actions button,
 	#war-desk-toggle-btn,
+	#war-desk-ai-side-select,
 	.war-archive-rerun-actions button {
 		min-height: 44px;
 	}
@@ -4594,6 +4705,14 @@ body.commander-active #reopen-report-btn {
 }
 
 @media (max-width: 480px) {
+	.war-desk-ai-operations-header {
+		grid-template-columns: 1fr;
+	}
+
+	.ai-operations-status span {
+		display: none;
+	}
+
 	.setup-panel .setup-sides {
 		align-items: stretch;
 		flex-direction: column;

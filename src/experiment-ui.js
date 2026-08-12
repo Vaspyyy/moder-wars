@@ -30,6 +30,7 @@
  * - onAfterActionMainMenu(report, event)
  * - onReopenReport(report, event)
  * - onWarDeskCollapsed(collapsed, event)
+ * - onAiObserverSideChange(sideUid, event)
  */
 
 export const EXPERIMENT_UI_CALLBACKS = Object.freeze([
@@ -61,7 +62,18 @@ export const EXPERIMENT_UI_CALLBACKS = Object.freeze([
 	"onAfterActionMainMenu",
 	"onReopenReport",
 	"onWarDeskCollapsed",
+	"onAiObserverSideChange",
 ]);
+
+const OPERATIONAL_EVENT_LABELS = Object.freeze({
+	INTEL_SURPRISE: "Intelligence Surprise",
+	OBJECTIVE_SECURED: "Objective Secured",
+	OFFENSIVE_CULMINATED: "Offensive Culminated",
+	OFFENSIVE_LAUNCHED: "Offensive Launched",
+	TASK_FORCE_FORMED: "Task Force Formed",
+	TASK_FORCE_REGROUPED: "Task Force Regrouped",
+	TASK_FORCE_WITHDREW: "Task Force Withdrew",
+});
 
 const NUMBER_FORMAT = new Intl.NumberFormat(undefined, {
 	maximumFractionDigits: 1,
@@ -178,14 +190,19 @@ export function describeWarEvent(event = {}) {
 	if (typeof event === "string") {
 		return { detail: "", label: event, time: "" };
 	}
+	const eventType = asText(event.type).toUpperCase();
+	const typeLabel = OPERATIONAL_EVENT_LABELS[eventType];
+	const rawSummary = asText(event.summary || event.message);
+	const summaryDetail =
+		rawSummary.toUpperCase() === eventType ? "" : rawSummary;
 	const label = asText(
-		event.title || event.label || event.summary || event.message,
-		humanizeKey(event.type || "War event"),
+		event.title || event.label || typeLabel || rawSummary,
+		humanizeKey(eventType || "War event"),
 	);
 	const explicitDetail =
 		event.description ||
 		event.detail ||
-		(event.summary === label ? "" : event.summary) ||
+		(summaryDetail === label ? "" : summaryDetail) ||
 		evidenceText(event.evidence);
 	const date = stringifyDate(event.date || event.simulationDate);
 	const tick = finiteNumber(event.tick ?? event.simulationTick);
@@ -373,6 +390,124 @@ function renderEventList(documentRef, target, events, emptyMessage) {
 			item.append(createElement(documentRef, "p", "", description.detail));
 		}
 		fragment.append(item);
+	}
+	target.replaceChildren(fragment);
+}
+
+function normalizeAiObserverSides(aiOperations = {}) {
+	const sides = aiOperations.sides || aiOperations.options || [];
+	return (Array.isArray(sides) ? sides : [])
+		.map((side, index) => ({
+			label: optionValue(
+				side,
+				["label", "name", "sideName"],
+				`Side ${index + 1}`,
+			),
+			sideUid: optionValue(side, ["sideUid", "uid", "value"], ""),
+		}))
+		.filter((side) => side.sideUid);
+}
+
+function aiReadinessText(value) {
+	const number = finiteNumber(value);
+	if (number === null) return asText(value, "Readiness unknown");
+	const normalized = Math.max(
+		0,
+		Math.min(1, number > 1 ? number / 100 : number),
+	);
+	return `${Math.round(normalized * 100)}% ready`;
+}
+
+function renderAiOperations(documentRef, target, aiOperations = {}) {
+	if (!target) return;
+	const taskForces = Array.isArray(aiOperations.taskForces)
+		? aiOperations.taskForces
+		: [];
+	const contacts = Array.isArray(aiOperations.contacts)
+		? aiOperations.contacts
+		: [];
+	if (!aiOperations.selectedSideUid && !aiOperations.sideUid) {
+		appendEmptyState(
+			documentRef,
+			target,
+			"Select a side to inspect its active operations.",
+		);
+		return;
+	}
+	const fragment = documentRef.createDocumentFragment();
+	const status = createElement(documentRef, "div", "ai-operations-status");
+	status.append(
+		createElement(
+			documentRef,
+			"strong",
+			"",
+			asText(aiOperations.label, "Selected side"),
+		),
+		createElement(
+			documentRef,
+			"span",
+			"",
+			`${taskForces.length} task force${taskForces.length === 1 ? "" : "s"} · ${contacts.length} contact${contacts.length === 1 ? "" : "s"}`,
+		),
+	);
+	fragment.append(status);
+
+	for (const [index, force] of taskForces.slice(0, 3).entries()) {
+		const row = createElement(documentRef, "div", "ai-operation-row");
+		const heading = createElement(
+			documentRef,
+			"div",
+			"ai-operation-row-heading",
+		);
+		heading.append(
+			createElement(
+				documentRef,
+				"strong",
+				"",
+				asText(
+					force.label || force.name || force.objective?.label,
+					`Task Force ${index + 1}`,
+				),
+			),
+			createElement(
+				documentRef,
+				"span",
+				"",
+				humanizeKey(force.phase || "FORMING"),
+			),
+		);
+		row.append(heading);
+		const details = [
+			aiReadinessText(force.readiness),
+			force.committedStrength == null ||
+			finiteNumber(force.committedStrength) === null
+				? ""
+				: `${formatExperimentMetric(force.committedStrength, "personnel")} committed`,
+			force.objective?.label ? `Objective: ${force.objective.label}` : "",
+		].filter(Boolean);
+		row.append(createElement(documentRef, "small", "", details.join(" · ")));
+		fragment.append(row);
+	}
+	if (taskForces.length > 3) {
+		fragment.append(
+			createElement(
+				documentRef,
+				"p",
+				"ai-operations-more",
+				`+${taskForces.length - 3} more operation${taskForces.length - 3 === 1 ? "" : "s"} on map`,
+			),
+		);
+	}
+	if (contacts.length) {
+		const freshContacts = contacts.filter((contact) => !contact.stale).length;
+		fragment.append(
+			createElement(
+				documentRef,
+				"p",
+				"ai-operations-intel",
+				`INTEL · ${freshContacts} fresh · ${contacts.length - freshContacts} stale`,
+			),
+		);
 	}
 	target.replaceChildren(fragment);
 }
@@ -812,6 +947,8 @@ export function initExperimentUi(
 		seedInput: byId("experiment-seed-input"),
 		seedStatus: byId("experiment-seed-status"),
 		setupPosture: byId("setup-posture-select"),
+		aiOperations: byId("war-desk-ai-operations-content"),
+		aiObserverSide: byId("war-desk-ai-side-select"),
 		warDesk: byId("war-desk"),
 		warDeskAdvantage: byId("war-desk-advantage"),
 		warDeskBody: byId("war-desk-body"),
@@ -1063,6 +1200,49 @@ export function initExperimentUi(
 		}
 		if (data.summary !== undefined && nodes.warDeskSummary) {
 			nodes.warDeskSummary.textContent = asText(data.summary);
+		}
+		if (data.aiOperations !== undefined) {
+			const aiOperations =
+				data.aiOperations && typeof data.aiOperations === "object"
+					? data.aiOperations
+					: {};
+			const observerSides = normalizeAiObserverSides(aiOperations);
+			const selectedSideUid = asText(
+				aiOperations.selectedSideUid || aiOperations.sideUid,
+			);
+			if (nodes.aiObserverSide) {
+				const previousOptions = [...nodes.aiObserverSide.options].map(
+					(option) => `${option.value}:${option.textContent}`,
+				);
+				const nextOptions = observerSides.map(
+					(side) => `${side.sideUid}:${side.label}`,
+				);
+				if (previousOptions.join("|") !== nextOptions.join("|")) {
+					const fragment = documentRef.createDocumentFragment();
+					if (!observerSides.length) {
+						const empty = createElement(
+							documentRef,
+							"option",
+							"",
+							"Awaiting sides",
+						);
+						empty.value = "";
+						fragment.append(empty);
+					}
+					for (const side of observerSides) {
+						const option = createElement(documentRef, "option", "", side.label);
+						option.value = side.sideUid;
+						fragment.append(option);
+					}
+					nodes.aiObserverSide.replaceChildren(fragment);
+				}
+				nodes.aiObserverSide.disabled = observerSides.length < 2;
+				if (selectedSideUid) nodes.aiObserverSide.value = selectedSideUid;
+			}
+			renderAiOperations(documentRef, nodes.aiOperations, {
+				...aiOperations,
+				selectedSideUid,
+			});
 		}
 		if (data.metrics !== undefined) {
 			renderMetricCards(
@@ -1554,6 +1734,9 @@ export function initExperimentUi(
 
 	listen(nodes.warDeskToggle, "click", (event) =>
 		setWarDeskCollapsed(!state.collapsed, event),
+	);
+	listen(nodes.aiObserverSide, "change", (event) =>
+		invoke("onAiObserverSideChange", nodes.aiObserverSide?.value || "", event),
 	);
 	const warDeskTabs = ["overview", "economy", "events", "intervene"];
 	for (const name of warDeskTabs) {

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://esm.sh 'sha256-UbZTXngprJmMtanNXRwZ5Pi9M0w7gaPwpxlWfxaufYA='; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.websim.ai https://*.websim.com https://*.arcgisonline.com https://*.google.com wss:; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self';">
-    <title>MW-V0.27.5</title>
+    <title>MW-V0.27.6</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous" />
     <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
@@ -202,7 +202,7 @@
                 <div class="setting-group" style="display: flex; flex-direction: column; gap: 10px;">
                     <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
                         <input type="checkbox" id="show-warplans-checkbox" style="width: 18px; height: 18px; accent-color: #e67e22;" checked>
-                        <span>Show War Plan Arrows</span>
+                        <span data-i18n="SHOW_AI_OPERATIONS">Show AI Operations</span>
                     </label>
                     <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
                         <input type="checkbox" id="show-labels-checkbox" style="width: 18px; height: 18px; accent-color: #9b59b6;" checked>
@@ -916,6 +916,27 @@
                     <p id="war-desk-summary" class="war-desk-summary">
                         Territory, city, personnel, economy, and equipment signals will appear here.
                     </p>
+                    <section
+                        id="war-desk-ai-operations"
+                        class="war-desk-ai-operations"
+                        aria-labelledby="war-desk-ai-operations-title"
+                    >
+                        <div class="war-desk-ai-operations-header">
+                            <label
+                                id="war-desk-ai-operations-title"
+                                for="war-desk-ai-side-select"
+                                data-i18n="AI_OPERATIONS"
+                            >
+                                AI Operations
+                            </label>
+                            <select id="war-desk-ai-side-select" aria-label="Side to observe">
+                                <option value="">Awaiting sides</option>
+                            </select>
+                        </div>
+                        <div id="war-desk-ai-operations-content" class="war-desk-ai-operations-content">
+                            <p class="war-desk-empty">Select a side to inspect its active operations.</p>
+                        </div>
+                    </section>
                     <div id="war-desk-overview-metrics" class="war-desk-metrics"></div>
                 </section>
 

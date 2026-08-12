@@ -440,6 +440,54 @@ const FACTOR_METRICS = [
 	["activeCountries", "Coalition survival"],
 ];
 
+const OPERATIONAL_COORDINATION_EVENT_TYPES = new Set([
+	"TASK_FORCE_FORMED",
+	"OFFENSIVE_LAUNCHED",
+	"OBJECTIVE_SECURED",
+	"OFFENSIVE_CULMINATED",
+	"TASK_FORCE_WITHDREW",
+	"TASK_FORCE_REGROUPED",
+]);
+
+const OPERATIONAL_AI_EVENT_TYPES = new Set([
+	...OPERATIONAL_COORDINATION_EVENT_TYPES,
+	"INTEL_SURPRISE",
+]);
+
+const OPERATIONAL_EVENT_COUNT_LABELS = {
+	TASK_FORCE_FORMED: ["task force formation", "task force formations"],
+	OFFENSIVE_LAUNCHED: ["offensive launch", "offensive launches"],
+	OBJECTIVE_SECURED: ["secured objective", "secured objectives"],
+	OFFENSIVE_CULMINATED: ["offensive culmination", "offensive culminations"],
+	TASK_FORCE_WITHDREW: ["task force withdrawal", "task force withdrawals"],
+	TASK_FORCE_REGROUPED: ["task force regrouping", "task force regroupings"],
+	INTEL_SURPRISE: ["intelligence surprise", "intelligence surprises"],
+};
+
+function operationalEventCounts(events, acceptedTypes) {
+	const counts = new Map();
+	for (const event of events) {
+		if (!acceptedTypes.has(event.type)) continue;
+		counts.set(event.type, (counts.get(event.type) || 0) + 1);
+	}
+	return counts;
+}
+
+function describeOperationalEventCounts(counts) {
+	return Array.from(counts, ([type, count]) => {
+		const labels = OPERATIONAL_EVENT_COUNT_LABELS[type] || [type, type];
+		return `${count} ${count === 1 ? labels[0] : labels[1]}`;
+	}).join(", ");
+}
+
+function observedSideUids(events) {
+	return [
+		...new Set(
+			events.flatMap((event) => [event.actorSideUid, event.targetSideUid]),
+		),
+	].filter(Boolean);
+}
+
 function metricValue(metrics, key) {
 	const value = Number(metrics?.[key]);
 	return Number.isFinite(value) ? value : null;
@@ -508,9 +556,52 @@ export function deriveDecisiveContributors({
 			evidence: { interventionCount, modified: true },
 		});
 	}
+	const coordinationEvents = events.filter((event) =>
+		OPERATIONAL_COORDINATION_EVENT_TYPES.has(event.type),
+	);
+	if (coordinationEvents.length > 0) {
+		const counts = operationalEventCounts(
+			coordinationEvents,
+			OPERATIONAL_COORDINATION_EVENT_TYPES,
+		);
+		ranked.push({
+			id: "operational-coordination",
+			title: "Operational coordination",
+			priority: 1,
+			score: Math.min(0.75, 0.5 + coordinationEvents.length / 40),
+			summary: `Operational coordination was an observed contributor. The run recorded ${describeOperationalEventCounts(counts)}. These observations accompany the ending state without asserting what would have happened otherwise.`,
+			evidence: {
+				eventCount: coordinationEvents.length,
+				eventTypes: Object.fromEntries(counts),
+				sideUids: observedSideUids(coordinationEvents),
+			},
+		});
+	}
+	const intelligenceEvents = events.filter(
+		(event) => event.type === "INTEL_SURPRISE",
+	);
+	if (intelligenceEvents.length > 0) {
+		const counts = operationalEventCounts(
+			intelligenceEvents,
+			OPERATIONAL_AI_EVENT_TYPES,
+		);
+		ranked.push({
+			id: "intelligence-surprise",
+			title: "Intelligence surprise",
+			priority: 1,
+			score: Math.min(0.7, 0.5 + intelligenceEvents.length / 40),
+			summary: `Intelligence conditions were an observed contributor. The run recorded ${describeOperationalEventCounts(counts)} alongside operational decisions. The report treats that timing as observed evidence, not a counterfactual conclusion.`,
+			evidence: {
+				eventCount: intelligenceEvents.length,
+				eventTypes: Object.fromEntries(counts),
+				sideUids: observedSideUids(intelligenceEvents),
+			},
+		});
+	}
 	const eventCounts = new Map();
 	for (const event of events) {
 		if (
+			OPERATIONAL_AI_EVENT_TYPES.has(event.type) ||
 			[
 				"INTERVENTION",
 				"CHECKPOINT",
@@ -539,11 +630,13 @@ export function deriveDecisiveContributors({
 	}
 	ranked.sort(
 		(left, right) =>
-			right.score - left.score || left.id.localeCompare(right.id),
+			(right.priority || 0) - (left.priority || 0) ||
+			right.score - left.score ||
+			left.id.localeCompare(right.id),
 	);
 	const selected = ranked
 		.slice(0, 3)
-		.map(({ score: _score, ...factor }) => factor);
+		.map(({ priority: _priority, score: _score, ...factor }) => factor);
 	while (selected.length < 3) {
 		selected.push({
 			id: `ending-state-${selected.length + 1}`,
@@ -575,6 +668,7 @@ function selectPivotalEvents(events) {
 		"AIRFIELD_CAPTURED",
 		"AI_PLAN_SUCCEEDED",
 		"AI_PLAN_FAILED",
+		...OPERATIONAL_AI_EVENT_TYPES,
 		"REBELLION_STARTED",
 		"REBELLION_SUCCEEDED",
 		"REBELLION_FAILED",
@@ -594,6 +688,12 @@ function selectPivotalEvents(events) {
 		seen.add(event.sequence);
 		selected.push(event);
 	};
+	for (const type of ["WAR_STARTED", "ENDING_TRIGGERED", "WAR_ENDED"]) {
+		add(relevant.find((event) => event.type === type));
+	}
+	for (const type of OPERATIONAL_AI_EVENT_TYPES) {
+		add(relevant.find((event) => event.type === type));
+	}
 	for (const event of relevant) {
 		if (event.major || event.intervention || priorityTypes.has(event.type)) {
 			add(event);

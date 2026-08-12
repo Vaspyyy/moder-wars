@@ -43,6 +43,7 @@ export const COMBINED_ARMS_CONFIG = Object.freeze({
 
 const MAX_ARMOR_CAPACITY = 50000;
 const MAX_AIRCRAFT_CAPACITY = 10000;
+const DEFAULT_AIR_PRIORITY_RADIUS_KM = 300;
 
 export function clampCombinedArms(value, min, max) {
 	return Math.max(min, Math.min(max, value));
@@ -523,23 +524,87 @@ export function getStrikeTargetScore(candidate) {
 	return -Infinity;
 }
 
+/**
+ * Normalize task-force operation sectors used only to order otherwise-valid
+ * air mission targets. Invalid entries are ignored rather than widening the
+ * target pool.
+ */
+export function normalizeAirPriorityAreas(priorityAreas) {
+	const entries = Array.isArray(priorityAreas)
+		? priorityAreas
+		: priorityAreas && typeof priorityAreas === "object"
+			? [priorityAreas]
+			: [];
+	const normalized = [];
+	for (const area of entries) {
+		if (
+			area?.lat == null ||
+			area?.lat === "" ||
+			area?.lng == null ||
+			area?.lng === ""
+		) {
+			continue;
+		}
+		const lat = Number(area?.lat);
+		const lng = Number(area?.lng);
+		const radiusKm =
+			area?.radiusKm == null
+				? DEFAULT_AIR_PRIORITY_RADIUS_KM
+				: Number(area.radiusKm);
+		if (
+			!Number.isFinite(lat) ||
+			!Number.isFinite(lng) ||
+			!Number.isFinite(radiusKm) ||
+			lat < -90 ||
+			lat > 90 ||
+			lng < -180 ||
+			lng > 180 ||
+			radiusKm <= 0
+		) {
+			continue;
+		}
+		normalized.push({ lat, lng, radiusKm });
+	}
+	return normalized;
+}
+
+export function targetIsInAirPriorityArea(target, priorityAreas) {
+	return (priorityAreas || []).some(
+		(area) => haversineKm(area, target) <= area.radiusKm,
+	);
+}
+
 export function selectStrikeTarget(
 	source,
 	candidates,
-	{ rangeKm = COMBINED_ARMS_CONFIG.STRIKE_RANGE_KM, isHostile } = {},
+	{
+		rangeKm = COMBINED_ARMS_CONFIG.STRIKE_RANGE_KM,
+		isHostile,
+		priorityAreas,
+	} = {},
 ) {
 	let best = null;
+	let bestIsPrioritized = false;
+	const normalizedPriorityAreas = normalizeAirPriorityAreas(priorityAreas);
 	for (const candidate of candidates || []) {
 		if (isHostile && !isHostile(candidate.sideIndex)) continue;
 		const distance = haversineKm(source, candidate);
 		if (distance > rangeKm) continue;
 		const score = getStrikeTargetScore(candidate) - distance * 0.01;
+		const isPrioritized = targetIsInAirPriorityArea(
+			candidate,
+			normalizedPriorityAreas,
+		);
 		if (
 			!best ||
-			score > best.score ||
-			(score === best.score && String(candidate.id) < String(best.target.id))
+			(isPrioritized && !bestIsPrioritized) ||
+			(isPrioritized === bestIsPrioritized &&
+				(score > best.score ||
+					(score === best.score &&
+						String(candidate.id) < String(best.target.id))))
 		) {
 			best = { target: candidate, score, distance };
+			bestIsPrioritized = isPrioritized;
 		}
 	}
 	return best;

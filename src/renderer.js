@@ -33,6 +33,7 @@ import {
 	flagProcessedBuffer,
 	gameMode,
 	gameState,
+	getAiObserverSnapshot,
 	getCookie,
 	getGridIndex,
 	godModeActive,
@@ -76,6 +77,239 @@ import {
 	worldHeightDeg,
 	worldWidthDeg,
 } from "./main.js";
+
+function isMapPoint(point) {
+	return (
+		point &&
+		point.lat !== null &&
+		point.lat !== undefined &&
+		point.lng !== null &&
+		point.lng !== undefined &&
+		Number.isFinite(Number(point.lat)) &&
+		Number.isFinite(Number(point.lng))
+	);
+}
+
+function normalizedReadiness(value) {
+	if (value === null || value === undefined || value === "") return null;
+	const number = Number(value);
+	if (!Number.isFinite(number)) return null;
+	return Math.max(0, Math.min(1, number > 1 ? number / 100 : number));
+}
+
+function drawOperationPolyline(ctx, project, points) {
+	const validPoints = (Array.isArray(points) ? points : []).filter(isMapPoint);
+	if (validPoints.length < 2) return [];
+	const projected = validPoints.map((point) => project(point.lat, point.lng));
+	ctx.beginPath();
+	ctx.moveTo(projected[0].x, projected[0].y);
+	for (let index = 1; index < projected.length; index++) {
+		ctx.lineTo(projected[index].x, projected[index].y);
+	}
+	ctx.stroke();
+	return projected;
+}
+
+function drawOperationAnchor(ctx, point, kind, color) {
+	if (!point) return;
+	ctx.save();
+	ctx.translate(point.x, point.y);
+	ctx.strokeStyle = color;
+	ctx.fillStyle = "rgba(8, 10, 12, 0.82)";
+	ctx.lineWidth = 1.6;
+	ctx.setLineDash([]);
+	if (kind === "objective") {
+		ctx.rotate(Math.PI / 4);
+		ctx.beginPath();
+		ctx.rect(-5, -5, 10, 10);
+		ctx.fill();
+		ctx.stroke();
+		ctx.beginPath();
+		ctx.moveTo(-8, 0);
+		ctx.lineTo(8, 0);
+		ctx.moveTo(0, -8);
+		ctx.lineTo(0, 8);
+		ctx.stroke();
+	} else if (kind === "withdrawal") {
+		ctx.setLineDash([2, 2]);
+		ctx.strokeRect(-4, -4, 8, 8);
+	} else {
+		ctx.beginPath();
+		ctx.arc(0, 0, 5, 0, Math.PI * 2);
+		ctx.fill();
+		ctx.stroke();
+		ctx.beginPath();
+		ctx.arc(0, 0, 8, 0, Math.PI * 2);
+		ctx.stroke();
+	}
+	ctx.restore();
+}
+
+function drawAiOperationsOverlay(
+	ctx,
+	snapshot,
+	project,
+	color,
+	compact,
+	revealedTaskForceUid = null,
+) {
+	const taskForces = Array.isArray(snapshot.taskForces)
+		? snapshot.taskForces.slice(0, 6)
+		: [];
+	for (const taskForce of taskForces) {
+		const assembly = isMapPoint(taskForce.assemblyArea)
+			? project(taskForce.assemblyArea.lat, taskForce.assemblyArea.lng)
+			: null;
+		const objective = isMapPoint(taskForce.objective)
+			? project(taskForce.objective.lat, taskForce.objective.lng)
+			: null;
+		const withdrawal = isMapPoint(taskForce.withdrawalAnchor)
+			? project(taskForce.withdrawalAnchor.lat, taskForce.withdrawalAnchor.lng)
+			: null;
+		const route = [
+			taskForce.assemblyArea,
+			...(Array.isArray(taskForce.corridor) ? taskForce.corridor : []),
+			taskForce.objective,
+		].filter(isMapPoint);
+		const phase = String(taskForce.phase || "FORMING").toUpperCase();
+		const readiness = normalizedReadiness(taskForce.readiness);
+		const isPreparing = ["FORMING", "ASSEMBLING", "REGROUPING"].includes(phase);
+
+		ctx.save();
+		ctx.strokeStyle = color;
+		ctx.globalAlpha = 0.1;
+		ctx.lineWidth = 11;
+		ctx.lineCap = "round";
+		ctx.lineJoin = "round";
+		drawOperationPolyline(ctx, project, route);
+		ctx.globalAlpha = isPreparing ? 0.58 : 0.82;
+		ctx.lineWidth = 2.5;
+		ctx.setLineDash(isPreparing ? [8, 6] : []);
+		const routePoints = drawOperationPolyline(ctx, project, route);
+		ctx.setLineDash([]);
+
+		if (routePoints.length >= 2) {
+			const tip = routePoints.at(-1);
+			const previous = routePoints.at(-2);
+			const angle = Math.atan2(tip.y - previous.y, tip.x - previous.x);
+			ctx.beginPath();
+			ctx.moveTo(tip.x, tip.y);
+			ctx.lineTo(
+				tip.x - 11 * Math.cos(angle - 0.48),
+				tip.y - 11 * Math.sin(angle - 0.48),
+			);
+			ctx.lineTo(
+				tip.x - 11 * Math.cos(angle + 0.48),
+				tip.y - 11 * Math.sin(angle + 0.48),
+			);
+			ctx.closePath();
+			ctx.fillStyle = color;
+			ctx.fill();
+		}
+
+		ctx.globalAlpha = 0.62;
+		ctx.lineWidth = 2;
+		ctx.setLineDash([3, 4]);
+		drawOperationPolyline(ctx, project, taskForce.frontage);
+		ctx.setLineDash([]);
+		ctx.globalAlpha = 0.92;
+		drawOperationAnchor(ctx, assembly, "assembly", color);
+		drawOperationAnchor(ctx, objective, "objective", color);
+		drawOperationAnchor(ctx, withdrawal, "withdrawal", color);
+
+		if (withdrawal && routePoints.length) {
+			const origin = routePoints[0];
+			ctx.globalAlpha = 0.38;
+			ctx.setLineDash([3, 6]);
+			ctx.beginPath();
+			ctx.moveTo(origin.x, origin.y);
+			ctx.lineTo(withdrawal.x, withdrawal.y);
+			ctx.stroke();
+			ctx.setLineDash([]);
+		}
+
+		const labelPoint = objective || routePoints.at(-1) || assembly;
+		if (
+			labelPoint &&
+			(!compact ||
+				String(taskForce.uid || taskForce.id) === revealedTaskForceUid)
+		) {
+			const readinessLabel =
+				readiness === null ? "" : ` · ${Math.round(readiness * 100)}% READY`;
+			const objectiveLabel = compact
+				? ""
+				: String(taskForce.objective?.label || taskForce.label || "").trim();
+			const label = `${phase}${readinessLabel}${objectiveLabel ? ` · ${objectiveLabel}` : ""}`;
+			ctx.globalAlpha = 0.92;
+			ctx.font = `800 ${compact ? 8 : 9}px monospace`;
+			const width = ctx.measureText(label).width;
+			ctx.fillStyle = "rgba(8, 10, 12, 0.84)";
+			ctx.fillRect(labelPoint.x + 8, labelPoint.y - 16, width + 8, 14);
+			ctx.fillStyle = color;
+			ctx.fillText(label, labelPoint.x + 12, labelPoint.y - 6);
+		}
+		ctx.restore();
+	}
+
+	const contacts = Array.isArray(snapshot.contacts)
+		? snapshot.contacts.slice(0, compact ? 10 : 18)
+		: [];
+	for (const [index, contact] of contacts.entries()) {
+		if (!isMapPoint(contact.position)) continue;
+		const point = project(contact.position.lat, contact.position.lng);
+		const rawConfidence = Number(contact.confidence);
+		const confidence =
+			contact.confidence !== null &&
+			contact.confidence !== undefined &&
+			Number.isFinite(rawConfidence)
+				? Math.max(
+						0.15,
+						Math.min(
+							1,
+							rawConfidence > 1 ? rawConfidence / 100 : rawConfidence,
+						),
+					)
+				: 0.5;
+		const age = Math.max(0, Number(contact.ageTicks) || 0);
+		const ageFade = Math.max(0.18, 1 / (1 + age / 180));
+		const alpha = Math.min(contact.stale ? 0.34 : 0.88, confidence * ageFade);
+		const power = Math.max(0, Number(contact.estimatedCombatPower) || 0);
+		const radius = Math.max(4, Math.min(9, 4 + Math.log10(power + 1)));
+		ctx.save();
+		ctx.translate(point.x, point.y);
+		ctx.globalAlpha = alpha;
+		ctx.strokeStyle = "#ffad42";
+		ctx.fillStyle = "rgba(15, 8, 3, 0.76)";
+		ctx.lineWidth = 1.5;
+		ctx.setLineDash(contact.stale ? [2, 3] : []);
+		ctx.rotate(Math.PI / 4);
+		ctx.beginPath();
+		ctx.rect(-radius, -radius, radius * 2, radius * 2);
+		ctx.fill();
+		ctx.stroke();
+		ctx.rotate(-Math.PI / 4);
+		ctx.beginPath();
+		ctx.moveTo(-radius - 3, 0);
+		ctx.lineTo(radius + 3, 0);
+		ctx.moveTo(0, -radius - 3);
+		ctx.lineTo(0, radius + 3);
+		ctx.stroke();
+		ctx.restore();
+
+		if (!compact && index < 6) {
+			const source = String(contact.source || "CONTACT").toUpperCase();
+			const status = contact.stale
+				? "STALE"
+				: `${Math.round(confidence * 100)}%`;
+			ctx.save();
+			ctx.globalAlpha = Math.max(0.35, alpha);
+			ctx.font = "700 8px monospace";
+			ctx.fillStyle = "#ffbd69";
+			ctx.fillText(`${source} · ${status}`, point.x + radius + 6, point.y + 3);
+			ctx.restore();
+		}
+	}
+}
 
 const _allianceCache = {
 	metaLen: -1,
@@ -2377,7 +2611,18 @@ const ControlMapLayer = L.Layer.extend({
 
 		// Draw war plan arrows between warring sides
 		if (isWar && showWarPlans) {
-			for (let si = 0; si < _warPlan.length; si++) {
+			const aiObserverSnapshot = getAiObserverSnapshot();
+			if (aiObserverSnapshot) {
+				drawAiOperationsOverlay(
+					ctx,
+					aiObserverSnapshot,
+					project,
+					sideColors[aiObserverSnapshot.sideIndex] || "rgba(255, 196, 64, 0.9)",
+					window.innerWidth < 480,
+					window.__mwAiOperationReveal?.uid || null,
+				);
+			}
+			for (let si = 0; !aiObserverSnapshot && si < _warPlan.length; si++) {
 				const plan = _warPlan[si];
 				if (!plan) continue;
 				const owningSide = si >= sides.length ? si - sides.length : si;
@@ -2519,7 +2764,7 @@ const ControlMapLayer = L.Layer.extend({
 				}
 			}
 
-			if (_aiDebugPlans?.length) {
+			if (!aiObserverSnapshot && _aiDebugPlans?.length) {
 				for (let si = 0; si < _aiDebugPlans.length; si++) {
 					const debug = _aiDebugPlans[si];
 					if (!debug?.fronts?.length) continue;
@@ -2546,6 +2791,8 @@ const ControlMapLayer = L.Layer.extend({
 			// Draw naval invasion arrows (dashed, country-colored)
 			if (typeof _navalPlan !== "undefined" && _navalPlan) {
 				for (let si = 0; si < _navalPlan.length; si++) {
+					if (aiObserverSnapshot && si !== aiObserverSnapshot.sideIndex)
+						continue;
 					const np = _navalPlan[si];
 					if (!np?.arrowPoints || np.arrowPoints.length < 2) continue;
 					const pts = np.arrowPoints;
@@ -2590,15 +2837,19 @@ const ControlMapLayer = L.Layer.extend({
 					ctx.fillStyle = sideColor.replace(rgbaRe, "0.85)");
 					ctx.fill();
 
-					ctx.font = "bold 9px monospace";
-					ctx.fillStyle = sideColor.replace(rgbaRe, "0.9)");
-					ctx.fillText(`NAVAL: ${np.phase}`, midX + 10, midY - 2);
+					if (!aiObserverSnapshot || window.innerWidth >= 480) {
+						ctx.font = "bold 9px monospace";
+						ctx.fillStyle = sideColor.replace(rgbaRe, "0.9)");
+						ctx.fillText(`NAVAL: ${np.phase}`, midX + 10, midY - 2);
+					}
 				}
 			}
 
 			// Draw naval supply arrows (dashed, country-colored)
 			if (typeof _navalSupplyPlan !== "undefined" && _navalSupplyPlan) {
 				for (let si = 0; si < _navalSupplyPlan.length; si++) {
+					if (aiObserverSnapshot && si !== aiObserverSnapshot.sideIndex)
+						continue;
 					const sp = _navalSupplyPlan[si];
 					if (!sp?.arrowPoints || sp.arrowPoints.length < 2) continue;
 					const pts = sp.arrowPoints;
@@ -2643,14 +2894,20 @@ const ControlMapLayer = L.Layer.extend({
 					ctx.fillStyle = sideColor.replace(rgbaRe, "0.75)");
 					ctx.fill();
 
-					ctx.font = "bold 8px monospace";
-					ctx.fillStyle = sideColor.replace(rgbaRe, "0.85)");
-					ctx.fillText(`SUPPLY: ${sp.phase}`, midX + 10, midY + 10);
+					if (!aiObserverSnapshot || window.innerWidth >= 480) {
+						ctx.font = "bold 8px monospace";
+						ctx.fillStyle = sideColor.replace(rgbaRe, "0.85)");
+						ctx.fillText(`SUPPLY: ${sp.phase}`, midX + 10, midY + 10);
+					}
 				}
 			}
 
 			// Draw transport arrows (dashed, side-colored, railway-style)
-			if (typeof _transportPlan !== "undefined" && _transportPlan) {
+			if (
+				!aiObserverSnapshot &&
+				typeof _transportPlan !== "undefined" &&
+				_transportPlan
+			) {
 				for (let si = 0; si < _transportPlan.length; si++) {
 					const tp = _transportPlan[si];
 					if (!tp?.arrowPoints || tp.arrowPoints.length < 2) continue;
@@ -2704,7 +2961,11 @@ const ControlMapLayer = L.Layer.extend({
 			}
 
 			// Draw coastal defense zones (passive overlay, subtle)
-			if (typeof _coastalDefensePlan !== "undefined" && _coastalDefensePlan) {
+			if (
+				!aiObserverSnapshot &&
+				typeof _coastalDefensePlan !== "undefined" &&
+				_coastalDefensePlan
+			) {
 				for (let si = 0; si < sides.length; si++) {
 					const color = sideColors[si] || "rgba(255,255,0,0.6)";
 					for (let ci = 0; ci < 10; ci++) {
@@ -2740,7 +3001,11 @@ const ControlMapLayer = L.Layer.extend({
 			}
 
 			// Draw neutral garrison zones (passive overlay, subtle)
-			if (typeof _neutralGarrisonPlan !== "undefined" && _neutralGarrisonPlan) {
+			if (
+				!aiObserverSnapshot &&
+				typeof _neutralGarrisonPlan !== "undefined" &&
+				_neutralGarrisonPlan
+			) {
 				for (let si = 0; si < sides.length; si++) {
 					const color = sideColors[si] || "rgba(255,255,0,0.6)";
 					for (let gi = 0; gi < 10; gi++) {

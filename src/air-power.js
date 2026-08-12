@@ -4,7 +4,9 @@ import {
 	getAirfieldCapacity,
 	getQualityMultiplier,
 	haversineKm,
+	normalizeAirPriorityAreas,
 	selectStrikeTarget,
+	targetIsInAirPriorityArea,
 } from "./combined-arms.js";
 
 export const AIR_WING_STATES = Object.freeze({
@@ -128,9 +130,10 @@ function chooseInterceptTarget(
 	wing,
 	wings,
 	areSidesHostile,
-	{ homeField = null, homeDefense = false } = {},
+	{ homeField = null, homeDefense = false, priorityAreas = [] } = {},
 ) {
 	let best = null;
+	let bestIsPrioritized = false;
 	for (const target of wings) {
 		if (target === wing || target.equipment <= 0) continue;
 		if (target.state === AIR_WING_STATES.GROUNDED) continue;
@@ -146,9 +149,30 @@ function chooseInterceptTarget(
 			continue;
 		const priority = target.role === "STRIKE" ? 10000 : 0;
 		const score = priority - distance;
-		if (!best || score > best.score) best = { target, score };
+		const isPrioritized = targetIsInAirPriorityArea(target, priorityAreas);
+		if (
+			!best ||
+			(isPrioritized && !bestIsPrioritized) ||
+			(isPrioritized === bestIsPrioritized && score > best.score)
+		) {
+			best = { target, score };
+			bestIsPrioritized = isPrioritized;
+		}
 	}
 	return best?.target || null;
+}
+
+function priorityAreasForSide(priorityAreasBySide, sideIndex) {
+	if (!priorityAreasBySide) return [];
+	let priorityAreas;
+	if (priorityAreasBySide instanceof Map) {
+		priorityAreas =
+			priorityAreasBySide.get(sideIndex) ??
+			priorityAreasBySide.get(String(sideIndex));
+	} else {
+		priorityAreas = priorityAreasBySide[sideIndex];
+	}
+	return normalizeAirPriorityAreas(priorityAreas);
 }
 
 function missionOffsetForWing(wing) {
@@ -193,6 +217,12 @@ export function createAirPowerRuntime() {
 	};
 }
 
+/**
+ * `priorityAreasBySide` optionally maps a runtime side index to operation
+ * sectors shaped as `{ lat, lng, radiusKm? }`. The radius defaults to 300 km.
+ * Areas only prioritize otherwise-valid mission targets; all existing range,
+ * hostility, airfield, funding, and command-policy checks still apply.
+ */
 export function runAirPowerTick({
 	tick,
 	wings,
@@ -205,6 +235,7 @@ export function runAirPowerTick({
 	applyAirLoss,
 	onEvent,
 	runtime,
+	priorityAreasBySide = null,
 }) {
 	if (tick % COMBINED_ARMS_CONFIG.AIR_TICK_INTERVAL !== 0) return;
 	const started = performance.now();
@@ -252,6 +283,16 @@ export function runAirPowerTick({
 			});
 		}
 	}
+	const priorityAreasCache = new Map();
+	const getPriorityAreas = (sideIndex) => {
+		if (!priorityAreasCache.has(sideIndex)) {
+			priorityAreasCache.set(
+				sideIndex,
+				priorityAreasForSide(priorityAreasBySide, sideIndex),
+			);
+		}
+		return priorityAreasCache.get(sideIndex);
+	};
 
 	for (const wing of wings) {
 		if (wing.equipment <= 0 || wing.state === AIR_WING_STATES.EVACUATED)
@@ -348,6 +389,7 @@ export function runAirPowerTick({
 				const intercept = chooseInterceptTarget(wing, wings, areSidesHostile, {
 					homeField: field,
 					homeDefense: policy.fighters === "HOME_DEFENSE",
+					priorityAreas: getPriorityAreas(wing.sideIndex),
 				});
 				if (intercept) {
 					wing.targetId = intercept.id;
@@ -411,6 +453,7 @@ export function runAirPowerTick({
 		) {
 			const selected = selectStrikeTarget(field, strikeCandidates, {
 				isHostile: (sideIndex) => areSidesHostile(wing.sideIndex, sideIndex),
+				priorityAreas: getPriorityAreas(wing.sideIndex),
 			});
 			if (selected) {
 				wing.targetId = selected.target.id;

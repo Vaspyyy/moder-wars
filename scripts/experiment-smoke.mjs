@@ -300,6 +300,92 @@ assert.ok(
 	contributors.every((factor) => Object.keys(factor.evidence).length > 0),
 );
 
+const operationalEventTypes = [
+	"TASK_FORCE_FORMED",
+	"OFFENSIVE_LAUNCHED",
+	"OBJECTIVE_SECURED",
+	"OFFENSIVE_CULMINATED",
+	"TASK_FORCE_WITHDREW",
+	"TASK_FORCE_REGROUPED",
+	"INTEL_SURPRISE",
+];
+const operationalRecorder = createExperimentRecorder(spec, {
+	runId: "operational-report",
+	now: "2026-08-11T09:00:00.000Z",
+	initialMetrics,
+});
+appendWarEvent(operationalRecorder, {
+	type: "WAR_STARTED",
+	tick: 0,
+	summary: "Operational smoke war started",
+});
+for (let tick = 1; tick <= 12; tick++) {
+	appendWarEvent(operationalRecorder, {
+		type: "CITY_CONTROLLER_CHANGED",
+		tick,
+		summary: `Noise event ${tick}`,
+		major: true,
+	});
+}
+for (const [index, type] of operationalEventTypes.entries()) {
+	appendWarEvent(operationalRecorder, {
+		type,
+		tick: 20 + index,
+		source: "operational-ai",
+		actorSideUid: "allies",
+		targetSideUid: "axis",
+		summary: `Operational event ${type}`,
+		evidence: { taskForceId: "tf-smoke", objectiveId: "obj-smoke" },
+	});
+}
+appendWarEvent(operationalRecorder, {
+	type: "WAR_ENDED",
+	tick: 40,
+	summary: "Operational smoke war ended",
+});
+const operationalReport = finalizeWarReport(operationalRecorder, {
+	outcome,
+	finalMetrics,
+	durationTicks: 40,
+	now: "2026-08-11T09:10:00.000Z",
+});
+const pivotalOperationalTypes = new Set(
+	operationalReport.pivotalEvents.map((event) => event.type),
+);
+for (const type of operationalEventTypes) {
+	assert.ok(
+		pivotalOperationalTypes.has(type),
+		`${type} should be retained as a pivotal event`,
+	);
+}
+const coordinationContributor = operationalReport.decisiveContributors.find(
+	(contributor) => contributor.id === "operational-coordination",
+);
+const intelligenceContributor = operationalReport.decisiveContributors.find(
+	(contributor) => contributor.id === "intelligence-surprise",
+);
+assert.ok(coordinationContributor);
+assert.ok(intelligenceContributor);
+assert.ok(
+	operationalReport.decisiveContributors.every(
+		(contributor) => !("priority" in contributor),
+	),
+);
+assert.deepEqual(
+	Object.keys(coordinationContributor.evidence.eventTypes),
+	operationalEventTypes.slice(0, -1),
+);
+assert.deepEqual(intelligenceContributor.evidence.eventTypes, {
+	INTEL_SURPRISE: 1,
+});
+for (const contributor of [coordinationContributor, intelligenceContributor]) {
+	assert.match(contributor.summary, /observed contributor/i);
+	assert.doesNotMatch(
+		contributor.summary,
+		/\b(caused|determined|drove|proved)\b|\bled to\b/i,
+	);
+}
+
 const parent = finalizeWarReport(recorder, {
 	outcome,
 	finalMetrics,
