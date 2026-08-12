@@ -96,6 +96,12 @@ import {
 	resolveOperationEvent as resolveOperationRulesEvent,
 } from "./operations.js";
 import {
+	comparePerfSuites,
+	normalizePerfSuiteCases,
+	perfBaselineStorageKey,
+	summarizePerfSuiteRuns,
+} from "./performance-profiler.js";
+import {
 	allocateLargestRemainderQuotas,
 	evaluateCountryCapitulation,
 	evaluateGlobalConflict,
@@ -1989,9 +1995,20 @@ let _perfLastTime = 0;
 let _perfFrameTimeSum = 0;
 let _perfFrameCount = 0;
 let _isBenchmarking = false;
+let _isBenchmarkWarmingUp = false;
 let _perfBenchmarkEnd = 0;
 let _perfSamples = [];
 let _benchmarkUnitsPerSide = null;
+let _benchmarkResolve = null;
+let _benchmarkReject = null;
+let _benchmarkMetadata = null;
+let _benchmarkTimeoutId = null;
+let _benchmarkRestoreSettings = null;
+let _perfPendingFrameEntry = null;
+let _perfLongTaskObserver = null;
+let _lastPerfSuite = null;
+let _lastPerfSuiteRuns = [];
+let _perfTraceMeasureCount = 0;
 export let _cachedP1T = 0,
 	_cachedP2T = 0;
 export let _cachedSoldierEls = [];
@@ -2261,10 +2278,13 @@ function scheduleWarLifecycleCallback(
 }
 
 const PERF_COUNTER_DEFAULTS = {
-	_version: "V0.26.1",
+	_version: "V0.27.8",
 	_mode: "off",
 	_enabled: false,
 	plans: 0,
+	legacyPlans: 0,
+	operationalIntel: 0,
+	operationalTaskForces: 0,
 	proposals: 0,
 	eval: 0,
 	neutralBorder: 0,
@@ -2346,9 +2366,15 @@ function createPerfState(mode = "off") {
 		...PERF_COUNTER_DEFAULTS,
 		_mode: mode,
 		_enabled: mode !== "off",
+		_trackingPaused: false,
+		_measurementStart: mode === "off" ? null : performance.now(),
+		_traceMarksEnabled: false,
 		_history: [],
 		_frameHistory: [],
 		_frameSpikes: [],
+		_longTasks: [],
+		_memorySamples: [],
+		_frozenReport: null,
 		_scheduler: {
 			frames: 0,
 			renderedFrames: 0,
@@ -2362,6 +2388,105 @@ function createPerfState(mode = "off") {
 		},
 		_lastBenchmark: null,
 	};
+}
+
+const PERF_TICK_HISTORY_LIMIT = 4096;
+const PERF_FRAME_HISTORY_LIMIT = 4096;
+const PERF_SPIKE_HISTORY_LIMIT = 200;
+const PERF_LONG_TASK_HISTORY_LIMIT = 200;
+const PERF_MEMORY_HISTORY_LIMIT = 240;
+const PERF_EXCLUSIVE_PHASES = [
+	"prePlans",
+	"plans",
+	"neutralBorder",
+	"recruit",
+	"unitLoop",
+	"post",
+];
+
+function ensurePerfLongTaskObserver() {
+	if (_perfLongTaskObserver || typeof PerformanceObserver === "undefined")
+		return;
+	try {
+		const supported = PerformanceObserver.supportedEntryTypes || [];
+		if (!supported.includes("longtask")) return;
+		_perfLongTaskObserver = new PerformanceObserver((list) => {
+			if (
+				!window.__perf ||
+				window.__perf._trackingPaused ||
+				(window.__perf._mode === "off" &&
+					!_isBenchmarking &&
+					!_isBenchmarkWarmingUp)
+			) {
+				return;
+			}
+			for (const entry of list.getEntries()) {
+				if (
+					window.__perf._measurementStart !== null &&
+					entry.startTime < window.__perf._measurementStart
+				) {
+					continue;
+				}
+				window.__perf._longTasks.push({
+					name: entry.name || "longtask",
+					startTime: entry.startTime,
+					duration: entry.duration,
+					frame: simFrameCount,
+					tick: _simTickCount,
+				});
+			}
+			if (window.__perf._longTasks.length > PERF_LONG_TASK_HISTORY_LIMIT) {
+				window.__perf._longTasks.splice(
+					0,
+					window.__perf._longTasks.length - PERF_LONG_TASK_HISTORY_LIMIT,
+				);
+			}
+		});
+		_perfLongTaskObserver.observe({ type: "longtask" });
+	} catch (_error) {
+		_perfLongTaskObserver = null;
+	}
+}
+
+function recordPerfMemorySample() {
+	if (!window.__perf || simFrameCount % 60 !== 0) return;
+	const memory = performance.memory;
+	if (!memory || !Number.isFinite(memory.usedJSHeapSize)) return;
+	window.__perf._memorySamples.push({
+		frame: simFrameCount,
+		tick: _simTickCount,
+		usedBytes: memory.usedJSHeapSize,
+		totalBytes: memory.totalJSHeapSize,
+		limitBytes: memory.jsHeapSizeLimit,
+	});
+	if (window.__perf._memorySamples.length > PERF_MEMORY_HISTORY_LIMIT) {
+		window.__perf._memorySamples.shift();
+	}
+}
+
+function recordPerfMeasure(name, startTime, duration, detail = undefined) {
+	if (
+		!window.__perf?._traceMarksEnabled ||
+		!Number.isFinite(startTime) ||
+		!Number.isFinite(duration) ||
+		duration < 0
+	) {
+		return;
+	}
+	try {
+		performance.measure(`MW · ${name}`, {
+			start: startTime,
+			duration,
+			detail,
+		});
+		_perfTraceMeasureCount++;
+		if (_perfTraceMeasureCount >= 2000) {
+			performance.clearMeasures();
+			_perfTraceMeasureCount = 0;
+		}
+	} catch (_error) {
+		window.__perf._traceMarksEnabled = false;
+	}
 }
 
 // ── Global perf profiler init (once at module load, before any tick code runs) ──
@@ -11512,8 +11637,27 @@ export function triggerRandomWar() {
 /**
  * Show benchmark results modal with frame timing statistics.
  */
+function restoreBenchmarkSettings() {
+	if (!_benchmarkRestoreSettings) return;
+	CONFIG.MAX_UNITS_PER_SIDE = _benchmarkRestoreSettings.maxUnitsPerSide;
+	if (noPeaceCheckbox) {
+		noPeaceCheckbox.checked = _benchmarkRestoreSettings.noPeaceChecked;
+	}
+	_benchmarkRestoreSettings = null;
+}
+
 function showBenchmarkResults() {
-	if (_perfSamples.length === 0) return;
+	if (_benchmarkTimeoutId !== null) {
+		clearTimeout(_benchmarkTimeoutId);
+		_benchmarkTimeoutId = null;
+	}
+	if (_perfSamples.length === 0) {
+		restoreBenchmarkSettings();
+		_benchmarkReject?.(new Error("Benchmark ended without frame samples."));
+		_benchmarkResolve = null;
+		_benchmarkReject = null;
+		return;
+	}
 	const avg = _perfSamples.reduce((a, b) => a + b, 0) / _perfSamples.length;
 	const max = Math.max(..._perfSamples);
 	const min = Math.min(..._perfSamples);
@@ -11522,6 +11666,7 @@ function showBenchmarkResults() {
 	const maxFps = 1000 / min;
 	if (window.__perf) {
 		window.__perf._lastBenchmark = {
+			..._benchmarkMetadata,
 			frames: _perfSamples.length,
 			speed: simSpeed,
 			maxUnitsPerSide: _benchmarkUnitsPerSide,
@@ -11534,13 +11679,24 @@ function showBenchmarkResults() {
 			endedAt: new Date().toISOString(),
 		};
 	}
+	const report = getPerfReportData();
 	if (benchmarkStatsEl) {
 		benchmarkStatsEl.innerHTML =
 			`Frames: ${_perfSamples.length} &nbsp;|&nbsp; Speed: ${simSpeed}x${_benchmarkUnitsPerSide ? ` &nbsp;|&nbsp; Units/side: ${_benchmarkUnitsPerSide}` : ""}<br>` +
 			`Avg FPS: ${avgFps.toFixed(0)} &nbsp;|&nbsp; Min FPS: ${minFps.toFixed(0)} &nbsp;|&nbsp; Max FPS: ${maxFps.toFixed(0)}<br>` +
-			`Avg frame: ${avg.toFixed(1)}ms &nbsp;|&nbsp; Max frame: ${max.toFixed(1)}ms &nbsp;|&nbsp; Min frame: ${min.toFixed(1)}ms`;
+			`Avg frame: ${avg.toFixed(1)}ms &nbsp;|&nbsp; P95: ${report.frames.p95.toFixed(1)}ms &nbsp;|&nbsp; P99: ${report.frames.p99.toFixed(1)}ms &nbsp;|&nbsp; Max: ${max.toFixed(1)}ms<br>` +
+			`Main work: ${report.frameStages.mainWork.avg.toFixed(1)}ms &nbsp;|&nbsp; Sim: ${report.frameStages.simulation.avg.toFixed(1)}ms &nbsp;|&nbsp; HUD: ${report.frameStages.hud.avg.toFixed(1)}ms &nbsp;|&nbsp; Render: ${report.frameStages.render.avg.toFixed(1)}ms<br>` +
+			`Tick: ${report.ticks.avgMs.toFixed(1)}ms avg / ${report.ticks.p95Ms.toFixed(1)}ms P95 &nbsp;|&nbsp; Long tasks: ${report.browser.longTasks.count}`;
 	}
 	if (benchmarkResults) benchmarkResults.style.display = "flex";
+	if (window.__perf) {
+		window.__perf._frozenReport = report;
+		window.__perf._trackingPaused = true;
+	}
+	restoreBenchmarkSettings();
+	_benchmarkResolve?.(report);
+	_benchmarkResolve = null;
+	_benchmarkReject = null;
 }
 
 /**
@@ -11548,18 +11704,36 @@ function showBenchmarkResults() {
  * Auto-fetches the 2022 preset if the main menu is open with no data loaded yet.
  */
 export async function startBenchmark(options = {}) {
+	if (_isBenchmarking || _isBenchmarkWarmingUp || _benchmarkResolve) {
+		throw new Error("A benchmark is already running.");
+	}
 	const requestedUnits = Number.isFinite(options.maxUnitsPerSide)
 		? Math.max(1, Math.floor(options.maxUnitsPerSide))
 		: null;
 	const durationMs = Number.isFinite(options.durationMs)
 		? Math.max(1_000, Math.floor(options.durationMs))
 		: 60_000;
+	const warmupMs = Number.isFinite(options.warmupMs)
+		? Math.max(0, Math.floor(options.warmupMs))
+		: 3000;
+	const benchmarkSeed = normalizeSeed(options.seed ?? 0x4d575031);
+	const benchmarkSpeedIndex = Number.isFinite(options.speedIndex)
+		? Math.max(
+				0,
+				Math.min(SPEED_STEPS.length - 1, Math.floor(options.speedIndex)),
+			)
+		: SPEED_STEPS.length - 1;
+	const benchmarkViewMode = options.viewMode === "FLAG" ? "FLAG" : "POLITICAL";
 	const perfMode =
 		options.perfMode === "detailed"
 			? "detailed"
 			: options.perfMode === "basic"
 				? "basic"
 				: null;
+	_benchmarkRestoreSettings = {
+		maxUnitsPerSide: CONFIG.MAX_UNITS_PER_SIDE,
+		noPeaceChecked: noPeaceCheckbox?.checked === true,
+	};
 	if (requestedUnits !== null) {
 		CONFIG.MAX_UNITS_PER_SIDE = requestedUnits;
 		_benchmarkUnitsPerSide = requestedUnits;
@@ -11580,7 +11754,8 @@ export async function startBenchmark(options = {}) {
 		} catch (e) {
 			console.error(e);
 			alert("Failed to load 2022 Modern Day scenario.");
-			return;
+			restoreBenchmarkSettings();
+			throw e;
 		}
 	}
 
@@ -11591,7 +11766,8 @@ export async function startBenchmark(options = {}) {
 	);
 	if (!metaRussia || !metaChina) {
 		alert("Russia or China not found in country data.");
-		return;
+		restoreBenchmarkSettings();
+		throw new Error("Russia or China not found in country data.");
 	}
 
 	const russia = {
@@ -11613,6 +11789,9 @@ export async function startBenchmark(options = {}) {
 
 	sides = [[russia], [china]];
 	activeSideIndex = 0;
+	const seedInput = document.getElementById("experiment-seed-input");
+	if (seedInput) seedInput.value = String(benchmarkSeed);
+	if (noPeaceCheckbox) noPeaceCheckbox.checked = true;
 	// Scenario loading reapplies saved settings, so the programmatic benchmark
 	// cap must be restored immediately before war creation.
 	if (requestedUnits !== null) CONFIG.MAX_UNITS_PER_SIDE = requestedUnits;
@@ -11647,22 +11826,65 @@ export async function startBenchmark(options = {}) {
 		warEconomyEnabled = economyWasEnabled;
 		for (const unit of units) unit.deployTicks = 0;
 	}
-	// Crank to max speed for stress testing
-	setSpeed(SPEED_STEPS.length - 1); // max speed
-	// Initialize benchmark state
-	isPaused = false;
-	_perfSamples = [];
-	if (perfMode && typeof window.perfReset === "function") {
-		window.perfReset(perfMode);
+	viewMode = benchmarkViewMode;
+	if (viewModeBtn) {
+		viewModeBtn.innerText = viewMode === "FLAG" ? "FLAG VIEW" : "POLITICAL";
+		viewModeBtn.style.background = viewMode === "FLAG" ? "#8e44ad" : "#3498db";
 	}
+	recalculateAllBounds();
+	if (influenceLayer) influenceLayer._forceRender = true;
+	setSpeed(benchmarkSpeedIndex);
+	ensurePerfLongTaskObserver();
+	if (benchmarkResults) benchmarkResults.style.display = "none";
+	// Warm the simulation and JIT before resetting measured counters.
+	isPaused = false;
+	_isBenchmarkWarmingUp = warmupMs > 0;
+	if (perfOverlay && _isBenchmarkWarmingUp) {
+		perfOverlay.style.display = "block";
+		perfOverlay.textContent = `PERF WARM-UP · ${(warmupMs / 1000).toFixed(1)}s`;
+	}
+	if (warmupMs > 0) {
+		await new Promise((resolve) => setTimeout(resolve, warmupMs));
+	}
+	_isBenchmarkWarmingUp = false;
+	if (gameState !== "SIMULATING") {
+		restoreBenchmarkSettings();
+		throw new Error("Benchmark war ended during warm-up.");
+	}
+	// Initialize benchmark state after warm-up.
+	_perfSamples = [];
+	window.perfReset(perfMode || "basic");
+	window.__perf._traceMarksEnabled = options.traceMarks === true;
 	if (window.__perf) {
 		window.__perf._frameHistory = [];
 		window.__perf._frameSpikes = [];
 		window.__perf._scheduler = createPerfState(window.__perf._mode)._scheduler;
 		window.__perf._lastBenchmark = null;
 	}
+	_benchmarkMetadata = {
+		caseId: String(options.caseId || "benchmark"),
+		seed: benchmarkSeed,
+		speedIndex: benchmarkSpeedIndex,
+		viewMode: benchmarkViewMode,
+		traceMarks: options.traceMarks === true,
+		durationMs,
+		warmupMs,
+		startedAt: new Date().toISOString(),
+	};
 	_perfBenchmarkEnd = performance.now() + durationMs;
 	_isBenchmarking = true;
+	return new Promise((resolve, reject) => {
+		_benchmarkResolve = resolve;
+		_benchmarkReject = reject;
+		_benchmarkTimeoutId = setTimeout(() => {
+			if (!_isBenchmarking) return;
+			_isBenchmarking = false;
+			isPaused = true;
+			_benchmarkMetadata.endedBy =
+				gameState === "SIMULATING" ? "WALL_CLOCK" : "WAR_ENDED";
+			showBenchmarkResults();
+		}, durationMs + 250);
+	});
 }
 
 export function activateCountryMidWar(country, sideIdx) {
@@ -17280,10 +17502,14 @@ export function performSimulationTick() {
 	if (!window.__perf) window.__perf = createPerfState();
 	window.__perf.ticks++;
 	// ── Perf snapshot for per-tick delta computation ──
-	const _perfEnabled = window.__perf._mode !== "off";
+	const _perfEnabled =
+		window.__perf._mode !== "off" && !window.__perf._trackingPaused;
 	const _perfSnap = _perfEnabled ? {} : null;
 	const _perfKeys = [
 		"plans",
+		"legacyPlans",
+		"operationalIntel",
+		"operationalTaskForces",
 		"proposals",
 		"eval",
 		"neutralBorder",
@@ -18366,7 +18592,15 @@ export function performSimulationTick() {
 		}
 	}
 
+	const _tOperationalIntel = performance.now();
 	const operationalIntelRefreshed = refreshOperationalAiIntel();
+	const operationalIntelMs = performance.now() - _tOperationalIntel;
+	window.__perf.operationalIntel += operationalIntelMs;
+	recordPerfMeasure(
+		"Operational AI · Intel",
+		_tOperationalIntel,
+		operationalIntelMs,
+	);
 
 	// ── Auto Posture: per-side strength ratio → OFFENSIVE/BALANCED/DEFENSIVE ──
 	const _tpo = performance.now();
@@ -18477,8 +18711,18 @@ export function performSimulationTick() {
 	window.__perf.prePlans =
 		(window.__perf.prePlans || 0) + performance.now() - _t0;
 	const _t1 = performance.now();
+	const _tLegacyPlans = performance.now();
 	evaluateAllPlans();
+	window.__perf.legacyPlans += performance.now() - _tLegacyPlans;
+	const _tOperationalTaskForces = performance.now();
 	updateOperationalAiTaskForces(operationalIntelRefreshed);
+	const operationalTaskForceMs = performance.now() - _tOperationalTaskForces;
+	window.__perf.operationalTaskForces += operationalTaskForceMs;
+	recordPerfMeasure(
+		"Operational AI · Task Forces",
+		_tOperationalTaskForces,
+		operationalTaskForceMs,
+	);
 	window.__perf.plans += performance.now() - _t1;
 
 	// ── Compute neutral border polylines (throttled to every 60 ticks) ──
@@ -22821,6 +23065,10 @@ export function performSimulationTick() {
 	const _tickMs = performance.now() - _t0;
 	window.__perf.tickTotal += _tickMs;
 	if (_tickMs > window.__perf.maxTick) window.__perf.maxTick = _tickMs;
+	recordPerfMeasure("Simulation Tick", _t0, _tickMs, {
+		tick: window.__perf.ticks,
+		units: units.length,
+	});
 
 	// ── Per-tick perf history ring buffer ──
 	if (!_perfEnabled) return false;
@@ -22854,7 +23102,9 @@ export function performSimulationTick() {
 		_tickEntry.water[k] = (window.__perf[k] || 0) - (_perfSnap[k] || 0);
 	if (!window.__perf._history) window.__perf._history = [];
 	window.__perf._history.push(_tickEntry);
-	if (window.__perf._history.length > 300) window.__perf._history.shift();
+	if (window.__perf._history.length > PERF_TICK_HISTORY_LIMIT) {
+		window.__perf._history.shift();
+	}
 
 	return false;
 }
@@ -22894,6 +23144,8 @@ function getRenderSkipCadence() {
 
 function getPerfConfigSnapshot() {
 	return {
+		build: document.title || null,
+		seed: getExperimentSeed(),
 		gridRes: CONFIG.GRID_RES,
 		mapResolution: mapResSelect?.value || null,
 		maxUnitsPerSide: CONFIG.MAX_UNITS_PER_SIDE,
@@ -22912,49 +23164,81 @@ function getPerfConfigSnapshot() {
 				: CONFIG.STALE_TARGET_MAX_CACHE_DIST_SQ,
 		frontlineFieldUpdateInterval: FRONTLINE_FIELD_UPDATE_INTERVAL,
 		frontlinePolyUpdateInterval: FRONTLINE_POLY_UPDATE_INTERVAL,
+		operationalAi: gameMode === "CONQUEST",
+		traceMarksEnabled: window.__perf?._traceMarksEnabled === true,
+		warEconomyEnabled,
+		armorEnabled,
+		airPowerEnabled,
+	};
+}
+
+function getPerfEnvironmentSnapshot() {
+	return {
+		userAgent: navigator.userAgent,
+		hardwareConcurrency: navigator.hardwareConcurrency || null,
+		deviceMemoryGiB: navigator.deviceMemory || null,
+		devicePixelRatio: window.devicePixelRatio || 1,
+		viewport: {
+			width: window.innerWidth,
+			height: window.innerHeight,
+		},
+		crossOriginIsolated: window.crossOriginIsolated === true,
 	};
 }
 
 function recordPerfFrame(entry) {
-	if (!window.__perf || (window.__perf._mode === "off" && !_isBenchmarking)) {
+	if (
+		!window.__perf ||
+		(window.__perf._mode === "off" && !_isBenchmarking && !entry.benchmark)
+	) {
 		return;
 	}
 	if (!window.__perf._frameHistory) window.__perf._frameHistory = [];
 	window.__perf._frameHistory.push(entry);
-	if (window.__perf._frameHistory.length > 600) {
+	if (window.__perf._frameHistory.length > PERF_FRAME_HISTORY_LIMIT) {
 		window.__perf._frameHistory.shift();
 	}
 	if (entry.ms < 100) return;
 
 	const history = window.__perf._history || [];
-	const nearestTick = history[history.length - 1] || null;
-	let topCategory = null;
-	if (nearestTick?.cats) {
-		for (const [name, ms] of Object.entries(nearestTick.cats)) {
-			if (!topCategory || ms > topCategory.ms) topCategory = { name, ms };
+	const relatedTicks = history.filter(
+		(tick) => tick.tick >= entry.tickStart && tick.tick <= entry.tickEnd,
+	);
+	const categoryTotals = {};
+	for (const tick of relatedTicks) {
+		for (const [name, ms] of Object.entries(tick.cats || {})) {
+			categoryTotals[name] = (categoryTotals[name] || 0) + ms;
 		}
 	}
+	const topCategories = Object.entries(categoryTotals)
+		.filter(([name]) => !PERF_EXCLUSIVE_PHASES.includes(name))
+		.map(([name, ms]) => ({ name, ms }))
+		.sort((left, right) => right.ms - left.ms)
+		.slice(0, 5);
+	const tickMs = relatedTicks.reduce((sum, tick) => sum + tick.ms, 0);
 	const reason =
 		entry.ms >= 350 ? ">=350ms" : entry.ms >= 250 ? ">=250ms" : ">=100ms";
 	if (!window.__perf._frameSpikes) window.__perf._frameSpikes = [];
 	window.__perf._frameSpikes.push({
 		...entry,
 		reason,
-		nearestTick: nearestTick
-			? {
-					tick: nearestTick.tick,
-					ms: nearestTick.ms,
-					units: nearestTick.units,
-					topCategory,
-				}
-			: null,
+		ticks: {
+			start: entry.tickStart,
+			end: entry.tickEnd,
+			count: relatedTicks.length,
+			totalMs: tickMs,
+			topCategories,
+		},
 	});
-	if (window.__perf._frameSpikes.length > 80) {
+	if (window.__perf._frameSpikes.length > PERF_SPIKE_HISTORY_LIMIT) {
 		window.__perf._frameSpikes.shift();
 	}
 }
 
 function getPerfReportData() {
+	if (window.__perf?._trackingPaused && window.__perf._frozenReport) {
+		return window.__perf._frozenReport;
+	}
 	const h = window.__perf?._history || [];
 	const frameEntries = window.__perf?._frameHistory || [];
 	const benchmark = window.__perf?._lastBenchmark || null;
@@ -22975,6 +23259,11 @@ function getPerfReportData() {
 	const unitCounts = h.map((e) => e.units || 0);
 	const avgUnits = n > 0 ? unitCounts.reduce((s, v) => s + v, 0) / n : 0;
 	const maxUnits = unitCounts.length ? Math.max(...unitCounts) : 0;
+	const taskForceCounts = frameEntries.map((entry) => entry.taskForces || 0);
+	const averageTaskForces = taskForceCounts.length
+		? taskForceCounts.reduce((sum, value) => sum + value, 0) /
+			taskForceCounts.length
+		: 0;
 
 	// Per-category averages, percentiles, and max
 	const catKeys = Object.keys(h[0]?.cats || {});
@@ -22987,6 +23276,20 @@ function getPerfReportData() {
 	}
 	const categories = {};
 	for (const k of catKeys) categories[k] = summarizeSamples(catSamples[k]);
+	const phases = {};
+	for (const key of PERF_EXCLUSIVE_PHASES) {
+		phases[key] = categories[key] || summarizeSamples([]);
+	}
+	const phaseTotals = h.map((entry) =>
+		PERF_EXCLUSIVE_PHASES.reduce(
+			(sum, key) => sum + Math.max(0, entry.cats?.[key] || 0),
+			0,
+		),
+	);
+	const unattributedTick = h.map((entry, index) =>
+		Math.max(0, entry.ms - phaseTotals[index]),
+	);
+	phases.unattributed = summarizeSamples(unattributedTick);
 
 	// Reassessment totals from history
 	const reassessKeys = [
@@ -23038,6 +23341,29 @@ function getPerfReportData() {
 	const renderSummary = summarizeSamples(
 		frameEntries.filter((e) => e.rendered).map((e) => e.renderMs || 0),
 	);
+	const frameStages = {
+		mainWork: summarizeSamples(
+			frameEntries.map((entry) => entry.mainWorkMs || 0),
+		),
+		simulation: summarizeSamples(
+			frameEntries.map((entry) => entry.simulationMs || 0),
+		),
+		hud: summarizeSamples(frameEntries.map((entry) => entry.hudMs || 0)),
+		render: summarizeSamples(frameEntries.map((entry) => entry.renderMs || 0)),
+		otherMain: summarizeSamples(
+			frameEntries.map((entry) => entry.otherMainMs || 0),
+		),
+		browserWait: summarizeSamples(
+			frameEntries.map((entry) => entry.browserWaitMs || 0),
+		),
+	};
+	const longTasks = window.__perf._longTasks || [];
+	const longTaskSummary = summarizeSamples(
+		longTasks.map((entry) => entry.duration || 0),
+	);
+	const memorySamples = window.__perf._memorySamples || [];
+	const firstMemory = memorySamples[0]?.usedBytes || null;
+	const lastMemory = memorySamples.at(-1)?.usedBytes || null;
 	const scheduler = window.__perf._scheduler || {};
 	const avgAccumulator =
 		scheduler.frames > 0 ? scheduler.accumulatorSum / scheduler.frames : 0;
@@ -23055,6 +23381,50 @@ function getPerfReportData() {
 							: "within target",
 			}
 		: null;
+	const rankedPhases = Object.entries(phases)
+		.filter(([key]) => key !== "unattributed")
+		.sort((left, right) => right[1].avg - left[1].avg);
+	const rankedDetails = Object.entries(categories)
+		.filter(([key]) => !PERF_EXCLUSIVE_PHASES.includes(key))
+		.sort((left, right) => right[1].avg - left[1].avg);
+	const rankedFrameStages = ["simulation", "hud", "render", "otherMain"]
+		.map((key) => [key, frameStages[key]])
+		.sort((left, right) => right[1].avg - left[1].avg);
+	const recommendations = [];
+	const topFrameStage = rankedFrameStages[0]?.[0] || null;
+	const topPhase = rankedPhases[0]?.[0] || null;
+	const topDetail = rankedDetails[0]?.[0] || null;
+	if (topFrameStage === "simulation") {
+		recommendations.push(
+			`Simulation dominates main-thread work; start with ${topPhase || "the hottest tick phase"}${topDetail ? `, especially ${topDetail}` : ""}.`,
+		);
+	} else if (topFrameStage === "render") {
+		recommendations.push(
+			"Canvas rendering dominates measured work; profile renderer draw loops, map invalidation, and label/unit culling.",
+		);
+	} else if (topFrameStage === "hud") {
+		recommendations.push(
+			"DOM/HUD updates dominate measured work; reduce update frequency and avoid rebuilding unchanged War Desk or casualty nodes.",
+		);
+	}
+	const operationalAiAverage =
+		(categories.operationalIntel?.avg || 0) +
+		(categories.operationalTaskForces?.avg || 0);
+	if (operationalAiAverage > tickSummary.avg * 0.1) {
+		recommendations.push(
+			"Operational AI exceeds 10% of tick time; inspect contact refresh breadth and task-force reassessment frequency.",
+		);
+	}
+	if ((scheduler.cappedSubTicks || 0) > 0) {
+		recommendations.push(
+			"The scheduler is capping requested subticks; improve simulation throughput before increasing render frequency.",
+		);
+	}
+	if (longTaskSummary.max >= 100) {
+		recommendations.push(
+			"Long main-thread tasks are causing visible stalls; inspect the recorded spike frames and correlate them with territory phases or worker applies.",
+		);
+	}
 
 	return {
 		ok: true,
@@ -23075,12 +23445,22 @@ function getPerfReportData() {
 			renderedFrameRenderMs: renderSummary,
 			spikes: window.__perf._frameSpikes || [],
 		},
+		frameStages,
 		units: {
 			avg: avgUnits,
 			max: maxUnits,
 			current: units.length,
 		},
+		taskForces: {
+			avg: averageTaskForces,
+			max: taskForceCounts.length ? Math.max(...taskForceCounts) : 0,
+			current: Array.from(_aiTaskForcesBySide.values()).reduce(
+				(sum, taskForces) => sum + taskForces.length,
+				0,
+			),
+		},
 		categories,
+		phases,
 		categoryDeltaSinceLastReport: delta,
 		reassess: reassessTotals,
 		water: {
@@ -23125,6 +23505,33 @@ function getPerfReportData() {
 		benchmark,
 		verdict,
 		config: getPerfConfigSnapshot(),
+		environment: getPerfEnvironmentSnapshot(),
+		browser: {
+			longTasks: {
+				...longTaskSummary,
+				entries: longTasks.slice(-20),
+			},
+			memory: {
+				supported: memorySamples.length > 0,
+				samples: memorySamples.length,
+				firstUsedBytes: firstMemory,
+				lastUsedBytes: lastMemory,
+				deltaBytes:
+					firstMemory !== null && lastMemory !== null
+						? lastMemory - firstMemory
+						: null,
+				peakUsedBytes: memorySamples.length
+					? Math.max(...memorySamples.map((entry) => entry.usedBytes))
+					: null,
+			},
+		},
+		analysis: {
+			topFrameStage,
+			topPhase,
+			topDetail,
+			operationalAiAverageMs: operationalAiAverage,
+			recommendations,
+		},
 	};
 }
 
@@ -23159,9 +23566,12 @@ function formatPerfReport(data) {
 		lines.push(
 			`  render: avg ${formatMs(data.frames.renderedFrameRenderMs.avg)}ms/rendered frame | p95 ${formatMs(data.frames.renderedFrameRenderMs.p95)}ms | max ${formatMs(data.frames.renderedFrameRenderMs.max)}ms`,
 		);
+		lines.push(
+			`  frame work: main ${formatMs(data.frameStages.mainWork.avg)}ms | sim ${formatMs(data.frameStages.simulation.avg)}ms | HUD ${formatMs(data.frameStages.hud.avg)}ms | render ${formatMs(data.frameStages.render.avg)}ms | other ${formatMs(data.frameStages.otherMain.avg)}ms | browser wait ${formatMs(data.frameStages.browserWait.avg)}ms`,
+		);
 	}
 	lines.push(
-		`  units: avg ${data.units.avg.toFixed(0)} | max ${data.units.max} | current ${data.units.current}`,
+		`  units: avg ${data.units.avg.toFixed(0)} | max ${data.units.max} | current ${data.units.current} | task forces avg ${data.taskForces.avg.toFixed(1)} max ${data.taskForces.max}`,
 	);
 	lines.push(
 		`  scheduler: rendered ${data.scheduler.renderedFrames}/${data.scheduler.frames} frames | subticks ${data.scheduler.executedSubTicks}/${data.scheduler.requestedSubTicks} | cappedFrames ${data.scheduler.cappedSubTickFrames} | cappedSubticks ${data.scheduler.cappedSubTicks}`,
@@ -23173,25 +23583,30 @@ function formatPerfReport(data) {
 		`  config: simSpeed ${data.config.simSpeed}x | view ${data.config.viewMode} | grid ${data.config.gridRes} | map ${data.config.mapResolution || "n/a"} | render ${data.config.renderSkipCadence}`,
 	);
 	lines.push("  ─────────────────────────────────────────────");
-
-	const sorted = Object.entries(data.categories).sort(
-		(a, b) => b[1].avg - a[1].avg,
-	);
-	for (const [k, stats] of sorted) {
-		if (stats.avg < 0.05 || Number.isNaN(stats.avg)) continue;
+	lines.push("  exclusive tick phases (these add up to tick time):");
+	for (const key of [...PERF_EXCLUSIVE_PHASES, "unattributed"]) {
+		const stats = data.phases[key];
+		if (!stats || stats.avg < 0.01) continue;
 		const rawPct = data.ticks.avgMs > 0 ? stats.avg / data.ticks.avgMs : 0;
 		const pct = Number.isFinite(rawPct) ? (rawPct * 100).toFixed(0) : "—";
-		const barCount = Number.isFinite(rawPct)
-			? Math.min(20, Math.round(rawPct * 20))
-			: 0;
-		const bar = "█".repeat(Math.max(0, barCount));
+		lines.push(
+			`    ${key.padEnd(16)} ${formatMs(stats.avg).padStart(6)}ms (${pct.padStart(2)}%) p95:${formatMs(stats.p95).padStart(5)}ms p99:${formatMs(stats.p99).padStart(5)}ms max:${formatMs(stats.max).padStart(5)}ms`,
+		);
+	}
+	lines.push("  nested hot operations (diagnostic; do not add percentages):");
+
+	const sorted = Object.entries(data.categories)
+		.filter(([key]) => !PERF_EXCLUSIVE_PHASES.includes(key))
+		.sort((a, b) => b[1].avg - a[1].avg);
+	for (const [k, stats] of sorted) {
+		if (stats.avg < 0.05 || Number.isNaN(stats.avg)) continue;
 		const delta = data.categoryDeltaSinceLastReport[k];
 		const deltaStr =
 			typeof delta === "number"
 				? `  Δ${delta >= 0 ? "+" : ""}${delta.toFixed(2)}ms`
 				: "";
 		lines.push(
-			`  ${k.padEnd(14)} ${stats.avg.toFixed(1).padStart(6)}ms (${pct.padStart(2)}%) ${bar.padEnd(20)} p95:${formatMs(stats.p95).padStart(5)}ms p99:${formatMs(stats.p99).padStart(5)}ms max:${formatMs(stats.max).padStart(5)}ms${deltaStr}`,
+			`    ${k.padEnd(24)} ${stats.avg.toFixed(1).padStart(6)}ms p95:${formatMs(stats.p95).padStart(5)}ms p99:${formatMs(stats.p99).padStart(5)}ms max:${formatMs(stats.max).padStart(5)}ms${deltaStr}`,
 		);
 	}
 
@@ -23212,16 +23627,124 @@ function formatPerfReport(data) {
 		lines.push("  ─────────────────────────────────────────────");
 		lines.push("  recent frame spikes:");
 		data.frames.spikes.slice(-5).forEach((spike) => {
-			const topCat = spike.nearestTick?.topCategory;
+			const topCat = spike.ticks?.topCategories?.[0];
 			const catText = topCat
-				? ` | tick hot: ${topCat.name} ${formatMs(topCat.ms)}ms`
+				? ` | ${spike.ticks.count} ticks (${formatMs(spike.ticks.totalMs)}ms), hot: ${topCat.name} ${formatMs(topCat.ms)}ms`
 				: "";
 			lines.push(
-				`    ${formatMs(spike.ms)}ms at frame ${spike.frame} (${spike.reason})${catText}`,
+				`    ${formatMs(spike.ms)}ms at frame ${spike.frame} (${spike.reason}) | work ${formatMs(spike.mainWorkMs)}ms, sim ${formatMs(spike.simulationMs)}ms, HUD ${formatMs(spike.hudMs)}ms, render ${formatMs(spike.renderMs)}ms${catText}`,
 			);
 		});
 	}
+	if (data.browser.longTasks.count > 0 || data.browser.memory.supported) {
+		lines.push("  ─────────────────────────────────────────────");
+		lines.push(
+			`  browser: long tasks ${data.browser.longTasks.count} (p95 ${formatMs(data.browser.longTasks.p95)}ms, max ${formatMs(data.browser.longTasks.max)}ms) | heap ${data.browser.memory.supported ? `${(data.browser.memory.lastUsedBytes / 1048576).toFixed(1)} MiB (${data.browser.memory.deltaBytes >= 0 ? "+" : ""}${(data.browser.memory.deltaBytes / 1048576).toFixed(1)} MiB)` : "unavailable"}`,
+		);
+	}
+	if (data.analysis.recommendations.length > 0) {
+		lines.push("  ─────────────────────────────────────────────");
+		lines.push(
+			`  diagnosis: frame=${data.analysis.topFrameStage || "n/a"} | phase=${data.analysis.topPhase || "n/a"} | nested=${data.analysis.topDetail || "n/a"}`,
+		);
+		for (const recommendation of data.analysis.recommendations) {
+			lines.push(`    → ${recommendation}`);
+		}
+	}
 	return lines.join("\n");
+}
+
+function formatPerfSuite(summary) {
+	if (!summary?.cases?.length) return "No completed performance-suite runs.";
+	const lines = [
+		`=== PERF SUITE ${summary.id} · ${summary.aggregate.runCount} runs ===`,
+	];
+	for (const entry of summary.cases) {
+		lines.push(
+			`${entry.id}: ${entry.medianAvgFps.toFixed(1)} FPS | frame p95 ${formatMs(entry.medianP95FrameMs)}ms p99 ${formatMs(entry.medianP99FrameMs)}ms worst ${formatMs(entry.worstFrameMs)}ms | tick ${formatMs(entry.medianTickMs)}ms | unit loop ${formatMs(entry.medianUnitLoopMs)}ms | operational AI ${formatMs(entry.medianOperationalAiMs)}ms`,
+		);
+	}
+	return lines.join("\n");
+}
+
+function formatPerfComparison(comparison) {
+	if (!comparison?.ok) return "No matching performance cases to compare.";
+	const lines = [
+		`=== PERF COMPARISON: ${comparison.verdict} (threshold ${comparison.thresholdPercent}%) ===`,
+	];
+	for (const entry of comparison.cases) {
+		lines.push(`  ${entry.id}${entry.compatible ? "" : " · INCOMPARABLE"}`);
+		if (!entry.compatible) {
+			for (const mismatch of entry.configMismatches) {
+				lines.push(
+					`    config ${mismatch.key}: baseline=${mismatch.baseline} current=${mismatch.current}`,
+				);
+			}
+			continue;
+		}
+		for (const [key, metric] of Object.entries(entry.metrics)) {
+			if (metric.changePercent === null) continue;
+			lines.push(
+				`    ${key}: ${metric.changePercent >= 0 ? "+" : ""}${metric.changePercent.toFixed(1)}% · ${metric.verdict}`,
+			);
+		}
+	}
+	return lines.join("\n");
+}
+
+async function runPerfSuite(options = {}) {
+	const repetitions = Math.max(1, Math.floor(Number(options.repetitions) || 3));
+	const requestedCases = options.cases || [
+		{ id: "100v100", maxUnitsPerSide: 100 },
+		{ id: "250v250", maxUnitsPerSide: 250 },
+		{ id: "500v500", maxUnitsPerSide: 500 },
+	];
+	const cases = normalizePerfSuiteCases(requestedCases, {
+		maxUnitsPerSide: options.maxUnitsPerSide || 250,
+		durationMs: options.durationMs || 15_000,
+		warmupMs: options.warmupMs ?? 3000,
+		seed: options.seed ?? 0x4d575031,
+		perfMode: options.perfMode || "detailed",
+		speedIndex: options.speedIndex ?? SPEED_STEPS.length - 1,
+		viewMode: options.viewMode || "POLITICAL",
+		traceMarks: options.traceMarks === true,
+	});
+	const runs = [];
+	for (const suiteCase of cases) {
+		for (let repetition = 1; repetition <= repetitions; repetition++) {
+			console.info(
+				`[MW PERF] ${suiteCase.id} · run ${repetition}/${repetitions} · warm-up ${(suiteCase.warmupMs / 1000).toFixed(1)}s · measure ${(suiteCase.durationMs / 1000).toFixed(1)}s`,
+			);
+			const report = await startBenchmark({
+				...suiteCase,
+				caseId: suiteCase.id,
+			});
+			runs.push({
+				caseId: suiteCase.id,
+				repetition,
+				config: suiteCase,
+				report,
+			});
+		}
+	}
+	_lastPerfSuiteRuns = runs;
+	_lastPerfSuite = summarizePerfSuiteRuns(runs, {
+		id: options.id,
+		build: document.title,
+		environment: getPerfEnvironmentSnapshot(),
+		repetitions,
+	});
+	console.info(formatPerfSuite(_lastPerfSuite));
+	return _lastPerfSuite;
+}
+
+function loadPerfBaseline(name = "default") {
+	try {
+		const raw = localStorage.getItem(perfBaselineStorageKey(name));
+		return raw ? JSON.parse(raw) : null;
+	} catch (_error) {
+		return null;
+	}
 }
 
 // ── Perf Report: type window.perfReport() in console ──
@@ -23231,6 +23754,9 @@ window.perfEnable = (mode = "basic") => {
 	if (!window.__perf) window.__perf = createPerfState(normalizedMode);
 	window.__perf._mode = normalizedMode;
 	window.__perf._enabled = true;
+	window.__perf._trackingPaused = false;
+	window.__perf._measurementStart = performance.now();
+	ensurePerfLongTaskObserver();
 	return `perf tracking enabled (${normalizedMode}) — let the sim run, then call window.perfReport()`;
 };
 window.perfDisable = () => {
@@ -23248,6 +23774,7 @@ window.perfReset = (mode = window.__perf?._mode || "off") => {
 	_perfFrameTimeSum = 0;
 	_perfFrameCount = 0;
 	_perfLastTime = 0;
+	_perfPendingFrameEntry = null;
 	return `perf counters reset (${normalizedMode})`;
 };
 window.perfReportJson = () => {
@@ -23272,10 +23799,109 @@ window.perfReport = () => {
 	}
 	return formatPerfReport(data);
 };
+window.perfTraceEnable = (mode = "detailed") => {
+	if (!window.__perf || window.__perf._mode === "off") window.perfReset(mode);
+	performance.clearMeasures();
+	_perfTraceMeasureCount = 0;
+	window.__perf._traceMarksEnabled = true;
+	return "DevTools trace markers enabled. Record a Performance trace, then run the simulation.";
+};
+window.perfTraceDisable = () => {
+	if (window.__perf) window.__perf._traceMarksEnabled = false;
+	return "DevTools trace markers disabled.";
+};
+window.perfTraceClear = () => {
+	performance.clearMeasures();
+	_perfTraceMeasureCount = 0;
+	return "Modern Wars trace markers cleared.";
+};
+window.perfRunQuick = (options = {}) =>
+	runPerfSuite({
+		...options,
+		id: options.id || "quick",
+		repetitions: options.repetitions || 1,
+		durationMs: options.durationMs || 10_000,
+		warmupMs: options.warmupMs ?? 2000,
+		perfMode: options.perfMode || "detailed",
+		cases: options.cases || [
+			{
+				id:
+					options.caseId ||
+					`${options.maxUnitsPerSide || 250}v${options.maxUnitsPerSide || 250}`,
+				maxUnitsPerSide: options.maxUnitsPerSide || 250,
+			},
+		],
+	});
+window.perfRunSuite = runPerfSuite;
+window.perfSuiteReport = () => formatPerfSuite(_lastPerfSuite);
+window.perfSuiteJson = () => ({
+	summary: _lastPerfSuite,
+	runs: _lastPerfSuiteRuns,
+});
+window.perfSaveBaseline = (name = "default", suite = _lastPerfSuite) => {
+	if (!suite?.cases?.length) {
+		throw new Error(
+			"Run perfRunQuick() or perfRunSuite() before saving a baseline.",
+		);
+	}
+	localStorage.setItem(perfBaselineStorageKey(name), JSON.stringify(suite));
+	return `Saved performance baseline '${name}' (${suite.aggregate.runCount} runs).`;
+};
+window.perfLoadBaseline = loadPerfBaseline;
+window.perfCompareBaseline = (
+	name = "default",
+	suite = _lastPerfSuite,
+	thresholdPercent = 5,
+) => {
+	const baseline = loadPerfBaseline(name);
+	if (!baseline)
+		throw new Error(`Performance baseline '${name}' was not found.`);
+	if (!suite) throw new Error("Run a performance suite before comparing it.");
+	const comparison = comparePerfSuites(suite, baseline, thresholdPercent);
+	console.info(formatPerfComparison(comparison));
+	return comparison;
+};
+window.perfClearBaseline = (name = "default") =>
+	localStorage.removeItem(perfBaselineStorageKey(name));
 window.aiDebugReport = (sideIdx = null) => {
 	if (sideIdx == null) return _aiDebugPlans;
 	return _aiDebugPlans[sideIdx] || null;
 };
+
+function finalizePendingPerfFrame(frameDurationMs) {
+	const entry = _perfPendingFrameEntry;
+	if (!entry) return;
+	entry.ms = frameDurationMs;
+	entry.browserWaitMs = Math.max(0, frameDurationMs - entry.mainWorkMs);
+	if (entry.benchmark) _perfSamples.push(frameDurationMs);
+	recordPerfFrame(entry);
+	_perfPendingFrameEntry = null;
+}
+
+function queuePerfFrame(entry, frameStartedAt) {
+	if (!entry) return;
+	entry.mainWorkMs = performance.now() - frameStartedAt;
+	entry.otherMainMs = Math.max(
+		0,
+		entry.mainWorkMs - entry.simulationMs - entry.hudMs - entry.renderMs,
+	);
+	entry.tickEnd = window.__perf?.ticks || entry.tickStart - 1;
+	entry.tickCount = Math.max(0, entry.tickEnd - entry.tickStart + 1);
+	recordPerfMeasure("Frame · Main Work", frameStartedAt, entry.mainWorkMs, {
+		frame: entry.frame,
+		rendered: entry.rendered,
+		ticks: entry.tickCount,
+	});
+	recordPerfMeasure(
+		"Frame · Simulation",
+		entry.simulationStart,
+		entry.simulationMs,
+	);
+	recordPerfMeasure("Frame · HUD", entry.hudStart, entry.hudMs);
+	recordPerfMeasure("Frame · Render", entry.renderStart, entry.renderMs);
+	_perfPendingFrameEntry = entry;
+	recordPerfMemorySample();
+}
 
 export function updateLoop(now) {
 	const shouldSimulate =
@@ -23291,19 +23917,34 @@ export function updateLoop(now) {
 	// --- Performance measurement ---
 	const realNow = performance.now();
 	const _frameDt = _perfLastTime > 0 ? realNow - _perfLastTime : 16.67;
+	if (_perfLastTime > 0) finalizePendingPerfFrame(_frameDt);
 	let framePerfEntry = null;
 	const shouldTrackFrame =
-		window.__perf && (window.__perf._mode !== "off" || _isBenchmarking);
+		window.__perf &&
+		!window.__perf._trackingPaused &&
+		(window.__perf._mode !== "off" || _isBenchmarking);
 	if (_perfLastTime > 0) {
 		const dt = _frameDt;
-		if (_isBenchmarking) _perfSamples.push(dt);
 		if (shouldTrackFrame) {
 			framePerfEntry = {
 				frame: simFrameCount,
-				ms: dt,
+				ms: 0,
+				benchmark: _isBenchmarking,
+				mainWorkMs: 0,
+				browserWaitMs: 0,
+				simulationMs: 0,
+				hudMs: 0,
 				renderMs: 0,
+				otherMainMs: 0,
 				simSpeed,
 				units: units.length,
+				taskForces: Array.from(_aiTaskForcesBySide.values()).reduce(
+					(sum, taskForces) => sum + taskForces.length,
+					0,
+				),
+				tickStart: (window.__perf?.ticks || 0) + 1,
+				tickEnd: window.__perf?.ticks || 0,
+				tickCount: 0,
 				rendered: false,
 				skippedRender: false,
 				requestedSubTicks: 0,
@@ -23339,10 +23980,14 @@ export function updateLoop(now) {
 		isPaused = true;
 		if (perfOverlay) perfOverlay.style.display = "none";
 		showBenchmarkResults();
+		animationFrameId = requestAnimationFrame(updateLoop);
+		return;
 	}
 	// --- End performance measurement ---
 
 	if (!isPaused) {
+		const simulationStarted = framePerfEntry ? performance.now() : 0;
+		if (framePerfEntry) framePerfEntry.simulationStart = simulationStarted;
 		// Run sub-ticks based on simSpeed (handles both fast-forward and slow-motion)
 		frameAccumulator += simSpeed;
 		const maxSubTicksThisFrame = simSpeed >= 3 ? 2 : Infinity;
@@ -23389,6 +24034,9 @@ export function updateLoop(now) {
 		if (typeof now === "number") {
 			tickGameTime(Math.min(_frameDt, 50));
 		}
+		if (framePerfEntry) {
+			framePerfEntry.simulationMs = performance.now() - simulationStarted;
+		}
 	}
 
 	// Advance simulation frame counter once per visual loop
@@ -23410,7 +24058,7 @@ export function updateLoop(now) {
 		}
 		if (framePerfEntry) {
 			framePerfEntry.skippedRender = true;
-			recordPerfFrame(framePerfEntry);
+			queuePerfFrame(framePerfEntry, realNow);
 		}
 		animationFrameId = requestAnimationFrame(updateLoop);
 		return;
@@ -23421,6 +24069,8 @@ export function updateLoop(now) {
 
 	const sideUnitCounts = _cachedSideUnitCounts;
 	const sideSoldierEsts = _cachedSideSoldierEsts;
+	const hudStarted = framePerfEntry ? performance.now() : 0;
+	if (framePerfEntry) framePerfEntry.hudStart = hudStarted;
 
 	for (let si = 0; si < sides.length; si++) {
 		const el = _cachedSoldierEls[si];
@@ -23570,8 +24220,10 @@ export function updateLoop(now) {
 			}
 		}
 	}
+	if (framePerfEntry) framePerfEntry.hudMs = performance.now() - hudStarted;
 
 	const renderStart = framePerfEntry ? performance.now() : 0;
+	if (framePerfEntry) framePerfEntry.renderStart = renderStart;
 	if (viewMode === "FLAG") {
 		// In flag view, force the canvas layer to fully update each frame so units and borders
 		// keep animating even when the camera is stationary.
@@ -23583,12 +24235,13 @@ export function updateLoop(now) {
 	if (framePerfEntry) {
 		framePerfEntry.renderMs = performance.now() - renderStart;
 		framePerfEntry.rendered = true;
-		recordPerfFrame(framePerfEntry);
+		queuePerfFrame(framePerfEntry, realNow);
 	}
 
 	// Show/hide performance overlay only during benchmark runs
 	if (perfOverlay) {
-		perfOverlay.style.display = _isBenchmarking ? "block" : "none";
+		perfOverlay.style.display =
+			_isBenchmarking || _isBenchmarkWarmingUp ? "block" : "none";
 	}
 
 	animationFrameId = requestAnimationFrame(updateLoop);
@@ -26980,7 +27633,10 @@ if (benchmarkBtn) {
 	benchmarkBtn.addEventListener("click", () => {
 		mainMenu.style.display = "none";
 		settingsOverlay.style.display = "none";
-		startBenchmark();
+		startBenchmark().catch((error) => {
+			console.error("[MW PERF] Benchmark failed:", error);
+			alert(`Benchmark failed: ${error.message}`);
+		});
 	});
 }
 
