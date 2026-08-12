@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://esm.sh 'sha256-UbZTXngprJmMtanNXRwZ5Pi9M0w7gaPwpxlWfxaufYA='; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.websim.ai https://*.websim.com https://*.arcgisonline.com https://*.google.com wss:; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self';">
-    <title>MW-V0.27.3</title>
+    <title>MW-V0.27.4</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous" />
     <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
@@ -589,6 +589,14 @@
                     </label>
                 </div>
 
+				<label
+					class="experiment-check experiment-basic-rule"
+					title="Disable peace deals. The war ends only when one side is defeated."
+				>
+					<input type="checkbox" id="no-peace-checkbox">
+					<span data-i18n="FIGHT_TO_DEATH">Fight to the Death</span>
+				</label>
+
                 <div id="estimated-force-balance" class="force-balance-card" role="status" aria-live="polite">
                     <span data-i18n="EXPERIMENT_FORCE_BALANCE">Estimated Force Balance</span>
                     <strong>Select countries to compare the sides.</strong>
@@ -728,13 +736,6 @@
                         <details id="advanced-rules-capture" class="experiment-detail-group">
                             <summary data-i18n="EXPERIMENT_RULES_CAPTURE">Rules &amp; Capture</summary>
                             <div class="experiment-detail-content experiment-check-grid">
-                                <label
-                                    class="experiment-check experiment-check--wide"
-                                    title="The AI never offers peace; war ends only when one side is defeated."
-                                >
-                                    <input type="checkbox" id="no-peace-checkbox">
-                                    <span data-i18n="FIGHT_TO_DEATH">Fight to the Death (No Peace)</span>
-                                </label>
                                 <label class="experiment-check experiment-check--wide" title="Disable long-range missile and bomb attacks.">
                                     <input type="checkbox" id="disable-bombs-checkbox">
                                     <span data-i18n="DISABLE_MISSILES">Disable Long-Range Missiles</span>

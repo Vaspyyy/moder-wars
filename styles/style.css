@@ -3719,6 +3719,19 @@ body.commander-active #force-peace-btn {
 	accent-color: var(--hud-color-active-border);
 }
 
+.experiment-basic-rule {
+	margin-top: 9px;
+	padding: 9px 10px;
+	color: #f4d7d3;
+	background: rgba(192, 57, 43, 0.1);
+	border: 1px solid rgba(231, 76, 60, 0.35);
+	border-radius: var(--hud-radius-sm);
+}
+
+.experiment-basic-rule input {
+	accent-color: #e74c3c;
+}
+
 .experiment-check--capture {
 	color: #f1c40f;
 }
