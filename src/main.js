@@ -9912,8 +9912,13 @@ function updateExperimentWarDesk(force = false) {
 		summary:
 			"Advantage combines territory, cities and capitals, personnel, economy, equipment, and the current war phase.",
 		metrics: metrics.map((metric) => ({
+			detail: `${metric.territoryPercent.toFixed(1)}% territory · ${metric.cities} cities · ${metric.phase}`,
+			key: "manpower",
 			label: metric.name,
-			value: `${metric.territoryPercent.toFixed(1)}% territory · ${Math.round(metric.personnel).toLocaleString()} personnel · ${metric.cities} cities · ${metric.phase}`,
+			primaryLabel: "Manpower",
+			secondaryKey: "casualties",
+			secondaryLabel: "Casualties",
+			secondaryValue: Math.round(metric.casualties),
 			tone:
 				metric.phase === "COLLAPSING"
 					? "danger"
@@ -9922,6 +9927,7 @@ function updateExperimentWarDesk(force = false) {
 						: metric.phase === "ADVANCING"
 							? "positive"
 							: "neutral",
+			value: Math.round(metric.personnel),
 		})),
 		economy: warDeskEconomyRows(),
 		events: activeExperimentRecorder.events.slice(-15).reverse(),

@@ -4032,6 +4032,31 @@ body.commander-active #reopen-report-btn {
 	text-align: right;
 }
 
+.war-desk-metric-values {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(50px, 1fr));
+	gap: 8px;
+	min-width: 128px;
+}
+
+.war-desk-metric-value {
+	display: grid;
+	gap: 1px;
+	text-align: right;
+}
+
+.war-desk-metric-value > small {
+	color: var(--hud-color-dim);
+	font: 700 7px var(--hud-font-mono);
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+
+.war-desk-metric-value > strong {
+	color: var(--hud-color-text-soft);
+	font: 800 10px var(--hud-font-mono);
+}
+
 .war-desk-metric > small,
 .war-desk-list-row > small {
 	grid-column: 1 / -1;

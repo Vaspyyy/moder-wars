@@ -240,8 +240,13 @@ function metricEntries(value, limit = 8) {
 			if (entry && typeof entry === "object") {
 				return {
 					delta: entry.delta,
+					detail: asText(entry.detail || entry.description),
 					key: asText(entry.key || entry.id, `metric-${index}`),
 					label: asText(entry.label || entry.name, `Metric ${index + 1}`),
+					primaryLabel: asText(entry.primaryLabel),
+					secondaryKey: asText(entry.secondaryKey),
+					secondaryLabel: asText(entry.secondaryLabel),
+					secondaryValue: entry.secondaryValue,
 					tone: asText(entry.tone),
 					value: entry.value ?? entry.amount ?? entry.total ?? "—",
 				};
@@ -303,15 +308,56 @@ function renderMetricCards(documentRef, target, metrics, emptyMessage) {
 	for (const entry of entries) {
 		const card = createElement(documentRef, "div", "war-desk-metric");
 		setTone(card, entry.tone);
-		card.append(
-			createElement(documentRef, "span", "", entry.label),
-			createElement(
+		card.append(createElement(documentRef, "span", "", entry.label));
+		if (entry.secondaryLabel) {
+			card.classList.add("war-desk-metric--paired");
+			const values = createElement(
 				documentRef,
-				"strong",
-				"",
-				formatExperimentMetric(entry.value, entry.key),
-			),
-		);
+				"div",
+				"war-desk-metric-values",
+			);
+			for (const metric of [
+				{
+					key: entry.key,
+					label: entry.primaryLabel || entry.label,
+					value: entry.value,
+				},
+				{
+					key: entry.secondaryKey,
+					label: entry.secondaryLabel,
+					value: entry.secondaryValue,
+				},
+			]) {
+				const value = createElement(
+					documentRef,
+					"span",
+					"war-desk-metric-value",
+				);
+				value.append(
+					createElement(documentRef, "small", "", metric.label),
+					createElement(
+						documentRef,
+						"strong",
+						"",
+						formatExperimentMetric(metric.value, metric.key),
+					),
+				);
+				values.append(value);
+			}
+			card.append(values);
+		} else {
+			card.append(
+				createElement(
+					documentRef,
+					"strong",
+					"",
+					formatExperimentMetric(entry.value, entry.key),
+				),
+			);
+		}
+		if (entry.detail) {
+			card.append(createElement(documentRef, "small", "", entry.detail));
+		}
 		if (entry.delta !== null && entry.delta !== undefined) {
 			const delta = finiteNumber(entry.delta);
 			const formatted = formatExperimentMetric(entry.delta, entry.key);
