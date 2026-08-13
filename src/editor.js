@@ -65,6 +65,7 @@ import {
 	mainMenu,
 	mapSettingsMissilesCheckbox,
 	mapUi,
+	markTerritoryCellsChanged,
 	missilesEnabled,
 	mountainsEnabled,
 	noNationsModal,
@@ -741,6 +742,7 @@ function applyPaintAt(latlng) {
 	);
 
 	let mapChanged = false;
+	const changedCells = [];
 	for (let y = startLat; y <= endLat; y++) {
 		const rowOffset = y * gridWidth;
 		for (let x = startLng; x <= endLng; x++) {
@@ -769,6 +771,7 @@ function applyPaintAt(latlng) {
 						worldControlMap[idx] = 0;
 						provinceMap[idx] = getProvinceId(x, y, 0);
 						mapChanged = true;
+						changedCells.push(idx);
 					}
 				} else if (isTerrain) {
 					const type = terrainTypeSelect.value;
@@ -782,6 +785,7 @@ function applyPaintAt(latlng) {
 							biomeMask[idx] = 0;
 							terrainMask[idx] = 0;
 							mapChanged = true;
+							changedCells.push(idx);
 						}
 					} else if (type === "DESERT") {
 						// Only works on existing land; does not create new land from ocean
@@ -789,12 +793,14 @@ function applyPaintAt(latlng) {
 							biomeMask[idx] = 1;
 							terrainMask[idx] = 0;
 							mapChanged = true;
+							changedCells.push(idx);
 						}
 					} else if (type === "MOUNTAIN") {
 						if (landMask[idx] > 0 && terrainMask[idx] < 0.7) {
 							terrainMask[idx] = 0.75;
 							biomeMask[idx] = 0;
 							mapChanged = true;
+							changedCells.push(idx);
 						}
 					} else {
 						// OCEAN
@@ -803,6 +809,7 @@ function applyPaintAt(latlng) {
 							worldControlMap[idx] = 0;
 							biomeMask[idx] = 0;
 							mapChanged = true;
+							changedCells.push(idx);
 						}
 					}
 				} else {
@@ -821,11 +828,13 @@ function applyPaintAt(latlng) {
 							meta.bounds.maxY = Math.max(meta.bounds.maxY, y);
 						}
 						mapChanged = true;
+						changedCells.push(idx);
 					}
 				}
 			}
 		}
 	}
+	if (changedCells.length > 0) markTerritoryCellsChanged(changedCells);
 	return mapChanged;
 }
 

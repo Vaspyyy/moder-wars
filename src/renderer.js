@@ -8,9 +8,6 @@ import {
 import {
 	_aiDebugPlans,
 	_allianceCacheDirty,
-	_cachedSideTerritoryPcts,
-	_cachedTerritoryCtrlEls,
-	_cachedTerritorySegEls,
 	_coastalDefensePlan,
 	_navalPlan,
 	_navalSupplyPlan,
@@ -364,6 +361,33 @@ const _allianceCache = {
 	flagMetaByRoot: {},
 };
 
+const RENDER_LAYERS = Object.freeze({
+	NONE: 0,
+	STATIC: 1 << 0,
+	DYNAMIC: 1 << 1,
+	LABELS: 1 << 2,
+	OVERLAYS: 1 << 3,
+	ALL: (1 << 4) - 1,
+});
+
+const CONTROL_DIRTY_TILE_SIZE = 32;
+const CONTROL_DIRTY_TILE_LIMIT = 4096;
+
+function createRenderSurface() {
+	const canvas = document.createElement("canvas");
+	canvas.setAttribute("aria-hidden", "true");
+	return canvas;
+}
+
+function getBoundsCacheKey(bounds) {
+	return [
+		bounds.getWest(),
+		bounds.getSouth(),
+		bounds.getEast(),
+		bounds.getNorth(),
+	].join(":");
+}
+
 const ControlMapLayer = L.Layer.extend({
 	onAdd: function (map) {
 		// Create a canvas that is viewport-locked rather than layer-locked to ensure
@@ -374,9 +398,27 @@ const ControlMapLayer = L.Layer.extend({
 		this._container.style.left = "0";
 		this._container.style.pointerEvents = "none";
 		this._container.style.zIndex = "400";
+		this._staticSurface = createRenderSurface();
+		this._labelsSurface = createRenderSurface();
+		this._overlaysSurface = createRenderSurface();
 
 		this._lastZoom = map.getZoom();
 		this._renderRequested = false;
+		this._renderRaf = 0;
+		this._invalidLayers = RENDER_LAYERS.ALL;
+		this._staticCacheKey = "";
+		this._cachedRegions = [];
+		this._gridProjectionCache = null;
+		this._materialCache = null;
+		this._dirtyControlTiles = new Set();
+		this._allControlTilesDirty = true;
+		this._controlChangeTrackingEnabled = false;
+		this._lastStaticRenderFrame = Number.NEGATIVE_INFINITY;
+		this._lastLabelsRenderFrame = Number.NEGATIVE_INFINITY;
+		this._lastOverlaysRenderFrame = Number.NEGATIVE_INFINITY;
+		this._labelsCacheKey = "";
+		this._overlaysCacheKey = "";
+		this._regionsRevision = 0;
 		this._visitId = 0;
 		this._zooming = false;
 		this._zoomStartZoom = map.getZoom();
@@ -387,13 +429,14 @@ const ControlMapLayer = L.Layer.extend({
 		this._update();
 
 		this._onMove = () => {
-			if (!this._renderRequested) {
-				this._renderRequested = true;
-				requestAnimationFrame(() => {
-					this._update();
-					this._renderRequested = false;
-				});
-			}
+			const nextBounds = map.getBounds();
+			if (this._lastBounds?.equals(nextBounds)) return;
+			this._lastBounds = nextBounds;
+			this.requestRender(RENDER_LAYERS.ALL);
+		};
+		this._onTileLoad = () => {
+			if (!cinematicMode && !this._isCapturing) return;
+			this.requestRender(RENDER_LAYERS.STATIC);
 		};
 
 		this._onZoomStart = () => {
@@ -419,12 +462,13 @@ const ControlMapLayer = L.Layer.extend({
 			// Remove CSS transform and re-render at final zoom
 			this._container.style.transform = "";
 			this._container.style.transformOrigin = "";
-			this._update();
+			this._lastBounds = map.getBounds();
+			this.requestRender(RENDER_LAYERS.ALL);
 			// Satellite stabilization: trigger a delayed cleanup render to ensure
 			// grid projection aligns with final post-zoom viewport coordinates.
 			setTimeout(() => {
 				this._forceRender = true;
-				this._onMove();
+				this.requestRender(RENDER_LAYERS.ALL);
 			}, 100);
 		};
 
@@ -433,8 +477,14 @@ const ControlMapLayer = L.Layer.extend({
 		map.on("zoomstart", this._onZoomStart, this);
 		map.on("zoomanim", this._onZoomAnim, this);
 		map.on("zoomend", this._onZoomEnd, this);
+		map.on("tileload", this._onTileLoad, this);
+		this._tilePane = map.getPane("tilePane");
+		this._tilePane?.addEventListener("load", this._onTileLoad, true);
 	},
 	onRemove: function (map) {
+		if (this._renderRaf) cancelAnimationFrame(this._renderRaf);
+		this._renderRaf = 0;
+		this._renderRequested = false;
 		if (this._container?.parentNode) {
 			this._container.parentNode.removeChild(this._container);
 		}
@@ -443,6 +493,153 @@ const ControlMapLayer = L.Layer.extend({
 		map.off("zoomstart", this._onZoomStart, this);
 		map.off("zoomanim", this._onZoomAnim, this);
 		map.off("zoomend", this._onZoomEnd, this);
+		map.off("tileload", this._onTileLoad, this);
+		this._tilePane?.removeEventListener("load", this._onTileLoad, true);
+		this._tilePane = null;
+	},
+
+	/**
+	 * Marks renderer-owned caches stale without forcing an immediate paint.
+	 * Callers can combine RENDER_LAYERS masks.
+	 */
+	invalidate: function (layerMask = RENDER_LAYERS.ALL) {
+		this._invalidLayers = (this._invalidLayers || 0) | layerMask;
+		if (layerMask & RENDER_LAYERS.STATIC) this._staticCacheKey = "";
+		if (layerMask & RENDER_LAYERS.LABELS) this._labelsCacheKey = "";
+		if (layerMask & RENDER_LAYERS.OVERLAYS) this._overlaysCacheKey = "";
+	},
+
+	_simulationOwnsRendering: () =>
+		!isPaused &&
+		(gameState === "SIMULATING" ||
+			(godModeActive && preGodModeState === "SIMULATING")),
+
+	/**
+	 * Coalesces multiple paint requests into one animation-frame callback.
+	 * `render()` remains synchronous for capture/export compatibility.
+	 */
+	requestRender: function (layerMask = RENDER_LAYERS.DYNAMIC) {
+		this.invalidate(layerMask);
+		// The simulation loop performs spike-aware render admission. Renderer-owned
+		// callbacks during an active war can otherwise bypass that admission or paint
+		// the same frame twice. Paused/non-war views still receive immediate updates.
+		if (this._simulationOwnsRendering()) return;
+		if (this._renderRaf) return;
+		this._renderRequested = true;
+		this._renderRaf = requestAnimationFrame(() => {
+			this._renderRaf = 0;
+			this._renderRequested = false;
+			if (this._zooming) return;
+			this.render();
+		});
+	},
+
+	/**
+	 * Enables cache reuse while a war is running. The owner must then report every
+	 * controller/occupier mutation through notifyControlCellsChanged(), and call
+	 * invalidate(STATIC) for bulk world replacement or political-style changes.
+	 */
+	setControlChangeTrackingEnabled: function (enabled = true) {
+		this._controlChangeTrackingEnabled = Boolean(enabled);
+		this._allControlTilesDirty = true;
+		this.invalidate(RENDER_LAYERS.STATIC);
+	},
+
+	/**
+	 * Records dirty 32x32 control-grid tiles. Offscreen changes remain queued and
+	 * invalidate the political surface only when that portion of the map is shown.
+	 * Accepts one cell index or any iterable of cell indices.
+	 */
+	notifyControlCellsChanged: function (cellIndices) {
+		if (cellIndices === null || cellIndices === undefined) return;
+		this._controlChangeTrackingEnabled = true;
+		const iterable =
+			typeof cellIndices === "number" ? [cellIndices] : cellIndices;
+		if (!iterable?.[Symbol.iterator]) {
+			this._allControlTilesDirty = true;
+			this.requestRender(RENDER_LAYERS.STATIC | RENDER_LAYERS.DYNAMIC);
+			return;
+		}
+		for (const rawIndex of iterable) {
+			const cellIndex = Number(rawIndex);
+			if (
+				!Number.isInteger(cellIndex) ||
+				cellIndex < 0 ||
+				cellIndex >= gridWidth * gridHeight
+			)
+				continue;
+			const x = cellIndex % gridWidth;
+			const y = Math.floor(cellIndex / gridWidth);
+			const tileX = Math.floor(x / CONTROL_DIRTY_TILE_SIZE);
+			const tileY = Math.floor(y / CONTROL_DIRTY_TILE_SIZE);
+			const tileColumns = Math.ceil(gridWidth / CONTROL_DIRTY_TILE_SIZE);
+			this._dirtyControlTiles.add(tileY * tileColumns + tileX);
+			if (this._dirtyControlTiles.size > CONTROL_DIRTY_TILE_LIMIT) {
+				this._dirtyControlTiles.clear();
+				this._allControlTilesDirty = true;
+				break;
+			}
+		}
+		// The simulation loop owns wartime paint admission. Scheduling an additional
+		// rAF here would bypass spike-aware render deferral and can paint twice in one
+		// visual frame. The dirty tile remains queued until the admitted render.
+		this.invalidate(RENDER_LAYERS.DYNAMIC);
+		this.requestRender(RENDER_LAYERS.DYNAMIC);
+	},
+
+	_getVisibleDirtyControlTileKeys: function (xMin, xMax, yMin, yMax) {
+		const result = new Set();
+		if (!this._dirtyControlTiles?.size) return result;
+		const tileColumns = Math.ceil(gridWidth / CONTROL_DIRTY_TILE_SIZE);
+		const tileRows = Math.ceil(gridHeight / CONTROL_DIRTY_TILE_SIZE);
+		const visibleTileXMin = Math.floor(xMin / CONTROL_DIRTY_TILE_SIZE);
+		const visibleTileXMax = Math.floor(xMax / CONTROL_DIRTY_TILE_SIZE);
+		const visibleTileYMin = Math.floor(yMin / CONTROL_DIRTY_TILE_SIZE);
+		const visibleTileYMax = Math.floor(yMax / CONTROL_DIRTY_TILE_SIZE);
+
+		for (const tileKey of this._dirtyControlTiles) {
+			const tileX = tileKey % tileColumns;
+			const tileY = Math.floor(tileKey / tileColumns);
+			// Repaint one neighboring tile around a mutation so coastlines,
+			// frontlines and greedy meshes crossing a tile edge remain seamless.
+			for (let offsetY = -1; offsetY <= 1; offsetY++) {
+				const paintTileY = tileY + offsetY;
+				if (
+					paintTileY < 0 ||
+					paintTileY >= tileRows ||
+					paintTileY < visibleTileYMin ||
+					paintTileY > visibleTileYMax
+				)
+					continue;
+				for (let offsetX = -1; offsetX <= 1; offsetX++) {
+					const paintTileX = tileX + offsetX;
+					if (
+						paintTileX < 0 ||
+						paintTileX >= tileColumns ||
+						paintTileX < visibleTileXMin ||
+						paintTileX > visibleTileXMax
+					)
+						continue;
+					result.add(paintTileY * tileColumns + paintTileX);
+				}
+			}
+		}
+		return result;
+	},
+
+	_clearVisibleControlTiles: function (xMin, xMax, yMin, yMax) {
+		this._allControlTilesDirty = false;
+		if (!this._dirtyControlTiles?.size) return;
+		const tileXMin = Math.floor(xMin / CONTROL_DIRTY_TILE_SIZE);
+		const tileXMax = Math.floor(xMax / CONTROL_DIRTY_TILE_SIZE);
+		const tileYMin = Math.floor(yMin / CONTROL_DIRTY_TILE_SIZE);
+		const tileYMax = Math.floor(yMax / CONTROL_DIRTY_TILE_SIZE);
+		const tileColumns = Math.ceil(gridWidth / CONTROL_DIRTY_TILE_SIZE);
+		for (let tileY = tileYMin; tileY <= tileYMax; tileY++) {
+			for (let tileX = tileXMin; tileX <= tileXMax; tileX++) {
+				this._dirtyControlTiles.delete(tileY * tileColumns + tileX);
+			}
+		}
 	},
 	_update: function () {
 		// During zoom animation, CSS transform handles the visual zoom.
@@ -459,24 +656,45 @@ const ControlMapLayer = L.Layer.extend({
 			this._container.height = newH;
 			this._container.style.width = `${size.x}px`;
 			this._container.style.height = `${size.y}px`;
+			this._staticSurface.width = newW;
+			this._staticSurface.height = newH;
+			this._labelsSurface.width = newW;
+			this._labelsSurface.height = newH;
+			this._overlaysSurface.width = newW;
+			this._overlaysSurface.height = newH;
+			this._gridProjectionCache = null;
+			this.invalidate(RENDER_LAYERS.ALL);
 		}
 
 		const isSimulating =
 			(gameState === "SIMULATING" ||
 				(godModeActive && preGodModeState === "SIMULATING")) &&
 			!isPaused;
-		const mapMoved = !this._lastBounds?.equals(map.getBounds());
+		const currentBounds = map.getBounds();
+		const mapMoved = !this._lastBounds?.equals(currentBounds);
+		if (mapMoved) this._lastBounds = currentBounds;
+		if (mapMoved) this.invalidate(RENDER_LAYERS.ALL);
+		if (this._forceRender) this.invalidate(RENDER_LAYERS.ALL);
 
 		if (isSimulating || mapMoved || this._forceRender) {
 			this.render();
-			this._lastBounds = map.getBounds();
 			this._forceRender = false;
 		}
 	},
 	render: function () {
 		const _r0 = performance.now();
 		if (!worldControlMap || !landMask) return;
+		if (this._renderRaf) {
+			cancelAnimationFrame(this._renderRaf);
+			this._renderRaf = 0;
+			this._renderRequested = false;
+		}
+		if (this._forceRender) {
+			this.invalidate(RENDER_LAYERS.ALL);
+			this._forceRender = false;
+		}
 		const viewBounds = map.getBounds();
+		this._lastBounds = viewBounds;
 		const bounds = viewBounds;
 		const res = CONFIG.GRID_RES;
 		const currentZoom = map.getZoom();
@@ -509,8 +727,30 @@ const ControlMapLayer = L.Layer.extend({
 		);
 
 		const terrain = terrainMask;
-		const ctx = this._container.getContext("2d", { willReadFrequently: false });
+		const mainCtx = this._container.getContext("2d", {
+			willReadFrequently: false,
+		});
 		const dpr = window.devicePixelRatio || 1;
+		const mapSize = map.getSize();
+		const surfaceWidth = Math.round(mapSize.x * dpr);
+		const surfaceHeight = Math.round(mapSize.y * dpr);
+		if (
+			this._container.width !== surfaceWidth ||
+			this._container.height !== surfaceHeight
+		) {
+			this._container.width = surfaceWidth;
+			this._container.height = surfaceHeight;
+			this._container.style.width = `${mapSize.x}px`;
+			this._container.style.height = `${mapSize.y}px`;
+			this._staticSurface.width = surfaceWidth;
+			this._staticSurface.height = surfaceHeight;
+			this._labelsSurface.width = surfaceWidth;
+			this._labelsSurface.height = surfaceHeight;
+			this._overlaysSurface.width = surfaceWidth;
+			this._overlaysSurface.height = surfaceHeight;
+			this._gridProjectionCache = null;
+			this.invalidate(RENDER_LAYERS.ALL);
+		}
 		const isWar =
 			gameState === "SIMULATING" ||
 			(godModeActive && preGodModeState === "SIMULATING");
@@ -521,56 +761,213 @@ const ControlMapLayer = L.Layer.extend({
 		const isSimplifiedMode = currentImagery === "wargames";
 		// Custom terrain maps always use the Simplified/WarGames base (ocean/neutral land) for visual clarity
 		const useSimplifiedBase = isSimplifiedMode || isCustomTerrain;
+		const isEditing =
+			gameMode === "EDITOR" || gameMode === "EDITOR_TEST" || godModeActive;
+		const viewportKey = `${map.getZoom()}:${getBoundsCacheKey(bounds)}:${this._container.width}x${this._container.height}`;
+		const sideKey = sides
+			.map((side) => side.map((country) => country?.id || 0).join(","))
+			.join("|");
+		const staticCacheKey = [
+			viewportKey,
+			viewMode,
+			currentImagery,
+			useSimplifiedBase ? 1 : 0,
+			mountainsEnabled ? 1 : 0,
+			disableCountryGradient ? 1 : 0,
+			allianceViewEnabled ? 1 : 0,
+			showCountryLabels ? 1 : 0,
+			isWar ? 1 : 0,
+			gameMode,
+			cinematicMode ? 1 : 0,
+			this._isCapturing ? 1 : 0,
+			refAboveTerrain ? 1 : 0,
+			referenceImageUrl || "",
+			refOpacity,
+			simSpeed,
+			countryMetadata.length,
+			sideKey,
+			sideColors.join("|"),
+		].join(";");
+		const canReuseStaticSurface =
+			this._controlChangeTrackingEnabled && isWar && !isEditing;
+		const dirtyControlPaintTiles = this._allControlTilesDirty
+			? new Set()
+			: this._getVisibleDirtyControlTileKeys(xMin, xMax, yMin, yMax);
+		const hasVisibleControlChanges =
+			this._allControlTilesDirty || dirtyControlPaintTiles.size > 0;
+		const politicalBatchFrames = isPaused
+			? 1
+			: simSpeed >= 5
+				? 10
+				: simSpeed >= 3
+					? 8
+					: simSpeed >= 2
+						? 4
+						: 2;
+		const politicalRefreshDue =
+			isPaused ||
+			simFrameCount - this._lastStaticRenderFrame >= politicalBatchFrames;
+		const fullStaticRefresh =
+			!canReuseStaticSurface ||
+			(this._invalidLayers & RENDER_LAYERS.STATIC) !== 0 ||
+			this._staticCacheKey !== staticCacheKey ||
+			_allianceCacheDirty ||
+			this._allControlTilesDirty ||
+			(viewMode === "FLAG" && hasVisibleControlChanges && politicalRefreshDue);
+		const partialControlRedraw =
+			!fullStaticRefresh && hasVisibleControlChanges && politicalRefreshDue;
+		const renderStatic = fullStaticRefresh || partialControlRedraw;
+		const controlTileColumns = Math.ceil(gridWidth / CONTROL_DIRTY_TILE_SIZE);
+		const isStaticCellInPaintTiles = (x, y) => {
+			if (!partialControlRedraw) return true;
+			const tileX = Math.floor(x / CONTROL_DIRTY_TILE_SIZE);
+			const tileY = Math.floor(y / CONTROL_DIRTY_TILE_SIZE);
+			return dirtyControlPaintTiles.has(tileY * controlTileColumns + tileX);
+		};
+		const staticPaintGridBounds = {
+			xMin,
+			xMax,
+			yMin,
+			yMax,
+		};
+		if (partialControlRedraw) {
+			staticPaintGridBounds.xMin = gridWidth;
+			staticPaintGridBounds.xMax = 0;
+			staticPaintGridBounds.yMin = gridHeight;
+			staticPaintGridBounds.yMax = 0;
+			for (const tileKey of dirtyControlPaintTiles) {
+				const tileX = tileKey % controlTileColumns;
+				const tileY = Math.floor(tileKey / controlTileColumns);
+				staticPaintGridBounds.xMin = Math.min(
+					staticPaintGridBounds.xMin,
+					Math.max(xMin, tileX * CONTROL_DIRTY_TILE_SIZE - 1),
+				);
+				staticPaintGridBounds.xMax = Math.max(
+					staticPaintGridBounds.xMax,
+					Math.min(xMax, (tileX + 1) * CONTROL_DIRTY_TILE_SIZE + 1),
+				);
+				staticPaintGridBounds.yMin = Math.min(
+					staticPaintGridBounds.yMin,
+					Math.max(yMin, tileY * CONTROL_DIRTY_TILE_SIZE - 1),
+				);
+				staticPaintGridBounds.yMax = Math.max(
+					staticPaintGridBounds.yMax,
+					Math.min(yMax, (tileY + 1) * CONTROL_DIRTY_TILE_SIZE + 1),
+				);
+			}
+		}
+		const staticCtx = this._staticSurface.getContext("2d", {
+			willReadFrequently: false,
+		});
+		let ctx = staticCtx;
 
-		ctx.clearRect(0, 0, this._container.width, this._container.height);
-		ctx.save();
-		ctx.scale(dpr, dpr);
+		if (renderStatic) {
+			if (fullStaticRefresh) {
+				ctx.clearRect(
+					0,
+					0,
+					this._staticSurface.width,
+					this._staticSurface.height,
+				);
+			}
+			ctx.save();
+			ctx.scale(dpr, dpr);
+			if (partialControlRedraw) {
+				ctx.beginPath();
+				for (const tileKey of dirtyControlPaintTiles) {
+					const tileX = tileKey % controlTileColumns;
+					const tileY = Math.floor(tileKey / controlTileColumns);
+					const cellX0 = Math.max(xMin, tileX * CONTROL_DIRTY_TILE_SIZE - 1);
+					const cellX1 = Math.min(
+						xMax + 1,
+						(tileX + 1) * CONTROL_DIRTY_TILE_SIZE + 1,
+					);
+					const cellY0 = Math.max(yMin, tileY * CONTROL_DIRTY_TILE_SIZE - 1);
+					const cellY1 = Math.min(
+						yMax + 1,
+						(tileY + 1) * CONTROL_DIRTY_TILE_SIZE + 1,
+					);
+					const cornerA = project(cellY0 * res - 90, cellX0 * res - 180);
+					const cornerB = project(cellY1 * res - 90, cellX1 * res - 180);
+					const left = Math.min(cornerA.x, cornerB.x) - 2;
+					const top = Math.min(cornerA.y, cornerB.y) - 2;
+					const width = Math.abs(cornerB.x - cornerA.x) + 4;
+					const height = Math.abs(cornerB.y - cornerA.y) + 4;
+					ctx.rect(left, top, width, height);
+				}
+				ctx.clip();
+				ctx.clearRect(0, 0, mapSize.x, mapSize.y);
+			}
 
-		// --- COMPOSITE LEAFLET TILES INTO CANVAS ---
-		// Optimization: Only draw tiles into canvas if we are actively capturing for Hub/Video.
-		// Leaflet already renders these to the screen; re-drawing them on canvas is a huge redundant GPU hit.
-		if (!useSimplifiedBase && (cinematicMode || this._isCapturing)) {
-			const tilePane = map.getPane("tilePane");
-			if (tilePane) {
-				const tiles = tilePane.querySelectorAll("img.leaflet-tile");
-				const mapRect = map.getContainer().getBoundingClientRect();
-				tiles.forEach((tile) => {
-					if (tile.complete && tile.naturalWidth > 0) {
-						const rect = tile.getBoundingClientRect();
-						const x = rect.left - mapRect.left;
-						const y = rect.top - mapRect.top;
+			// --- COMPOSITE LEAFLET TILES INTO CANVAS ---
+			// Optimization: Only draw tiles into canvas if we are actively capturing for Hub/Video.
+			// Leaflet already renders these to the screen; re-drawing them on canvas is a huge redundant GPU hit.
+			if (!useSimplifiedBase && (cinematicMode || this._isCapturing)) {
+				const tilePane = map.getPane("tilePane");
+				if (tilePane) {
+					const tiles = tilePane.querySelectorAll("img.leaflet-tile");
+					const mapRect = map.getContainer().getBoundingClientRect();
+					tiles.forEach((tile) => {
+						if (tile.complete && tile.naturalWidth > 0) {
+							const rect = tile.getBoundingClientRect();
+							const x = rect.left - mapRect.left;
+							const y = rect.top - mapRect.top;
 
-						if (
-							x + rect.width > 0 &&
-							y + rect.height > 0 &&
-							x < mapRect.width &&
-							y < mapRect.height
-						) {
-							const opacity = window.getComputedStyle(tile).opacity;
-							ctx.globalAlpha = parseFloat(opacity) || 1.0;
-							try {
-								ctx.drawImage(tile, x, y, rect.width, rect.height);
-							} catch (_e) {
-								// Silent catch for CORS
+							if (
+								x + rect.width > 0 &&
+								y + rect.height > 0 &&
+								x < mapRect.width &&
+								y < mapRect.height
+							) {
+								const opacity = window.getComputedStyle(tile).opacity;
+								ctx.globalAlpha = parseFloat(opacity) || 1.0;
+								try {
+									ctx.drawImage(tile, x, y, rect.width, rect.height);
+								} catch (_e) {
+									// Silent catch for CORS
+								}
+								ctx.globalAlpha = 1.0;
 							}
-							ctx.globalAlpha = 1.0;
 						}
-					}
-				});
+					});
+				}
 			}
 		}
 
-		// Optimization: Pre-calculate pole map for faster lookups in render loop
-		const metaMaxId = countryMetadata.reduce(
-			(max, m) => (m ? Math.max(max, m.id) : max),
-			0,
-		);
-		const sovereignSideMap = new Int8Array(metaMaxId + 1).fill(-1);
-		sides.forEach((side, idx) => {
-			side.forEach((c) => {
-				if (c.id > 0 && c.id <= metaMaxId) sovereignSideMap[c.id] = idx;
+		// Cache renderer material lookups that otherwise allocate once per frame.
+		let materialCache = this._materialCache;
+		const metadataChanged =
+			isEditing ||
+			materialCache?.metadata !== countryMetadata ||
+			materialCache?.metadataLength !== countryMetadata.length;
+		if (metadataChanged) {
+			const metaMaxId = countryMetadata.reduce(
+				(max, metadata) => (metadata ? Math.max(max, metadata.id || 0) : max),
+				0,
+			);
+			materialCache = {
+				metadata: countryMetadata,
+				metadataLength: countryMetadata.length,
+				metaMaxId,
+				sideKey: "",
+				sovereignSideMap: null,
+			};
+			this._materialCache = materialCache;
+		}
+		const metaMaxId = materialCache.metaMaxId;
+		if (materialCache.sideKey !== sideKey || !materialCache.sovereignSideMap) {
+			const sovereignSideMap = new Int8Array(metaMaxId + 1).fill(-1);
+			sides.forEach((side, sideIndex) => {
+				side.forEach((country) => {
+					if (country.id > 0 && country.id <= metaMaxId) {
+						sovereignSideMap[country.id] = sideIndex;
+					}
+				});
 			});
-		});
+			materialCache.sideKey = sideKey;
+			materialCache.sovereignSideMap = sovereignSideMap;
+		}
+		const sovereignSideMap = materialCache.sovereignSideMap;
 
 		// Alliance mapping: group countries into alliances via mutual allies graph.
 		// Root = smallest id in connected component. Every country gets a key so “non‑aligned” shows too.
@@ -642,61 +1039,63 @@ const ControlMapLayer = L.Layer.extend({
 			allianceFlagMetaByRoot = _allianceCache.flagMetaByRoot;
 		}
 
-		if (useSimplifiedBase) {
-			const size = map.getSize();
-			// Always render the procedural ocean/land gradient; custom satellite imagery is disabled.
-			const centerLng = map.getCenter().lng;
-			const grad = ctx.createLinearGradient(0, 0, 0, size.y);
+		if (renderStatic) {
+			if (useSimplifiedBase) {
+				const size = map.getSize();
+				// Always render the procedural ocean/land gradient; custom satellite imagery is disabled.
+				const centerLng = map.getCenter().lng;
+				const grad = ctx.createLinearGradient(0, 0, 0, size.y);
 
-			// Generate a latitude-aware gradient by sampling the viewport's geographic coordinates
-			const stops = 12;
-			for (let i = 0; i <= stops; i++) {
-				const pct = i / stops;
-				const screenY = size.y * pct;
-				let lat = 0;
-				try {
-					// Convert screen position to latitude for color calculation
-					lat = map.containerPointToLatLng([0, screenY]).lat;
-				} catch (_e) {}
+				// Generate a latitude-aware gradient by sampling the viewport's geographic coordinates
+				const stops = 12;
+				for (let i = 0; i <= stops; i++) {
+					const pct = i / stops;
+					const screenY = size.y * pct;
+					let lat = 0;
+					try {
+						// Convert screen position to latitude for color calculation
+						lat = map.containerPointToLatLng([0, screenY]).lat;
+					} catch (_e) {}
 
-				// Add noise to the equator logic so transitions aren't perfectly uniform
-				// Noise is tied to longitude and screen stop index for a dynamic, non-perfect feel
-				const noise = Math.sin(i * 0.7 + centerLng * 0.04) * 3.5;
-				const absLat = Math.min(90, Math.max(0, Math.abs(lat) + noise));
-				const t = Math.min(1, Math.max(0, absLat / 90));
+					// Add noise to the equator logic so transitions aren't perfectly uniform
+					// Noise is tied to longitude and screen stop index for a dynamic, non-perfect feel
+					const noise = Math.sin(i * 0.7 + centerLng * 0.04) * 3.5;
+					const absLat = Math.min(90, Math.max(0, Math.abs(lat) + noise));
+					const t = Math.min(1, Math.max(0, absLat / 90));
 
-				// Narrower, more subtle ocean color spectrum
-				// Equator (0): rgb(5, 52, 72)
-				// Poles (1): rgb(2, 18, 34)
-				const r = Math.round(5 * (1 - t) + 2 * t);
-				const g = Math.round(52 * (1 - t) + 18 * t);
-				const b = Math.round(72 * (1 - t) + 34 * t);
+					// Narrower, more subtle ocean color spectrum
+					// Equator (0): rgb(5, 52, 72)
+					// Poles (1): rgb(2, 18, 34)
+					const r = Math.round(5 * (1 - t) + 2 * t);
+					const g = Math.round(52 * (1 - t) + 18 * t);
+					const b = Math.round(72 * (1 - t) + 34 * t);
 
-				grad.addColorStop(pct, `rgb(${r},${g},${b})`);
+					grad.addColorStop(pct, `rgb(${r},${g},${b})`);
+				}
+				ctx.fillStyle = grad;
+				ctx.fillRect(0, 0, size.x, size.y);
 			}
-			ctx.fillStyle = grad;
-			ctx.fillRect(0, 0, size.x, size.y);
-		}
 
-		// Draw reference image underneath terrain/countries but above ocean/background
-		// when "Draw Above Terrain" is disabled. This now runs after both tile and
-		// simplified ocean rendering so the guide is never hidden by the water layer.
-		if (
-			!this._isCapturing &&
-			!refAboveTerrain &&
-			referenceImageUrl &&
-			referenceOverlay &&
-			(gameMode === "EDITOR" || gameMode === "EDITOR_TEST" || godModeActive)
-		) {
-			const img = referenceOverlay.getElement();
-			if (img?.complete && img.naturalWidth > 0) {
-				const b = referenceOverlay.getBounds();
-				const pTL = map.latLngToContainerPoint(b.getNorthWest());
-				const pBR = map.latLngToContainerPoint(b.getSouthEast());
-				ctx.save();
-				ctx.globalAlpha = refOpacity;
-				ctx.drawImage(img, pTL.x, pTL.y, pBR.x - pTL.x, pBR.y - pTL.y);
-				ctx.restore();
+			// Draw reference image underneath terrain/countries but above ocean/background
+			// when "Draw Above Terrain" is disabled. This now runs after both tile and
+			// simplified ocean rendering so the guide is never hidden by the water layer.
+			if (
+				!this._isCapturing &&
+				!refAboveTerrain &&
+				referenceImageUrl &&
+				referenceOverlay &&
+				(gameMode === "EDITOR" || gameMode === "EDITOR_TEST" || godModeActive)
+			) {
+				const img = referenceOverlay.getElement();
+				if (img?.complete && img.naturalWidth > 0) {
+					const b = referenceOverlay.getBounds();
+					const pTL = map.latLngToContainerPoint(b.getNorthWest());
+					const pBR = map.latLngToContainerPoint(b.getSouthEast());
+					ctx.save();
+					ctx.globalAlpha = refOpacity;
+					ctx.drawImage(img, pTL.x, pTL.y, pBR.x - pTL.x, pBR.y - pTL.y);
+					ctx.restore();
+				}
 			}
 		}
 
@@ -706,8 +1105,6 @@ const ControlMapLayer = L.Layer.extend({
 		const vArea = (xMax - xMin) * (yMax - yMin);
 
 		// Dynamic sampling based on zoom level and engine load
-		const isEditing =
-			gameMode === "EDITOR" || gameMode === "EDITOR_TEST" || godModeActive;
 		if (isEditing) {
 			step = 1;
 		} else if (this._zooming) {
@@ -720,1008 +1117,1108 @@ const ControlMapLayer = L.Layer.extend({
 			else step = 1;
 		}
 
+		const vWidth = xMax - xMin + 1;
+		const vHeight = yMax - yMin + 1;
+		const staticVxStart = Math.max(
+			0,
+			Math.floor((staticPaintGridBounds.xMin - xMin) / step) * step,
+		);
+		const staticVxEnd = Math.min(
+			vWidth,
+			Math.ceil((staticPaintGridBounds.xMax - xMin + 1) / step) * step,
+		);
+		const staticVyStart = Math.max(
+			0,
+			Math.floor((staticPaintGridBounds.yMin - yMin) / step) * step,
+		);
+		const staticVyEnd = Math.min(
+			vHeight,
+			Math.ceil((staticPaintGridBounds.yMax - yMin + 1) / step) * step,
+		);
+		const staticLoopXMin = xMin + staticVxStart;
+		const staticLoopXMax = Math.min(xMax, xMin + staticVxEnd);
+		const staticLoopYMin = yMin + staticVyStart;
+		const staticLoopYMax = Math.min(yMax, yMin + staticVyEnd);
+		const projectionKey = `${viewportKey}:${xMin}:${xMax}:${yMin}:${yMax}`;
+		let gridProjection = this._gridProjectionCache;
+		if (gridProjection?.key !== projectionKey) {
+			const x = new Float32Array(vWidth + 1);
+			const y = new Float32Array(vHeight + 1);
+			for (let offset = 0; offset <= vWidth; offset++) {
+				x[offset] = project(yMin * res - 90, (xMin + offset) * res - 180).x;
+			}
+			for (let offset = 0; offset <= vHeight; offset++) {
+				y[offset] = project((yMin + offset) * res - 90, xMin * res - 180).y;
+			}
+			gridProjection = { key: projectionKey, x, y };
+			this._gridProjectionCache = gridProjection;
+		}
+
 		const getGridPoint = (gx, gy) => {
-			const lat = gy * CONFIG.GRID_RES - 90;
-			const lng = gx * CONFIG.GRID_RES - 180;
-			return project(lat, lng);
+			const xOffset = gx - xMin;
+			const yOffset = gy - yMin;
+			const hasCachedX =
+				Number.isInteger(xOffset) &&
+				xOffset >= 0 &&
+				xOffset < gridProjection.x.length;
+			const hasCachedY =
+				Number.isInteger(yOffset) &&
+				yOffset >= 0 &&
+				yOffset < gridProjection.y.length;
+			const rawPoint =
+				hasCachedX && hasCachedY
+					? null
+					: project(gy * res - 90, gx * res - 180);
+			const x = hasCachedX ? gridProjection.x[xOffset] : rawPoint.x;
+			const y = hasCachedY ? gridProjection.y[yOffset] : rawPoint.y;
+			return { x, y };
 		};
 
 		// --- REGION SEGMENTATION & DATA COLLECTION ---
 		// Performance Fix: "only render parts of flags that are onscreen"
 		// We limit contiguous blob detection to a slightly padded viewport and use global metadata
 		// bounds for UV mapping, preventing the engine from walking entire massive nations like Russia.
-		const regions = [];
+		const regions = fullStaticRefresh ? [] : this._cachedRegions || [];
 
-		if ((viewMode === "FLAG" || showCountryLabels) && flagProcessedBuffer) {
-			this._visitId = (this._visitId || 0) + 1;
-			if (this._visitId > 1e15) {
-				flagProcessedBuffer.fill(0);
-				this._visitId = 1;
-			}
-			const visitId = this._visitId;
+		if (renderStatic) {
+			if (
+				fullStaticRefresh &&
+				(viewMode === "FLAG" || showCountryLabels) &&
+				flagProcessedBuffer
+			) {
+				this._visitId = (this._visitId || 0) + 1;
+				if (this._visitId > 1e15) {
+					flagProcessedBuffer.fill(0);
+					this._visitId = 1;
+				}
+				const visitId = this._visitId;
 
-			// In FLAG view we always sample at full resolution to avoid blocky / dotted flags.
-			// For label-only mode we still downsample for performance when zoomed out.
-			let samplingStep = 1;
-			if (viewMode !== "FLAG") {
-				if (currentZoom < 4) samplingStep = 4;
-				else if (currentZoom < 6) samplingStep = 2;
-			}
+				// In FLAG view we always sample at full resolution to avoid blocky / dotted flags.
+				// For label-only mode we still downsample for performance when zoomed out.
+				let samplingStep = 1;
+				if (viewMode !== "FLAG") {
+					if (currentZoom < 4) samplingStep = 4;
+					else if (currentZoom < 6) samplingStep = 2;
+				}
 
-			const startX = Math.floor(xMin / samplingStep) * samplingStep;
-			const startY = Math.floor(yMin / samplingStep) * samplingStep;
+				const startX = Math.floor(xMin / samplingStep) * samplingStep;
+				const startY = Math.floor(yMin / samplingStep) * samplingStep;
 
-			for (let y = startY; y <= yMax; y += samplingStep) {
-				const rowOffset = y * gridWidth;
-				for (let x = startX; x <= xMax; x += samplingStep) {
-					const idx = rowOffset + x;
-					if (flagProcessedBuffer[idx] === visitId) continue;
+				for (let y = startY; y <= yMax; y += samplingStep) {
+					const rowOffset = y * gridWidth;
+					for (let x = startX; x <= xMax; x += samplingStep) {
+						const idx = rowOffset + x;
+						if (flagProcessedBuffer[idx] === visitId) continue;
 
-					const sovereignId = worldControlMap[idx];
-					if (sovereignId <= 0) continue;
+						const sovereignId = worldControlMap[idx];
+						if (sovereignId <= 0) continue;
 
-					let effectiveOwner = sovereignId;
-					if (isWar && landMask[idx] === 2) {
-						const sSide = sovereignSideMap[sovereignId];
-						const ds = dominantSideMap[idx];
-						const isOccupiedByEnemy = ds !== -1 && ds !== sSide;
-						if (isOccupiedByEnemy) {
-							effectiveOwner = primaryOccupierMap[idx] || effectiveOwner;
+						let effectiveOwner = sovereignId;
+						if (isWar && landMask[idx] === 2) {
+							const sSide = sovereignSideMap[sovereignId];
+							const ds = dominantSideMap[idx];
+							const isOccupiedByEnemy = ds !== -1 && ds !== sSide;
+							if (isOccupiedByEnemy) {
+								effectiveOwner = primaryOccupierMap[idx] || effectiveOwner;
+							}
+						}
+
+						if (effectiveOwner > 0) {
+							const regionPixels = [];
+							const queue = [idx];
+							flagProcessedBuffer[idx] = visitId;
+
+							let latSum = 0,
+								lngSum = 0,
+								count = 0;
+
+							// Contiguous search limited to viewport + padding to fulfill "only onscreen" directive
+							const pad = 25;
+							const vXMin = Math.max(0, xMin - pad);
+							const vXMax = Math.min(gridWidth - 1, xMax + pad);
+							const vYMin = Math.max(0, yMin - pad);
+							const vYMax = Math.min(gridHeight - 1, yMax + pad);
+
+							let bfsCellCount = 0;
+							while (queue.length > 0) {
+								if (++bfsCellCount > 100000) break;
+								const curr = queue.pop();
+								const cy = Math.floor(curr / gridWidth);
+								const cx = curr % gridWidth;
+
+								if (cx >= xMin && cx <= xMax && cy >= yMin && cy <= yMax) {
+									regionPixels.push(curr);
+								}
+
+								const lat = cy * CONFIG.GRID_RES - 90;
+								const lng = cx * CONFIG.GRID_RES - 180;
+								latSum += lat;
+								lngSum += lng;
+								count++;
+
+								const neighbors = [
+									curr + samplingStep,
+									curr - samplingStep,
+									curr + gridWidth * samplingStep,
+									curr - gridWidth * samplingStep,
+								];
+								for (const nIdx of neighbors) {
+									if (
+										nIdx < 0 ||
+										nIdx >= gridWidth * gridHeight ||
+										flagProcessedBuffer[nIdx] === visitId
+									)
+										continue;
+
+									const ny = Math.floor(nIdx / gridWidth);
+									const nx = nIdx % gridWidth;
+									if (nx < vXMin || nx > vXMax || ny < vYMin || ny > vYMax)
+										continue;
+
+									const nSovereign = worldControlMap[nIdx];
+									let nEffectiveOwner = nSovereign;
+									if (isWar && landMask[nIdx] === 2) {
+										const nSSide = sovereignSideMap[nSovereign];
+										const nDs = dominantSideMap[nIdx];
+										const isOccupiedByEnemy = nDs !== -1 && nDs !== nSSide;
+										if (isOccupiedByEnemy)
+											nEffectiveOwner =
+												primaryOccupierMap[nIdx] || nEffectiveOwner;
+									}
+
+									if (nEffectiveOwner === effectiveOwner) {
+										flagProcessedBuffer[nIdx] = visitId;
+										queue.push(nIdx);
+									}
+								}
+							}
+
+							if (regionPixels.length > 0) {
+								// Calculate local Lat/Lng bounds for label scaling
+								let minLat = 90,
+									maxLat = -90,
+									minLng = 180,
+									maxLng = -180;
+								let regMinX = Infinity,
+									regMaxX = -Infinity,
+									regMinY = Infinity,
+									regMaxY = -Infinity;
+								regionPixels.forEach((pxIdx) => {
+									const py = Math.floor(pxIdx / gridWidth);
+									const px = pxIdx % gridWidth;
+									const lat = py * CONFIG.GRID_RES - 90;
+									const lng = px * CONFIG.GRID_RES - 180;
+									if (lat < minLat) minLat = lat;
+									if (lat > maxLat) maxLat = lat;
+									if (lng < minLng) minLng = lng;
+									if (lng > maxLng) maxLng = lng;
+									if (px < regMinX) regMinX = px;
+									if (px > regMaxX) regMaxX = px;
+									if (py < regMinY) regMinY = py;
+									if (py > regMaxY) regMaxY = py;
+								});
+
+								// Build 4 bins along the region's width so each disconnected landmass
+								// gets its own curved label spine independent of overseas territories.
+								const bins = Array.from({ length: 4 }, () => ({
+									latSum: 0,
+									lngSum: 0,
+									count: 0,
+								}));
+								const width = Math.max(1, regMaxX - regMinX + 1);
+								regionPixels.forEach((pxIdx) => {
+									const py = Math.floor(pxIdx / gridWidth);
+									const px = pxIdx % gridWidth;
+									const lat = py * CONFIG.GRID_RES - 90;
+									const lng = px * CONFIG.GRID_RES - 180;
+									const rel = (px - regMinX) / width;
+									const binIdx = Math.max(0, Math.min(3, Math.floor(rel * 4)));
+									const b = bins[binIdx];
+									b.latSum += lat;
+									b.lngSum += lng;
+									b.count++;
+								});
+
+								// Fallback for empty bins: interpolate from neighbors or region center
+								const centerLat = latSum / count;
+								const centerLng = lngSum / count;
+								for (let i = 0; i < 4; i++) {
+									if (bins[i].count === 0) {
+										let left = null,
+											right = null;
+										for (let j = i - 1; j >= 0; j--) {
+											if (bins[j].count > 0) {
+												left = bins[j];
+												break;
+											}
+										}
+										for (let j = i + 1; j < 4; j++) {
+											if (bins[j].count > 0) {
+												right = bins[j];
+												break;
+											}
+										}
+										if (left && right) {
+											bins[i].latSum =
+												(left.latSum / left.count +
+													right.latSum / right.count) /
+												2;
+											bins[i].lngSum =
+												(left.lngSum / left.count +
+													right.lngSum / right.count) /
+												2;
+											bins[i].count = 1;
+										} else if (left && left.count > 0) {
+											bins[i].latSum = left.latSum;
+											bins[i].lngSum = left.lngSum;
+											bins[i].count = left.count;
+										} else if (right && right.count > 0) {
+											bins[i].latSum = right.latSum;
+											bins[i].lngSum = right.lngSum;
+											bins[i].count = right.count;
+										} else {
+											bins[i].latSum = centerLat;
+											bins[i].lngSum = centerLng;
+											bins[i].count = 1;
+										}
+									}
+								}
+
+								regions.push({
+									id: effectiveOwner,
+									sovereignId: sovereignId,
+									pixels: regionPixels,
+									latSum,
+									lngSum,
+									count,
+									minLat,
+									maxLat,
+									minLng,
+									maxLng,
+									regMinX,
+									regMaxX,
+									regMinY,
+									regMaxY,
+									bins,
+								});
+							}
 						}
 					}
+				}
+			}
 
-					if (effectiveOwner > 0) {
-						const regionPixels = [];
-						const queue = [idx];
-						flagProcessedBuffer[idx] = visitId;
+			// PASS 1: Base Background & Topography Rendering (Greedy Meshing)
+			{
+				// GC Optimization: Pre-allocate reusable buffers for the greedy mesh pass instead of new Array().fill(null)
+				const maxVSize = vWidth * vHeight;
+				if (!this._viewportFills || this._viewportFills.length < maxVSize) {
+					this._viewportFills = new Array(maxVSize);
+					this._processedCells = new Uint8Array(maxVSize);
+				}
 
-						let latSum = 0,
-							lngSum = 0,
-							count = 0;
+				// Only clear the specific bounds we are iterating over
+				for (let vy = staticVyStart; vy < staticVyEnd; vy += step) {
+					const rowOffset = vy * vWidth;
+					for (let vx = staticVxStart; vx < staticVxEnd; vx += step) {
+						if (!isStaticCellInPaintTiles(xMin + vx, yMin + vy)) continue;
+						this._viewportFills[rowOffset + vx] = null;
+						this._processedCells[rowOffset + vx] = 0;
+					}
+				}
 
-						// Contiguous search limited to viewport + padding to fulfill "only onscreen" directive
-						const pad = 25;
-						const vXMin = Math.max(0, xMin - pad);
-						const vXMax = Math.min(gridWidth - 1, xMax + pad);
-						const vYMin = Math.max(0, yMin - pad);
-						const vYMax = Math.min(gridHeight - 1, yMax + pad);
+				const viewportFills = this._viewportFills;
 
-						let bfsCellCount = 0;
-						while (queue.length > 0) {
-							if (++bfsCellCount > 100000) break;
-							const curr = queue.pop();
-							const cy = Math.floor(curr / gridWidth);
-							const cx = curr % gridWidth;
+				// 1. Pass: Pre-calculate fill styles and Label Data
+				for (let vy = staticVyStart; vy < staticVyEnd; vy += step) {
+					const y = yMin + vy;
+					const rowOffset = vy * vWidth;
+					for (let vx = staticVxStart; vx < staticVxEnd; vx += step) {
+						const x = xMin + vx;
+						if (!isStaticCellInPaintTiles(x, y)) continue;
+						if (x >= gridWidth || y >= gridHeight) continue;
 
-							if (cx >= xMin && cx <= xMax && cy >= yMin && cy <= yMax) {
-								regionPixels.push(curr);
+						const idx = y * gridWidth + x;
+						const sovereignId = worldControlMap[idx];
+						const _occ = occupationMap[idx];
+						const lMask = landMask[idx];
+						const isWarZone = lMask === 2;
+						const isStable = lMask === 1;
+
+						if (isWarZone || isStable) {
+							let fillStyle = null;
+							let baseRgba = [150, 150, 150];
+							let alpha = isSimplifiedMode && !isCustomTerrain ? 1.0 : 0.65;
+							let effectiveId = sovereignId;
+
+							// FLAG MODE OVERRIDE: Render all land using the neutral "Map" palette so topography
+							// and biomes are visible behind the country flags.
+							const isBackgroundPass = viewMode === "FLAG";
+
+							if (sovereignId === 0 || isBackgroundPass) {
+								if (useSimplifiedBase) {
+									const isDesert = biomeMask[idx] === 1;
+									baseRgba = isDesert ? [140, 120, 70] : [20, 38, 20];
+									alpha = 1.0;
+								} else if (!isBackgroundPass) {
+									continue;
+								}
 							}
 
-							const lat = cy * CONFIG.GRID_RES - 90;
-							const lng = cx * CONFIG.GRID_RES - 180;
-							latSum += lat;
-							lngSum += lng;
-							count++;
+							if (sovereignId > 0 && !isBackgroundPass) {
+								// Alliance view: collapse members into a single color
+								if (allianceViewEnabled) {
+									const rootId = allianceKeyById[sovereignId] || sovereignId;
+									const allianceRgba = allianceColorByRoot[rootId] || [
+										180, 180, 180, 1,
+									];
+									baseRgba = [
+										allianceRgba[0],
+										allianceRgba[1],
+										allianceRgba[2],
+									];
+									alpha = isSimplifiedMode && !isCustomTerrain ? 1.0 : 0.85;
+								} else {
+									const meta = countryMetadata[sovereignId - 1];
+									if (!meta) {
+										baseRgba = [150, 150, 150];
+										alpha = 0.6;
+									} else {
+										let effectiveRgba = meta.rgba;
+										if (meta.overlordId) {
+											const overlordMeta = countryMetadata[meta.overlordId - 1];
+											if (overlordMeta) {
+												effectiveRgba = [
+													Math.round(
+														overlordMeta.rgba[0] * 0.75 + meta.rgba[0] * 0.25,
+													),
+													Math.round(
+														overlordMeta.rgba[1] * 0.75 + meta.rgba[1] * 0.25,
+													),
+													Math.round(
+														overlordMeta.rgba[2] * 0.75 + meta.rgba[2] * 0.25,
+													),
+													meta.rgba[3] || 1,
+												];
+											}
+										}
 
-							const neighbors = [
-								curr + samplingStep,
-								curr - samplingStep,
-								curr + gridWidth * samplingStep,
-								curr - gridWidth * samplingStep,
-							];
-							for (const nIdx of neighbors) {
+										baseRgba = [
+											effectiveRgba[0],
+											effectiveRgba[1],
+											effectiveRgba[2],
+										];
+										alpha = isSimplifiedMode && !isCustomTerrain ? 1.0 : 0.65;
+
+										if (isWar && isWarZone && dominantSideMap[idx] !== -1) {
+											const sSide = sovereignSideMap[sovereignId];
+											const ds = dominantSideMap[idx];
+											const isOccupiedLand = ds !== sSide;
+
+											if (isOccupiedLand) {
+												const occupierId = primaryOccupierMap[idx];
+												const occMeta =
+													occupierId > 0
+														? countryMetadata[occupierId - 1]
+														: null;
+												if (occupierId > 0) effectiveId = occupierId;
+												const dsColor = sideColors[ds]
+													? sideColors[ds]
+															.replace(rgbaRe, "0.5)")
+															.match(/[\d.]+/g)
+															.map(Number)
+													: [180, 180, 180, 0.5];
+												const occColor = occMeta ? occMeta.rgba : dsColor;
+												baseRgba = [
+													Math.round(occColor[0] * 0.7 + 255 * 0.3),
+													Math.round(occColor[1] * 0.7 + 255 * 0.3),
+													Math.round(occColor[2] * 0.7 + 255 * 0.3),
+												];
+												alpha = 0.85;
+											} else {
+												alpha = 0.7;
+											}
+										}
+									}
+								}
+							}
+
+							// Apply mountain visuals across all states (War or Peace), including neutral land
+							if (mountainsEnabled && terrain && terrain[idx] > 0) {
+								const intensity = terrain[idx];
+
+								if (useSimplifiedBase && sovereignId === 0) {
+									// In Simplified Mode on neutral land, use a "highlight" for mountains to make them pop
+									// instead of just darkening, since the base color is already quite dark.
+									const lift = intensity * 42;
+									baseRgba[0] = Math.min(255, baseRgba[0] + lift);
+									baseRgba[1] = Math.min(255, baseRgba[1] + lift * 1.1);
+									baseRgba[2] = Math.min(255, baseRgba[2] + lift);
+									alpha = 0.95;
+								} else {
+									const dim = 0.7 - intensity * 0.25;
+									baseRgba[0] = Math.floor(baseRgba[0] * dim);
+									baseRgba[1] = Math.floor(baseRgba[1] * dim);
+									baseRgba[2] = Math.floor(baseRgba[2] * dim);
+
+									if (isWar) {
+										alpha *= 0.75;
+									} else {
+										alpha = 0.75;
+									}
+								}
+							}
+
+							if (useSimplifiedBase) {
+								fillStyle = `WG_${effectiveId}_${baseRgba.join(",")}_${alpha.toFixed(3)}_${biomeMask[idx]}`;
+							} else {
+								fillStyle = `rgba(${baseRgba[0]},${baseRgba[1]},${baseRgba[2]},${alpha.toFixed(3)})`;
+							}
+							viewportFills[rowOffset + vx] = fillStyle;
+						}
+					}
+				}
+
+				// 2. Pass: Greedy Mesh Rendering (Batched)
+				this._gradientCache = null; // Clear per-frame gradient cache (camera may have moved)
+				const processed = this._processedCells;
+				const gridXPositions = gridProjection.x;
+				const gridYPositions = gridProjection.y;
+
+				// Batch mesh rectangles by resolved fillStyle to minimize ctx.fillStyle + ctx.fill() calls
+				if (!this._meshBatch) this._meshBatch = new Map();
+				this._meshBatch.clear();
+				const meshBatch = this._meshBatch;
+
+				for (let vy = staticVyStart; vy < staticVyEnd; vy += step) {
+					const rowOffset = vy * vWidth;
+					for (let vx = staticVxStart; vx < staticVxEnd; vx += step) {
+						if (!isStaticCellInPaintTiles(xMin + vx, yMin + vy)) continue;
+						const vIdx = rowOffset + vx;
+						const fill = viewportFills[vIdx];
+						if (fill === null || processed[vIdx]) continue;
+
+						// Mesh Width (respecting sampling step)
+						let mw = step;
+						while (
+							vx + mw < staticVxEnd &&
+							isStaticCellInPaintTiles(xMin + vx + mw, yMin + vy) &&
+							viewportFills[rowOffset + vx + mw] === fill &&
+							!processed[rowOffset + vx + mw]
+						) {
+							mw += step;
+						}
+						if (vx + mw > vWidth) mw = vWidth - vx;
+
+						// Mesh Height (respecting sampling step)
+						let mh = step;
+						while (vy + mh < staticVyEnd) {
+							let rowMatch = true;
+							const nextRowOffset = (vy + mh) * vWidth;
+							for (let k = 0; k < mw; k += step) {
 								if (
-									nIdx < 0 ||
-									nIdx >= gridWidth * gridHeight ||
-									flagProcessedBuffer[nIdx] === visitId
-								)
-									continue;
-
-								const ny = Math.floor(nIdx / gridWidth);
-								const nx = nIdx % gridWidth;
-								if (nx < vXMin || nx > vXMax || ny < vYMin || ny > vYMax)
-									continue;
-
-								const nSovereign = worldControlMap[nIdx];
-								let nEffectiveOwner = nSovereign;
-								if (isWar && landMask[nIdx] === 2) {
-									const nSSide = sovereignSideMap[nSovereign];
-									const nDs = dominantSideMap[nIdx];
-									const isOccupiedByEnemy = nDs !== -1 && nDs !== nSSide;
-									if (isOccupiedByEnemy)
-										nEffectiveOwner =
-											primaryOccupierMap[nIdx] || nEffectiveOwner;
-								}
-
-								if (nEffectiveOwner === effectiveOwner) {
-									flagProcessedBuffer[nIdx] = visitId;
-									queue.push(nIdx);
+									!isStaticCellInPaintTiles(xMin + vx + k, yMin + vy + mh) ||
+									viewportFills[nextRowOffset + vx + k] !== fill ||
+									processed[nextRowOffset + vx + k]
+								) {
+									rowMatch = false;
+									break;
 								}
 							}
+							if (!rowMatch) break;
+							mh += step;
+						}
+						if (vy + mh > vHeight) mh = vHeight - vy;
+
+						// Compute mesh rectangle bounds
+						const pX1 = gridXPositions[vx];
+						const pX2 = gridXPositions[vx + mw];
+						const pY1 = gridYPositions[vy];
+						const pY2 = gridYPositions[vy + mh];
+
+						const drawX = Math.min(pX1, pX2);
+						const drawY = Math.min(pY1, pY2);
+						const drawW = Math.abs(pX2 - pX1);
+						const drawH = Math.abs(pY2 - pY1);
+
+						if (drawW > 0 && drawH > 0) {
+							let resolvedFill = fill;
+							if (typeof fill === "string" && fill.startsWith("WG_")) {
+								const parts = fill.split("_");
+								const sid = parseInt(parts[1], 10);
+								const colorParts = parts[2].split(",").map(Number);
+								const a = parts[3] || "1";
+								const biome = parseInt(parts[4], 10) || 0;
+
+								if (biome === 1) {
+									colorParts[0] = Math.min(255, colorParts[0] * 1.1 + 30);
+									colorParts[1] = Math.min(255, colorParts[1] * 1.1 + 10);
+									colorParts[2] = Math.max(0, colorParts[2] * 0.85);
+								}
+
+								const meta = countryMetadata[sid - 1];
+								if (!disableCountryGradient && meta && meta.bounds) {
+									if (!this._gradientCache) this._gradientCache = new Map();
+									let cached = this._gradientCache.get(fill);
+									if (!cached) {
+										const pTop = getGridPoint(0, meta.bounds.minY).y;
+										const pBottom = getGridPoint(0, meta.bounds.maxY).y;
+										const g = ctx.createLinearGradient(0, pTop, 0, pBottom);
+										g.addColorStop(
+											0,
+											`rgba(${Math.min(255, colorParts[0] + 25)},${Math.min(255, colorParts[1] + 25)},${Math.min(255, colorParts[2] + 25)},${a})`,
+										);
+										g.addColorStop(
+											0.3,
+											`rgba(${colorParts[0]},${colorParts[1]},${colorParts[2]},${a})`,
+										);
+										g.addColorStop(
+											1,
+											`rgba(${Math.floor(colorParts[0] * 0.65)},${Math.floor(colorParts[1] * 0.65)},${Math.floor(colorParts[2] * 0.65)},${a})`,
+										);
+										cached = g;
+										this._gradientCache.set(fill, cached);
+									}
+									resolvedFill = cached;
+								} else {
+									resolvedFill = `rgba(${colorParts[0]},${colorParts[1]},${colorParts[2]},${a})`;
+								}
+							}
+							if (!meshBatch.has(resolvedFill)) meshBatch.set(resolvedFill, []);
+							meshBatch
+								.get(resolvedFill)
+								.push([drawX - 0.25, drawY - 0.25, drawW + 0.5, drawH + 0.5]);
 						}
 
-						if (regionPixels.length > 0) {
-							// Calculate local Lat/Lng bounds for label scaling
-							let minLat = 90,
-								maxLat = -90,
-								minLng = 180,
-								maxLng = -180;
-							let regMinX = Infinity,
-								regMaxX = -Infinity,
-								regMinY = Infinity,
-								regMaxY = -Infinity;
-							regionPixels.forEach((pxIdx) => {
-								const py = Math.floor(pxIdx / gridWidth);
-								const px = pxIdx % gridWidth;
-								const lat = py * CONFIG.GRID_RES - 90;
-								const lng = px * CONFIG.GRID_RES - 180;
-								if (lat < minLat) minLat = lat;
-								if (lat > maxLat) maxLat = lat;
-								if (lng < minLng) minLng = lng;
-								if (lng > maxLng) maxLng = lng;
+						// Mark as processed
+						for (let j = 0; j < mh; j += step) {
+							const targetRowOffset = (vy + j) * vWidth;
+							for (let i = 0; i < mw; i += step) {
+								processed[targetRowOffset + vx + i] = 1;
+							}
+						}
+					}
+				}
+
+				// Render all batched rectangles: one ctx.fill() per unique fillStyle
+				for (const [fillStyle, rects] of meshBatch) {
+					ctx.fillStyle = fillStyle;
+					ctx.beginPath();
+					for (let r = 0; r < rects.length; r++) {
+						const rc = rects[r];
+						ctx.rect(rc[0], rc[1], rc[2], rc[3]);
+					}
+					ctx.fill();
+				}
+			}
+
+			// PASS 1.5: Flag Overlays (Only in Flag View)
+			if (viewMode === "FLAG") {
+				const _countryById = new Map();
+				for (const side of sides)
+					for (const c of side) _countryById.set(c.id, c);
+				// Group regions by alliance root when alliance view is enabled, so each alliance
+				// gets a single merged clipping mask and flag overlay.
+				if (allianceViewEnabled) {
+					const allianceGroups = new Map();
+					regions.forEach((region) => {
+						const rootId = allianceKeyById[region.id] || region.id;
+						if (!allianceGroups.has(rootId)) allianceGroups.set(rootId, []);
+						allianceGroups.get(rootId).push(region);
+					});
+
+					allianceGroups.forEach((group, rootId) => {
+						const rootMeta =
+							allianceFlagMetaByRoot[rootId] || countryMetadata[rootId - 1];
+						if (!rootMeta) return;
+
+						const flagMeta = rootMeta;
+						ctx.save();
+						ctx.beginPath();
+
+						const pixelsByRow = new Map();
+						let regMinX = Infinity,
+							regMaxX = -Infinity,
+							regMinY = Infinity,
+							regMaxY = -Infinity;
+
+						group.forEach((region) => {
+							region.pixels.forEach((idx) => {
+								const py = Math.floor(idx / gridWidth);
+								const px = idx % gridWidth;
+								let row = pixelsByRow.get(py);
+								if (!row) {
+									row = [];
+									pixelsByRow.set(py, row);
+								}
+								row.push(px);
 								if (px < regMinX) regMinX = px;
 								if (px > regMaxX) regMaxX = px;
 								if (py < regMinY) regMinY = py;
 								if (py > regMaxY) regMaxY = py;
 							});
+						});
 
-							// Build 4 bins along the region's width so each disconnected landmass
-							// gets its own curved label spine independent of overseas territories.
-							const bins = Array.from({ length: 4 }, () => ({
-								latSum: 0,
-								lngSum: 0,
-								count: 0,
-							}));
-							const width = Math.max(1, regMaxX - regMinX + 1);
-							regionPixels.forEach((pxIdx) => {
-								const py = Math.floor(pxIdx / gridWidth);
-								const px = pxIdx % gridWidth;
-								const lat = py * CONFIG.GRID_RES - 90;
-								const lng = px * CONFIG.GRID_RES - 180;
-								const rel = (px - regMinX) / width;
-								const binIdx = Math.max(0, Math.min(3, Math.floor(rel * 4)));
-								const b = bins[binIdx];
-								b.latSum += lat;
-								b.lngSum += lng;
-								b.count++;
-							});
+						pixelsByRow.forEach((rowPixels, py) => {
+							rowPixels.sort((a, b) => a - b);
+							let spanStart = rowPixels[0];
+							const pY1 = getGridPoint(0, py).y;
+							const pY2 = getGridPoint(0, py + step).y;
+							const drawY = Math.min(pY1, pY2);
+							const drawH = Math.abs(pY2 - pY1) + 0.5;
 
-							// Fallback for empty bins: interpolate from neighbors or region center
-							const centerLat = latSum / count;
-							const centerLng = lngSum / count;
-							for (let i = 0; i < 4; i++) {
-								if (bins[i].count === 0) {
-									let left = null,
-										right = null;
-									for (let j = i - 1; j >= 0; j--) {
-										if (bins[j].count > 0) {
-											left = bins[j];
-											break;
-										}
-									}
-									for (let j = i + 1; j < 4; j++) {
-										if (bins[j].count > 0) {
-											right = bins[j];
-											break;
-										}
-									}
-									if (left && right) {
-										bins[i].latSum =
-											(left.latSum / left.count + right.latSum / right.count) /
-											2;
-										bins[i].lngSum =
-											(left.lngSum / left.count + right.lngSum / right.count) /
-											2;
-										bins[i].count = 1;
-									} else if (left && left.count > 0) {
-										bins[i].latSum = left.latSum;
-										bins[i].lngSum = left.lngSum;
-										bins[i].count = left.count;
-									} else if (right && right.count > 0) {
-										bins[i].latSum = right.latSum;
-										bins[i].lngSum = right.lngSum;
-										bins[i].count = right.count;
-									} else {
-										bins[i].latSum = centerLat;
-										bins[i].lngSum = centerLng;
-										bins[i].count = 1;
-									}
+							for (let i = 0; i < rowPixels.length; i++) {
+								if (
+									i === rowPixels.length - 1 ||
+									rowPixels[i + 1] !== rowPixels[i] + step
+								) {
+									const pXStart = getGridPoint(spanStart, py).x;
+									const pXEnd = getGridPoint(rowPixels[i] + step, py).x;
+									ctx.rect(pXStart, drawY, pXEnd - pXStart + 0.5, drawH);
+									if (i < rowPixels.length - 1) spanStart = rowPixels[i + 1];
 								}
 							}
+						});
+						ctx.clip();
 
-							regions.push({
-								id: effectiveOwner,
-								sovereignId: sovereignId,
-								pixels: regionPixels,
-								latSum,
-								lngSum,
-								count,
-								minLat,
-								maxLat,
-								minLng,
-								maxLng,
-								regMinX,
-								regMaxX,
-								regMinY,
-								regMaxY,
-								bins,
-							});
-						}
-					}
-				}
-			}
-		}
+						const p1 = getGridPoint(regMinX, regMinY);
+						const p2 = getGridPoint(regMaxX + step, regMaxY + step);
+						const drawX = Math.min(p1.x, p2.x);
+						const drawY = Math.min(p1.y, p2.y);
+						const drawW = Math.abs(p1.x - p2.x);
+						const drawH = Math.abs(p1.y - p2.y);
 
-		// PASS 1: Base Background & Topography Rendering (Greedy Meshing)
-		{
-			const vWidth = xMax - xMin + 1;
-			const vHeight = yMax - yMin + 1;
-
-			// GC Optimization: Pre-allocate reusable buffers for the greedy mesh pass instead of new Array().fill(null)
-			const maxVSize = vWidth * vHeight;
-			if (!this._viewportFills || this._viewportFills.length < maxVSize) {
-				this._viewportFills = new Array(maxVSize);
-				this._processedCells = new Uint8Array(maxVSize);
-			}
-
-			// Only clear the specific bounds we are iterating over
-			for (let vy = 0; vy < vHeight; vy += step) {
-				const rowOffset = vy * vWidth;
-				for (let vx = 0; vx < vWidth; vx += step) {
-					this._viewportFills[rowOffset + vx] = null;
-					this._processedCells[rowOffset + vx] = 0;
-				}
-			}
-
-			const viewportFills = this._viewportFills;
-
-			// 1. Pass: Pre-calculate fill styles and Label Data
-			for (let vy = 0; vy < vHeight; vy += step) {
-				const y = yMin + vy;
-				const rowOffset = vy * vWidth;
-				for (let vx = 0; vx < vWidth; vx += step) {
-					const x = xMin + vx;
-					if (x >= gridWidth || y >= gridHeight) continue;
-
-					const idx = y * gridWidth + x;
-					const sovereignId = worldControlMap[idx];
-					const _occ = occupationMap[idx];
-					const lMask = landMask[idx];
-					const isWarZone = lMask === 2;
-					const isStable = lMask === 1;
-
-					if (isWarZone || isStable) {
-						let fillStyle = null;
-						let baseRgba = [150, 150, 150];
-						let alpha = isSimplifiedMode && !isCustomTerrain ? 1.0 : 0.65;
-						let effectiveId = sovereignId;
-
-						// FLAG MODE OVERRIDE: Render all land using the neutral "Map" palette so topography
-						// and biomes are visible behind the country flags.
-						const isBackgroundPass = viewMode === "FLAG";
-
-						if (sovereignId === 0 || isBackgroundPass) {
-							if (useSimplifiedBase) {
-								const isDesert = biomeMask[idx] === 1;
-								baseRgba = isDesert ? [140, 120, 70] : [20, 38, 20];
-								alpha = 1.0;
-							} else if (!isBackgroundPass) {
-								continue;
-							}
-						}
-
-						if (sovereignId > 0 && !isBackgroundPass) {
-							// Alliance view: collapse members into a single color
-							if (allianceViewEnabled) {
-								const rootId = allianceKeyById[sovereignId] || sovereignId;
-								const allianceRgba = allianceColorByRoot[rootId] || [
-									180, 180, 180, 1,
-								];
-								baseRgba = [allianceRgba[0], allianceRgba[1], allianceRgba[2]];
-								alpha = isSimplifiedMode && !isCustomTerrain ? 1.0 : 0.85;
-							} else {
-								const meta = countryMetadata[sovereignId - 1];
-								if (!meta) {
-									baseRgba = [150, 150, 150];
-									alpha = 0.6;
-								} else {
-									let effectiveRgba = meta.rgba;
-									if (meta.overlordId) {
-										const overlordMeta = countryMetadata[meta.overlordId - 1];
-										if (overlordMeta) {
-											effectiveRgba = [
-												Math.round(
-													overlordMeta.rgba[0] * 0.75 + meta.rgba[0] * 0.25,
-												),
-												Math.round(
-													overlordMeta.rgba[1] * 0.75 + meta.rgba[1] * 0.25,
-												),
-												Math.round(
-													overlordMeta.rgba[2] * 0.75 + meta.rgba[2] * 0.25,
-												),
-												meta.rgba[3] || 1,
-											];
-										}
-									}
-
-									baseRgba = [
-										effectiveRgba[0],
-										effectiveRgba[1],
-										effectiveRgba[2],
-									];
-									alpha = isSimplifiedMode && !isCustomTerrain ? 1.0 : 0.65;
-
-									if (isWar && isWarZone && dominantSideMap[idx] !== -1) {
-										const sSide = sovereignSideMap[sovereignId];
-										const ds = dominantSideMap[idx];
-										const isOccupiedLand = ds !== sSide;
-
-										if (isOccupiedLand) {
-											const occupierId = primaryOccupierMap[idx];
-											const occMeta =
-												occupierId > 0 ? countryMetadata[occupierId - 1] : null;
-											if (occupierId > 0) effectiveId = occupierId;
-											const dsColor = sideColors[ds]
-												? sideColors[ds]
-														.replace(rgbaRe, "0.5)")
-														.match(/[\d.]+/g)
-														.map(Number)
-												: [180, 180, 180, 0.5];
-											const occColor = occMeta ? occMeta.rgba : dsColor;
-											baseRgba = [
-												Math.round(occColor[0] * 0.7 + 255 * 0.3),
-												Math.round(occColor[1] * 0.7 + 255 * 0.3),
-												Math.round(occColor[2] * 0.7 + 255 * 0.3),
-											];
-											alpha = 0.85;
-										} else {
-											alpha = 0.7;
-										}
-									}
-								}
-							}
-						}
-
-						// Apply mountain visuals across all states (War or Peace), including neutral land
-						if (mountainsEnabled && terrain && terrain[idx] > 0) {
-							const intensity = terrain[idx];
-
-							if (useSimplifiedBase && sovereignId === 0) {
-								// In Simplified Mode on neutral land, use a "highlight" for mountains to make them pop
-								// instead of just darkening, since the base color is already quite dark.
-								const lift = intensity * 42;
-								baseRgba[0] = Math.min(255, baseRgba[0] + lift);
-								baseRgba[1] = Math.min(255, baseRgba[1] + lift * 1.1);
-								baseRgba[2] = Math.min(255, baseRgba[2] + lift);
-								alpha = 0.95;
-							} else {
-								const dim = 0.7 - intensity * 0.25;
-								baseRgba[0] = Math.floor(baseRgba[0] * dim);
-								baseRgba[1] = Math.floor(baseRgba[1] * dim);
-								baseRgba[2] = Math.floor(baseRgba[2] * dim);
-
-								if (isWar) {
-									alpha *= 0.75;
-								} else {
-									alpha = 0.75;
-								}
-							}
-						}
-
-						if (useSimplifiedBase) {
-							fillStyle = `WG_${effectiveId}_${baseRgba.join(",")}_${alpha.toFixed(3)}_${biomeMask[idx]}`;
+						let flagImg = null;
+						const countryObj = _countryById.get(flagMeta.id);
+						if (flagMeta.allianceFlagTempFlag?.complete) {
+							flagImg = flagMeta.allianceFlagTempFlag;
+						} else if (
+							countryObj?.flag?.complete &&
+							countryObj.flag.naturalWidth > 0
+						) {
+							flagImg = countryObj.flag;
 						} else {
-							fillStyle = `rgba(${baseRgba[0]},${baseRgba[1]},${baseRgba[2]},${alpha.toFixed(3)})`;
-						}
-						viewportFills[rowOffset + vx] = fillStyle;
-					}
-				}
-			}
-
-			// 2. Pass: Greedy Mesh Rendering (Batched)
-			this._gradientCache = null; // Clear per-frame gradient cache (camera may have moved)
-			const processed = this._processedCells;
-			const gridXPositions = new Float32Array(vWidth + 1);
-			const gridYPositions = new Float32Array(vHeight + 1);
-			for (let x = 0; x <= vWidth; x++)
-				gridXPositions[x] = getGridPoint(xMin + x, yMin).x;
-			for (let y = 0; y <= vHeight; y++)
-				gridYPositions[y] = getGridPoint(xMin, yMin + y).y;
-
-			// Batch mesh rectangles by resolved fillStyle to minimize ctx.fillStyle + ctx.fill() calls
-			if (!this._meshBatch) this._meshBatch = new Map();
-			this._meshBatch.clear();
-			const meshBatch = this._meshBatch;
-
-			for (let vy = 0; vy < vHeight; vy += step) {
-				const rowOffset = vy * vWidth;
-				for (let vx = 0; vx < vWidth; vx += step) {
-					const vIdx = rowOffset + vx;
-					const fill = viewportFills[vIdx];
-					if (fill === null || processed[vIdx]) continue;
-
-					// Mesh Width (respecting sampling step)
-					let mw = step;
-					while (
-						vx + mw < vWidth &&
-						viewportFills[rowOffset + vx + mw] === fill &&
-						!processed[rowOffset + vx + mw]
-					) {
-						mw += step;
-					}
-					if (vx + mw > vWidth) mw = vWidth - vx;
-
-					// Mesh Height (respecting sampling step)
-					let mh = step;
-					while (vy + mh < vHeight) {
-						let rowMatch = true;
-						const nextRowOffset = (vy + mh) * vWidth;
-						for (let k = 0; k < mw; k += step) {
+							if (!flagMeta.tempFlag && flagMeta.flagUrl) {
+								flagMeta.tempFlag = new Image();
+								flagMeta.tempFlag.crossOrigin = "anonymous";
+								flagMeta.tempFlag.onload = () => {
+									if (influenceLayer) {
+										influenceLayer.invalidate?.(RENDER_LAYERS.STATIC);
+										influenceLayer.render();
+									}
+								};
+								flagMeta.tempFlag.src = flagMeta.flagUrl;
+							}
 							if (
-								viewportFills[nextRowOffset + vx + k] !== fill ||
-								processed[nextRowOffset + vx + k]
+								flagMeta.tempFlag?.complete &&
+								flagMeta.tempFlag.naturalWidth > 0
 							) {
-								rowMatch = false;
-								break;
+								flagImg = flagMeta.tempFlag;
 							}
 						}
-						if (!rowMatch) break;
-						mh += step;
-					}
-					if (vy + mh > vHeight) mh = vHeight - vy;
 
-					// Compute mesh rectangle bounds
-					const pX1 = gridXPositions[vx];
-					const pX2 = gridXPositions[vx + mw];
-					const pY1 = gridYPositions[vy];
-					const pY2 = gridYPositions[vy + mh];
+						if (
+							flagImg &&
+							drawW > 0 &&
+							drawH > 0 &&
+							Number.isFinite(drawX) &&
+							Number.isFinite(drawY)
+						) {
+							const viewW = this._container.width / dpr;
+							const viewH = this._container.height / dpr;
 
-					const drawX = Math.min(pX1, pX2);
-					const drawY = Math.min(pY1, pY2);
-					const drawW = Math.abs(pX2 - pX1);
-					const drawH = Math.abs(pY2 - pY1);
+							const vL = Math.max(0, drawX);
+							const vT = Math.max(0, drawY);
+							const vR = Math.min(viewW, drawX + drawW);
+							const vB = Math.min(viewH, drawY + drawH);
 
-					if (drawW > 0 && drawH > 0) {
-						let resolvedFill = fill;
-						if (typeof fill === "string" && fill.startsWith("WG_")) {
-							const parts = fill.split("_");
-							const sid = parseInt(parts[1], 10);
-							const colorParts = parts[2].split(",").map(Number);
-							const a = parts[3] || "1";
-							const biome = parseInt(parts[4], 10) || 0;
+							const vW = vR - vL;
+							const vH = vB - vT;
 
-							if (biome === 1) {
-								colorParts[0] = Math.min(255, colorParts[0] * 1.1 + 30);
-								colorParts[1] = Math.min(255, colorParts[1] * 1.1 + 10);
-								colorParts[2] = Math.max(0, colorParts[2] * 0.85);
-							}
+							if (
+								vW > 0 &&
+								vH > 0 &&
+								Number.isFinite(vW) &&
+								Number.isFinite(vH)
+							) {
+								const sx = ((vL - drawX) / drawW) * flagImg.naturalWidth;
+								const sy = ((vT - drawY) / drawH) * flagImg.naturalHeight;
+								const sw = (vW / drawW) * flagImg.naturalWidth;
+								const sh = (vH / drawH) * flagImg.naturalHeight;
 
-							const meta = countryMetadata[sid - 1];
-							if (!disableCountryGradient && meta && meta.bounds) {
-								if (!this._gradientCache) this._gradientCache = new Map();
-								let cached = this._gradientCache.get(fill);
-								if (!cached) {
-									const pTop = getGridPoint(0, meta.bounds.minY).y;
-									const pBottom = getGridPoint(0, meta.bounds.maxY).y;
-									const g = ctx.createLinearGradient(0, pTop, 0, pBottom);
-									g.addColorStop(
-										0,
-										`rgba(${Math.min(255, colorParts[0] + 25)},${Math.min(255, colorParts[1] + 25)},${Math.min(255, colorParts[2] + 25)},${a})`,
-									);
-									g.addColorStop(
-										0.3,
-										`rgba(${colorParts[0]},${colorParts[1]},${colorParts[2]},${a})`,
-									);
-									g.addColorStop(
-										1,
-										`rgba(${Math.floor(colorParts[0] * 0.65)},${Math.floor(colorParts[1] * 0.65)},${Math.floor(colorParts[2] * 0.65)},${a})`,
-									);
-									cached = g;
-									this._gradientCache.set(fill, cached);
+								if (
+									Number.isFinite(sx) &&
+									Number.isFinite(sy) &&
+									Number.isFinite(sw) &&
+									Number.isFinite(sh) &&
+									sw > 0 &&
+									sh > 0
+								) {
+									ctx.globalAlpha = 0.55;
+									ctx.drawImage(flagImg, sx, sy, sw, sh, vL, vT, vW, vH);
+									ctx.globalAlpha = 1.0;
 								}
-								resolvedFill = cached;
-							} else {
-								resolvedFill = `rgba(${colorParts[0]},${colorParts[1]},${colorParts[2]},${a})`;
 							}
+						} else if (
+							Number.isFinite(drawX) &&
+							Number.isFinite(drawY) &&
+							Number.isFinite(drawW) &&
+							Number.isFinite(drawH)
+						) {
+							const c = flagMeta.rgba || [180, 180, 180, 1];
+							ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},0.35)`;
+							ctx.fillRect(drawX, drawY, drawW, drawH);
 						}
-						if (!meshBatch.has(resolvedFill)) meshBatch.set(resolvedFill, []);
-						meshBatch
-							.get(resolvedFill)
-							.push([drawX - 0.25, drawY - 0.25, drawW + 0.5, drawH + 0.5]);
-					}
 
-					// Mark as processed
-					for (let j = 0; j < mh; j += step) {
-						const targetRowOffset = (vy + j) * vWidth;
-						for (let i = 0; i < mw; i += step) {
-							processed[targetRowOffset + vx + i] = 1;
-						}
-					}
-				}
-			}
+						ctx.restore();
+					});
+				} else {
+					regions.forEach((region) => {
+						const id = region.id;
+						const pixels = region.pixels;
+						const meta = countryMetadata[id - 1];
+						if (!meta) return;
 
-			// Render all batched rectangles: one ctx.fill() per unique fillStyle
-			for (const [fillStyle, rects] of meshBatch) {
-				ctx.fillStyle = fillStyle;
-				ctx.beginPath();
-				for (let r = 0; r < rects.length; r++) {
-					const rc = rects[r];
-					ctx.rect(rc[0], rc[1], rc[2], rc[3]);
-				}
-				ctx.fill();
-			}
-		}
+						const flagMeta = meta;
 
-		// PASS 1.5: Flag Overlays (Only in Flag View)
-		if (viewMode === "FLAG") {
-			const _countryById = new Map();
-			for (const side of sides) for (const c of side) _countryById.set(c.id, c);
-			// Group regions by alliance root when alliance view is enabled, so each alliance
-			// gets a single merged clipping mask and flag overlay.
-			if (allianceViewEnabled) {
-				const allianceGroups = new Map();
-				regions.forEach((region) => {
-					const rootId = allianceKeyById[region.id] || region.id;
-					if (!allianceGroups.has(rootId)) allianceGroups.set(rootId, []);
-					allianceGroups.get(rootId).push(region);
-				});
+						ctx.save();
+						ctx.beginPath();
 
-				allianceGroups.forEach((group, rootId) => {
-					const rootMeta =
-						allianceFlagMetaByRoot[rootId] || countryMetadata[rootId - 1];
-					if (!rootMeta) return;
+						const pixelsByRow = new Map();
+						let regMinX = Infinity,
+							regMaxX = -Infinity,
+							regMinY = Infinity,
+							regMaxY = -Infinity;
 
-					const flagMeta = rootMeta;
-					ctx.save();
-					ctx.beginPath();
-
-					const pixelsByRow = new Map();
-					let regMinX = Infinity,
-						regMaxX = -Infinity,
-						regMinY = Infinity,
-						regMaxY = -Infinity;
-
-					group.forEach((region) => {
-						region.pixels.forEach((idx) => {
+						pixels.forEach((idx) => {
 							const py = Math.floor(idx / gridWidth);
 							const px = idx % gridWidth;
-							let row = pixelsByRow.get(py);
-							if (!row) {
-								row = [];
-								pixelsByRow.set(py, row);
-							}
-							row.push(px);
+							if (!pixelsByRow.has(py)) pixelsByRow.set(py, []);
+							pixelsByRow.get(py).push(px);
 							if (px < regMinX) regMinX = px;
 							if (px > regMaxX) regMaxX = px;
 							if (py < regMinY) regMinY = py;
 							if (py > regMaxY) regMaxY = py;
 						});
-					});
 
-					pixelsByRow.forEach((rowPixels, py) => {
-						rowPixels.sort((a, b) => a - b);
-						let spanStart = rowPixels[0];
-						const pY1 = getGridPoint(0, py).y;
-						const pY2 = getGridPoint(0, py + step).y;
-						const drawY = Math.min(pY1, pY2);
-						const drawH = Math.abs(pY2 - pY1) + 0.5;
+						pixelsByRow.forEach((rowPixels, py) => {
+							rowPixels.sort((a, b) => a - b);
+							let spanStart = rowPixels[0];
+							const pY1 = getGridPoint(0, py).y;
+							const pY2 = getGridPoint(0, py + step).y;
+							const drawY = Math.min(pY1, pY2);
+							const drawH = Math.abs(pY2 - pY1) + 0.5;
 
-						for (let i = 0; i < rowPixels.length; i++) {
+							for (let i = 0; i < rowPixels.length; i++) {
+								if (
+									i === rowPixels.length - 1 ||
+									rowPixels[i + 1] !== rowPixels[i] + step
+								) {
+									const pXStart = getGridPoint(spanStart, py).x;
+									const pXEnd = getGridPoint(rowPixels[i] + step, py).x;
+									ctx.rect(pXStart, drawY, pXEnd - pXStart + 0.5, drawH);
+									if (i < rowPixels.length - 1) spanStart = rowPixels[i + 1];
+								}
+							}
+						});
+						ctx.clip();
+
+						const p1 = getGridPoint(region.regMinX, region.regMinY);
+						const p2 = getGridPoint(
+							region.regMaxX + step,
+							region.regMaxY + step,
+						);
+						const drawX = Math.min(p1.x, p2.x);
+						const drawY = Math.min(p1.y, p2.y);
+						const drawW = Math.abs(p1.x - p2.x);
+						const drawH = Math.abs(p1.y - p2.y);
+
+						let flagImg = null;
+						const countryObj = _countryById.get(flagMeta.id);
+						if (
+							countryObj?.flag?.complete &&
+							countryObj.flag.naturalWidth > 0
+						) {
+							flagImg = countryObj.flag;
+						} else {
+							if (!flagMeta.tempFlag && flagMeta.flagUrl) {
+								flagMeta.tempFlag = new Image();
+								flagMeta.tempFlag.crossOrigin = "anonymous";
+								flagMeta.tempFlag.onload = () => {
+									if (influenceLayer) {
+										influenceLayer.invalidate?.(RENDER_LAYERS.STATIC);
+										influenceLayer.render();
+									}
+								};
+								flagMeta.tempFlag.src = flagMeta.flagUrl;
+							}
 							if (
-								i === rowPixels.length - 1 ||
-								rowPixels[i + 1] !== rowPixels[i] + step
+								flagMeta.tempFlag?.complete &&
+								flagMeta.tempFlag.naturalWidth > 0
 							) {
-								const pXStart = getGridPoint(spanStart, py).x;
-								const pXEnd = getGridPoint(rowPixels[i] + step, py).x;
-								ctx.rect(pXStart, drawY, pXEnd - pXStart + 0.5, drawH);
-								if (i < rowPixels.length - 1) spanStart = rowPixels[i + 1];
+								flagImg = flagMeta.tempFlag;
 							}
 						}
-					});
-					ctx.clip();
-
-					const p1 = getGridPoint(regMinX, regMinY);
-					const p2 = getGridPoint(regMaxX + step, regMaxY + step);
-					const drawX = Math.min(p1.x, p2.x);
-					const drawY = Math.min(p1.y, p2.y);
-					const drawW = Math.abs(p1.x - p2.x);
-					const drawH = Math.abs(p1.y - p2.y);
-
-					let flagImg = null;
-					const countryObj = _countryById.get(flagMeta.id);
-					if (flagMeta.allianceFlagTempFlag?.complete) {
-						flagImg = flagMeta.allianceFlagTempFlag;
-					} else if (
-						countryObj?.flag?.complete &&
-						countryObj.flag.naturalWidth > 0
-					) {
-						flagImg = countryObj.flag;
-					} else {
-						if (!flagMeta.tempFlag && flagMeta.flagUrl) {
-							flagMeta.tempFlag = new Image();
-							flagMeta.tempFlag.crossOrigin = "anonymous";
-							flagMeta.tempFlag.onload = () => {
-								if (influenceLayer) influenceLayer.render();
-							};
-							flagMeta.tempFlag.src = flagMeta.flagUrl;
-						}
-						if (
-							flagMeta.tempFlag?.complete &&
-							flagMeta.tempFlag.naturalWidth > 0
-						) {
-							flagImg = flagMeta.tempFlag;
-						}
-					}
-
-					if (
-						flagImg &&
-						drawW > 0 &&
-						drawH > 0 &&
-						Number.isFinite(drawX) &&
-						Number.isFinite(drawY)
-					) {
-						const viewW = this._container.width / dpr;
-						const viewH = this._container.height / dpr;
-
-						const vL = Math.max(0, drawX);
-						const vT = Math.max(0, drawY);
-						const vR = Math.min(viewW, drawX + drawW);
-						const vB = Math.min(viewH, drawY + drawH);
-
-						const vW = vR - vL;
-						const vH = vB - vT;
 
 						if (
-							vW > 0 &&
-							vH > 0 &&
-							Number.isFinite(vW) &&
-							Number.isFinite(vH)
+							flagImg &&
+							drawW > 0 &&
+							drawH > 0 &&
+							Number.isFinite(drawX) &&
+							Number.isFinite(drawY)
 						) {
-							const sx = ((vL - drawX) / drawW) * flagImg.naturalWidth;
-							const sy = ((vT - drawY) / drawH) * flagImg.naturalHeight;
-							const sw = (vW / drawW) * flagImg.naturalWidth;
-							const sh = (vH / drawH) * flagImg.naturalHeight;
+							const viewW = this._container.width / dpr;
+							const viewH = this._container.height / dpr;
+
+							const vL = Math.max(0, drawX);
+							const vT = Math.max(0, drawY);
+							const vR = Math.min(viewW, drawX + drawW);
+							const vB = Math.min(viewH, drawY + drawH);
+
+							const vW = vR - vL;
+							const vH = vB - vT;
 
 							if (
-								Number.isFinite(sx) &&
-								Number.isFinite(sy) &&
-								Number.isFinite(sw) &&
-								Number.isFinite(sh) &&
-								sw > 0 &&
-								sh > 0
+								vW > 0 &&
+								vH > 0 &&
+								Number.isFinite(vW) &&
+								Number.isFinite(vH)
 							) {
-								ctx.globalAlpha = 0.55;
-								ctx.drawImage(flagImg, sx, sy, sw, sh, vL, vT, vW, vH);
-								ctx.globalAlpha = 1.0;
+								const sx = ((vL - drawX) / drawW) * flagImg.naturalWidth;
+								const sy = ((vT - drawY) / drawH) * flagImg.naturalHeight;
+								const sw = (vW / drawW) * flagImg.naturalWidth;
+								const sh = (vH / drawH) * flagImg.naturalHeight;
+
+								if (
+									Number.isFinite(sx) &&
+									Number.isFinite(sy) &&
+									Number.isFinite(sw) &&
+									Number.isFinite(sh) &&
+									sw > 0 &&
+									sh > 0
+								) {
+									ctx.globalAlpha = 0.55;
+									ctx.drawImage(flagImg, sx, sy, sw, sh, vL, vT, vW, vH);
+									ctx.globalAlpha = 1.0;
+								}
 							}
-						}
-					} else if (
-						Number.isFinite(drawX) &&
-						Number.isFinite(drawY) &&
-						Number.isFinite(drawW) &&
-						Number.isFinite(drawH)
-					) {
-						const c = flagMeta.rgba || [180, 180, 180, 1];
-						ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},0.35)`;
-						ctx.fillRect(drawX, drawY, drawW, drawH);
-					}
-
-					ctx.restore();
-				});
-			} else {
-				regions.forEach((region) => {
-					const id = region.id;
-					const pixels = region.pixels;
-					const meta = countryMetadata[id - 1];
-					if (!meta) return;
-
-					const flagMeta = meta;
-
-					ctx.save();
-					ctx.beginPath();
-
-					const pixelsByRow = new Map();
-					let regMinX = Infinity,
-						regMaxX = -Infinity,
-						regMinY = Infinity,
-						regMaxY = -Infinity;
-
-					pixels.forEach((idx) => {
-						const py = Math.floor(idx / gridWidth);
-						const px = idx % gridWidth;
-						if (!pixelsByRow.has(py)) pixelsByRow.set(py, []);
-						pixelsByRow.get(py).push(px);
-						if (px < regMinX) regMinX = px;
-						if (px > regMaxX) regMaxX = px;
-						if (py < regMinY) regMinY = py;
-						if (py > regMaxY) regMaxY = py;
-					});
-
-					pixelsByRow.forEach((rowPixels, py) => {
-						rowPixels.sort((a, b) => a - b);
-						let spanStart = rowPixels[0];
-						const pY1 = getGridPoint(0, py).y;
-						const pY2 = getGridPoint(0, py + step).y;
-						const drawY = Math.min(pY1, pY2);
-						const drawH = Math.abs(pY2 - pY1) + 0.5;
-
-						for (let i = 0; i < rowPixels.length; i++) {
-							if (
-								i === rowPixels.length - 1 ||
-								rowPixels[i + 1] !== rowPixels[i] + step
-							) {
-								const pXStart = getGridPoint(spanStart, py).x;
-								const pXEnd = getGridPoint(rowPixels[i] + step, py).x;
-								ctx.rect(pXStart, drawY, pXEnd - pXStart + 0.5, drawH);
-								if (i < rowPixels.length - 1) spanStart = rowPixels[i + 1];
-							}
-						}
-					});
-					ctx.clip();
-
-					const p1 = getGridPoint(region.regMinX, region.regMinY);
-					const p2 = getGridPoint(region.regMaxX + step, region.regMaxY + step);
-					const drawX = Math.min(p1.x, p2.x);
-					const drawY = Math.min(p1.y, p2.y);
-					const drawW = Math.abs(p1.x - p2.x);
-					const drawH = Math.abs(p1.y - p2.y);
-
-					let flagImg = null;
-					const countryObj = _countryById.get(flagMeta.id);
-					if (countryObj?.flag?.complete && countryObj.flag.naturalWidth > 0) {
-						flagImg = countryObj.flag;
-					} else {
-						if (!flagMeta.tempFlag && flagMeta.flagUrl) {
-							flagMeta.tempFlag = new Image();
-							flagMeta.tempFlag.crossOrigin = "anonymous";
-							flagMeta.tempFlag.onload = () => {
-								if (influenceLayer) influenceLayer.render();
-							};
-							flagMeta.tempFlag.src = flagMeta.flagUrl;
-						}
-						if (
-							flagMeta.tempFlag?.complete &&
-							flagMeta.tempFlag.naturalWidth > 0
+						} else if (
+							Number.isFinite(drawX) &&
+							Number.isFinite(drawY) &&
+							Number.isFinite(drawW) &&
+							Number.isFinite(drawH)
 						) {
-							flagImg = flagMeta.tempFlag;
+							const c = meta.rgba;
+							ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},0.35)`;
+							ctx.fillRect(drawX, drawY, drawW, drawH);
 						}
-					}
 
-					if (
-						flagImg &&
-						drawW > 0 &&
-						drawH > 0 &&
-						Number.isFinite(drawX) &&
-						Number.isFinite(drawY)
-					) {
-						const viewW = this._container.width / dpr;
-						const viewH = this._container.height / dpr;
-
-						const vL = Math.max(0, drawX);
-						const vT = Math.max(0, drawY);
-						const vR = Math.min(viewW, drawX + drawW);
-						const vB = Math.min(viewH, drawY + drawH);
-
-						const vW = vR - vL;
-						const vH = vB - vT;
-
-						if (
-							vW > 0 &&
-							vH > 0 &&
-							Number.isFinite(vW) &&
-							Number.isFinite(vH)
-						) {
-							const sx = ((vL - drawX) / drawW) * flagImg.naturalWidth;
-							const sy = ((vT - drawY) / drawH) * flagImg.naturalHeight;
-							const sw = (vW / drawW) * flagImg.naturalWidth;
-							const sh = (vH / drawH) * flagImg.naturalHeight;
-
-							if (
-								Number.isFinite(sx) &&
-								Number.isFinite(sy) &&
-								Number.isFinite(sw) &&
-								Number.isFinite(sh) &&
-								sw > 0 &&
-								sh > 0
-							) {
-								ctx.globalAlpha = 0.55;
-								ctx.drawImage(flagImg, sx, sy, sw, sh, vL, vT, vW, vH);
-								ctx.globalAlpha = 1.0;
-							}
-						}
-					} else if (
-						Number.isFinite(drawX) &&
-						Number.isFinite(drawY) &&
-						Number.isFinite(drawW) &&
-						Number.isFinite(drawH)
-					) {
-						const c = meta.rgba;
-						ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},0.35)`;
-						ctx.fillRect(drawX, drawY, drawW, drawH);
-					}
-
-					ctx.restore();
-				});
+						ctx.restore();
+					});
+				}
 			}
-		}
 
-		// Pre-build grid-to-screen position arrays (reused by border loop)
-		const vWidth = xMax - xMin + 1;
-		const vHeight = yMax - yMin + 1;
-		const gridXP = new Float32Array(vWidth + 1);
-		const gridYP = new Float32Array(vHeight + 1);
-		for (let x = 0; x <= vWidth; x++)
-			gridXP[x] = getGridPoint(xMin + x, yMin).x;
-		for (let y = 0; y <= vHeight; y++)
-			gridYP[y] = getGridPoint(xMin, yMin + y).y;
+			// Pre-build grid-to-screen position arrays (reused by border loop)
+			const gridXP = gridProjection.x;
+			const gridYP = gridProjection.y;
 
-		// PASS 2: Frontlines (Organic borders during war)
-		if (isWar) {
-			ctx.strokeStyle = CONFIG.FRONTLINE_COLOR;
-			// Adaptive line width: Thinner at distance to prevent "blobby" lines
-			ctx.lineWidth = Math.max(1.2, 3.5 * (currentZoom / 5));
-			ctx.lineJoin = "round";
-			ctx.lineCap = "round";
+			// PASS 2: Frontlines (Organic borders during war)
+			if (isWar) {
+				ctx.strokeStyle = CONFIG.FRONTLINE_COLOR;
+				// Adaptive line width: Thinner at distance to prevent "blobby" lines
+				ctx.lineWidth = Math.max(1.2, 3.5 * (currentZoom / 5));
+				ctx.lineJoin = "round";
+				ctx.lineCap = "round";
+				ctx.beginPath();
+
+				const lineStep = step; // Downsample frontline calculations matching the greedy mesh
+
+				for (let y = staticLoopYMin; y < staticLoopYMax; y += lineStep) {
+					for (let x = staticLoopXMin; x < staticLoopXMax; x += lineStep) {
+						if (!isStaticCellInPaintTiles(x, y)) continue;
+						const i1 = y * gridWidth + x;
+						const i2 = y * gridWidth + (x + 1);
+						const i3 = (y + 1) * gridWidth + (x + 1);
+						const i4 = (y + 1) * gridWidth + x;
+
+						if (
+							landMask[i1] !== 2 &&
+							landMask[i2] !== 2 &&
+							landMask[i3] !== 2 &&
+							landMask[i4] !== 2
+						)
+							continue;
+
+						const ds1 = dominantSideMap[i1];
+						const ds2 = dominantSideMap[i2];
+						const ds3 = dominantSideMap[i3];
+						const ds4 = dominantSideMap[i4];
+
+						const s1 = ds1 >= 0 ? ds1 : -1;
+						const s2 = ds2 >= 0 ? ds2 : -1;
+						const s3 = ds3 >= 0 ? ds3 : -1;
+						const s4 = ds4 >= 0 ? ds4 : -1;
+
+						// For each edge of the quad, if the two corners belong to different
+						// combatant sides, there is a border crossing somewhere along it.
+						// We use a simple midpoint approach: draw a short line segment
+						// between crossing points on edges that span different sides.
+						const crossings = [];
+
+						const addCrossing = (ax, ay, sa, bx, by, sb) => {
+							if (sa !== sb && sa >= 0 && sb >= 0) {
+								crossings.push(getGridPoint((ax + bx) / 2, (ay + by) / 2));
+							}
+						};
+
+						// Top edge (v1 -> v2)
+						addCrossing(x, y, s1, x + 1, y, s2);
+						// Right edge (v2 -> v3)
+						addCrossing(x + 1, y, s2, x + 1, y + 1, s3);
+						// Bottom edge (v4 -> v3)
+						addCrossing(x, y + 1, s4, x + 1, y + 1, s3);
+						// Left edge (v1 -> v4)
+						addCrossing(x, y, s1, x, y + 1, s4);
+
+						if (crossings.length >= 2) {
+							ctx.moveTo(crossings[0].x, crossings[0].y);
+							ctx.lineTo(crossings[1].x, crossings[1].y);
+							if (crossings.length >= 3) {
+								ctx.lineTo(crossings[2].x, crossings[2].y);
+							}
+						} else if (crossings.length === 1) {
+							// Single crossing — connect to diagonal midpoint
+							const mid = getGridPoint(x + 0.5, y + 0.5);
+							ctx.moveTo(crossings[0].x, crossings[0].y);
+							ctx.lineTo(mid.x, mid.y);
+						}
+					}
+				}
+				ctx.stroke();
+			}
+
+			// PASS 3: Borders
+			// PASS 3: Dynamic Borders & Coastlines
+			// Outlines of annexed nations disappear because they now share the same owner ID in the grid.
+			const isFlag = viewMode === "FLAG";
+			ctx.strokeStyle = isFlag ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.3)";
+			ctx.lineWidth = isFlag ? 1.5 : 1;
 			ctx.beginPath();
 
-			const lineStep = step; // Downsample frontline calculations matching the greedy mesh
+			const borderStep = currentZoom < 5 ? 2 : 1;
+			const borderRowStep = gridWidth * borderStep;
 
-			for (let y = yMin; y < yMax; y += lineStep) {
-				for (let x = xMin; x < xMax; x += lineStep) {
-					const i1 = y * gridWidth + x;
-					const i2 = y * gridWidth + (x + 1);
-					const i3 = (y + 1) * gridWidth + (x + 1);
-					const i4 = (y + 1) * gridWidth + x;
+			if (isFlag) {
+				const getEffectiveId = (idx) => {
+					if (idx < 0 || idx >= worldControlMap.length || landMask[idx] === 0)
+						return -1; // -1 represents water
 
-					if (
-						landMask[i1] !== 2 &&
-						landMask[i2] !== 2 &&
-						landMask[i3] !== 2 &&
-						landMask[i4] !== 2
-					)
-						continue;
+					const sovereignId = worldControlMap[idx];
+					if (sovereignId <= 0) return 0;
+					if (isWar && landMask[idx] === 2) {
+						const sSide = sovereignSideMap[sovereignId];
+						const ds = dominantSideMap[idx];
+						const isOccupiedByEnemy = ds !== -1 && ds !== sSide;
+						if (isOccupiedByEnemy)
+							return primaryOccupierMap[idx] || sovereignId;
+					}
+					return sovereignId;
+				};
 
-					const ds1 = dominantSideMap[i1];
-					const ds2 = dominantSideMap[i2];
-					const ds3 = dominantSideMap[i3];
-					const ds4 = dominantSideMap[i4];
+				for (let y = staticLoopYMin; y < staticLoopYMax; y += borderStep) {
+					const rowOffset = y * gridWidth;
+					for (let x = staticLoopXMin; x < staticLoopXMax; x += borderStep) {
+						if (!isStaticCellInPaintTiles(x, y)) continue;
+						const i = rowOffset + x;
+						const id = getEffectiveId(i);
 
-					const s1 = ds1 >= 0 ? ds1 : -1;
-					const s2 = ds2 >= 0 ? ds2 : -1;
-					const s3 = ds3 >= 0 ? ds3 : -1;
-					const s4 = ds4 >= 0 ? ds4 : -1;
-
-					// For each edge of the quad, if the two corners belong to different
-					// combatant sides, there is a border crossing somewhere along it.
-					// We use a simple midpoint approach: draw a short line segment
-					// between crossing points on edges that span different sides.
-					const crossings = [];
-
-					const addCrossing = (ax, ay, sa, bx, by, sb) => {
-						if (sa !== sb && sa >= 0 && sb >= 0) {
-							crossings.push(getGridPoint((ax + bx) / 2, (ay + by) / 2));
+						if (x + borderStep < gridWidth) {
+							const idR = getEffectiveId(i + borderStep);
+							if (id !== idR && (id !== -1 || idR !== -1)) {
+								const p1x = gridXP[x + borderStep - xMin];
+								const p1y = gridYP[y - yMin];
+								const p2x = gridXP[x + borderStep - xMin];
+								const p2y = gridYP[y + borderStep - yMin];
+								ctx.moveTo(p1x, p1y);
+								ctx.lineTo(p2x, p2y);
+							}
 						}
-					};
-
-					// Top edge (v1 -> v2)
-					addCrossing(x, y, s1, x + 1, y, s2);
-					// Right edge (v2 -> v3)
-					addCrossing(x + 1, y, s2, x + 1, y + 1, s3);
-					// Bottom edge (v4 -> v3)
-					addCrossing(x, y + 1, s4, x + 1, y + 1, s3);
-					// Left edge (v1 -> v4)
-					addCrossing(x, y, s1, x, y + 1, s4);
-
-					if (crossings.length >= 2) {
-						ctx.moveTo(crossings[0].x, crossings[0].y);
-						ctx.lineTo(crossings[1].x, crossings[1].y);
-						if (crossings.length >= 3) {
-							ctx.lineTo(crossings[2].x, crossings[2].y);
+						if (y + borderStep < gridHeight) {
+							const idD = getEffectiveId(i + borderRowStep);
+							if (id !== idD && (id !== -1 || idD !== -1)) {
+								const p1x = gridXP[x - xMin];
+								const p1y = gridYP[y + borderStep - yMin];
+								const p2x = gridXP[x + borderStep - xMin];
+								const p2y = gridYP[y + borderStep - yMin];
+								ctx.moveTo(p1x, p1y);
+								ctx.lineTo(p2x, p2y);
+							}
 						}
-					} else if (crossings.length === 1) {
-						// Single crossing — connect to diagonal midpoint
-						const mid = getGridPoint(x + 0.5, y + 0.5);
-						ctx.moveTo(crossings[0].x, crossings[0].y);
-						ctx.lineTo(mid.x, mid.y);
+					}
+				}
+			} else {
+				for (let y = staticLoopYMin; y < staticLoopYMax; y += borderStep) {
+					const rowOffset = y * gridWidth;
+					for (let x = staticLoopXMin; x < staticLoopXMax; x += borderStep) {
+						if (!isStaticCellInPaintTiles(x, y)) continue;
+						const i = rowOffset + x;
+						const id = landMask[i] === 0 ? -1 : worldControlMap[i];
+
+						if (x + borderStep < gridWidth) {
+							const rightIdx = i + borderStep;
+							const idR =
+								landMask[rightIdx] === 0 ? -1 : worldControlMap[rightIdx];
+							if (id !== idR && (id !== -1 || idR !== -1)) {
+								const p1x = gridXP[x + borderStep - xMin];
+								const p1y = gridYP[y - yMin];
+								const p2x = gridXP[x + borderStep - xMin];
+								const p2y = gridYP[y + borderStep - yMin];
+								ctx.moveTo(p1x, p1y);
+								ctx.lineTo(p2x, p2y);
+							}
+						}
+						if (y + borderStep < gridHeight) {
+							const downIdx = i + borderRowStep;
+							const idD =
+								landMask[downIdx] === 0 ? -1 : worldControlMap[downIdx];
+							if (id !== idD && (id !== -1 || idD !== -1)) {
+								const p1x = gridXP[x - xMin];
+								const p1y = gridYP[y + borderStep - yMin];
+								const p2x = gridXP[x + borderStep - xMin];
+								const p2y = gridYP[y + borderStep - yMin];
+								ctx.moveTo(p1x, p1y);
+								ctx.lineTo(p2x, p2y);
+							}
+						}
 					}
 				}
 			}
 			ctx.stroke();
+			ctx.restore();
+			if (fullStaticRefresh) {
+				this._cachedRegions = regions;
+				this._regionsRevision++;
+				this._invalidLayers |= RENDER_LAYERS.LABELS;
+			}
+			this._staticCacheKey = staticCacheKey;
+			this._lastStaticRenderFrame = simFrameCount;
+			this._invalidLayers &= ~RENDER_LAYERS.STATIC;
+			this._clearVisibleControlTiles(xMin, xMax, yMin, yMax);
 		}
 
-		// PASS 3: Borders
-		// PASS 3: Dynamic Borders & Coastlines
-		// Outlines of annexed nations disappear because they now share the same owner ID in the grid.
-		const isFlag = viewMode === "FLAG";
-		ctx.strokeStyle = isFlag ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.3)";
-		ctx.lineWidth = isFlag ? 1.5 : 1;
-		ctx.beginPath();
-
-		const borderStep = currentZoom < 5 ? 2 : 1;
-		const borderRowStep = gridWidth * borderStep;
-
-		if (isFlag) {
-			const getEffectiveId = (idx) => {
-				if (idx < 0 || idx >= worldControlMap.length || landMask[idx] === 0)
-					return -1; // -1 represents water
-
-				const sovereignId = worldControlMap[idx];
-				if (sovereignId <= 0) return 0;
-				if (isWar && landMask[idx] === 2) {
-					const sSide = sovereignSideMap[sovereignId];
-					const ds = dominantSideMap[idx];
-					const isOccupiedByEnemy = ds !== -1 && ds !== sSide;
-					if (isOccupiedByEnemy) return primaryOccupierMap[idx] || sovereignId;
-				}
-				return sovereignId;
-			};
-
-			for (let y = yMin; y < yMax; y += borderStep) {
-				const rowOffset = y * gridWidth;
-				for (let x = xMin; x < xMax; x += borderStep) {
-					const i = rowOffset + x;
-					const id = getEffectiveId(i);
-
-					if (x + borderStep < gridWidth) {
-						const idR = getEffectiveId(i + borderStep);
-						if (id !== idR && (id !== -1 || idR !== -1)) {
-							const p1x = gridXP[x + borderStep - xMin];
-							const p1y = gridYP[y - yMin];
-							const p2x = gridXP[x + borderStep - xMin];
-							const p2y = gridYP[y + borderStep - yMin];
-							ctx.moveTo(p1x, p1y);
-							ctx.lineTo(p2x, p2y);
-						}
-					}
-					if (y + borderStep < gridHeight) {
-						const idD = getEffectiveId(i + borderRowStep);
-						if (id !== idD && (id !== -1 || idD !== -1)) {
-							const p1x = gridXP[x - xMin];
-							const p1y = gridYP[y + borderStep - yMin];
-							const p2x = gridXP[x + borderStep - xMin];
-							const p2y = gridYP[y + borderStep - yMin];
-							ctx.moveTo(p1x, p1y);
-							ctx.lineTo(p2x, p2y);
-						}
-					}
-				}
-			}
-		} else {
-			for (let y = yMin; y < yMax; y += borderStep) {
-				const rowOffset = y * gridWidth;
-				for (let x = xMin; x < xMax; x += borderStep) {
-					const i = rowOffset + x;
-					const id = landMask[i] === 0 ? -1 : worldControlMap[i];
-
-					if (x + borderStep < gridWidth) {
-						const rightIdx = i + borderStep;
-						const idR =
-							landMask[rightIdx] === 0 ? -1 : worldControlMap[rightIdx];
-						if (id !== idR && (id !== -1 || idR !== -1)) {
-							const p1x = gridXP[x + borderStep - xMin];
-							const p1y = gridYP[y - yMin];
-							const p2x = gridXP[x + borderStep - xMin];
-							const p2y = gridYP[y + borderStep - yMin];
-							ctx.moveTo(p1x, p1y);
-							ctx.lineTo(p2x, p2y);
-						}
-					}
-					if (y + borderStep < gridHeight) {
-						const downIdx = i + borderRowStep;
-						const idD = landMask[downIdx] === 0 ? -1 : worldControlMap[downIdx];
-						if (id !== idD && (id !== -1 || idD !== -1)) {
-							const p1x = gridXP[x - xMin];
-							const p1y = gridYP[y + borderStep - yMin];
-							const p2x = gridXP[x + borderStep - xMin];
-							const p2y = gridYP[y + borderStep - yMin];
-							ctx.moveTo(p1x, p1y);
-							ctx.lineTo(p2x, p2y);
-						}
-					}
-				}
-			}
-		}
-		ctx.stroke();
+		// Dynamic entities, labels, editor highlights and operation overlays stay on
+		// the public canvas. Captures therefore continue to receive one composited
+		// surface even though the political/control work is cached separately.
+		mainCtx.clearRect(0, 0, this._container.width, this._container.height);
+		mainCtx.save();
+		mainCtx.scale(dpr, dpr);
+		mainCtx.drawImage(
+			this._staticSurface,
+			0,
+			0,
+			this._container.width / dpr,
+			this._container.height / dpr,
+		);
+		ctx = mainCtx;
 
 		// Pass 4: Selection Highlight
 		if (gameState !== "SIMULATING") {
@@ -2462,676 +2959,745 @@ const ControlMapLayer = L.Layer.extend({
 				ctx.restore();
 			});
 		}
+		mainCtx.restore();
+		this._invalidLayers &= ~RENDER_LAYERS.DYNAMIC;
 
-		// PASS 6: Curved Soldier Labels (HOI4 Style)
-		// Drawn AFTER units so they appear on top
-		if (isWar && !hideCurvedLabels) {
-			for (let sIdx = 0; sIdx < MAX_SIDES; sIdx++) {
-				if (sides[sIdx] && sides[sIdx].length > 0) {
-					this.drawCurvedLabel(ctx, sIdx);
-				}
-			}
-			// Only bake the casualty list into the map canvas during Cinematic Mode
-			// so it appears in the WebM recording while the standard HTML UI is hidden.
-			if (cinematicMode) {
-				this.drawCasualtiesOnCanvas(ctx);
-			}
-		}
+		const labelsCacheKey = [
+			viewportKey,
+			isWar ? 1 : 0,
+			hideCurvedLabels ? 1 : 0,
+			showCountryLabels ? 1 : 0,
+			cinematicMode ? 1 : 0,
+			this._isCapturing ? 1 : 0,
+			this._regionsRevision,
+			sideKey,
+		].join(";");
+		const labelsRefreshFrames = simSpeed >= 3 ? 6 : 3;
+		const movingLabelsRefreshDue =
+			isWar &&
+			!hideCurvedLabels &&
+			simFrameCount - this._lastLabelsRenderFrame >= labelsRefreshFrames;
+		const renderLabels =
+			(isWar && isPaused) ||
+			(this._invalidLayers & RENDER_LAYERS.LABELS) !== 0 ||
+			this._labelsCacheKey !== labelsCacheKey ||
+			movingLabelsRefreshDue;
+		const labelsCtx = this._labelsSurface.getContext("2d", {
+			willReadFrequently: false,
+		});
+		if (renderLabels) {
+			labelsCtx.clearRect(
+				0,
+				0,
+				this._labelsSurface.width,
+				this._labelsSurface.height,
+			);
+			labelsCtx.save();
+			labelsCtx.scale(dpr, dpr);
+			ctx = labelsCtx;
 
-		// PASS 7: Country Labels (HOI4 Curved Style)
-		// Drawn per contiguous region so overseas territories get their own labels,
-		// recomputed every frame in map-space so they move naturally with the camera.
-		if (showCountryLabels && regions?.length && countryMetadata) {
-			const mapSize = map.getSize();
-			const viewBounds = map.getBounds();
-			const res = CONFIG.GRID_RES;
-
-			const safeLatLngToPoint = (lat, lng) => {
-				if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
-				try {
-					return project(lat, lng);
-				} catch (_e) {
-					return null;
-				}
-			};
-
-			regions.forEach((region) => {
-				const meta = countryMetadata[region.id - 1];
-				if (!meta) return;
-
-				const centerLat = region.latSum / region.count;
-				const centerLng = region.lngSum / region.count;
-
-				// Skip regions far from the current view
-				if (!viewBounds.pad(0.5).contains([centerLat, centerLng])) return;
-				const pCenter = safeLatLngToPoint(centerLat, centerLng);
-				if (
-					!pCenter ||
-					pCenter.x < -400 ||
-					pCenter.x > mapSize.x + 400 ||
-					pCenter.y < -400 ||
-					pCenter.y > mapSize.y + 400
-				) {
-					return;
-				}
-
-				const nameRaw = meta.displayName || meta.name || "Unknown";
-				const name = nameRaw.toUpperCase();
-
-				// Area scale based on this region only
-				const pMin = safeLatLngToPoint(
-					region.regMinY * res - 90,
-					region.regMinX * res - 180,
-				);
-				const pMax = safeLatLngToPoint(
-					region.regMaxY * res - 90,
-					region.regMaxX * res - 180,
-				);
-				if (!pMin || !pMax) return;
-				const areaScale = Math.sqrt(
-					Math.abs(pMax.x - pMin.x) * Math.abs(pMax.y - pMin.y),
-				);
-
-				const zoom = map.getZoom();
-				let fontSize = Math.max(8, Math.min(zoom * 12, areaScale / 4.5));
-
-				// Build control points from region bins in lat/lng -> screen space
-				const points = (region.bins || []).map((bin) => {
-					if (!bin || bin.count <= 0) return null;
-					const lat = bin.latSum / bin.count;
-					const lng = bin.lngSum / bin.count;
-					return safeLatLngToPoint(lat, lng);
-				});
-
-				if (!points || points.length < 4) return;
-
-				// Fill any missing points by interpolating neighbours, or fall back to center
-				for (let i = 0; i < 4; i++) {
-					if (!points[i]) {
-						let left = null,
-							right = null;
-						for (let j = i - 1; j >= 0; j--) {
-							if (points[j]) {
-								left = { p: points[j], idx: j };
-								break;
-							}
-						}
-						for (let j = i + 1; j < 4; j++) {
-							if (points[j]) {
-								right = { p: points[j], idx: j };
-								break;
-							}
-						}
-						if (left && right) {
-							const t = (i - left.idx) / (right.idx - left.idx);
-							points[i] = {
-								x: left.p.x + (right.p.x - left.p.x) * t,
-								y: left.p.y + (right.p.y - left.p.y) * t,
-							};
-						} else if (left) {
-							points[i] = { ...left.p };
-						} else if (right) {
-							points[i] = { ...right.p };
-						} else {
-							points[i] = { ...pCenter };
-						}
+			// PASS 6: Curved Soldier Labels (HOI4 Style)
+			// Drawn AFTER units so they appear on top
+			if (isWar && !hideCurvedLabels) {
+				for (let sIdx = 0; sIdx < MAX_SIDES; sIdx++) {
+					if (sides[sIdx] && sides[sIdx].length > 0) {
+						this.drawCurvedLabel(ctx, sIdx);
 					}
 				}
+				// Only bake the casualty list into the map canvas during Cinematic Mode
+				// so it appears in the WebM recording while the standard HTML UI is hidden.
+				if (cinematicMode) {
+					this.drawCasualtiesOnCanvas(ctx);
+				}
+			}
 
-				// Measure curve length to fit text nicely
-				let pathLength = 0;
-				let prev = points[0];
-				for (let i = 1; i <= 10; i++) {
-					const curr = this.getBezierPoint(
-						i / 10,
+			// PASS 7: Country Labels (HOI4 Curved Style)
+			// Drawn per contiguous region so overseas territories get their own labels,
+			// recomputed every frame in map-space so they move naturally with the camera.
+			if (showCountryLabels && regions?.length && countryMetadata) {
+				const mapSize = map.getSize();
+				const viewBounds = map.getBounds();
+				const res = CONFIG.GRID_RES;
+
+				const safeLatLngToPoint = (lat, lng) => {
+					if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
+					try {
+						return project(lat, lng);
+					} catch (_e) {
+						return null;
+					}
+				};
+
+				regions.forEach((region) => {
+					const meta = countryMetadata[region.id - 1];
+					if (!meta) return;
+
+					const centerLat = region.latSum / region.count;
+					const centerLng = region.lngSum / region.count;
+
+					// Skip regions far from the current view
+					if (!viewBounds.pad(0.5).contains([centerLat, centerLng])) return;
+					const pCenter = safeLatLngToPoint(centerLat, centerLng);
+					if (
+						!pCenter ||
+						pCenter.x < -400 ||
+						pCenter.x > mapSize.x + 400 ||
+						pCenter.y < -400 ||
+						pCenter.y > mapSize.y + 400
+					) {
+						return;
+					}
+
+					const nameRaw = meta.displayName || meta.name || "Unknown";
+					const name = nameRaw.toUpperCase();
+
+					// Area scale based on this region only
+					const pMin = safeLatLngToPoint(
+						region.regMinY * res - 90,
+						region.regMinX * res - 180,
+					);
+					const pMax = safeLatLngToPoint(
+						region.regMaxY * res - 90,
+						region.regMaxX * res - 180,
+					);
+					if (!pMin || !pMax) return;
+					const areaScale = Math.sqrt(
+						Math.abs(pMax.x - pMin.x) * Math.abs(pMax.y - pMin.y),
+					);
+
+					const zoom = map.getZoom();
+					let fontSize = Math.max(8, Math.min(zoom * 12, areaScale / 4.5));
+
+					// Build control points from region bins in lat/lng -> screen space
+					const points = (region.bins || []).map((bin) => {
+						if (!bin || bin.count <= 0) return null;
+						const lat = bin.latSum / bin.count;
+						const lng = bin.lngSum / bin.count;
+						return safeLatLngToPoint(lat, lng);
+					});
+
+					if (!points || points.length < 4) return;
+
+					// Fill any missing points by interpolating neighbours, or fall back to center
+					for (let i = 0; i < 4; i++) {
+						if (!points[i]) {
+							let left = null,
+								right = null;
+							for (let j = i - 1; j >= 0; j--) {
+								if (points[j]) {
+									left = { p: points[j], idx: j };
+									break;
+								}
+							}
+							for (let j = i + 1; j < 4; j++) {
+								if (points[j]) {
+									right = { p: points[j], idx: j };
+									break;
+								}
+							}
+							if (left && right) {
+								const t = (i - left.idx) / (right.idx - left.idx);
+								points[i] = {
+									x: left.p.x + (right.p.x - left.p.x) * t,
+									y: left.p.y + (right.p.y - left.p.y) * t,
+								};
+							} else if (left) {
+								points[i] = { ...left.p };
+							} else if (right) {
+								points[i] = { ...right.p };
+							} else {
+								points[i] = { ...pCenter };
+							}
+						}
+					}
+
+					// Measure curve length to fit text nicely
+					let pathLength = 0;
+					let prev = points[0];
+					for (let i = 1; i <= 10; i++) {
+						const curr = this.getBezierPoint(
+							i / 10,
+							points[0],
+							points[1],
+							points[2],
+							points[3],
+						);
+						pathLength += Math.sqrt(
+							(curr.x - prev.x) ** 2 + (curr.y - prev.y) ** 2,
+						);
+						prev = curr;
+					}
+
+					const charFactor = 0.65;
+					const spacingFactor = 0.35;
+					const idealFontSize =
+						(pathLength * 0.9) / (name.length * (charFactor + spacingFactor));
+					fontSize = Math.min(idealFontSize, fontSize);
+					if (fontSize < 7) return;
+
+					this.drawTextOnCurve(
+						ctx,
+						name,
 						points[0],
 						points[1],
 						points[2],
 						points[3],
+						fontSize,
+						fontSize * spacingFactor,
 					);
-					pathLength += Math.sqrt(
-						(curr.x - prev.x) ** 2 + (curr.y - prev.y) ** 2,
+				});
+			}
+			ctx.restore();
+			this._labelsCacheKey = labelsCacheKey;
+			this._lastLabelsRenderFrame = simFrameCount;
+			this._invalidLayers &= ~RENDER_LAYERS.LABELS;
+		}
+		mainCtx.drawImage(this._labelsSurface, 0, 0);
+
+		const overlaysCacheKey = [
+			viewportKey,
+			isWar ? 1 : 0,
+			showWarPlans ? 1 : 0,
+			isCustomTerrain ? 1 : 0,
+			refAboveTerrain ? 1 : 0,
+			referenceImageUrl || "",
+			refOpacity,
+			this._isCapturing ? 1 : 0,
+			window.__mwAiOperationReveal?.uid || "",
+		].join(";");
+		const overlaysRefreshDue =
+			isWar &&
+			showWarPlans &&
+			simFrameCount - this._lastOverlaysRenderFrame >= 5;
+		const renderOverlays =
+			!isWar ||
+			isPaused ||
+			(this._invalidLayers & RENDER_LAYERS.OVERLAYS) !== 0 ||
+			this._overlaysCacheKey !== overlaysCacheKey ||
+			overlaysRefreshDue;
+		const overlaysCtx = this._overlaysSurface.getContext("2d", {
+			willReadFrequently: false,
+		});
+		if (renderOverlays) {
+			overlaysCtx.clearRect(
+				0,
+				0,
+				this._overlaysSurface.width,
+				this._overlaysSurface.height,
+			);
+			overlaysCtx.save();
+			overlaysCtx.scale(dpr, dpr);
+			ctx = overlaysCtx;
+
+			// Draw a white frame around the custom map extent so you can see where the world ends.
+			// For custom maps, this should match the world size set before the map loads:
+			// use explicit maxBounds if configured (blank canvas size), otherwise the full world.
+			if (isCustomTerrain) {
+				let boundsToUse = null;
+				if (map.options.maxBounds) {
+					boundsToUse = map.options.maxBounds;
+				} else {
+					const halfW = (worldWidthDeg || 360) / 2;
+					const halfH = (worldHeightDeg || 180) / 2;
+					boundsToUse = L.latLngBounds(
+						L.latLng(-halfH, -halfW),
+						L.latLng(halfH, halfW),
 					);
-					prev = curr;
 				}
 
-				const charFactor = 0.65;
-				const spacingFactor = 0.35;
-				const idealFontSize =
-					(pathLength * 0.9) / (name.length * (charFactor + spacingFactor));
-				fontSize = Math.min(idealFontSize, fontSize);
-				if (fontSize < 7) return;
+				if (boundsToUse) {
+					try {
+						const nw = boundsToUse.getNorthWest();
+						const ne = boundsToUse.getNorthEast();
+						const se = boundsToUse.getSouthEast();
+						const sw = boundsToUse.getSouthWest();
 
-				this.drawTextOnCurve(
-					ctx,
-					name,
-					points[0],
-					points[1],
-					points[2],
-					points[3],
-					fontSize,
-					fontSize * spacingFactor,
-				);
-			});
-		}
+						const pNW = map.latLngToContainerPoint(nw);
+						const pNE = map.latLngToContainerPoint(ne);
+						const pSE = map.latLngToContainerPoint(se);
+						const pSW = map.latLngToContainerPoint(sw);
 
-		// Draw a white frame around the custom map extent so you can see where the world ends.
-		// For custom maps, this should match the world size set before the map loads:
-		// use explicit maxBounds if configured (blank canvas size), otherwise the full world.
-		if (isCustomTerrain) {
-			let boundsToUse = null;
-			if (map.options.maxBounds) {
-				boundsToUse = map.options.maxBounds;
-			} else {
-				const halfW = (worldWidthDeg || 360) / 2;
-				const halfH = (worldHeightDeg || 180) / 2;
-				boundsToUse = L.latLngBounds(
-					L.latLng(-halfH, -halfW),
-					L.latLng(halfH, halfW),
-				);
-			}
-
-			if (boundsToUse) {
-				try {
-					const nw = boundsToUse.getNorthWest();
-					const ne = boundsToUse.getNorthEast();
-					const se = boundsToUse.getSouthEast();
-					const sw = boundsToUse.getSouthWest();
-
-					const pNW = map.latLngToContainerPoint(nw);
-					const pNE = map.latLngToContainerPoint(ne);
-					const pSE = map.latLngToContainerPoint(se);
-					const pSW = map.latLngToContainerPoint(sw);
-
-					ctx.save();
-					ctx.strokeStyle = "rgba(255,255,255,0.9)";
-					ctx.lineWidth = 2.0;
-					ctx.setLineDash([6, 4]);
-					ctx.beginPath();
-					ctx.moveTo(pNW.x, pNW.y);
-					ctx.lineTo(pNE.x, pNE.y);
-					ctx.lineTo(pSE.x, pSE.y);
-					ctx.lineTo(pSW.x, pSW.y);
-					ctx.closePath();
-					ctx.stroke();
-					ctx.restore();
-				} catch (_e) {
-					// If projection fails (e.g. bounds offscreen), just skip drawing the frame.
-				}
-			}
-		}
-
-		// Draw Reference Image Guide (Over everything) when "Draw Above Terrain" is enabled.
-		// Hidden during preview capture to ensure clean Hub thumbnails and exports.
-		// This pass runs last so the reference image sits on top of terrain, countries, oceans, and units.
-		if (
-			!this._isCapturing &&
-			refAboveTerrain &&
-			referenceImageUrl &&
-			referenceOverlay &&
-			(gameMode === "EDITOR" || gameMode === "EDITOR_TEST" || godModeActive)
-		) {
-			const img = referenceOverlay.getElement();
-			if (img?.complete && img.naturalWidth > 0) {
-				const b = referenceOverlay.getBounds();
-				const pTL = map.latLngToContainerPoint(b.getNorthWest());
-				const pBR = map.latLngToContainerPoint(b.getSouthEast());
-				ctx.save();
-				ctx.globalAlpha = refOpacity;
-				ctx.drawImage(img, pTL.x, pTL.y, pBR.x - pTL.x, pBR.y - pTL.y);
-				ctx.restore();
-			}
-		}
-
-		// Draw war plan arrows between warring sides
-		if (isWar && showWarPlans) {
-			const aiObserverSnapshot = getAiObserverSnapshot();
-			if (aiObserverSnapshot) {
-				drawAiOperationsOverlay(
-					ctx,
-					aiObserverSnapshot,
-					project,
-					sideColors[aiObserverSnapshot.sideIndex] || "rgba(255, 196, 64, 0.9)",
-					window.innerWidth < 480,
-					window.__mwAiOperationReveal?.uid || null,
-				);
-			}
-			for (let si = 0; !aiObserverSnapshot && si < _warPlan.length; si++) {
-				const plan = _warPlan[si];
-				if (!plan) continue;
-				const owningSide = si >= sides.length ? si - sides.length : si;
-				const color = sideColors[owningSide] || "rgba(255,255,0,0.6)";
-
-				// DEFEND plan: draw dotted frontline line
-				if (plan.type === "DEFEND" && plan.frontlinePoints?.length > 1) {
-					ctx.save();
-					ctx.strokeStyle = color.replace(rgbaRe, "0.5)");
-					ctx.lineWidth = 2;
-					ctx.setLineDash([6, 4]);
-					ctx.beginPath();
-					const fp0 = project(
-						plan.frontlinePoints[0].lat,
-						plan.frontlinePoints[0].lng,
-					);
-					ctx.moveTo(fp0.x, fp0.y);
-					for (let fi = 1; fi < plan.frontlinePoints.length; fi++) {
-						const fp = project(
-							plan.frontlinePoints[fi].lat,
-							plan.frontlinePoints[fi].lng,
-						);
-						ctx.lineTo(fp.x, fp.y);
+						ctx.save();
+						ctx.strokeStyle = "rgba(255,255,255,0.9)";
+						ctx.lineWidth = 2.0;
+						ctx.setLineDash([6, 4]);
+						ctx.beginPath();
+						ctx.moveTo(pNW.x, pNW.y);
+						ctx.lineTo(pNE.x, pNE.y);
+						ctx.lineTo(pSE.x, pSE.y);
+						ctx.lineTo(pSW.x, pSW.y);
+						ctx.closePath();
+						ctx.stroke();
+						ctx.restore();
+					} catch (_e) {
+						// If projection fails (e.g. bounds offscreen), just skip drawing the frame.
 					}
-					ctx.stroke();
-					ctx.setLineDash([]);
-
-					// Label at midpoint
-					const mid =
-						plan.frontlinePoints[Math.floor(plan.frontlinePoints.length / 2)];
-					const midP = project(mid.lat, mid.lng);
-					ctx.font = "bold 9px monospace";
-					ctx.fillStyle = color.replace(rgbaRe, "0.8)");
-					ctx.fillText("DEFEND", midP.x + 8, midP.y - 6);
-					if (plan.frontIntel) {
-						ctx.font = "8px monospace";
-						ctx.fillText(
-							`FR ${plan.frontIntel.localRatio.toFixed(1)} P${Math.round(plan.frontIntel.pressureScore)}`,
-							midP.x + 8,
-							midP.y + 6,
-						);
-					}
-					ctx.restore();
-					continue;
 				}
+			}
 
-				// PUSH_FRONT: draw arrow from unit centroid to enemy territory centroid
-				if (
-					plan.type === "PUSH_FRONT" &&
-					plan.arrowPoints &&
-					plan.arrowPoints.length >= 2
-				) {
+			// Draw Reference Image Guide (Over everything) when "Draw Above Terrain" is enabled.
+			// Hidden during preview capture to ensure clean Hub thumbnails and exports.
+			// This pass runs last so the reference image sits on top of terrain, countries, oceans, and units.
+			if (
+				!this._isCapturing &&
+				refAboveTerrain &&
+				referenceImageUrl &&
+				referenceOverlay &&
+				(gameMode === "EDITOR" || gameMode === "EDITOR_TEST" || godModeActive)
+			) {
+				const img = referenceOverlay.getElement();
+				if (img?.complete && img.naturalWidth > 0) {
+					const b = referenceOverlay.getBounds();
+					const pTL = map.latLngToContainerPoint(b.getNorthWest());
+					const pBR = map.latLngToContainerPoint(b.getSouthEast());
+					ctx.save();
+					ctx.globalAlpha = refOpacity;
+					ctx.drawImage(img, pTL.x, pTL.y, pBR.x - pTL.x, pBR.y - pTL.y);
+					ctx.restore();
+				}
+			}
+
+			// Draw war plan arrows between warring sides
+			if (isWar && showWarPlans) {
+				const aiObserverSnapshot = getAiObserverSnapshot();
+				if (aiObserverSnapshot) {
+					drawAiOperationsOverlay(
+						ctx,
+						aiObserverSnapshot,
+						project,
+						sideColors[aiObserverSnapshot.sideIndex] ||
+							"rgba(255, 196, 64, 0.9)",
+						window.innerWidth < 480,
+						window.__mwAiOperationReveal?.uid || null,
+					);
+				}
+				for (let si = 0; !aiObserverSnapshot && si < _warPlan.length; si++) {
+					const plan = _warPlan[si];
+					if (!plan) continue;
+					const owningSide = si >= sides.length ? si - sides.length : si;
+					const color = sideColors[owningSide] || "rgba(255,255,0,0.6)";
+
+					// DEFEND plan: draw dotted frontline line
+					if (plan.type === "DEFEND" && plan.frontlinePoints?.length > 1) {
+						ctx.save();
+						ctx.strokeStyle = color.replace(rgbaRe, "0.5)");
+						ctx.lineWidth = 2;
+						ctx.setLineDash([6, 4]);
+						ctx.beginPath();
+						const fp0 = project(
+							plan.frontlinePoints[0].lat,
+							plan.frontlinePoints[0].lng,
+						);
+						ctx.moveTo(fp0.x, fp0.y);
+						for (let fi = 1; fi < plan.frontlinePoints.length; fi++) {
+							const fp = project(
+								plan.frontlinePoints[fi].lat,
+								plan.frontlinePoints[fi].lng,
+							);
+							ctx.lineTo(fp.x, fp.y);
+						}
+						ctx.stroke();
+						ctx.setLineDash([]);
+
+						// Label at midpoint
+						const mid =
+							plan.frontlinePoints[Math.floor(plan.frontlinePoints.length / 2)];
+						const midP = project(mid.lat, mid.lng);
+						ctx.font = "bold 9px monospace";
+						ctx.fillStyle = color.replace(rgbaRe, "0.8)");
+						ctx.fillText("DEFEND", midP.x + 8, midP.y - 6);
+						if (plan.frontIntel) {
+							ctx.font = "8px monospace";
+							ctx.fillText(
+								`FR ${plan.frontIntel.localRatio.toFixed(1)} P${Math.round(plan.frontIntel.pressureScore)}`,
+								midP.x + 8,
+								midP.y + 6,
+							);
+						}
+						ctx.restore();
+						continue;
+					}
+
+					// PUSH_FRONT: draw arrow from unit centroid to enemy territory centroid
+					if (
+						plan.type === "PUSH_FRONT" &&
+						plan.arrowPoints &&
+						plan.arrowPoints.length >= 2
+					) {
+						const pts = plan.arrowPoints;
+						const p0 = project(pts[0].lat, pts[0].lng);
+						const p1 = project(pts[1].lat, pts[1].lng);
+						const midX = (p0.x + p1.x) / 2;
+						const midY = (p0.y + p1.y) / 2 - 40;
+
+						ctx.strokeStyle = color.replace(rgbaRe, "0.4)");
+						ctx.lineWidth = 2;
+						ctx.setLineDash([4, 6]);
+						ctx.beginPath();
+						ctx.moveTo(p0.x, p0.y);
+						ctx.quadraticCurveTo(midX, midY, p1.x, p1.y);
+						ctx.stroke();
+						ctx.setLineDash([]);
+
+						ctx.font = "bold 9px monospace";
+						ctx.fillStyle = color.replace(rgbaRe, "0.6)");
+						ctx.fillText("PUSH", midX + 8, midY);
+						if (plan.scoreBreakdown) {
+							ctx.font = "8px monospace";
+							ctx.fillText(
+								`S${Math.round(plan.priority || 0)} R${plan.scoreBreakdown.effectiveForceRatio.toFixed(1)}`,
+								midX + 8,
+								midY + 12,
+							);
+						}
+						continue;
+					}
+
+					if (!plan?.arrowPoints || plan.arrowPoints.length < 2) continue;
+					const isDashed = plan.phase === "PREPARATION";
+					ctx.strokeStyle = color.replace(rgbaRe, isDashed ? "0.4)" : "0.7)");
+					ctx.lineWidth = Math.max(
+						2,
+						Math.min(6, 2 + Math.floor((plan.activeUnitCount || 0) / 5)),
+					);
+					if (isDashed) ctx.setLineDash([8, 6]);
+					else ctx.setLineDash([]);
+
+					ctx.beginPath();
 					const pts = plan.arrowPoints;
+					if (
+						Number.isNaN(pts[0].lat) ||
+						Number.isNaN(pts[0].lng) ||
+						Number.isNaN(pts[1].lat) ||
+						Number.isNaN(pts[1].lng)
+					) {
+						continue;
+					}
 					const p0 = project(pts[0].lat, pts[0].lng);
 					const p1 = project(pts[1].lat, pts[1].lng);
 					const midX = (p0.x + p1.x) / 2;
 					const midY = (p0.y + p1.y) / 2 - 40;
-
-					ctx.strokeStyle = color.replace(rgbaRe, "0.4)");
-					ctx.lineWidth = 2;
-					ctx.setLineDash([4, 6]);
-					ctx.beginPath();
 					ctx.moveTo(p0.x, p0.y);
 					ctx.quadraticCurveTo(midX, midY, p1.x, p1.y);
 					ctx.stroke();
 					ctx.setLineDash([]);
 
-					ctx.font = "bold 9px monospace";
-					ctx.fillStyle = color.replace(rgbaRe, "0.6)");
-					ctx.fillText("PUSH", midX + 8, midY);
+					const angle = Math.atan2(p1.y - midY, p1.x - midX);
+					const headLen = 12;
+					ctx.beginPath();
+					ctx.moveTo(p1.x, p1.y);
+					ctx.lineTo(
+						p1.x - headLen * Math.cos(angle - 0.5),
+						p1.y - headLen * Math.sin(angle - 0.5),
+					);
+					ctx.lineTo(
+						p1.x - headLen * Math.cos(angle + 0.5),
+						p1.y - headLen * Math.sin(angle + 0.5),
+					);
+					ctx.closePath();
+					ctx.fillStyle = ctx.strokeStyle;
+					ctx.fill();
+
+					ctx.font = "bold 10px monospace";
+					ctx.fillStyle = color;
+					const planLabel = plan.type
+						? `${plan.type} ${plan.phase}`
+						: plan.phase;
+					ctx.fillText(planLabel, midX + 10, midY - 2);
 					if (plan.scoreBreakdown) {
 						ctx.font = "8px monospace";
+						const theater = plan.theaterId ? ` ${plan.theaterId}` : "";
 						ctx.fillText(
-							`S${Math.round(plan.priority || 0)} R${plan.scoreBreakdown.effectiveForceRatio.toFixed(1)}`,
-							midX + 8,
-							midY + 12,
+							`S${Math.round(plan.priority || 0)} R${plan.scoreBreakdown.effectiveForceRatio.toFixed(1)}${theater}`,
+							midX + 10,
+							midY + 10,
 						);
 					}
-					continue;
 				}
 
-				if (!plan?.arrowPoints || plan.arrowPoints.length < 2) continue;
-				const isDashed = plan.phase === "PREPARATION";
-				ctx.strokeStyle = color.replace(rgbaRe, isDashed ? "0.4)" : "0.7)");
-				ctx.lineWidth = Math.max(
-					2,
-					Math.min(6, 2 + Math.floor((plan.activeUnitCount || 0) / 5)),
-				);
-				if (isDashed) ctx.setLineDash([8, 6]);
-				else ctx.setLineDash([]);
-
-				ctx.beginPath();
-				const pts = plan.arrowPoints;
-				if (
-					Number.isNaN(pts[0].lat) ||
-					Number.isNaN(pts[0].lng) ||
-					Number.isNaN(pts[1].lat) ||
-					Number.isNaN(pts[1].lng)
-				) {
-					continue;
+				if (!aiObserverSnapshot && _aiDebugPlans?.length) {
+					for (let si = 0; si < _aiDebugPlans.length; si++) {
+						const debug = _aiDebugPlans[si];
+						if (!debug?.fronts?.length) continue;
+						const color = sideColors[si] || "rgba(255,255,0,0.6)";
+						ctx.save();
+						ctx.font = "8px monospace";
+						ctx.fillStyle = color.replace(rgbaRe, "0.65)");
+						for (const front of debug.fronts.slice(0, 2)) {
+							const weak =
+								_warPlan[si]?.frontIntel?.weakPoint ||
+								_warPlan[si + sides.length]?.frontIntel?.weakPoint;
+							if (!weak) continue;
+							const p = project(weak.lat, weak.lng);
+							ctx.fillText(
+								`AI ${debug.strategy} FR ${front.localRatio.toFixed(1)} P${Math.round(front.pressureScore)}`,
+								p.x + 8,
+								p.y + 14,
+							);
+						}
+						ctx.restore();
+					}
 				}
-				const p0 = project(pts[0].lat, pts[0].lng);
-				const p1 = project(pts[1].lat, pts[1].lng);
-				const midX = (p0.x + p1.x) / 2;
-				const midY = (p0.y + p1.y) / 2 - 40;
-				ctx.moveTo(p0.x, p0.y);
-				ctx.quadraticCurveTo(midX, midY, p1.x, p1.y);
-				ctx.stroke();
-				ctx.setLineDash([]);
 
-				const angle = Math.atan2(p1.y - midY, p1.x - midX);
-				const headLen = 12;
-				ctx.beginPath();
-				ctx.moveTo(p1.x, p1.y);
-				ctx.lineTo(
-					p1.x - headLen * Math.cos(angle - 0.5),
-					p1.y - headLen * Math.sin(angle - 0.5),
-				);
-				ctx.lineTo(
-					p1.x - headLen * Math.cos(angle + 0.5),
-					p1.y - headLen * Math.sin(angle + 0.5),
-				);
-				ctx.closePath();
-				ctx.fillStyle = ctx.strokeStyle;
-				ctx.fill();
+				// Draw naval invasion arrows (dashed, country-colored)
+				if (typeof _navalPlan !== "undefined" && _navalPlan) {
+					for (let si = 0; si < _navalPlan.length; si++) {
+						if (aiObserverSnapshot && si !== aiObserverSnapshot.sideIndex)
+							continue;
+						const np = _navalPlan[si];
+						if (!np?.arrowPoints || np.arrowPoints.length < 2) continue;
+						const pts = np.arrowPoints;
+						if (
+							Number.isNaN(pts[0].lat) ||
+							Number.isNaN(pts[0].lng) ||
+							Number.isNaN(pts[1].lat) ||
+							Number.isNaN(pts[1].lng)
+						)
+							continue;
+						const p0 = project(pts[0].lat, pts[0].lng);
+						const p1 = project(pts[1].lat, pts[1].lng);
+						const midX = (p0.x + p1.x) / 2;
+						const midY = (p0.y + p1.y) / 2 - 50;
+						const sideColor = sideColors[si] || "rgba(255,255,0,0.6)";
 
-				ctx.font = "bold 10px monospace";
-				ctx.fillStyle = color;
-				const planLabel = plan.type ? `${plan.type} ${plan.phase}` : plan.phase;
-				ctx.fillText(planLabel, midX + 10, midY - 2);
-				if (plan.scoreBreakdown) {
-					ctx.font = "8px monospace";
-					const theater = plan.theaterId ? ` ${plan.theaterId}` : "";
-					ctx.fillText(
-						`S${Math.round(plan.priority || 0)} R${plan.scoreBreakdown.effectiveForceRatio.toFixed(1)}${theater}`,
-						midX + 10,
-						midY + 10,
-					);
-				}
-			}
-
-			if (!aiObserverSnapshot && _aiDebugPlans?.length) {
-				for (let si = 0; si < _aiDebugPlans.length; si++) {
-					const debug = _aiDebugPlans[si];
-					if (!debug?.fronts?.length) continue;
-					const color = sideColors[si] || "rgba(255,255,0,0.6)";
-					ctx.save();
-					ctx.font = "8px monospace";
-					ctx.fillStyle = color.replace(rgbaRe, "0.65)");
-					for (const front of debug.fronts.slice(0, 2)) {
-						const weak =
-							_warPlan[si]?.frontIntel?.weakPoint ||
-							_warPlan[si + sides.length]?.frontIntel?.weakPoint;
-						if (!weak) continue;
-						const p = project(weak.lat, weak.lng);
-						ctx.fillText(
-							`AI ${debug.strategy} FR ${front.localRatio.toFixed(1)} P${Math.round(front.pressureScore)}`,
-							p.x + 8,
-							p.y + 14,
+						ctx.setLineDash([4, 4]);
+						ctx.strokeStyle = sideColor.replace(rgbaRe, "0.75)");
+						ctx.lineWidth = Math.max(
+							2,
+							Math.min(5, 2 + Math.floor((np.activeUnitCount || 0) / 3)),
 						);
-					}
-					ctx.restore();
-				}
-			}
+						ctx.beginPath();
+						ctx.moveTo(p0.x, p0.y);
+						ctx.quadraticCurveTo(midX, midY, p1.x, p1.y);
+						ctx.stroke();
+						ctx.setLineDash([]);
 
-			// Draw naval invasion arrows (dashed, country-colored)
-			if (typeof _navalPlan !== "undefined" && _navalPlan) {
-				for (let si = 0; si < _navalPlan.length; si++) {
-					if (aiObserverSnapshot && si !== aiObserverSnapshot.sideIndex)
-						continue;
-					const np = _navalPlan[si];
-					if (!np?.arrowPoints || np.arrowPoints.length < 2) continue;
-					const pts = np.arrowPoints;
-					if (
-						Number.isNaN(pts[0].lat) ||
-						Number.isNaN(pts[0].lng) ||
-						Number.isNaN(pts[1].lat) ||
-						Number.isNaN(pts[1].lng)
-					)
-						continue;
-					const p0 = project(pts[0].lat, pts[0].lng);
-					const p1 = project(pts[1].lat, pts[1].lng);
-					const midX = (p0.x + p1.x) / 2;
-					const midY = (p0.y + p1.y) / 2 - 50;
-					const sideColor = sideColors[si] || "rgba(255,255,0,0.6)";
-
-					ctx.setLineDash([4, 4]);
-					ctx.strokeStyle = sideColor.replace(rgbaRe, "0.75)");
-					ctx.lineWidth = Math.max(
-						2,
-						Math.min(5, 2 + Math.floor((np.activeUnitCount || 0) / 3)),
-					);
-					ctx.beginPath();
-					ctx.moveTo(p0.x, p0.y);
-					ctx.quadraticCurveTo(midX, midY, p1.x, p1.y);
-					ctx.stroke();
-					ctx.setLineDash([]);
-
-					const angle = Math.atan2(p1.y - midY, p1.x - midX);
-					const headLen = 10;
-					ctx.beginPath();
-					ctx.moveTo(p1.x, p1.y);
-					ctx.lineTo(
-						p1.x - headLen * Math.cos(angle - 0.5),
-						p1.y - headLen * Math.sin(angle - 0.5),
-					);
-					ctx.lineTo(
-						p1.x - headLen * Math.cos(angle + 0.5),
-						p1.y - headLen * Math.sin(angle + 0.5),
-					);
-					ctx.closePath();
-					ctx.fillStyle = sideColor.replace(rgbaRe, "0.85)");
-					ctx.fill();
-
-					if (!aiObserverSnapshot || window.innerWidth >= 480) {
-						ctx.font = "bold 9px monospace";
-						ctx.fillStyle = sideColor.replace(rgbaRe, "0.9)");
-						ctx.fillText(`NAVAL: ${np.phase}`, midX + 10, midY - 2);
-					}
-				}
-			}
-
-			// Draw naval supply arrows (dashed, country-colored)
-			if (typeof _navalSupplyPlan !== "undefined" && _navalSupplyPlan) {
-				for (let si = 0; si < _navalSupplyPlan.length; si++) {
-					if (aiObserverSnapshot && si !== aiObserverSnapshot.sideIndex)
-						continue;
-					const sp = _navalSupplyPlan[si];
-					if (!sp?.arrowPoints || sp.arrowPoints.length < 2) continue;
-					const pts = sp.arrowPoints;
-					if (
-						Number.isNaN(pts[0].lat) ||
-						Number.isNaN(pts[0].lng) ||
-						Number.isNaN(pts[1].lat) ||
-						Number.isNaN(pts[1].lng)
-					)
-						continue;
-					const p0 = project(pts[0].lat, pts[0].lng);
-					const p1 = project(pts[1].lat, pts[1].lng);
-					const midX = (p0.x + p1.x) / 2;
-					const midY = (p0.y + p1.y) / 2 - 50;
-					const sideColor = sideColors[si] || "rgba(255,255,0,0.6)";
-
-					ctx.setLineDash([3, 5]);
-					ctx.strokeStyle = sideColor.replace(rgbaRe, "0.6)");
-					ctx.lineWidth = Math.max(
-						2,
-						Math.min(4, 2 + Math.floor((sp.activeUnitCount || 0) / 3)),
-					);
-					ctx.beginPath();
-					ctx.moveTo(p0.x, p0.y);
-					ctx.quadraticCurveTo(midX, midY, p1.x, p1.y);
-					ctx.stroke();
-					ctx.setLineDash([]);
-
-					const angle = Math.atan2(p1.y - midY, p1.x - midX);
-					const headLen = 8;
-					ctx.beginPath();
-					ctx.moveTo(p1.x, p1.y);
-					ctx.lineTo(
-						p1.x - headLen * Math.cos(angle - 0.5),
-						p1.y - headLen * Math.sin(angle - 0.5),
-					);
-					ctx.lineTo(
-						p1.x - headLen * Math.cos(angle + 0.5),
-						p1.y - headLen * Math.sin(angle + 0.5),
-					);
-					ctx.closePath();
-					ctx.fillStyle = sideColor.replace(rgbaRe, "0.75)");
-					ctx.fill();
-
-					if (!aiObserverSnapshot || window.innerWidth >= 480) {
-						ctx.font = "bold 8px monospace";
+						const angle = Math.atan2(p1.y - midY, p1.x - midX);
+						const headLen = 10;
+						ctx.beginPath();
+						ctx.moveTo(p1.x, p1.y);
+						ctx.lineTo(
+							p1.x - headLen * Math.cos(angle - 0.5),
+							p1.y - headLen * Math.sin(angle - 0.5),
+						);
+						ctx.lineTo(
+							p1.x - headLen * Math.cos(angle + 0.5),
+							p1.y - headLen * Math.sin(angle + 0.5),
+						);
+						ctx.closePath();
 						ctx.fillStyle = sideColor.replace(rgbaRe, "0.85)");
-						ctx.fillText(`SUPPLY: ${sp.phase}`, midX + 10, midY + 10);
+						ctx.fill();
+
+						if (!aiObserverSnapshot || window.innerWidth >= 480) {
+							ctx.font = "bold 9px monospace";
+							ctx.fillStyle = sideColor.replace(rgbaRe, "0.9)");
+							ctx.fillText(`NAVAL: ${np.phase}`, midX + 10, midY - 2);
+						}
 					}
 				}
-			}
 
-			// Draw transport arrows (dashed, side-colored, railway-style)
-			if (
-				!aiObserverSnapshot &&
-				typeof _transportPlan !== "undefined" &&
-				_transportPlan
-			) {
-				for (let si = 0; si < _transportPlan.length; si++) {
-					const tp = _transportPlan[si];
-					if (!tp?.arrowPoints || tp.arrowPoints.length < 2) continue;
-					const pts = tp.arrowPoints;
-					if (
-						Number.isNaN(pts[0].lat) ||
-						Number.isNaN(pts[0].lng) ||
-						Number.isNaN(pts[1].lat) ||
-						Number.isNaN(pts[1].lng)
-					)
-						continue;
-					const p0 = project(pts[0].lat, pts[0].lng);
-					const p1 = project(pts[1].lat, pts[1].lng);
-					const midX = (p0.x + p1.x) / 2;
-					const midY = (p0.y + p1.y) / 2 - 30;
-					const sideColor = sideColors[si] || "rgba(255,255,0,0.6)";
-
-					ctx.setLineDash([8, 4]);
-					ctx.strokeStyle = sideColor.replace(rgbaRe, "0.5)");
-					ctx.lineWidth = 2;
-					ctx.beginPath();
-					ctx.moveTo(p0.x, p0.y);
-					ctx.quadraticCurveTo(midX, midY, p1.x, p1.y);
-					ctx.stroke();
-					ctx.setLineDash([]);
-
-					const angle = Math.atan2(p1.y - midY, p1.x - midX);
-					const headLen = 8;
-					ctx.beginPath();
-					ctx.moveTo(p1.x, p1.y);
-					ctx.lineTo(
-						p1.x - headLen * Math.cos(angle - 0.5),
-						p1.y - headLen * Math.sin(angle - 0.5),
-					);
-					ctx.lineTo(
-						p1.x - headLen * Math.cos(angle + 0.5),
-						p1.y - headLen * Math.sin(angle + 0.5),
-					);
-					ctx.closePath();
-					ctx.fillStyle = sideColor.replace(rgbaRe, "0.6)");
-					ctx.fill();
-
-					ctx.font = "bold 9px monospace";
-					ctx.fillStyle = sideColor.replace(rgbaRe, "0.8)");
-					ctx.fillText(
-						`TRANSPORT (${tp.activeUnitCount || 0})`,
-						midX + 10,
-						midY - 2,
-					);
-				}
-			}
-
-			// Draw coastal defense zones (passive overlay, subtle)
-			if (
-				!aiObserverSnapshot &&
-				typeof _coastalDefensePlan !== "undefined" &&
-				_coastalDefensePlan
-			) {
-				for (let si = 0; si < sides.length; si++) {
-					const color = sideColors[si] || "rgba(255,255,0,0.6)";
-					for (let ci = 0; ci < 10; ci++) {
-						const cp = _coastalDefensePlan[si * 10 + ci];
-						if (!cp?.zonePolyline || cp.zonePolyline.length < 2) continue;
-						const pts = cp.zonePolyline;
-
-						ctx.strokeStyle = color.replace(rgbaRe, "0.25)");
-						ctx.lineWidth = 1.5;
-						ctx.setLineDash([2, 6]);
-						ctx.beginPath();
+				// Draw naval supply arrows (dashed, country-colored)
+				if (typeof _navalSupplyPlan !== "undefined" && _navalSupplyPlan) {
+					for (let si = 0; si < _navalSupplyPlan.length; si++) {
+						if (aiObserverSnapshot && si !== aiObserverSnapshot.sideIndex)
+							continue;
+						const sp = _navalSupplyPlan[si];
+						if (!sp?.arrowPoints || sp.arrowPoints.length < 2) continue;
+						const pts = sp.arrowPoints;
+						if (
+							Number.isNaN(pts[0].lat) ||
+							Number.isNaN(pts[0].lng) ||
+							Number.isNaN(pts[1].lat) ||
+							Number.isNaN(pts[1].lng)
+						)
+							continue;
 						const p0 = project(pts[0].lat, pts[0].lng);
+						const p1 = project(pts[1].lat, pts[1].lng);
+						const midX = (p0.x + p1.x) / 2;
+						const midY = (p0.y + p1.y) / 2 - 50;
+						const sideColor = sideColors[si] || "rgba(255,255,0,0.6)";
+
+						ctx.setLineDash([3, 5]);
+						ctx.strokeStyle = sideColor.replace(rgbaRe, "0.6)");
+						ctx.lineWidth = Math.max(
+							2,
+							Math.min(4, 2 + Math.floor((sp.activeUnitCount || 0) / 3)),
+						);
+						ctx.beginPath();
 						ctx.moveTo(p0.x, p0.y);
-						for (let pi = 1; pi < pts.length; pi++) {
-							const pp = project(pts[pi].lat, pts[pi].lng);
-							ctx.lineTo(pp.x, pp.y);
-						}
+						ctx.quadraticCurveTo(midX, midY, p1.x, p1.y);
 						ctx.stroke();
 						ctx.setLineDash([]);
 
-						if (cp.target) {
-							const tp = project(cp.target.lat, cp.target.lng);
-							ctx.font = "bold 7px monospace";
-							ctx.fillStyle = color.replace(rgbaRe, "0.35)");
-							ctx.fillText(
-								`COASTAL (${cp.activeUnitCount || 0})`,
-								tp.x + 6,
-								tp.y - 4,
-							);
+						const angle = Math.atan2(p1.y - midY, p1.x - midX);
+						const headLen = 8;
+						ctx.beginPath();
+						ctx.moveTo(p1.x, p1.y);
+						ctx.lineTo(
+							p1.x - headLen * Math.cos(angle - 0.5),
+							p1.y - headLen * Math.sin(angle - 0.5),
+						);
+						ctx.lineTo(
+							p1.x - headLen * Math.cos(angle + 0.5),
+							p1.y - headLen * Math.sin(angle + 0.5),
+						);
+						ctx.closePath();
+						ctx.fillStyle = sideColor.replace(rgbaRe, "0.75)");
+						ctx.fill();
+
+						if (!aiObserverSnapshot || window.innerWidth >= 480) {
+							ctx.font = "bold 8px monospace";
+							ctx.fillStyle = sideColor.replace(rgbaRe, "0.85)");
+							ctx.fillText(`SUPPLY: ${sp.phase}`, midX + 10, midY + 10);
 						}
 					}
 				}
-			}
 
-			// Draw neutral garrison zones (passive overlay, subtle)
-			if (
-				!aiObserverSnapshot &&
-				typeof _neutralGarrisonPlan !== "undefined" &&
-				_neutralGarrisonPlan
-			) {
-				for (let si = 0; si < sides.length; si++) {
-					const color = sideColors[si] || "rgba(255,255,0,0.6)";
-					for (let gi = 0; gi < 10; gi++) {
-						const gp = _neutralGarrisonPlan[si * 10 + gi];
-						if (!gp?.borderPolyline || gp.borderPolyline.length < 2) continue;
-						const pts = gp.borderPolyline;
-
-						ctx.strokeStyle = color.replace(rgbaRe, "0.2)");
-						ctx.lineWidth = 1.0;
-						ctx.setLineDash([3, 9]);
-						ctx.beginPath();
+				// Draw transport arrows (dashed, side-colored, railway-style)
+				if (
+					!aiObserverSnapshot &&
+					typeof _transportPlan !== "undefined" &&
+					_transportPlan
+				) {
+					for (let si = 0; si < _transportPlan.length; si++) {
+						const tp = _transportPlan[si];
+						if (!tp?.arrowPoints || tp.arrowPoints.length < 2) continue;
+						const pts = tp.arrowPoints;
+						if (
+							Number.isNaN(pts[0].lat) ||
+							Number.isNaN(pts[0].lng) ||
+							Number.isNaN(pts[1].lat) ||
+							Number.isNaN(pts[1].lng)
+						)
+							continue;
 						const p0 = project(pts[0].lat, pts[0].lng);
+						const p1 = project(pts[1].lat, pts[1].lng);
+						const midX = (p0.x + p1.x) / 2;
+						const midY = (p0.y + p1.y) / 2 - 30;
+						const sideColor = sideColors[si] || "rgba(255,255,0,0.6)";
+
+						ctx.setLineDash([8, 4]);
+						ctx.strokeStyle = sideColor.replace(rgbaRe, "0.5)");
+						ctx.lineWidth = 2;
+						ctx.beginPath();
 						ctx.moveTo(p0.x, p0.y);
-						for (let pi = 1; pi < pts.length; pi++) {
-							const pp = project(pts[pi].lat, pts[pi].lng);
-							ctx.lineTo(pp.x, pp.y);
-						}
+						ctx.quadraticCurveTo(midX, midY, p1.x, p1.y);
 						ctx.stroke();
 						ctx.setLineDash([]);
 
-						if (gp.target) {
-							const tp = project(gp.target.lat, gp.target.lng);
-							ctx.font = "bold 7px monospace";
-							ctx.fillStyle = color.replace(rgbaRe, "0.3)");
-							ctx.fillText(
-								`GARRISON (${gp.activeUnitCount || 0})`,
-								tp.x + 6,
-								tp.y - 4,
-							);
+						const angle = Math.atan2(p1.y - midY, p1.x - midX);
+						const headLen = 8;
+						ctx.beginPath();
+						ctx.moveTo(p1.x, p1.y);
+						ctx.lineTo(
+							p1.x - headLen * Math.cos(angle - 0.5),
+							p1.y - headLen * Math.sin(angle - 0.5),
+						);
+						ctx.lineTo(
+							p1.x - headLen * Math.cos(angle + 0.5),
+							p1.y - headLen * Math.sin(angle + 0.5),
+						);
+						ctx.closePath();
+						ctx.fillStyle = sideColor.replace(rgbaRe, "0.6)");
+						ctx.fill();
+
+						ctx.font = "bold 9px monospace";
+						ctx.fillStyle = sideColor.replace(rgbaRe, "0.8)");
+						ctx.fillText(
+							`TRANSPORT (${tp.activeUnitCount || 0})`,
+							midX + 10,
+							midY - 2,
+						);
+					}
+				}
+
+				// Draw coastal defense zones (passive overlay, subtle)
+				if (
+					!aiObserverSnapshot &&
+					typeof _coastalDefensePlan !== "undefined" &&
+					_coastalDefensePlan
+				) {
+					for (let si = 0; si < sides.length; si++) {
+						const color = sideColors[si] || "rgba(255,255,0,0.6)";
+						for (let ci = 0; ci < 10; ci++) {
+							const cp = _coastalDefensePlan[si * 10 + ci];
+							if (!cp?.zonePolyline || cp.zonePolyline.length < 2) continue;
+							const pts = cp.zonePolyline;
+
+							ctx.strokeStyle = color.replace(rgbaRe, "0.25)");
+							ctx.lineWidth = 1.5;
+							ctx.setLineDash([2, 6]);
+							ctx.beginPath();
+							const p0 = project(pts[0].lat, pts[0].lng);
+							ctx.moveTo(p0.x, p0.y);
+							for (let pi = 1; pi < pts.length; pi++) {
+								const pp = project(pts[pi].lat, pts[pi].lng);
+								ctx.lineTo(pp.x, pp.y);
+							}
+							ctx.stroke();
+							ctx.setLineDash([]);
+
+							if (cp.target) {
+								const tp = project(cp.target.lat, cp.target.lng);
+								ctx.font = "bold 7px monospace";
+								ctx.fillStyle = color.replace(rgbaRe, "0.35)");
+								ctx.fillText(
+									`COASTAL (${cp.activeUnitCount || 0})`,
+									tp.x + 6,
+									tp.y - 4,
+								);
+							}
+						}
+					}
+				}
+
+				// Draw neutral garrison zones (passive overlay, subtle)
+				if (
+					!aiObserverSnapshot &&
+					typeof _neutralGarrisonPlan !== "undefined" &&
+					_neutralGarrisonPlan
+				) {
+					for (let si = 0; si < sides.length; si++) {
+						const color = sideColors[si] || "rgba(255,255,0,0.6)";
+						for (let gi = 0; gi < 10; gi++) {
+							const gp = _neutralGarrisonPlan[si * 10 + gi];
+							if (!gp?.borderPolyline || gp.borderPolyline.length < 2) continue;
+							const pts = gp.borderPolyline;
+
+							ctx.strokeStyle = color.replace(rgbaRe, "0.2)");
+							ctx.lineWidth = 1.0;
+							ctx.setLineDash([3, 9]);
+							ctx.beginPath();
+							const p0 = project(pts[0].lat, pts[0].lng);
+							ctx.moveTo(p0.x, p0.y);
+							for (let pi = 1; pi < pts.length; pi++) {
+								const pp = project(pts[pi].lat, pts[pi].lng);
+								ctx.lineTo(pp.x, pp.y);
+							}
+							ctx.stroke();
+							ctx.setLineDash([]);
+
+							if (gp.target) {
+								const tp = project(gp.target.lat, gp.target.lng);
+								ctx.font = "bold 7px monospace";
+								ctx.fillStyle = color.replace(rgbaRe, "0.3)");
+								ctx.fillText(
+									`GARRISON (${gp.activeUnitCount || 0})`,
+									tp.x + 6,
+									tp.y - 4,
+								);
+							}
 						}
 					}
 				}
 			}
-		}
 
-		ctx.restore();
-
-		if (
-			isWar &&
-			_cachedSideTerritoryPcts &&
-			_cachedSideTerritoryPcts.length > 0
-		) {
-			requestAnimationFrame(() => {
-				for (let si = 0; si < _cachedSideTerritoryPcts.length; si++) {
-					const pct = _cachedSideTerritoryPcts[si];
-					const ctrlEl = _cachedTerritoryCtrlEls[si];
-					if (ctrlEl) ctrlEl.textContent = `${pct}%`;
-					const segEl = _cachedTerritorySegEls[si];
-					if (segEl) segEl.style.width = `${pct}%`;
-				}
-			});
+			ctx.restore();
+			this._overlaysCacheKey = overlaysCacheKey;
+			this._lastOverlaysRenderFrame = simFrameCount;
+			this._invalidLayers &= ~RENDER_LAYERS.OVERLAYS;
 		}
+		mainCtx.drawImage(this._overlaysSurface, 0, 0);
 
 		if (window.__perf)
 			window.__perf.render =
@@ -3415,4 +3981,4 @@ const ControlMapLayer = L.Layer.extend({
 	},
 });
 
-export { ControlMapLayer };
+export { ControlMapLayer, RENDER_LAYERS };

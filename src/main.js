@@ -109,8 +109,12 @@ import {
 import {
 	createDeterministicJob,
 	createDeterministicJobQueue,
-	createDirtyTileTracker,
 } from "./simulation-jobs.js";
+import {
+	createSimulationPhaseWheel,
+	decideRenderAdmission,
+	isSimulationPhaseDue,
+} from "./simulation-phase-wheel.js";
 import {
 	allocateLargestRemainderQuotas,
 	evaluateCountryCapitulation,
@@ -126,6 +130,12 @@ import {
 	forEachUnorderedNeighborPair,
 	rebuildTacticalGrid,
 } from "./tactical-grid.js";
+import {
+	createTerritoryLedger,
+	getCountryLedger,
+	getDeJureControlBySide,
+	getSideLedger,
+} from "./territory-ledger.js";
 
 let _experimentSeed = normalizeSeed(createRandomSeed());
 let _gameplayRng = createSeededRng(_experimentSeed);
@@ -2036,18 +2046,24 @@ const _simulationJobs = createDeterministicJobQueue({
 	itemBudget: 160_000,
 	maxItemsPerJobTurn: 80_000,
 });
+const _simulationPhaseWheel = createSimulationPhaseWheel({
+	generation: 0,
+	itemBudget: 80_000,
+	maxItemsPerJobTurn: 40_000,
+});
 let _simulationWorldGeneration = 0;
-let _territoryCensusCommittedTick = Number.NEGATIVE_INFINITY;
-let _territoryCensusHasSnapshot = false;
-let _territoryDirtyTiles = null;
-let _territoryCensusEpochTiles = [];
-let _territoryTileSummaries = [];
-let _territoryCensusTotals = null;
-let _territoryCensusSideSignature = "";
-let _territoryCensusRefreshPending = false;
-let _territoryCensusSnapshotReady = false;
+let _territoryLedger = null;
+let _territoryLedgerSnapshot = null;
+let _territoryLedgerDecisionTick = Number.NEGATIVE_INFINITY;
+let _territoryLedgerCitiesSource = null;
+let _territoryLedgerCitiesLength = -1;
+let _territoryLedgerCitiesRevision = 0;
+let _territoryLedgerAppliedCitiesRevision = -1;
 let _coastalTopologyReady = false;
 let _coastalLandIndices = [];
+const _frameSimulationCommitFlags = new Set();
+let _renderAdmissionDeferredFrames = 0;
+let _simulationPhaseJobsRegistered = false;
 const _pendingProposalSides = [];
 const _pendingProposalSideSet = new Set();
 const _retiredSidePersonnelByUid = new Map();
@@ -2464,25 +2480,21 @@ function stableUnitCohort(unit, interval) {
 function resetSimulationOptimizationRuntime() {
 	_simulationWorldGeneration++;
 	_simulationJobs.clear("world-reset");
+	_simulationPhaseWheel.setGeneration(_simulationWorldGeneration);
 	soldiersPerUnit.fill(CONFIG.UNIT_TO_SOLDIER_RATIO);
-	_territoryCensusCommittedTick = Number.NEGATIVE_INFINITY;
-	_territoryCensusHasSnapshot = false;
-	_territoryCensusEpochTiles = [];
-	_territoryTileSummaries = [];
-	_territoryCensusTotals = null;
-	_territoryCensusSideSignature = "";
-	_territoryCensusRefreshPending = false;
-	_territoryCensusSnapshotReady = false;
+	_territoryLedgerSnapshot = null;
+	_territoryLedgerDecisionTick = Number.NEGATIVE_INFINITY;
+	_territoryLedgerCitiesSource = null;
+	_territoryLedgerCitiesLength = -1;
+	_territoryLedgerAppliedCitiesRevision = -1;
 	_coastalTopologyReady = false;
 	_coastalLandIndices = [];
 	_pendingProposalSides.length = 0;
 	_pendingProposalSideSet.clear();
 	_retiredSidePersonnelByUid.clear();
-	_territoryDirtyTiles =
-		gridWidth > 0 && gridHeight > 0
-			? createDirtyTileTracker({ gridWidth, gridHeight, tileSize: 32 })
-			: null;
-	_territoryDirtyTiles?.markAll();
+	_territoryLedger = createRuntimeTerritoryLedger();
+	_frameSimulationCommitFlags.clear();
+	_renderAdmissionDeferredFrames = 0;
 }
 
 function scheduleCoastalTopologyJob() {
@@ -2539,209 +2551,280 @@ function scheduleCoastalTopologyJob() {
 	);
 }
 
-function createTerritoryCensusTotals(maxCountryId) {
+function territoryLedgerMaps() {
 	return {
-		owned: new Int32Array(maxCountryId + 1),
-		controlled: new Int32Array(maxCountryId + 1),
-		frontline: new Int32Array(maxCountryId + 1),
-		p1: 0,
-		p2: 0,
+		landMask,
+		worldControlMap,
+		dominantSideMap,
+		deJureMap,
+		primaryOccupierMap,
+		occupationMap,
 	};
 }
 
-function applyTerritoryTileSummary(totals, summary, direction) {
-	if (!summary) return;
-	totals.p1 += summary.p1 * direction;
-	totals.p2 += summary.p2 * direction;
-	for (const [countryId, count] of summary.owned) {
-		if (countryId < totals.owned.length) {
-			totals.owned[countryId] += count * direction;
+function runtimeCountryToSideMap() {
+	const mapping = new Map();
+	for (let sideIndex = 0; sideIndex < sides.length; sideIndex++) {
+		for (const country of sides[sideIndex] || []) {
+			if (country?.id > 0) mapping.set(country.id, sideIndex);
 		}
 	}
-	for (const [countryId, count] of summary.controlled) {
-		if (countryId < totals.controlled.length) {
-			totals.controlled[countryId] += count * direction;
+	return mapping;
+}
+
+function publishTerritoryLedgerSnapshot(snapshot, decisionBoundary = false) {
+	if (!snapshot) return false;
+	_territoryLedgerSnapshot = snapshot;
+	_cachedP1T = snapshot.positiveOccupationCells || 0;
+	_cachedP2T = snapshot.negativeOccupationCells || 0;
+
+	const counts = new Array(sides.length).fill(0);
+	for (let sideIndex = 0; sideIndex < sides.length; sideIndex++) {
+		counts[sideIndex] = getSideLedger(snapshot, sideIndex)?.territory || 0;
+	}
+	_cachedSideTerritoryCounts = counts;
+	const total = counts.reduce((sum, count) => sum + count, 0);
+	_cachedSideTerritoryPcts = counts.map((count) =>
+		total > 0 ? Math.round((count / total) * 100) : 50,
+	);
+
+	if (decisionBoundary) {
+		for (const country of sides.flat()) {
+			if (!country) continue;
+			const ledger = getCountryLedger(snapshot, country.id);
+			country.lastOwnedCount = ledger?.owned || 0;
+			country.lastControlledCount = ledger?.controlled || 0;
+			country.lastFrontlineCount = ledger?.frontline || 0;
 		}
+		_territoryLedgerDecisionTick = _simTickCount;
 	}
-	for (const [countryId, count] of summary.frontline) {
-		if (countryId < totals.frontline.length) {
-			totals.frontline[countryId] += count * direction;
-		}
-	}
-}
-
-function buildTerritoryTileSummary(tileIndex, sideByCountry, liveCombatants) {
-	const bounds = _territoryDirtyTiles.bounds(tileIndex);
-	const summary = {
-		owned: new Map(),
-		controlled: new Map(),
-		frontline: new Map(),
-		p1: 0,
-		p2: 0,
-	};
-	for (let row = bounds.minY; row < bounds.maxY; row++) {
-		const rowOffset = row * gridWidth;
-		for (let column = bounds.minX; column < bounds.maxX; column++) {
-			const index = rowOffset + column;
-			if (landMask[index] !== 2) continue;
-			if (occupationMap[index] > 0) summary.p1++;
-			else if (occupationMap[index] < 0) summary.p2++;
-			const countryId = worldControlMap[index];
-			if (!liveCombatants.has(countryId)) continue;
-			summary.owned.set(countryId, (summary.owned.get(countryId) || 0) + 1);
-			const sideIndex = sideByCountry.get(countryId);
-			if (dominantSideMap[index] === sideIndex) {
-				summary.controlled.set(
-					countryId,
-					(summary.controlled.get(countryId) || 0) + 1,
-				);
-			}
-			let isFrontline = false;
-			if (column > 0) {
-				const neighborSide = sideByCountry.get(worldControlMap[index - 1]);
-				isFrontline =
-					neighborSide !== undefined &&
-					neighborSide !== sideIndex &&
-					areSidesHostile(sideIndex, neighborSide);
-			}
-			if (!isFrontline && column + 1 < gridWidth) {
-				const neighborSide = sideByCountry.get(worldControlMap[index + 1]);
-				isFrontline =
-					neighborSide !== undefined &&
-					neighborSide !== sideIndex &&
-					areSidesHostile(sideIndex, neighborSide);
-			}
-			if (!isFrontline && row > 0) {
-				const neighborSide = sideByCountry.get(
-					worldControlMap[index - gridWidth],
-				);
-				isFrontline =
-					neighborSide !== undefined &&
-					neighborSide !== sideIndex &&
-					areSidesHostile(sideIndex, neighborSide);
-			}
-			if (!isFrontline && row + 1 < gridHeight) {
-				const neighborSide = sideByCountry.get(
-					worldControlMap[index + gridWidth],
-				);
-				isFrontline =
-					neighborSide !== undefined &&
-					neighborSide !== sideIndex &&
-					areSidesHostile(sideIndex, neighborSide);
-			}
-			if (isFrontline) {
-				summary.frontline.set(
-					countryId,
-					(summary.frontline.get(countryId) || 0) + 1,
-				);
-			}
-		}
-	}
-	return summary;
-}
-
-function scheduleTerritoryCensus(
-	countryToSideMap,
-	combatantIds,
-	startRefresh = false,
-) {
-	if (!_territoryDirtyTiles || !worldControlMap?.length) return;
-	const sideSignature = `${[...countryToSideMap.entries()]
-		.sort(([left], [right]) => left - right)
-		.map(([countryId, sideIndex]) => `${countryId}:${sideIndex}`)
-		.join("|")}#${[...hostileSidePairs].sort().join(",")}`;
-	if (sideSignature !== _territoryCensusSideSignature) {
-		const maxCountryId = Math.max(countryMetadata.length, ...combatantIds, 0);
-		_territoryCensusSideSignature = sideSignature;
-		_territoryTileSummaries = [];
-		_territoryCensusTotals = createTerritoryCensusTotals(maxCountryId);
-		_territoryCensusEpochTiles = [];
-		_territoryDirtyTiles.clear();
-		_territoryDirtyTiles.markAll();
-		_territoryCensusHasSnapshot = false;
-		_territoryCensusRefreshPending = false;
-		_territoryCensusSnapshotReady = false;
-	}
-	const hasQueuedChanges = _territoryDirtyTiles.size() > 0;
-	if (
-		!_territoryCensusRefreshPending &&
-		(hasQueuedChanges ||
-			(!_territoryCensusSnapshotReady &&
-				(startRefresh || !_territoryCensusHasSnapshot)))
-	) {
-		// Freeze one deterministic epoch. Controller changes that occur while it is
-		// processed accumulate in the live dirty tracker for the next epoch. A
-		// completed candidate is revoked as soon as newer controller changes queue,
-		// preventing phase 133 from publishing a stale phase-0 snapshot.
-		_territoryCensusSnapshotReady = false;
-		_territoryCensusEpochTiles = _territoryDirtyTiles.consume();
-		_territoryCensusRefreshPending = _territoryCensusEpochTiles.length > 0;
-		_territoryCensusSnapshotReady = !_territoryCensusRefreshPending;
-	}
-}
-
-function processTerritoryCensusTiles(countryToSideMap, combatantIds) {
-	if (
-		!_territoryCensusRefreshPending ||
-		!_territoryDirtyTiles ||
-		!_territoryCensusTotals
-	) {
-		return;
-	}
-	const dirtyTiles = _territoryCensusEpochTiles.splice(0, 160);
-	for (const tileIndex of dirtyTiles) {
-		const previous = _territoryTileSummaries[tileIndex];
-		applyTerritoryTileSummary(_territoryCensusTotals, previous, -1);
-		const next = buildTerritoryTileSummary(
-			tileIndex,
-			countryToSideMap,
-			combatantIds,
-		);
-		_territoryTileSummaries[tileIndex] = next;
-		applyTerritoryTileSummary(_territoryCensusTotals, next, 1);
-	}
-	if (_territoryCensusEpochTiles.length > 0) return;
-	_territoryCensusRefreshPending = false;
-	_territoryCensusSnapshotReady = true;
-}
-
-function closeTerritoryCensusForDecision(countryToSideMap, combatantIds) {
-	// Phase 133 is the existing 200-tick decision boundary. Finish the bounded
-	// tile set here so surrender logic cannot use stale territory or starve while
-	// fronts keep changing. Ordinary ticks still process the same work in chunks.
-	while (
-		_territoryCensusRefreshPending ||
-		(_territoryDirtyTiles?.size() || 0) > 0
-	) {
-		if (!_territoryCensusRefreshPending) {
-			scheduleTerritoryCensus(countryToSideMap, combatantIds, true);
-		}
-		processTerritoryCensusTiles(countryToSideMap, combatantIds);
-	}
-}
-
-function publishTerritoryCensusSnapshot() {
-	if (
-		!_territoryCensusSnapshotReady ||
-		_territoryCensusRefreshPending ||
-		_territoryDirtyTiles?.size() > 0
-	) {
-		return false;
-	}
-	_cachedP1T = _territoryCensusTotals.p1;
-	_cachedP2T = _territoryCensusTotals.p2;
-	for (const country of sides.flat()) {
-		if (!country) continue;
-		country.lastOwnedCount = _territoryCensusTotals.owned[country.id] || 0;
-		country.lastControlledCount =
-			_territoryCensusTotals.controlled[country.id] || 0;
-		country.lastFrontlineCount =
-			_territoryCensusTotals.frontline[country.id] || 0;
-	}
-	_territoryCensusCommittedTick = _simTickCount;
-	_territoryCensusHasSnapshot = true;
-	_territoryCensusSnapshotReady = false;
 	return true;
+}
+
+function createRuntimeTerritoryLedger(
+	countryToSide = runtimeCountryToSideMap(),
+) {
+	if (
+		gridWidth <= 0 ||
+		gridHeight <= 0 ||
+		!landMask?.length ||
+		landMask.length !== gridWidth * gridHeight
+	) {
+		return null;
+	}
+	const citySource = activeTheaterCities || [];
+	_territoryLedgerCitiesSource = citySource;
+	_territoryLedgerCitiesLength = citySource.length;
+	_territoryLedgerAppliedCitiesRevision = _territoryLedgerCitiesRevision;
+	return createTerritoryLedger({
+		gridWidth,
+		gridHeight,
+		tileSize: 32,
+		maps: territoryLedgerMaps(),
+		countryToSide,
+		sideUids,
+		hostilityMatrix,
+		maxSides: MAX_SIDES,
+		topologyRevision: _simulationWorldGeneration,
+		worldRevision: _simulationWorldGeneration,
+		cityRevision: _territoryLedgerCitiesRevision,
+		cities: citySource,
+		getCityCellIndex: (city) => getGridIndex(city.lat, city.lng),
+		countedLandValue: 2,
+		defaultItemBudget: 160_000,
+		onCommit: (snapshot) => publishTerritoryLedgerSnapshot(snapshot, false),
+	});
+}
+
+function ensureRuntimeTerritoryLedger(countryToSide) {
+	if (!_territoryLedger) {
+		_territoryLedger = createRuntimeTerritoryLedger(countryToSide);
+	}
+	if (!_territoryLedger) return null;
+	const topologyChanged = _territoryLedger.setSideTopology({
+		countryToSide,
+		sideUids,
+		hostilityMatrix,
+		maxSides: MAX_SIDES,
+		revision: _simulationWorldGeneration,
+	});
+	if (topologyChanged) {
+		_territoryLedgerSnapshot = null;
+		_cachedSideTerritoryCounts = [];
+		_cachedSideTerritoryPcts = [];
+	}
+	const citySource = activeTheaterCities || [];
+	const citySourceChanged =
+		_territoryLedgerCitiesSource !== citySource ||
+		_territoryLedgerCitiesLength !== citySource.length;
+	if (
+		citySourceChanged ||
+		_territoryLedgerAppliedCitiesRevision !== _territoryLedgerCitiesRevision
+	) {
+		if (
+			citySourceChanged &&
+			_territoryLedgerAppliedCitiesRevision === _territoryLedgerCitiesRevision
+		) {
+			_territoryLedgerCitiesRevision++;
+		}
+		_territoryLedger.setCities(citySource, {
+			getCityCellIndex: (city) => getGridIndex(city.lat, city.lng),
+			revision: _territoryLedgerCitiesRevision,
+		});
+		_territoryLedgerCitiesSource = citySource;
+		_territoryLedgerCitiesLength = citySource.length;
+		_territoryLedgerAppliedCitiesRevision = _territoryLedgerCitiesRevision;
+		_territoryLedgerSnapshot = null;
+	}
+	return _territoryLedger;
+}
+
+function stepTerritoryLedger(countryToSide, itemBudget = 160_000) {
+	const ledger = ensureRuntimeTerritoryLedger(countryToSide);
+	if (!ledger) return null;
+	const result = ledger.step(itemBudget);
+	if (result.committed) _frameSimulationCommitFlags.add("territory-ledger");
+	return result;
+}
+
+function flushTerritoryLedger(countryToSide = runtimeCountryToSideMap()) {
+	const ledger = ensureRuntimeTerritoryLedger(countryToSide);
+	if (!ledger) return null;
+	const result = ledger.flush(160_000);
+	if (result.committedGenerations > 0) {
+		_frameSimulationCommitFlags.add("territory-ledger");
+	}
+	if (result.snapshot) publishTerritoryLedgerSnapshot(result.snapshot, false);
+	return result.snapshot || _territoryLedgerSnapshot;
+}
+
+function registerSimulationPhaseJobs() {
+	if (_simulationPhaseJobsRegistered) return;
+	_simulationPhaseJobsRegistered = true;
+	_simulationPhaseWheel.register({
+		id: "operational-intel-decay",
+		intervalTicks: 15,
+		phaseOffset: 4,
+		priority: 10,
+		oncePerFrame: false,
+		run: () => decayOperationalAiIntelContacts(),
+	});
+	_simulationPhaseWheel.register({
+		id: "occupation-garrison-sync",
+		intervalTicks: 60,
+		phaseOffset: 17,
+		priority: 20,
+		oncePerFrame: false,
+		run: () => syncOccupationGarrisonAssignments(),
+	});
+	_simulationPhaseWheel.register({
+		id: "unit-consolidation",
+		intervalTicks: 30,
+		phaseOffset: 11,
+		priority: 30,
+		oncePerFrame: false,
+		run: () => {
+			const started = performance.now();
+			const removed = consolidateOverlappingUnits();
+			if (window.__perf) {
+				window.__perf.consolidate =
+					(window.__perf.consolidate || 0) + performance.now() - started;
+			}
+			return removed;
+		},
+	});
+}
+
+function advanceSimulationPhaseWheel() {
+	registerSimulationPhaseJobs();
+	const advanced = _simulationPhaseWheel.advance({
+		tick: _simTickCount,
+		frameToken: simFrameCount,
+		context: { worldGeneration: _simulationWorldGeneration },
+		itemBudget: 80_000,
+	});
+	const committed = _simulationPhaseWheel.flushReadyCommits({
+		expectedGeneration: _simulationWorldGeneration,
+		maxCommits: 2,
+	});
+	for (const ticket of committed.committed) {
+		_frameSimulationCommitFlags.add(ticket.id);
+	}
+	if (advanced.errors.length || committed.errors.length) {
+		console.error("[MW] Simulation phase job failed", {
+			advance: advanced.errors,
+			commit: committed.errors,
+		});
+	}
+}
+
+function consolidateOverlappingUnits() {
+	if (units.length <= 40) return 0;
+	const mergeDistSq = 0.14 * 0.14;
+	const maxMergedHealth = CONFIG.UNIT_HEALTH * 5;
+	const unitsToRemove = new Set();
+
+	for (let index = 0; index < units.length; index++) {
+		const unit = units[index];
+		if (
+			unitsToRemove.has(unit) ||
+			unit.kind === "armor" ||
+			unit.personnel !== undefined ||
+			(unit.personnelCapacity || 0) > CONFIG.UNIT_TO_SOLDIER_RATIO ||
+			unit.health >= maxMergedHealth ||
+			unit.deployTicks > 0
+		) {
+			continue;
+		}
+
+		const hashX = Math.floor((unit.lng + 180) / UNIT_HASH_CELL_SIZE);
+		const hashY = Math.floor((unit.lat + 90) / UNIT_HASH_CELL_SIZE);
+		const hashKey = hashX * 100 + hashY;
+		const sideIndex = unit.sideIndex;
+		const cellUnits =
+			CONFIG.ENABLE_SIDE_HASH_COMBAT &&
+			sideIndex >= 0 &&
+			sideIndex < sides.length
+				? unitHashBySide[sideIndex].get(hashKey)
+				: unitSpatialHash.get(hashKey);
+		if (!cellUnits) continue;
+
+		for (let otherIndex = 0; otherIndex < cellUnits.length; otherIndex++) {
+			const other = cellUnits[otherIndex];
+			if (
+				other === unit ||
+				unitsToRemove.has(other) ||
+				other.kind === "armor" ||
+				other.personnel !== undefined ||
+				(other.personnelCapacity || 0) > CONFIG.UNIT_TO_SOLDIER_RATIO ||
+				(CONFIG.ENABLE_SIDE_HASH_COMBAT
+					? false
+					: other.sideIndex === unit.sideIndex) ||
+				other.sovereignId !== unit.sovereignId ||
+				other.deployTicks > 0
+			) {
+				continue;
+			}
+
+			let deltaLng = other.lng - unit.lng;
+			if (deltaLng > 180) deltaLng -= 360;
+			else if (deltaLng < -180) deltaLng += 360;
+			const distanceSq = (unit.lat - other.lat) ** 2 + deltaLng ** 2;
+			if (distanceSq >= mergeDistSq) continue;
+
+			const transfer = Math.min(maxMergedHealth - unit.health, other.health);
+			unit.health += transfer;
+			other.health -= transfer;
+			if (other.health <= 0) unitsToRemove.add(other);
+			if (unit.health >= maxMergedHealth) break;
+		}
+	}
+
+	if (unitsToRemove.size > 0) {
+		units = units.filter((unit) => !unitsToRemove.has(unit));
+		_frameSimulationCommitFlags.add("unit-consolidation");
+	}
+	return unitsToRemove.size;
 }
 
 function resetOperationalAiRuntime() {
@@ -2843,7 +2926,7 @@ function scheduleWarLifecycleCallback(
 }
 
 const PERF_COUNTER_DEFAULTS = {
-	_version: "V0.27.9",
+	_version: "V0.27.10",
 	_mode: "off",
 	_enabled: false,
 	plans: 0,
@@ -2868,6 +2951,7 @@ const PERF_COUNTER_DEFAULTS = {
 	frontlinePolys: 0,
 	frontlineLayoutApply: 0,
 	frontlineSlotApply: 0,
+	phaseWheel: 0,
 	consolidate: 0,
 	caches: 0,
 	victory: 0,
@@ -3091,6 +3175,27 @@ const _tickCountryById = new Map();
 const _tickCityGridIndexSet = new Set();
 const _tickSideAllyIdSets = [];
 const _tickSideSupportIdSets = [];
+const _influenceActiveSideIndices = [];
+const _influenceHostileSideIndices = Array.from(
+	{ length: MAX_SIDES },
+	() => [],
+);
+const _influenceNeighborCountryIds = new Int32Array(8);
+const _influenceNeighborCountryCounts = new Uint8Array(8);
+const _influenceNeighborDx = new Int8Array([0, 0, 1, -1, 1, 1, -1, -1]);
+const _influenceNeighborDy = new Int8Array([1, -1, 0, 0, 1, -1, 1, -1]);
+let _influenceCityGridSource = null;
+let _influenceCityGridSourceLength = -1;
+let _influenceCityGridWorldGeneration = -1;
+let _influenceCoalitionSignature = "";
+let _influenceFrontierQueued = new Uint8Array(0);
+let _influenceFrontierQueue = [];
+let _influenceFrontierCursor = 0;
+let _influenceFrontierPriorityQueue = [];
+let _influenceFrontierPriorityCursor = 0;
+let _influenceFrontierWorldGeneration = -1;
+const INFLUENCE_FRONTIER_BACKLOG_LIMIT = 16_384;
+const INFLUENCE_FRONTIER_PRIORITY_LIMIT = 8_192;
 export const _tickUnitsBySide = [];
 const _tickUnitGridIdx = new Map();
 let _tickAllCombatants = [];
@@ -3279,6 +3384,8 @@ let _frontlineSlotApplyPendingMs = 0;
 // Frontline polyline system: distributed unit stationing along war fronts
 export let _frontlinePolys = {};
 export let _neutralBorderPolys = {}; // combatant-vs-neutral border polylines for garrison stationing
+let _neutralBorderCacheSignature = "";
+let _politicalMapRevision = 0;
 export let _frontlinePolyTick = -999;
 export const FRONTLINE_POLY_UPDATE_INTERVAL = 30; // visual frames between polyline rebuilds (15→30)
 
@@ -3298,8 +3405,21 @@ export let gridWidth = 0,
 export function setBombsDisabled(val) {
 	bombsDisabled = val;
 }
+export function markTerritoryCellsChanged(cellIndices) {
+	if (!cellIndices?.[Symbol.iterator]) return 0;
+	_politicalMapRevision++;
+	_neutralBorderCacheSignature = "";
+	const changed = _territoryLedger?.markCellsChanged(cellIndices, true) || 0;
+	influenceLayer?.notifyControlCellsChanged(cellIndices);
+	return changed;
+}
+function invalidateTerritoryLedgerCities() {
+	_territoryLedgerCitiesRevision++;
+	_influenceCityGridSource = null;
+}
 export function setCities(val) {
 	cities = val;
+	invalidateTerritoryLedgerCities();
 }
 export function setCountryMetadata(val) {
 	countryMetadata = val;
@@ -3394,6 +3514,7 @@ export function setSideInfluenceMaps(val) {
 }
 export function setNeutralBorderPolys(val) {
 	_neutralBorderPolys = val;
+	_neutralBorderCacheSignature = "";
 }
 export function setDominantSideMap(val) {
 	dominantSideMap = val;
@@ -4869,7 +4990,7 @@ import {
 	selectScenario,
 	switchHubTab,
 } from "./firebase.js";
-import { ControlMapLayer } from "./renderer.js";
+import { ControlMapLayer, RENDER_LAYERS } from "./renderer.js";
 
 export { getGridIndex, resetSideInfluenceMaps };
 
@@ -4878,7 +4999,9 @@ setOccupationChangeListener((cellIndex, change) => {
 	// side controls a cell. Revisit the tile (and its border neighbors) when that
 	// discrete controller changes.
 	if (change?.previousSide === change?.nextSide) return;
-	_territoryDirtyTiles?.markCell(cellIndex);
+	_territoryLedger?.markControllerChange(cellIndex);
+	influenceLayer?.notifyControlCellsChanged(cellIndex);
+	queueInfluenceFrontierCell(cellIndex, true);
 });
 
 influenceLayer = new ControlMapLayer().addTo(map);
@@ -4939,6 +5062,10 @@ export function generateProvinces() {
 			provinceMap[idx] = getProvinceId(x, y, worldControlMap[idx]);
 		}
 	}
+	_politicalMapRevision++;
+	_neutralBorderCacheSignature = "";
+	_territoryLedger?.markAllDirty();
+	influenceLayer?.invalidate(RENDER_LAYERS.STATIC);
 }
 
 export function applyWorldBounds(
@@ -5606,116 +5733,324 @@ randomWarBtn.onclick = () => {
 	}
 };
 
-export function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
+function refreshInfluenceLookupCaches() {
+	const citySource = activeTheaterCities;
+	if (
+		_influenceCityGridSource !== citySource ||
+		_influenceCityGridSourceLength !== citySource.length ||
+		_influenceCityGridWorldGeneration !== _simulationWorldGeneration
+	) {
+		_tickCityGridIndexSet.clear();
+		for (let cityIndex = 0; cityIndex < citySource.length; cityIndex++) {
+			const gridIndex = getGridIndex(
+				citySource[cityIndex].lat,
+				citySource[cityIndex].lng,
+			);
+			if (gridIndex !== -1) _tickCityGridIndexSet.add(gridIndex);
+		}
+		_influenceCityGridSource = citySource;
+		_influenceCityGridSourceLength = citySource.length;
+		_influenceCityGridWorldGeneration = _simulationWorldGeneration;
+	}
+
+	let signature = `${sides.length}|`;
+	for (let sideIndex = 0; sideIndex < sides.length; sideIndex++) {
+		const side = sides[sideIndex] || [];
+		signature += `${sideIndex}:`;
+		for (let countryIndex = 0; countryIndex < side.length; countryIndex++) {
+			const country = side[countryIndex];
+			signature += `${country.id},${country.role || "OFFENSE"};`;
+		}
+		for (let otherIndex = 0; otherIndex < sides.length; otherIndex++) {
+			if (areSidesHostile(sideIndex, otherIndex))
+				signature += `h${otherIndex},`;
+		}
+		signature += "|";
+	}
+	if (signature === _influenceCoalitionSignature) return;
+	_influenceCoalitionSignature = signature;
+	_influenceActiveSideIndices.length = 0;
+	while (_tickSideAllyIdSets.length < sides.length) {
+		_tickSideAllyIdSets.push(new Set());
+		_tickSideSupportIdSets.push(new Set());
+	}
+	for (let sideIndex = 0; sideIndex < MAX_SIDES; sideIndex++) {
+		_influenceHostileSideIndices[sideIndex].length = 0;
+		const allies = _tickSideAllyIdSets[sideIndex];
+		const support = _tickSideSupportIdSets[sideIndex];
+		allies?.clear();
+		support?.clear();
+		const side = sides[sideIndex] || [];
+		if (side.length === 0) continue;
+		_influenceActiveSideIndices.push(sideIndex);
+		for (const country of side) {
+			allies.add(country.id);
+			if (country.role === "SUPPORT") support.add(country.id);
+		}
+		for (let otherIndex = 0; otherIndex < sides.length; otherIndex++) {
+			if (areSidesHostile(sideIndex, otherIndex)) {
+				_influenceHostileSideIndices[sideIndex].push(otherIndex);
+			}
+		}
+	}
+}
+
+function ensureInfluenceFrontierQueue() {
+	const gridSize = gridWidth * gridHeight;
+	if (
+		_influenceFrontierQueued.length === gridSize &&
+		_influenceFrontierWorldGeneration === _simulationWorldGeneration
+	) {
+		return;
+	}
+	_influenceFrontierQueued = new Uint8Array(gridSize);
+	_influenceFrontierQueue = [];
+	_influenceFrontierCursor = 0;
+	_influenceFrontierPriorityQueue = [];
+	_influenceFrontierPriorityCursor = 0;
+	_influenceFrontierWorldGeneration = _simulationWorldGeneration;
+}
+
+function enqueueInfluenceFrontierIndex(index, priority = false) {
+	if (index < 0 || index >= _influenceFrontierQueued.length) return false;
+	const queuedState = _influenceFrontierQueued[index];
+	if (priority) {
+		if (queuedState === 2) return false;
+		if (
+			_influenceFrontierPriorityQueue.length -
+				_influenceFrontierPriorityCursor >=
+			INFLUENCE_FRONTIER_PRIORITY_LIMIT
+		) {
+			return false;
+		}
+		// Controller changes jump ahead of smoothing work. If this upgrades an
+		// existing regular entry, that stale FIFO entry is ignored when reached.
+		_influenceFrontierQueued[index] = 2;
+		_influenceFrontierPriorityQueue.push(index);
+		return true;
+	}
+	if (queuedState !== 0) return false;
+	if (
+		_influenceFrontierQueue.length - _influenceFrontierCursor >=
+		INFLUENCE_FRONTIER_BACKLOG_LIMIT
+	) {
+		return false;
+	}
+	_influenceFrontierQueued[index] = 1;
+	_influenceFrontierQueue.push(index);
+	return true;
+}
+
+function queueInfluenceFrontierCell(index, priority = false) {
+	ensureInfluenceFrontierQueue();
+	if (index < 0 || index >= _influenceFrontierQueued.length) return;
+	const x = index % gridWidth;
+	enqueueInfluenceFrontierIndex(index, priority);
+	if (x > 0) enqueueInfluenceFrontierIndex(index - 1, priority);
+	if (x + 1 < gridWidth) enqueueInfluenceFrontierIndex(index + 1, priority);
+	if (index >= gridWidth) {
+		enqueueInfluenceFrontierIndex(index - gridWidth, priority);
+	}
+	if (index + gridWidth < _influenceFrontierQueued.length) {
+		enqueueInfluenceFrontierIndex(index + gridWidth, priority);
+	}
+}
+
+function isInfluenceFrontierIndex(index) {
+	if (index < 0 || index >= dominantSideMap.length || landMask[index] !== 2) {
+		return false;
+	}
+	const x = index % gridWidth;
+	const y = Math.floor(index / gridWidth);
+	if (x <= 0 || x >= gridWidth - 1 || y <= 0 || y >= gridHeight - 1) {
+		return false;
+	}
+	const controller = dominantSideMap[index];
+	return (
+		dominantSideMap[index - 1] !== controller ||
+		dominantSideMap[index + 1] !== controller ||
+		dominantSideMap[index - gridWidth] !== controller ||
+		dominantSideMap[index + gridWidth] !== controller
+	);
+}
+
+function processInfluenceFrontierDiffusion(itemBudget) {
+	ensureInfluenceFrontierQueue();
+	const priorityEnd = _influenceFrontierPriorityQueue.length;
+	const regularEnd = _influenceFrontierQueue.length;
+	let processed = 0;
+	while (processed < itemBudget) {
+		let index = -1;
+		let expectedState = 0;
+		if (_influenceFrontierPriorityCursor < priorityEnd) {
+			index =
+				_influenceFrontierPriorityQueue[_influenceFrontierPriorityCursor++];
+			expectedState = 2;
+		} else if (_influenceFrontierCursor < regularEnd) {
+			index = _influenceFrontierQueue[_influenceFrontierCursor++];
+			expectedState = 1;
+		} else {
+			break;
+		}
+		if (_influenceFrontierQueued[index] !== expectedState) continue;
+		_influenceFrontierQueued[index] = 0;
+		processed++;
+		if (landMask[index] !== 2) continue;
+		const y = Math.floor(index / gridWidth);
+		const x = index % gridWidth;
+		if (x <= 0 || x >= gridWidth - 1 || y <= 0 || y >= gridHeight - 1) {
+			continue;
+		}
+		const blur = 0.25;
+		for (
+			let activeIndex = 0;
+			activeIndex < _influenceActiveSideIndices.length;
+			activeIndex++
+		) {
+			const sideIndex = _influenceActiveSideIndices[activeIndex];
+			const influenceMap = sideInfluenceMaps[sideIndex];
+			let sum = 0;
+			for (let deltaY = -1; deltaY <= 1; deltaY++) {
+				const rowOffset = index + deltaY * gridWidth;
+				for (let deltaX = -1; deltaX <= 1; deltaX++) {
+					sum += influenceMap[rowOffset + deltaX];
+				}
+			}
+			influenceMap[index] = influenceMap[index] * (1 - blur) + (sum / 9) * blur;
+		}
+		syncOccupationFromSideInfluence(index);
+		if (isInfluenceFrontierIndex(index)) {
+			enqueueInfluenceFrontierIndex(index);
+		}
+	}
+	if (_influenceFrontierPriorityCursor > 4096) {
+		_influenceFrontierPriorityQueue = _influenceFrontierPriorityQueue.slice(
+			_influenceFrontierPriorityCursor,
+		);
+		_influenceFrontierPriorityCursor = 0;
+	}
+	if (_influenceFrontierCursor > 4096) {
+		_influenceFrontierQueue = _influenceFrontierQueue.slice(
+			_influenceFrontierCursor,
+		);
+		_influenceFrontierCursor = 0;
+	}
+}
+
+function selectInfluenceNeighborCredit(x, y, sideIndex, countryToSideMap) {
+	let uniqueCountries = 0;
+	for (let direction = 0; direction < 8; direction++) {
+		const neighborX = x + _influenceNeighborDx[direction];
+		const neighborY = y + _influenceNeighborDy[direction];
+		if (
+			neighborX < 0 ||
+			neighborX >= gridWidth ||
+			neighborY < 0 ||
+			neighborY >= gridHeight
+		) {
+			continue;
+		}
+		const countryId = primaryOccupierMap[neighborY * gridWidth + neighborX];
+		if (countryId <= 0 || countryToSideMap.get(countryId) !== sideIndex) {
+			continue;
+		}
+		let slot = 0;
+		while (
+			slot < uniqueCountries &&
+			_influenceNeighborCountryIds[slot] !== countryId
+		) {
+			slot++;
+		}
+		if (slot === uniqueCountries) {
+			_influenceNeighborCountryIds[slot] = countryId;
+			_influenceNeighborCountryCounts[slot] = 1;
+			uniqueCountries++;
+		} else {
+			_influenceNeighborCountryCounts[slot]++;
+		}
+	}
+	let bestCountryId = 0;
+	let bestCount = 0;
+	for (let slot = 0; slot < uniqueCountries; slot++) {
+		const count = _influenceNeighborCountryCounts[slot];
+		if (count > bestCount && count >= 3) {
+			bestCount = count;
+			bestCountryId = _influenceNeighborCountryIds[slot];
+		}
+		_influenceNeighborCountryCounts[slot] = 0;
+	}
+	return bestCountryId;
+}
+
+export function updatePersistentInfluence(
+	p1Count,
+	p2Count,
+	countryToSideMap,
+	countryById = _tickCountryById,
+) {
 	let baseInfluence = CONFIG.INFLUENCE_RATE;
+	refreshInfluenceLookupCaches();
 
 	// Dynamic optimization: More sides => fewer expensive samples / unit updates
 	const optimizationFactor = getOptimizationFactor();
 
-	// Mobilization Ramp: Influence starts at 5% and climbs to 100% over 600 frames (~10 seconds)
+	// Mobilization Ramp: Influence starts at 5% and climbs to 100% over 600
+	// simulation ticks, independent of render cadence.
 	const rampDuration = 600;
-	const rampScale = Math.min(1.0, 0.05 + (simFrameCount / rampDuration) * 0.95);
+	const rampScale = Math.min(1.0, 0.05 + (_simTickCount / rampDuration) * 0.95);
 	baseInfluence *= rampScale;
 
 	// Boost expansion when unopposed
 	if (p1Count > 0 && p2Count === 0) baseInfluence *= 6;
 	if (p2Count > 0 && p1Count === 0) baseInfluence *= 6;
 
-	// Optimization: Interleave unit influence updates to prevent frame spikes
-	// Each unit only updates its influence 1 in 3 ticks.
-	const frameStride = 3;
-	const _currentTickOffset = simFrameCount % frameStride;
+	// Every simulation tick owns one stable formation cohort. Unlike the visual
+	// frame counter, `_simTickCount` advances between high-speed subticks, so the
+	// same cohort cannot be charged twice inside one animation frame.
+	const influenceStride = 3;
+	const influenceCohort = _simTickCount % influenceStride;
 
-	// Territory Diffusion Pass: Spread occupation laterally to prevent thin "fingers" and jagged borders.
-	// Throttled: only runs every 3 ticks (was every tick at 35K samples — ~15-20% CPU at 5x).
-	if (simFrameCount % 3 === 0) {
-		const smoothingBase = 8000;
-		const smoothingSamples = Math.max(
-			2000,
-			Math.floor(smoothingBase / optimizationFactor),
-		);
-		for (let s = 0; s < smoothingSamples; s++) {
-			const idx = Math.floor(gameplayRandom() * landMask.length);
-			if (landMask[idx] !== 2) continue;
-
-			const y = Math.floor(idx / gridWidth);
-			const x = idx % gridWidth;
-			if (x <= 0 || x >= gridWidth - 1 || y <= 0 || y >= gridHeight - 1)
-				continue;
-
-			const blur = 0.25;
-			for (let si = 0; si < sideInfluenceMaps.length; si++) {
-				let sum = 0;
-				let count = 0;
-				for (let dy = -1; dy <= 1; dy++) {
-					for (let dx = -1; dx <= 1; dx++) {
-						const nIdx = idx + dy * gridWidth + dx;
-						if (nIdx >= 0 && nIdx < sideInfluenceMaps[si].length) {
-							sum += sideInfluenceMaps[si][nIdx];
-							count++;
-						}
-					}
-				}
-				if (count > 0) {
-					sideInfluenceMaps[si][idx] =
-						sideInfluenceMaps[si][idx] * (1 - blur) + (sum / count) * blur;
-				}
-			}
-			syncOccupationFromSideInfluence(idx);
-		}
-	}
+	// Smooth only cells near active influence or controller changes. The previous
+	// global random sampler rejected most water/stable cells and produced a large
+	// three-tick sawtooth. Fixed item-count work keeps repeat-seed ordering stable.
+	processInfluenceFrontierDiffusion(
+		Math.max(400, Math.floor(1600 / optimizationFactor)),
+	);
 
 	// Strategic Batching: Process a fixed max number of units per frame for influence
 	// This prevents framerate drops when unit counts explode (e.g. 1000+ units)
 	const maxUnitsBase = 300;
-	const maxUnitsToProcess = Math.max(
+	const maxInfluenceApplications = Math.max(
 		50,
 		Math.floor(maxUnitsBase / optimizationFactor),
 	);
+	// Each processed cohort member represents `influenceStride` elapsed ticks.
+	// Divide the old per-tick application cap by that stride so large armies keep
+	// the same total pressure instead of receiving a 2-3x capture-rate boost.
+	const influenceApplicationShare = Math.floor(
+		maxInfluenceApplications / influenceStride,
+	);
+	const influenceApplicationRemainder =
+		maxInfluenceApplications % influenceStride;
+	const maxUnitsToProcess = Math.max(
+		1,
+		influenceApplicationShare +
+			(influenceCohort < influenceApplicationRemainder ? 1 : 0),
+	);
 	let unitsProcessed = 0;
 
-	// Start index rotates through the unit list
-	const startIndex = (simFrameCount * 30) % Math.max(1, units.length);
-
-	// OPT: Pre-compute city grid indices as a Set once per tick, not per-cell inside the loop.
-	// Previously: activeTheaterCities.some(c => getGridIndex(c.lat, c.lng) === idx) ran inside
-	// a triple-nested loop (units × cells × cities), causing millions of getGridIndex calls/tick.
-	_tickCityGridIndexSet.clear();
+	// Start index rotates through the unit list using simulation time rather than
+	// visual time, and cached lookups rebuild only when their source revisions move.
+	const startIndex = (_simTickCount * 30) % Math.max(1, units.length);
 	const cityGridIndexSet = _tickCityGridIndexSet;
-	const citySource = activeTheaterCities?.length ? activeTheaterCities : [];
-	for (let ci = 0; ci < citySource.length; ci++) {
-		const gi = getGridIndex(citySource[ci].lat, citySource[ci].lng);
-		if (gi !== -1) cityGridIndexSet.add(gi);
-	}
-
-	// OPT: Pre-compute per-side ally id Sets so isOwnerAlly is an O(1) Set lookup, not .some()
-	while (_tickSideAllyIdSets.length < sides.length)
-		_tickSideAllyIdSets.push(new Set());
-	while (_tickSideSupportIdSets.length < sides.length)
-		_tickSideSupportIdSets.push(new Set());
-	for (let si = 0; si < sides.length; si++) {
-		_tickSideAllyIdSets[si].clear();
-		sides[si].forEach((c) => {
-			_tickSideAllyIdSets[si].add(c.id);
-		});
-		_tickSideSupportIdSets[si].clear();
-		sides[si].forEach((c) => {
-			if (c.role === "SUPPORT") _tickSideSupportIdSets[si].add(c.id);
-		});
-	}
 	const sideAllyIdSets = _tickSideAllyIdSets;
 	const sideSupportIdSets = _tickSideSupportIdSets;
-
-	const _countryById = new Map();
-	for (let _csi = 0; _csi < sides.length; _csi++) {
-		for (let _cc = 0; _cc < sides[_csi].length; _cc++) {
-			_countryById.set(sides[_csi][_cc].id, sides[_csi][_cc]);
-		}
-	}
 
 	for (let i = 0; i < units.length; i++) {
 		const idx = (startIndex + i) % units.length;
 		const u = units[idx];
+		const cohortId = stableUnitCohort(u, influenceStride);
+		if (cohortId !== influenceCohort) continue;
 		if (u.deployTicks > 0) continue;
 
 		// If this unit is currently in active combat, it should not exert territorial influence
@@ -5748,7 +6083,7 @@ export function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
 			teamMult *= 1.0 - mountainIntensity * 0.5;
 		}
 
-		const countryObj = _countryById.get(u.sovereignId);
+		const countryObj = countryById.get(u.sovereignId);
 		const commandPolicy = getUnitCommandPolicy(u);
 		const role = countryObj?.role || "OFFENSE";
 
@@ -5784,13 +6119,18 @@ export function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
 
 		// Organic Push: Randomize push intensity per unit to create ragged, non-linear salients
 		const organicNoise =
-			0.8 + Math.sin(u.id * 1000 + simFrameCount * 0.05) * 0.4;
-		const delta = baseInfluence * teamMult * organicNoise;
-		const _mySide = sides[u.sideIndex];
+			0.8 + Math.sin(u.id * 1000 + _simTickCount * 0.05) * 0.4;
+		const delta = baseInfluence * teamMult * organicNoise * influenceStride;
 		const mySideIdx = u.sideIndex;
 
 		// Ragged Frontiers: Perturb the influence radius slightly to create "fingers" and "bubbles"
-		const rVar = r * (0.9 + Math.sin(u.id * 500 + simFrameCount * 0.1) * 0.2);
+		const rVar = r * (0.9 + Math.sin(u.id * 500 + _simTickCount * 0.1) * 0.2);
+		const radiusSq = rVar * rVar;
+		const concentrationBonus = Math.min(2.5, (u.lastAllyCount || 1) / 5);
+		const unitRebellion = getRebellionForUnit(u);
+		const isRebelUnit = !!unitRebellion;
+		const hostileSideIndices = _influenceHostileSideIndices[mySideIdx];
+		const myInfluenceMap = sideInfluenceMaps[mySideIdx];
 
 		const startLat = Math.max(
 			0,
@@ -5810,35 +6150,30 @@ export function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
 		);
 
 		for (let y = startLat; y <= endLat; y++) {
+			const deltaLat = u.lat - (y * CONFIG.GRID_RES - 90);
+			const deltaLatSq = deltaLat * deltaLat;
+			const rowOffset = y * gridWidth;
 			for (let x = startLng; x <= endLng; x++) {
-				const idx = y * gridWidth + x;
-				if (
-					idx < 0 ||
-					idx >= landMask.length ||
-					landMask[idx] === 0 ||
-					landMask[idx] !== 2
-				)
-					continue;
+				const idx = rowOffset + x;
+				if (landMask[idx] !== 2) continue;
+				const previousControllerSide = dominantSideMap[idx];
+				const deltaLng = u.lng - (x * CONFIG.GRID_RES - 180);
+				const dSq = deltaLatSq + deltaLng * deltaLng;
+				if (dSq >= radiusSq) continue;
 
 				// City Resistance: Cells containing cities are much harder for frontlines to pass through
 				let cellDelta = delta;
 				if (cityGridIndexSet.has(idx)) cellDelta *= 0.35;
 
-				const cellLat = y * CONFIG.GRID_RES - 90;
-				const cellLng = x * CONFIG.GRID_RES - 180;
-				const dSq = (u.lat - cellLat) ** 2 + (u.lng - cellLng) ** 2;
-				if (dSq < rVar * rVar) {
+				{
 					const dist = Math.sqrt(dSq);
 					// Strategic Concentration: Units push harder when clustered or in spearheads
-					const concentrationBonus = Math.min(2.5, (u.lastAllyCount || 1) / 5);
 					const weight = (1 - dist / rVar) ** 2.0 * concentrationBonus;
 
-					const curInfluence = sideInfluenceMaps[mySideIdx][idx];
+					const curInfluence = myInfluenceMap[idx];
 					let newInfluence = curInfluence + Math.abs(cellDelta) * weight;
 					if (newInfluence > 1) newInfluence = 1;
 
-					const unitRebellion = getRebellionForUnit(u);
-					const isRebelUnit = !!unitRebellion;
 					if (isRebelUnit && deJureMap[idx] !== unitRebellion.rebelId) {
 						if (newInfluence > curInfluence) {
 							newInfluence = curInfluence;
@@ -5881,37 +6216,12 @@ export function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
 							currentOccSideIdx === u.sideIndex;
 
 						if (!isCurrentOccAlly) {
-							const counts = new Map();
-							const checkDirs = [
-								[0, 1],
-								[0, -1],
-								[1, 0],
-								[-1, 0],
-								[1, 1],
-								[1, -1],
-								[-1, 1],
-								[-1, -1],
-							];
-							for (const [dx, dy] of checkDirs) {
-								const nx = x + dx;
-								const ny = y + dy;
-								if (nx >= 0 && nx < gridWidth && ny >= 0 && ny < gridHeight) {
-									const nId = primaryOccupierMap[ny * gridWidth + nx];
-									const nSide = countryToSideMap.get(nId);
-									if (nId > 0 && nSide !== undefined && nSide === u.sideIndex) {
-										counts.set(nId, (counts.get(nId) || 0) + 1);
-									}
-								}
-							}
-
-							let bestAllyId = 0;
-							let maxCount = 0;
-							counts.forEach((count, id) => {
-								if (count > maxCount && count >= 3) {
-									maxCount = count;
-									bestAllyId = id;
-								}
-							});
+							const bestAllyId = selectInfluenceNeighborCredit(
+								x,
+								y,
+								u.sideIndex,
+								countryToSideMap,
+							);
 
 							const finalCreditId = bestAllyId || creditToId;
 
@@ -5929,24 +6239,40 @@ export function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
 						}
 					}
 
-					sideInfluenceMaps[mySideIdx][idx] = newInfluence;
+					myInfluenceMap[idx] = newInfluence;
 					// Decay opposing sides' influence when we enter a cell
-					for (let si = 0; si < sideInfluenceMaps.length; si++) {
-						if (
-							areSidesHostile(mySideIdx, si) &&
-							sideInfluenceMaps[si][idx] > 0
-						) {
-							sideInfluenceMaps[si][idx] = Math.max(
+					let touchedHostileInfluence = false;
+					for (
+						let hostileIndex = 0;
+						hostileIndex < hostileSideIndices.length;
+						hostileIndex++
+					) {
+						const sideIndex = hostileSideIndices[hostileIndex];
+						const hostileInfluenceMap = sideInfluenceMaps[sideIndex];
+						if (hostileInfluenceMap[idx] > 0) {
+							touchedHostileInfluence = true;
+							hostileInfluenceMap[idx] = Math.max(
 								0,
-								sideInfluenceMaps[si][idx] - cellDelta * 0.5,
+								hostileInfluenceMap[idx] - cellDelta * 0.5,
 							);
 						}
 					}
 					// De-jure owner reclaim bonus: 1.5x influence when retaking own territory
 					if (worldControlMap[idx] === u.sovereignId) {
-						sideInfluenceMaps[mySideIdx][idx] *= 1.5;
+						myInfluenceMap[idx] *= 1.5;
 					}
 					syncOccupationFromSideInfluence(idx);
+					if (primaryOccupierMap[idx] !== currentOccupierId) {
+						_territoryLedger?.markControllerChange(idx);
+						influenceLayer?.notifyControlCellsChanged(idx);
+						queueInfluenceFrontierCell(idx, true);
+					} else if (
+						touchedHostileInfluence ||
+						previousControllerSide !== mySideIdx ||
+						isInfluenceFrontierIndex(idx)
+					) {
+						queueInfluenceFrontierCell(idx);
+					}
 				}
 			}
 		}
@@ -7728,6 +8054,13 @@ function formatBudget(value) {
 
 export function updateEconomyPanel() {
 	if (!economyPanel || !economyPanelBody || !economyEventsList) return;
+	const warDeskOwnsEconomy =
+		document.body.classList.contains("experiment-loop-active") &&
+		!document.body.classList.contains("commander-active");
+	if (warDeskOwnsEconomy) {
+		economyPanel.style.display = "none";
+		return;
+	}
 	const simulating =
 		gameState === "SIMULATING" ||
 		(godModeActive && preGodModeState === "SIMULATING");
@@ -8911,18 +9244,19 @@ function resolveRebellionFailure(rebellion) {
 	reconcileOperationalAiLifecycle("rebellion-failed");
 }
 
-function processRebellionStates() {
+function processRebellionStates(territorySnapshot = _territoryLedgerSnapshot) {
 	for (const rebellion of Array.from(activeRebellions.values())) {
 		const rebelSideIdx = findCountrySideIndex(rebellion.rebelId);
-		let coreCells = 0;
-		let controlled = 0;
-		for (let i = 0; i < deJureMap.length; i++) {
-			if (deJureMap[i] !== rebellion.rebelId || landMask[i] === 0) continue;
-			coreCells++;
-			if (dominantSideMap[i] === rebelSideIdx) {
-				controlled++;
-			}
-		}
+		const countryLedger = getCountryLedger(
+			territorySnapshot,
+			rebellion.rebelId,
+		);
+		const coreCells = countryLedger?.deJureTotal || 0;
+		const controlled = getDeJureControlBySide(
+			territorySnapshot,
+			rebellion.rebelId,
+			rebelSideIdx,
+		);
 		const ratio = coreCells > 0 ? controlled / coreCells : 0;
 		if (ratio >= 0.85) {
 			resolveRebellionSuccess(rebellion);
@@ -9016,7 +9350,9 @@ function restoreCountryPeacefully(record) {
 	return true;
 }
 
-function ensureOccupationControllers() {
+function ensureOccupationControllers(
+	territorySnapshot = _territoryLedgerSnapshot,
+) {
 	const activeCountryIds = new Set(
 		sides
 			.flat()
@@ -9025,24 +9361,20 @@ function ensureOccupationControllers() {
 	);
 	for (const record of Array.from(occupationEconomies.values())) {
 		if (activeCountryIds.has(record.annexerId)) continue;
-		const controllerCounts = new Map();
-		for (let i = 0; i < deJureMap.length; i++) {
-			if (deJureMap[i] !== record.victimId) continue;
-			const controller = primaryOccupierMap[i] || worldControlMap[i];
-			if (
-				controller > 0 &&
-				controller !== record.victimId &&
-				activeCountryIds.has(controller)
-			) {
-				controllerCounts.set(
-					controller,
-					(controllerCounts.get(controller) || 0) + 1,
-				);
-			}
-		}
+		const controllerCounts =
+			getCountryLedger(territorySnapshot, record.victimId)
+				?.deJureControlByCountry || {};
 		let nextAnnexer = 0;
 		let bestCount = 0;
-		for (const [countryId, count] of controllerCounts) {
+		for (const [rawCountryId, count] of Object.entries(controllerCounts)) {
+			const countryId = Number(rawCountryId);
+			if (
+				countryId <= 0 ||
+				countryId === record.victimId ||
+				!activeCountryIds.has(countryId)
+			) {
+				continue;
+			}
 			if (count > bestCount) {
 				bestCount = count;
 				nextAnnexer = countryId;
@@ -9200,8 +9532,12 @@ export function runWarEconomyCycle(force = false) {
 			(window.__perf.economy || 0) + performance.now() - started;
 		return;
 	}
+	let territorySnapshot = flushTerritoryLedger();
 	economyPayCycle++;
-	ensureOccupationControllers();
+	ensureOccupationControllers(territorySnapshot);
+	// Controller migration can create or restore a side. Reflush only when that
+	// changed topology invalidated the prior atomic view; otherwise this is O(1).
+	territorySnapshot = flushTerritoryLedger();
 	const countryToSide = new Map();
 	for (let sideIdx = 0; sideIdx < sides.length; sideIdx++) {
 		for (const country of sides[sideIdx] || []) {
@@ -9209,6 +9545,7 @@ export function runWarEconomyCycle(force = false) {
 		}
 	}
 	const payrollDueByCountry = new Map();
+	const garrisonByVictim = new Map();
 	for (const unit of units) {
 		const payroll =
 			unit.kind === "armor"
@@ -9219,62 +9556,31 @@ export function runWarEconomyCycle(force = false) {
 			(payrollDueByCountry.get(unit.sovereignId) || 0) + payroll,
 		);
 		getUnitDiscipline(unit);
+		if (!unitCountsAsOccupationGarrison(unit)) continue;
+		const gridIndex = getGridIndex(unit.lat, unit.lng);
+		if (gridIndex < 0) continue;
+		const victimId = deJureMap[gridIndex];
+		const occupation = occupationEconomies.get(victimId);
+		if (!occupation) continue;
+		const annexerSideIdx = countryToSide.get(occupation.annexerId);
+		if (annexerSideIdx !== unit.sideIndex) continue;
+		garrisonByVictim.set(
+			victimId,
+			(garrisonByVictim.get(victimId) || 0) + getLiveFormationStrength(unit),
+		);
 	}
 	const liveEquipment = summarizeLiveEquipment();
-	const controlledCore = new Map();
-	const occupiedCore = new Map();
-	for (let i = 0; i < deJureMap.length; i++) {
-		if (landMask[i] === 0) continue;
-		const countryId = deJureMap[i];
-		if (countryToSide.has(countryId)) {
-			const sideIdx = countryToSide.get(countryId);
-			if (dominantSideMap[i] === sideIdx) {
-				controlledCore.set(countryId, (controlledCore.get(countryId) || 0) + 1);
-			}
-		}
-		const occupation = occupationEconomies.get(countryId);
-		if (occupation) {
-			const annexerSideIdx = countryToSide.get(occupation.annexerId);
-			if (dominantSideMap[i] === annexerSideIdx) {
-				occupiedCore.set(countryId, (occupiedCore.get(countryId) || 0) + 1);
-			}
-		}
-	}
-	const controlledCityPop = new Map();
-	const capitalHeld = new Map();
-	for (const countryId of countryToSide.keys())
-		capitalHeld.set(countryId, true);
-	for (const city of cities) {
-		const ownerId = city.ownerId || city.sovereignId;
-		if (!countryToSide.has(ownerId)) continue;
-		const sideIdx = countryToSide.get(ownerId);
-		const idx = getGridIndex(city.lat, city.lng);
-		const held = idx !== -1 && dominantSideMap[idx] === sideIdx;
-		if (held) {
-			controlledCityPop.set(
-				ownerId,
-				(controlledCityPop.get(ownerId) || 0) + Math.max(0, city.pop || 0),
-			);
-		}
-		if (city.isCapital && !held) capitalHeld.set(ownerId, false);
-	}
 	const occupationDueByAnnexer = new Map();
 	const occupationYieldByAnnexer = new Map();
 	for (const record of occupationEconomies.values()) {
-		const held = occupiedCore.get(record.victimId) || 0;
-		record.heldRatio = Math.max(0, Math.min(1, held / record.coreCells));
 		const annexerSideIdx = countryToSide.get(record.annexerId);
-		let garrisonUnits = 0;
-		if (annexerSideIdx !== undefined) {
-			for (const unit of units) {
-				if (unit.sideIndex !== annexerSideIdx) continue;
-				if (!unitCountsAsOccupationGarrison(unit)) continue;
-				const idx = getGridIndex(unit.lat, unit.lng);
-				if (idx !== -1 && deJureMap[idx] === record.victimId) {
-					garrisonUnits += getLiveFormationStrength(unit);
-				}
-			}
-		}
+		const held = getDeJureControlBySide(
+			territorySnapshot,
+			record.victimId,
+			annexerSideIdx,
+		);
+		record.heldRatio = Math.max(0, Math.min(1, held / record.coreCells));
+		const garrisonUnits = garrisonByVictim.get(record.victimId) || 0;
 		const requiredGarrison =
 			record.requiredGarrison ||
 			computeRequiredGarrison(record.expectedArmyUnits || 0);
@@ -9301,12 +9607,10 @@ export function runWarEconomyCycle(force = false) {
 	for (const [countryId, sideIdx] of countryToSide) {
 		const state = countryEconomy.get(countryId);
 		if (!state || state.capitulated) continue;
+		const territory = getCountryLedger(territorySnapshot, countryId);
 		const coreControlRatio = Math.max(
 			0,
-			Math.min(
-				1,
-				(controlledCore.get(countryId) || 0) / state.initialCoreCells,
-			),
+			Math.min(1, (territory?.coreControlled || 0) / state.initialCoreCells),
 		);
 		const cityControlRatio =
 			state.initialCityPop > 0
@@ -9314,11 +9618,11 @@ export function runWarEconomyCycle(force = false) {
 						0,
 						Math.min(
 							1,
-							(controlledCityPop.get(countryId) || 0) / state.initialCityPop,
+							(territory?.cityPopulationControlled || 0) / state.initialCityPop,
 						),
 					)
 				: coreControlRatio;
-		const hasCapital = capitalHeld.get(countryId) !== false;
+		const hasCapital = territory?.capitalHeld !== false;
 		const income = computeCurrentIncome(state.baseIncome, {
 			coreControlRatio,
 			cityControlRatio,
@@ -9373,7 +9677,7 @@ export function runWarEconomyCycle(force = false) {
 		}
 	}
 	applyDesertion();
-	processRebellionStates();
+	processRebellionStates(territorySnapshot);
 	updateEconomyPanel();
 	window.__perf.economy =
 		(window.__perf.economy || 0) + performance.now() - started;
@@ -10498,13 +10802,13 @@ function captureExperimentMetrics({ scanWorld = true } = {}) {
 	return metrics;
 }
 
-function createExperimentSnapshot(reason, options = {}) {
+function createExperimentSnapshot(reason, options = {}, sideMetrics = null) {
 	return {
 		reason,
 		tick: _simTickCount,
 		date: getExperimentDateValue(),
 		rngState: getGameplayRngState(),
-		sides: captureExperimentMetrics(options),
+		sides: sideMetrics || captureExperimentMetrics(options),
 	};
 }
 
@@ -10517,10 +10821,14 @@ export function recordExperimentCheckpoint(reason, details = {}) {
 				([key]) => !["sideMetrics", "metrics", "date", "tick"].includes(key),
 			),
 		);
+	const sideMetrics =
+		details.sideMetrics ||
+		details.metrics ||
+		captureExperimentMetrics({ scanWorld: false });
 	const checkpoint = {
-		...createExperimentSnapshot(reason, { scanWorld: false }),
+		...createExperimentSnapshot(reason, { scanWorld: false }, sideMetrics),
 		date: getExperimentDateLabel(),
-		sideMetrics: captureExperimentMetrics({ scanWorld: false }),
+		sideMetrics,
 		...details,
 		evidence,
 	};
@@ -10891,12 +11199,24 @@ function updateExperimentWarDesk(force = false) {
 			: metrics.some((metric) => metric.phase === "ADVANCING")
 				? "MOBILE WAR"
 				: "STALEMATE";
-	_experimentUi?.updateWarDesk({
+	const warDeskBody = document.getElementById("war-desk-body");
+	const overviewVisible =
+		!warDeskBody?.hidden &&
+		document.getElementById("war-desk-overview-panel")?.hidden !== true;
+	const economyVisible =
+		!warDeskBody?.hidden &&
+		document.getElementById("war-desk-economy-panel")?.hidden !== true;
+	const eventsVisible =
+		!warDeskBody?.hidden &&
+		document.getElementById("war-desk-events-panel")?.hidden !== true;
+	const warDeskData = {
 		advantage,
 		phase: strongestPhase,
 		summary:
 			"Advantage combines territory, cities and capitals, personnel, economy, equipment, and the current war phase.",
-		metrics: metrics.map((metric) => ({
+	};
+	if (force || overviewVisible) {
+		warDeskData.metrics = metrics.map((metric) => ({
 			detail: `${metric.territoryPercent.toFixed(1)}% territory · ${metric.cities} cities · ${metric.phase}`,
 			key: "manpower",
 			label: metric.name,
@@ -10913,10 +11233,8 @@ function updateExperimentWarDesk(force = false) {
 							? "positive"
 							: "neutral",
 			value: Math.round(metric.personnel),
-		})),
-		economy: warDeskEconomyRows(),
-		events: activeExperimentRecorder.events.slice(-15).reverse(),
-		aiOperations: {
+		}));
+		warDeskData.aiOperations = {
 			sides: sides
 				.map((side, sideIndex) => ({
 					sideUid: sideUids[sideIndex],
@@ -10925,8 +11243,13 @@ function updateExperimentWarDesk(force = false) {
 				.filter((side) => side.sideUid && _aiIntelBySide.has(side.sideUid)),
 			selectedSideUid: aiObserverSideUid,
 			...(getAiObserverSnapshot() || {}),
-		},
-	});
+		};
+	}
+	if (force || economyVisible) warDeskData.economy = warDeskEconomyRows();
+	if (force || eventsVisible) {
+		warDeskData.events = activeExperimentRecorder.events.slice(-15).reverse();
+	}
+	_experimentUi?.updateWarDesk(warDeskData);
 }
 
 function endingReasonForTreaty(type, winnerName = "") {
@@ -11422,7 +11745,7 @@ function handleRebellionIntervention(values) {
 	finishExperimentIntervention("REBELLION_FORCED", selected, {
 		annexerCountryId: occupation.annexerId,
 	});
-	processRebellionStates();
+	processRebellionStates(flushTerritoryLedger());
 }
 
 function handlePeaceIntervention() {
@@ -11529,6 +11852,8 @@ export async function _startWarInner() {
 
 	gameState = "SIMULATING";
 	isPaused = false;
+	influenceLayer?.setControlChangeTrackingEnabled(true);
+	influenceLayer?.invalidate(RENDER_LAYERS.ALL);
 	_simTickCount = 0;
 	warGraceEndTick = simFrameCount + CONFIG.WAR_GRACE_TICKS;
 	_lastCapitulationTick = Number.NEGATIVE_INFINITY;
@@ -13544,6 +13869,21 @@ function getOperationalSectorId(observerIndex, enemyIndex) {
 		: `${enemyUid}|${observerUid}`;
 }
 
+function decayOperationalAiIntelContacts() {
+	if (gameMode !== "CONQUEST" || _aiIntelBySide.size === 0) return false;
+	let changed = false;
+	for (let observerIndex = 0; observerIndex < sides.length; observerIndex++) {
+		const observerUid = sideUids[observerIndex];
+		const state = _aiIntelBySide.get(observerUid);
+		if (!state || !sides[observerIndex]?.length) continue;
+		const next = decayAiIntel(state, _simTickCount);
+		_aiIntelBySide.set(observerUid, next);
+		if (next !== state) changed = true;
+	}
+	if (changed) _aiOperationsDirty = true;
+	return changed;
+}
+
 function refreshOperationalAiIntel(force = false) {
 	if (gameMode !== "CONQUEST" || _aiIntelBySide.size === 0) return false;
 	let refreshedAny = false;
@@ -13566,8 +13906,6 @@ function refreshOperationalAiIntel(force = false) {
 			_simTickCount - state.lastScanTick >= state.config.scanIntervalTicks
 		) {
 			dueObserverIndices.add(observerIndex);
-		} else if (_simTickCount % 15 === 0) {
-			state = decayAiIntel(state, _simTickCount);
 		}
 		_aiIntelBySide.set(observerUid, state);
 	}
@@ -17396,7 +17734,6 @@ export function evaluateAllPlans() {
 	for (const plan of _occupationGarrisonPlans.values()) {
 		plan.activeUnitCount = 0;
 	}
-	if (_simTickCount % 60 === 0) syncOccupationGarrisonAssignments();
 	window.__perf.proposals =
 		(window.__perf.proposals || 0) + performance.now() - _tp;
 
@@ -17423,7 +17760,7 @@ export function evaluateAllPlans() {
 	}
 
 	const _te = performance.now();
-	if (simFrameCount % 5 === 0) {
+	if (isSimulationPhaseDue(_simTickCount, 5, 2)) {
 		if (gameMode !== "CONQUEST") {
 			for (let si = 0; si < sides.length; si++) {
 				if (!sides[si] || sides[si].length === 0) continue;
@@ -18585,7 +18922,13 @@ function getOperationalAirPriorityAreas() {
 
 function runCombinedArmsSimulationTick() {
 	if (!airPowerEnabled) return;
-	if (_simTickCount % COMBINED_ARMS_CONFIG.AIR_MISSION_INTERVAL === 0) {
+	if (
+		isSimulationPhaseDue(
+			_simTickCount,
+			COMBINED_ARMS_CONFIG.AIR_MISSION_INTERVAL,
+			47,
+		)
+	) {
 		updateAirfieldControllers();
 	}
 	if (airWings.length === 0) return;
@@ -18640,6 +18983,7 @@ export function performSimulationTick() {
 		"frontlinePolys",
 		"frontlineLayoutApply",
 		"frontlineSlotApply",
+		"phaseWheel",
 		"consolidate",
 		"caches",
 		"victory",
@@ -18809,7 +19153,7 @@ export function performSimulationTick() {
 
 	// 1a. Occupancy Smoothing: Occasionally clean up primaryOccupierMap during war to prevent speckling
 	const _tSmooth = performance.now();
-	if (simFrameCount % 120 === 0) {
+	if (isSimulationPhaseDue(_simTickCount, 120, 83)) {
 		const sampleCount = 5000;
 		const modified = [];
 		for (let s = 0; s < sampleCount; s++) {
@@ -18855,7 +19199,10 @@ export function performSimulationTick() {
 		}
 		// Apply modifications without a massive 24MB array GC copy
 		for (let i = 0; i < modified.length; i++) {
-			primaryOccupierMap[modified[i].idx] = modified[i].dominantAlly;
+			const change = modified[i];
+			primaryOccupierMap[change.idx] = change.dominantAlly;
+			_territoryLedger?.markControllerChange(change.idx);
+			influenceLayer?.notifyControlCellsChanged(change.idx);
 		}
 	}
 	window.__perf.smoothing =
@@ -18868,10 +19215,17 @@ export function performSimulationTick() {
 	// results atomic without producing a multi-million-cell frame spike.
 	const optimizationFactor = getOptimizationFactor();
 	const countInterval = 200;
-	const countPhase = _simTickCount % countInterval;
-	const shouldCountLand = countPhase === 0;
-	const shouldScheduleTerritoryCensus = countPhase === 133;
-	if (shouldCountLand) {
+	const shouldCountLand = isSimulationPhaseDue(
+		_simTickCount,
+		countInterval,
+		37,
+	);
+	const shouldCommitTerritoryDecision = isSimulationPhaseDue(
+		_simTickCount,
+		countInterval,
+		133,
+	);
+	if (isSimulationPhaseDue(_simTickCount, countInterval, 67)) {
 		const _tP0 = performance.now();
 		const integBase = 5000;
 		const integSamples = Math.max(
@@ -18920,22 +19274,21 @@ export function performSimulationTick() {
 				syncOccupationFromSideInfluence(idx);
 			}
 		}
-		window.__perf.phase0 =
-			(window.__perf.phase0 || 0) + performance.now() - _tP0;
+		window.__perf.phase67 += performance.now() - _tP0;
 	} // end territorial integrity
 
-	// 2. Statistics & Soldiers (Dynamic based on units)
-	scheduleTerritoryCensus(countryToSideMap, combatantIds, shouldCountLand);
+	// 2. Statistics & Soldiers (Dynamic based on units). One shared ledger now
+	// feeds surrender, economy, reports, rebellion and HUD territory consumers.
 	const _tP133 = performance.now();
 	_simulationJobs.step(160_000);
-	processTerritoryCensusTiles(countryToSideMap, combatantIds);
-	if (shouldScheduleTerritoryCensus) {
-		closeTerritoryCensusForDecision(countryToSideMap, combatantIds);
-		publishTerritoryCensusSnapshot();
+	stepTerritoryLedger(countryToSideMap, 160_000);
+	if (shouldCommitTerritoryDecision) {
+		const decisionSnapshot = flushTerritoryLedger(countryToSideMap);
+		publishTerritoryLedgerSnapshot(decisionSnapshot, true);
 	}
 	window.__perf.phase133 =
 		(window.__perf.phase133 || 0) + performance.now() - _tP133;
-	const territoryCensusFresh = _territoryCensusCommittedTick === _simTickCount;
+	const territoryCensusFresh = _territoryLedgerDecisionTick === _simTickCount;
 	const p1T = _cachedP1T,
 		p2T = _cachedP2T;
 	const _p1LandScore = p1T + p2T > 0 ? (p1T / (p1T + p2T)) * 100 : 50;
@@ -19152,9 +19505,11 @@ export function performSimulationTick() {
 	// Direction fields and polyline/slot layouts share one async worker. While it
 	// is busy, each work type coalesces to one newest snapshot for the next tick.
 	const fieldDue =
-		_simTickCount - frontlineFieldTick >= FRONTLINE_FIELD_UPDATE_INTERVAL;
+		_simTickCount - frontlineFieldTick >= FRONTLINE_FIELD_UPDATE_INTERVAL &&
+		isSimulationPhaseDue(_simTickCount, 7, 3);
 	const layoutDue =
-		_simTickCount - _frontlinePolyTick >= FRONTLINE_POLY_UPDATE_INTERVAL;
+		_simTickCount - _frontlinePolyTick >= FRONTLINE_POLY_UPDATE_INTERVAL &&
+		isSimulationPhaseDue(_simTickCount, 7, 5);
 	if (
 		fieldDue ||
 		layoutDue ||
@@ -19168,89 +19523,9 @@ export function performSimulationTick() {
 	window.__perf.frontline =
 		(window.__perf.frontline || 0) + performance.now() - _tFrontline;
 
-	const _tConsolidate = performance.now();
-	// --- UNIT CONSOLIDATION (Merge Stacks) ---
-	// Periodically merge units of the same team that are virtually overlapping.
-	// This fulfills the "no stacks" optimization and boosts performance in massive wars.
-	if (simFrameCount % 30 === 0 && units.length > 40) {
-		const mergeDistSq = 0.14 * 0.14; // ~15km radius for merging
-		const maxMergedHealth = CONFIG.UNIT_HEALTH * 5; // Cap to prevent invincible "super-units"
-		const unitsToRemove = new Set();
-
-		for (let i = 0; i < units.length; i++) {
-			const u = units[i];
-			// Skip if already marked for removal or already at max merged strength
-			if (
-				unitsToRemove.has(u) ||
-				u.kind === "armor" ||
-				u.personnel !== undefined ||
-				(u.personnelCapacity || 0) > CONFIG.UNIT_TO_SOLDIER_RATIO ||
-				u.health >= maxMergedHealth ||
-				u.deployTicks > 0
-			)
-				continue;
-
-			const kx = Math.floor((u.lng + 180) / HASH_SIZE);
-			const ky = Math.floor((u.lat + 90) / HASH_SIZE);
-			const k = kx * 100 + ky;
-			const si = u.sideIndex;
-			let cellUnits;
-			if (CONFIG.ENABLE_SIDE_HASH_COMBAT && si >= 0 && si < sides.length) {
-				cellUnits = unitHashBySide[si].get(k);
-			} else {
-				cellUnits = unitHash.get(k);
-			}
-			if (!cellUnits) continue;
-
-			for (let j = 0; j < cellUnits.length; j++) {
-				const other = cellUnits[j];
-				// Must be a different unit, same team, same sovereign, and not already being removed
-				if (
-					other === u ||
-					unitsToRemove.has(other) ||
-					other.kind === "armor" ||
-					other.personnel !== undefined ||
-					(other.personnelCapacity || 0) > CONFIG.UNIT_TO_SOLDIER_RATIO ||
-					(CONFIG.ENABLE_SIDE_HASH_COMBAT
-						? false
-						: other.sideIndex === u.sideIndex) ||
-					other.sovereignId !== u.sovereignId ||
-					other.deployTicks > 0
-				)
-					continue;
-
-				// Simple squared distance check
-				let dlng = other.lng - u.lng;
-				if (dlng > 180) dlng -= 360;
-				else if (dlng < -180) dlng += 360;
-				const dSq = (u.lat - other.lat) ** 2 + dlng ** 2;
-
-				if (dSq < mergeDistSq) {
-					const capacity = maxMergedHealth - u.health;
-					const transfer = Math.min(capacity, other.health);
-
-					u.health += transfer;
-					other.health -= transfer;
-
-					// If the other unit is depleted, mark for removal
-					if (other.health <= 0) {
-						unitsToRemove.add(other);
-					}
-
-					// If the primary unit is full, stop looking for more neighbors to merge
-					if (u.health >= maxMergedHealth) break;
-				}
-			}
-		}
-
-		if (unitsToRemove.size > 0) {
-			units = units.filter((u) => !unitsToRemove.has(u));
-			// Re-sync casualty counts: these units weren't destroyed by enemies, just consolidated.
-			// No action needed here as personnel display derives from live unit health.
-		}
-	}
-	window.__perf.consolidate =
-		(window.__perf.consolidate || 0) + performance.now() - _tConsolidate;
+	const _tPhaseWheel = performance.now();
+	advanceSimulationPhaseWheel();
+	window.__perf.phaseWheel += performance.now() - _tPhaseWheel;
 	// Consume only committed census data; partial tile refreshes never leak into AI or
 	// surrender decisions.
 	_allCombatants.forEach((c) => {
@@ -19933,14 +20208,14 @@ export function performSimulationTick() {
 	);
 	window.__perf.plans += performance.now() - _t1;
 
-	// ── Compute neutral border polylines (throttled to every 60 ticks) ──
+	// ── Compute neutral border polylines only when political topology changes ──
 	const _tn = performance.now();
-	const NEUTRAL_BORDER_INTERVAL = 60;
+	const neutralBorderSignature = `${_simulationWorldGeneration}:${_politicalMapRevision}:${[...combatantIds].sort((left, right) => left - right).join(",")}`;
 	if (
 		adjacencyCache &&
-		(simFrameCount % NEUTRAL_BORDER_INTERVAL === 0 ||
-			Object.keys(_neutralBorderPolys).length === 0)
+		neutralBorderSignature !== _neutralBorderCacheSignature
 	) {
+		_neutralBorderCacheSignature = neutralBorderSignature;
 		_neutralBorderPolys = {};
 
 		// Identify combatant countries with neutral neighbors
@@ -23988,23 +24263,9 @@ export function performSimulationTick() {
 
 	let sideTerritoryCounts = _cachedSideTerritoryCounts;
 	if (shouldCountLand) {
-		const counts = new Array(sides.length).fill(0);
-		for (let i = 0; i < dominantSideMap.length; i++) {
-			if (landMask[i] === 2) {
-				const ds = dominantSideMap[i];
-				if (ds >= 0 && ds < sides.length) counts[ds]++;
-			}
-		}
-		_cachedSideTerritoryCounts = counts;
-		sideTerritoryCounts = counts;
-		const total = counts.reduce((a, b) => a + b, 0);
-		const pcts = new Array(sides.length).fill(50);
-		if (total > 0) {
-			for (let si = 0; si < sides.length; si++) {
-				pcts[si] = Math.round((counts[si] / total) * 100);
-			}
-		}
-		_cachedSideTerritoryPcts = pcts;
+		// The last atomically committed ledger generation is coherent. Avoid the
+		// former multi-million-cell scan on every 200-tick report boundary.
+		sideTerritoryCounts = _cachedSideTerritoryCounts;
 		if (activeExperimentRecorder) {
 			recordExperimentCheckpoint("TERRITORY_SCAN", {
 				sideMetrics: captureExperimentMetrics({ scanWorld: false }),
@@ -25306,8 +25567,10 @@ export function updateLoop(now) {
 	}
 	// --- End performance measurement ---
 
+	_frameSimulationCommitFlags.clear();
+	let simulationWorkMs = 0;
 	if (!isPaused) {
-		const simulationStarted = framePerfEntry ? performance.now() : 0;
+		const simulationStarted = performance.now();
 		if (framePerfEntry) framePerfEntry.simulationStart = simulationStarted;
 		// Run sub-ticks based on simSpeed (handles both fast-forward and slow-motion)
 		frameAccumulator += simSpeed;
@@ -25355,25 +25618,33 @@ export function updateLoop(now) {
 		if (typeof now === "number") {
 			tickGameTime(Math.min(_frameDt, 50));
 		}
-		if (framePerfEntry) {
-			framePerfEntry.simulationMs = performance.now() - simulationStarted;
-		}
+		simulationWorkMs = performance.now() - simulationStarted;
+		if (framePerfEntry) framePerfEntry.simulationMs = simulationWorkMs;
 	}
 
 	// Advance simulation frame counter once per visual loop
 	simFrameCount++;
 
-	// Aggressive Render Skipping: At high sim speeds, process mechanics multiple times without painting
-	let skipRenderThisFrame = false;
-	if (simSpeed >= 5) {
-		skipRenderThisFrame = simFrameCount % 5 !== 0;
-	} else if (simSpeed >= 3) {
-		skipRenderThisFrame = simFrameCount % 4 !== 0;
-	} else if (simSpeed >= 2) {
-		skipRenderThisFrame = simFrameCount % 2 !== 0;
-	}
+	// Preserve high-speed paint cadence, then avoid placing an admitted paint on
+	// the same frame as a large simulation/atomic-commit spike. Presentation may
+	// move; simulation ordering and budgets never depend on wall-clock time.
+	const renderCadence =
+		simSpeed >= 5 ? 5 : simSpeed >= 3 ? 4 : simSpeed >= 2 ? 2 : 1;
+	const cadenceDue = simFrameCount % renderCadence === 0;
+	const maxDeferredFrames = Math.max(2, renderCadence + 1);
+	const starvationDue = _renderAdmissionDeferredFrames >= maxDeferredFrames;
+	const renderAdmission = decideRenderAdmission({
+		visualDirty: cadenceDue || starvationDue,
+		simulationWorkMs,
+		simulationBudgetMs: 12,
+		commitFlags: _frameSimulationCommitFlags,
+		framesSinceRender: _renderAdmissionDeferredFrames,
+		maxDeferredFrames,
+	});
+	const skipRenderThisFrame = !renderAdmission.admit;
 
 	if (skipRenderThisFrame && document.hidden === false) {
+		_renderAdmissionDeferredFrames++;
 		if (shouldTrackFrame) {
 			window.__perf._scheduler.skippedRenderFrames++;
 		}
@@ -25384,6 +25655,7 @@ export function updateLoop(now) {
 		animationFrameId = requestAnimationFrame(updateLoop);
 		return;
 	}
+	_renderAdmissionDeferredFrames = 0;
 	if (shouldTrackFrame) {
 		window.__perf._scheduler.renderedFrames++;
 	}
@@ -25423,14 +25695,12 @@ export function updateLoop(now) {
 		}
 	}
 
-	const sideCityCounts = new Array(sides.length).fill(0);
-	activeTheaterCities.forEach((c) => {
-		const dm = dominantSideMap[getGridIndex(c.lat, c.lng)];
-		if (dm >= 0 && dm < sides.length) sideCityCounts[dm]++;
-	});
 	for (let si = 0; si < sides.length; si++) {
 		const el = _cachedCityEls[si];
-		if (el) el.textContent = sideCityCounts[si];
+		if (el) {
+			el.textContent =
+				getSideLedger(_territoryLedgerSnapshot, si)?.citiesControlled || 0;
+		}
 	}
 
 	// Update tug-of-war bar with actual territory percentages
@@ -25552,14 +25822,7 @@ export function updateLoop(now) {
 
 	const renderStart = framePerfEntry ? performance.now() : 0;
 	if (framePerfEntry) framePerfEntry.renderStart = renderStart;
-	if (viewMode === "FLAG") {
-		// In flag view, force the canvas layer to fully update each frame so units and borders
-		// keep animating even when the camera is stationary.
-		influenceLayer._forceRender = true;
-		influenceLayer._update();
-	} else {
-		influenceLayer.render();
-	}
+	influenceLayer.render();
 	if (framePerfEntry) {
 		framePerfEntry.renderMs = performance.now() - renderStart;
 		framePerfEntry.rendered = true;
@@ -26644,6 +26907,7 @@ map.on("click", (e) => {
 		if (city) {
 			city.lat = e.latlng.lat;
 			city.lng = e.latlng.lng;
+			invalidateTerritoryLedgerCities();
 			statusText.innerText = `Moved ${city.name} to new position`;
 			cityEditMode = null;
 			cityInspector.style.display = "block";
@@ -26670,6 +26934,7 @@ map.on("click", (e) => {
 		};
 		cities.push(newCity);
 		activeTheaterCities = cities;
+		invalidateTerritoryLedgerCities();
 		statusText.innerText =
 			"New city created. Use the City Inspector to name and assign it.";
 		cityEditMode = null;
@@ -26992,7 +27257,7 @@ if (economyPanelBody) {
 			occupation.resistance = 100;
 			occupation.cooldownUntilCycle = 0;
 			occupation.queuedAtCycle = economyPayCycle;
-			processRebellionStates();
+			processRebellionStates(flushTerritoryLedger());
 		}
 		updateEconomyPanel();
 	});
@@ -30973,6 +31238,7 @@ cityOwnerSelect.addEventListener("change", () => {
 	const val = parseInt(cityOwnerSelect.value || "0", 10);
 	city.ownerId = val || null;
 	city.sovereignId = city.ownerId;
+	invalidateTerritoryLedgerCities();
 	influenceLayer.render();
 });
 
@@ -30990,6 +31256,7 @@ cityCapitalCheckbox.addEventListener("change", () => {
 			}
 		});
 	}
+	invalidateTerritoryLedgerCities();
 	influenceLayer.render();
 });
 
@@ -31009,6 +31276,7 @@ cityDeleteBtn.addEventListener("click", () => {
 	activeTheaterCities = activeTheaterCities.filter(
 		(c) => c.id !== editingCityId,
 	);
+	invalidateTerritoryLedgerCities();
 	editingCityId = -1;
 	cityInspector.style.display = "none";
 	influenceLayer.render();
@@ -32245,6 +32513,7 @@ if (editorCityClearBtn) {
 
 		cities = [];
 		activeTheaterCities = [];
+		invalidateTerritoryLedgerCities();
 		editingCityId = -1;
 		cityInspector.style.display = "none";
 		influenceLayer.render();
