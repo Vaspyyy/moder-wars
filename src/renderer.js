@@ -2,6 +2,10 @@ import L from "leaflet";
 import { getAirfieldCapacity } from "./combined-arms.js";
 import { CONFIG } from "./config.js";
 import {
+	getFormationPersonnel,
+	getFormationStrengthBadge,
+} from "./formation-strength.js";
+import {
 	_aiDebugPlans,
 	_allianceCacheDirty,
 	_cachedSideTerritoryPcts,
@@ -77,6 +81,47 @@ import {
 	worldHeightDeg,
 	worldWidthDeg,
 } from "./main.js";
+
+function drawFormationStrengthBadge(
+	ctx,
+	point,
+	markerWidth,
+	badge,
+	zoomScale,
+	color,
+) {
+	if (!badge?.visible || !badge.text) return;
+	ctx.save();
+	const fontSize = Math.max(6, Math.min(10, 6 * zoomScale));
+	ctx.font = `900 ${fontSize}px monospace`;
+	ctx.textAlign = "left";
+	ctx.textBaseline = "middle";
+	const paddingX = Math.max(2, 2 * zoomScale);
+	const badgeHeight = fontSize + Math.max(2, 2 * zoomScale);
+	const badgeWidth = ctx.measureText(badge.text).width + paddingX * 2;
+	const badgeX = point.x + markerWidth / 2 + Math.max(1, zoomScale);
+	const badgeY = point.y - badgeHeight / 2;
+	ctx.fillStyle = "rgba(7, 9, 11, 0.86)";
+	ctx.strokeStyle = color;
+	ctx.lineWidth = Math.max(0.75, 0.75 * zoomScale);
+	ctx.beginPath();
+	if (typeof ctx.roundRect === "function") {
+		ctx.roundRect(
+			badgeX,
+			badgeY,
+			badgeWidth,
+			badgeHeight,
+			Math.max(2, 2 * zoomScale),
+		);
+	} else {
+		ctx.rect(badgeX, badgeY, badgeWidth, badgeHeight);
+	}
+	ctx.fill();
+	ctx.stroke();
+	ctx.fillStyle = "#f3f5f7";
+	ctx.fillText(badge.text, badgeX + paddingX, point.y);
+	ctx.restore();
+}
 
 function isMapPoint(point) {
 	return (
@@ -2350,6 +2395,35 @@ const ControlMapLayer = L.Layer.extend({
 						ctx.stroke();
 					}
 				}
+
+				// Variable-strength formations keep one map marker while carrying
+				// multiple standard formations. Ordinary 1x units remain unchanged.
+				const hasVariableStrength =
+					u.personnel !== undefined ||
+					u.strengthMultiplier !== undefined ||
+					(u.kind !== "armor" && u.health > CONFIG.UNIT_HEALTH * 1.15);
+				if (currentZoom >= 3 && hasVariableStrength) {
+					const nominalPersonnel =
+						soldiersPerUnit[u.sideIndex] || CONFIG.UNIT_TO_SOLDIER_RATIO;
+					const badge = getFormationStrengthBadge(u, {
+						nominalPersonnel,
+						baseHealth:
+							u.maxHealth ||
+							CONFIG.UNIT_HEALTH *
+								(u.isAlpenjager ? CONFIG.ALPEN_HEALTH_MULT : 1),
+						referencePersonnel: CONFIG.UNIT_TO_SOLDIER_RATIO,
+					});
+					if (badge.multiplier > 1.15) {
+						drawFormationStrengthBadge(
+							ctx,
+							p,
+							w,
+							badge,
+							zoomScale,
+							sideColors[u.sideIndex]?.replace(rgbaRe, "1") || "#fff",
+						);
+					}
+				}
 			});
 		}
 
@@ -3093,8 +3167,15 @@ const ControlMapLayer = L.Layer.extend({
 		teamUnits.forEach((u) => {
 			avgLat += u.lat;
 			avgLng += u.lng;
-			// Factor in current health for the manpower display
-			clusterManpower += (u.health / CONFIG.UNIT_HEALTH) * sp;
+			if (u.kind !== "armor") {
+				clusterManpower += getFormationPersonnel(u, {
+					nominalPersonnel: sp,
+					baseHealth:
+						u.maxHealth ||
+						CONFIG.UNIT_HEALTH *
+							(u.isAlpenjager ? CONFIG.ALPEN_HEALTH_MULT : 1),
+				});
+			}
 		});
 		avgLat /= teamUnits.length;
 		avgLng /= teamUnits.length;

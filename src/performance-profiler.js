@@ -20,6 +20,27 @@
  * @property {object} aggregate
  */
 
+/**
+ * Optional tactical-grid counters captured by one benchmark report. Older
+ * reports may omit this block entirely.
+ * @typedef {object} TacticalPerfCounters
+ * @property {number} [candidateVisits] Legacy mixed candidate counter.
+ * @property {number} [friendlyCandidatePairs] Friendly pair candidates inspected.
+ * @property {number} [enemyCandidateVisits] Enemy candidates inspected.
+ * @property {number} acceptedPairs Candidate pairs accepted for tactical work.
+ * @property {number} friendlyPairs Friendly pairs processed once.
+ * @property {number} hostileCellVisits Hostile tactical cells inspected.
+ * @property {number} cacheHits Cached tactical decisions reused.
+ * @property {number} cacheMisses Tactical decisions that required refresh.
+ * @property {number} ghostInvalidations Stale unit references invalidated.
+ * @property {number} fastLaneUnits Units using cached task-force movement.
+ * @property {number} maxBucketOccupancy Largest occupied tactical cell.
+ * @property {number} cellCount Occupied tactical cells.
+ * @property {number} insertedUnits Units indexed into tactical cells.
+ * @property {number} [sampleTicks] Measured simulation ticks.
+ * @property {number} [unitTicks] Sum of live units across measured ticks.
+ */
+
 export const PERF_SUITE_SCHEMA_VERSION = "1";
 export const PERF_BASELINE_STORAGE_PREFIX = "mw_perf_baseline_v1:";
 
@@ -35,6 +56,169 @@ function median(values) {
 	return sorted.length % 2
 		? sorted[middle]
 		: (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function optionalNonNegative(value) {
+	return typeof value === "number" && Number.isFinite(value)
+		? Math.max(0, value)
+		: null;
+}
+
+function optionalMedian(values) {
+	const available = values.filter((value) => Number.isFinite(value));
+	return available.length ? median(available) : null;
+}
+
+const TACTICAL_RAW_COUNTER_KEYS = [
+	"candidateVisits",
+	"friendlyCandidatePairs",
+	"enemyCandidateVisits",
+	"acceptedPairs",
+	"friendlyPairs",
+	"hostileCellVisits",
+	"cacheHits",
+	"cacheMisses",
+	"ghostInvalidations",
+	"fastLaneUnits",
+	"maxBucketOccupancy",
+	"cellCount",
+	"insertedUnits",
+];
+
+const TACTICAL_NORMALIZED_KEYS = [
+	"friendlyCandidatePairsPerTick",
+	"enemyCandidateVisitsPerUnitTick",
+	"acceptedPairsPerTick",
+	"friendlyPairsPerTick",
+	"hostileCellVisitsPerTick",
+	"acceptanceRate",
+	"comparableAcceptanceRate",
+	"cacheHitRate",
+	"cacheMissesPerUnitTick",
+	"ghostInvalidationsPerUnitTick",
+	"fastLaneShare",
+	"averageCellCount",
+	"averageInsertedUnits",
+];
+
+const TACTICAL_COUNTER_KEYS = [
+	...TACTICAL_RAW_COUNTER_KEYS,
+	...TACTICAL_NORMALIZED_KEYS,
+];
+
+function normalizeTacticalCounters(tactical, report = null) {
+	if (!tactical || typeof tactical !== "object") return null;
+	const normalized = {};
+	let hasCounter = false;
+	for (const key of TACTICAL_COUNTER_KEYS) {
+		const value = optionalNonNegative(tactical[key]);
+		normalized[key] = value;
+		if (value !== null) hasCounter = true;
+	}
+	if (!hasCounter) return null;
+	const sampleTicks = Math.max(
+		0,
+		finite(tactical.sampleTicks, report?.ticks?.count || 0),
+	);
+	const unitTicks = Math.max(
+		0,
+		finite(tactical.unitTicks, finite(report?.units?.avg) * sampleTicks),
+	);
+	const friendlyCandidates = normalized.friendlyCandidatePairs;
+	const legacyCandidates = normalized.candidateVisits;
+	if (normalized.friendlyCandidatePairsPerTick === null && sampleTicks > 0) {
+		normalized.friendlyCandidatePairsPerTick =
+			friendlyCandidates !== null ? friendlyCandidates / sampleTicks : null;
+	}
+	if (
+		normalized.enemyCandidateVisitsPerUnitTick === null &&
+		unitTicks > 0 &&
+		normalized.enemyCandidateVisits !== null
+	) {
+		normalized.enemyCandidateVisitsPerUnitTick =
+			normalized.enemyCandidateVisits / unitTicks;
+	}
+	for (const [rawKey, normalizedKey] of [
+		["acceptedPairs", "acceptedPairsPerTick"],
+		["friendlyPairs", "friendlyPairsPerTick"],
+		["hostileCellVisits", "hostileCellVisitsPerTick"],
+	]) {
+		if (normalized[normalizedKey] === null && sampleTicks > 0) {
+			normalized[normalizedKey] =
+				normalized[rawKey] !== null ? normalized[rawKey] / sampleTicks : null;
+		}
+	}
+	if (normalized.acceptanceRate === null) {
+		const denominator = friendlyCandidates ?? legacyCandidates;
+		normalized.acceptanceRate =
+			denominator > 0 && normalized.acceptedPairs !== null
+				? normalized.acceptedPairs / denominator
+				: null;
+	}
+	if (normalized.comparableAcceptanceRate === null) {
+		normalized.comparableAcceptanceRate =
+			friendlyCandidates !== null ? normalized.acceptanceRate : null;
+	}
+	const cacheTotal =
+		normalized.cacheHits !== null && normalized.cacheMisses !== null
+			? normalized.cacheHits + normalized.cacheMisses
+			: 0;
+	if (normalized.cacheHitRate === null) {
+		normalized.cacheHitRate =
+			cacheTotal > 0 ? normalized.cacheHits / cacheTotal : null;
+	}
+	for (const [rawKey, normalizedKey] of [
+		["cacheMisses", "cacheMissesPerUnitTick"],
+		["ghostInvalidations", "ghostInvalidationsPerUnitTick"],
+		["fastLaneUnits", "fastLaneShare"],
+	]) {
+		if (normalized[normalizedKey] === null && unitTicks > 0) {
+			normalized[normalizedKey] =
+				normalized[rawKey] !== null ? normalized[rawKey] / unitTicks : null;
+		}
+	}
+	if (normalized.averageCellCount === null) {
+		normalized.averageCellCount = normalized.cellCount;
+	}
+	if (normalized.averageInsertedUnits === null) {
+		normalized.averageInsertedUnits = normalized.insertedUnits;
+	}
+	return normalized;
+}
+
+/**
+ * Produces median tactical counters while ignoring reports that predate the
+ * tactical profiler block. Rates are calculated per run before taking their
+ * median so large runs do not silently dominate smaller repetitions.
+ */
+export function summarizeTacticalPerfReports(reports) {
+	const samples = (Array.isArray(reports) ? reports : [])
+		.map((report) => normalizeTacticalCounters(report?.tactical, report))
+		.filter(Boolean);
+	if (!samples.length) return null;
+	const summary = { sampleCount: samples.length };
+	for (const key of TACTICAL_COUNTER_KEYS) {
+		const label = `median${key[0].toUpperCase()}${key.slice(1)}`;
+		summary[label] = optionalMedian(samples.map((sample) => sample[key]));
+	}
+	return summary;
+}
+
+function aggregateTacticalCases(cases) {
+	const samples = cases.map((entry) => entry.tactical).filter(Boolean);
+	if (!samples.length) return null;
+	const summary = {
+		caseCount: samples.length,
+		sampleCount: samples.reduce(
+			(total, sample) => total + finite(sample.sampleCount),
+			0,
+		),
+	};
+	for (const key of TACTICAL_COUNTER_KEYS) {
+		const label = `median${key[0].toUpperCase()}${key.slice(1)}`;
+		summary[label] = optionalMedian(samples.map((sample) => sample[label]));
+	}
+	return summary;
 }
 
 function categoryAverage(report, key) {
@@ -142,6 +326,7 @@ export function summarizePerfSuiteRuns(runs, metadata = {}) {
 			medianLongTasks: median(
 				reports.map((report) => report.browser?.longTasks?.count || 0),
 			),
+			tactical: summarizeTacticalPerfReports(reports),
 		};
 	});
 	return {
@@ -163,6 +348,7 @@ export function summarizePerfSuiteRuns(runs, metadata = {}) {
 			medianOperationalAiMs: median(
 				cases.map((entry) => entry.medianOperationalAiMs),
 			),
+			tactical: aggregateTacticalCases(cases),
 		},
 	};
 }
@@ -201,6 +387,79 @@ const COMPARISON_CONFIG_KEYS = [
 	"viewMode",
 	"traceMarks",
 ];
+
+const TACTICAL_COMPARISON_METRICS = [
+	["medianCandidateVisits", "informational"],
+	["medianFriendlyCandidatePairs", "informational"],
+	["medianEnemyCandidateVisits", "informational"],
+	["medianAcceptedPairs", "informational"],
+	["medianFriendlyPairs", "informational"],
+	["medianHostileCellVisits", "informational"],
+	["medianCacheHits", "informational"],
+	["medianCacheMisses", "informational"],
+	["medianGhostInvalidations", "informational"],
+	["medianFastLaneUnits", "informational"],
+	["medianMaxBucketOccupancy", "informational"],
+	["medianCellCount", "informational"],
+	["medianInsertedUnits", "informational"],
+	["medianFriendlyCandidatePairsPerTick", "lower"],
+	["medianEnemyCandidateVisitsPerUnitTick", "lower"],
+	["medianAcceptedPairsPerTick", "informational"],
+	["medianFriendlyPairsPerTick", "informational"],
+	["medianHostileCellVisitsPerTick", "lower"],
+	["medianAcceptanceRate", "informational"],
+	["medianComparableAcceptanceRate", "higher"],
+	["medianCacheHitRate", "higher"],
+	["medianCacheMissesPerUnitTick", "lower"],
+	["medianGhostInvalidationsPerUnitTick", "lower"],
+	["medianFastLaneShare", "higher"],
+	["medianAverageCellCount", "informational"],
+	["medianAverageInsertedUnits", "informational"],
+];
+
+function metricVerdict(changePercent, direction, thresholdPercent) {
+	if (direction === "informational") return "INFORMATIONAL";
+	if (changePercent === null) return "STABLE";
+	const signedImpact = changePercent * (direction === "higher" ? -1 : 1);
+	return signedImpact >= thresholdPercent
+		? "REGRESSION"
+		: signedImpact <= -thresholdPercent
+			? "IMPROVEMENT"
+			: "STABLE";
+}
+
+function compareTacticalSummaries(current, baseline, thresholdPercent) {
+	if (!current || !baseline) return null;
+	const metrics = {};
+	for (const [key, direction] of TACTICAL_COMPARISON_METRICS) {
+		const currentValue = optionalNonNegative(current[key]);
+		const baselineValue = optionalNonNegative(baseline[key]);
+		if (currentValue === null || baselineValue === null) continue;
+		const changePercent = percentChange(currentValue, baselineValue);
+		metrics[key] = {
+			baseline: baselineValue,
+			current: currentValue,
+			changePercent,
+			direction,
+			verdict: metricVerdict(changePercent, direction, thresholdPercent),
+		};
+	}
+	const directionalVerdicts = Object.values(metrics)
+		.filter((metric) => metric.direction !== "informational")
+		.map((metric) => metric.verdict);
+	return {
+		sampleCount: {
+			baseline: finite(baseline.sampleCount),
+			current: finite(current.sampleCount),
+		},
+		verdict: directionalVerdicts.includes("REGRESSION")
+			? "REGRESSION"
+			: directionalVerdicts.includes("IMPROVEMENT")
+				? "IMPROVEMENT"
+				: "STABLE",
+		metrics,
+	};
+}
 
 export function comparePerfSuites(current, baseline, thresholdPercent = 5) {
 	const baselineById = new Map(
@@ -242,17 +501,24 @@ export function comparePerfSuites(current, baseline, thresholdPercent = 5) {
 							: "STABLE",
 			};
 		}
+		const tactical = compareTacticalSummaries(
+			currentCase.tactical,
+			baselineCase.tactical,
+			thresholdPercent,
+		);
 		cases.push({
 			id: currentCase.id,
 			compatible,
 			configMismatches,
 			metrics,
+			tactical,
 		});
 	}
 	const comparableCases = cases.filter((entry) => entry.compatible);
-	const verdicts = comparableCases.flatMap((entry) =>
-		Object.values(entry.metrics).map((metric) => metric.verdict),
-	);
+	const verdicts = comparableCases.flatMap((entry) => [
+		...Object.values(entry.metrics).map((metric) => metric.verdict),
+		...(entry.tactical ? [entry.tactical.verdict] : []),
+	]);
 	return {
 		ok: cases.length > 0,
 		comparable: comparableCases.length > 0,

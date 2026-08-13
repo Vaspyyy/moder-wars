@@ -14,7 +14,6 @@ import {
 	calculateTaskForceReadiness,
 	cleanupAiTaskForces,
 	createAiTaskForceObserverSnapshot,
-	estimateUnitCombatPower,
 	reconcileAiTaskForces,
 	selectWithdrawalAnchor,
 } from "./ai-task-forces.js";
@@ -77,6 +76,12 @@ import {
 	readWarArchive,
 } from "./experiment.js";
 import { initExperimentUi } from "./experiment-ui.js";
+import {
+	chooseFormationBudget,
+	distributeFormationPersonnel,
+	getFormationPersonnel,
+	getFormationStrengthMultiplier,
+} from "./formation-strength.js";
 import { fetchJSONWithCache } from "./geo.js";
 import {
 	cacheMopUpCell,
@@ -102,6 +107,11 @@ import {
 	summarizePerfSuiteRuns,
 } from "./performance-profiler.js";
 import {
+	createDeterministicJob,
+	createDeterministicJobQueue,
+	createDirtyTileTracker,
+} from "./simulation-jobs.js";
+import {
 	allocateLargestRemainderQuotas,
 	evaluateCountryCapitulation,
 	evaluateGlobalConflict,
@@ -110,6 +120,12 @@ import {
 	selectOccupationController,
 	updateRebellionFailureCycles,
 } from "./surrender.js";
+import {
+	createTacticalGrid,
+	forEachNeighborCell,
+	forEachUnorderedNeighborPair,
+	rebuildTacticalGrid,
+} from "./tactical-grid.js";
 
 let _experimentSeed = normalizeSeed(createRandomSeed());
 let _gameplayRng = createSeededRng(_experimentSeed);
@@ -1908,6 +1924,9 @@ export let lastSelectionTime = 0;
 export let lastSelectedId = -1;
 export const sideSoldiers = new Float64Array(MAX_SIDES);
 export const initialSideSoldiers = new Float64Array(MAX_SIDES);
+// Uncommitted personnel available for new formations. `sideSoldiers` remains
+// total surviving personnel for the HUD, reports, and war-phase calculations.
+export const sideRecruitableManpower = new Float64Array(MAX_SIDES);
 export const soldiersPerUnit = new Float64Array(MAX_SIDES).fill(
 	CONFIG.UNIT_TO_SOLDIER_RATIO,
 );
@@ -1999,11 +2018,13 @@ let _isBenchmarkWarmingUp = false;
 let _perfBenchmarkEnd = 0;
 let _perfSamples = [];
 let _benchmarkUnitsPerSide = null;
+let _benchmarkForcePersonnelPerSide = null;
 let _benchmarkResolve = null;
 let _benchmarkReject = null;
 let _benchmarkMetadata = null;
 let _benchmarkTimeoutId = null;
 let _benchmarkRestoreSettings = null;
+let _benchmarkSuppressAutomaticPuppets = false;
 let _perfPendingFrameEntry = null;
 let _perfLongTaskObserver = null;
 let _lastPerfSuite = null;
@@ -2011,6 +2032,25 @@ let _lastPerfSuiteRuns = [];
 let _perfTraceMeasureCount = 0;
 export let _cachedP1T = 0,
 	_cachedP2T = 0;
+const _simulationJobs = createDeterministicJobQueue({
+	itemBudget: 160_000,
+	maxItemsPerJobTurn: 80_000,
+});
+let _simulationWorldGeneration = 0;
+let _territoryCensusCommittedTick = Number.NEGATIVE_INFINITY;
+let _territoryCensusHasSnapshot = false;
+let _territoryDirtyTiles = null;
+let _territoryCensusEpochTiles = [];
+let _territoryTileSummaries = [];
+let _territoryCensusTotals = null;
+let _territoryCensusSideSignature = "";
+let _territoryCensusRefreshPending = false;
+let _territoryCensusSnapshotReady = false;
+let _coastalTopologyReady = false;
+let _coastalLandIndices = [];
+const _pendingProposalSides = [];
+const _pendingProposalSideSet = new Set();
+const _retiredSidePersonnelByUid = new Map();
 export let _cachedSoldierEls = [];
 export let _cachedSideUnitCounts = [];
 export let _cachedSideSoldierEsts = [];
@@ -2040,13 +2080,29 @@ function sidePairKey(uidA, uidB) {
 	return uidA < uidB ? `${uidA}|${uidB}` : `${uidB}|${uidA}`;
 }
 
+function synchronizeSideUidCounter() {
+	for (const uid of sideUids) {
+		const match = /^side-(\d+)$/.exec(String(uid || ""));
+		if (match) _nextSideUid = Math.max(_nextSideUid, Number(match[1]) + 1);
+	}
+}
+
+function allocateSideUid() {
+	let uid;
+	do {
+		uid = `side-${_nextSideUid++}`;
+	} while (sideUids.includes(uid));
+	return uid;
+}
+
 function ensureSideIdentities(reset = false) {
 	if (reset) {
 		sideUids = [];
 		hostileSidePairs.clear();
 	}
+	synchronizeSideUidCounter();
 	for (let i = 0; i < sides.length; i++) {
-		if (!sideUids[i]) sideUids[i] = `side-${_nextSideUid++}`;
+		if (!sideUids[i]) sideUids[i] = allocateSideUid();
 	}
 	if (sideUids.length > sides.length) sideUids.length = sides.length;
 }
@@ -2177,6 +2233,515 @@ function clearUnitCommandAssignments(unit) {
 	unit._occupationGarrisonPointIndex = null;
 	unit.frontSlot = null;
 	unit._defenderReactTarget = null;
+	unit._cachedTarget = null;
+	unit._cachedLocalEnemyCount = 0;
+	unit._cachedEnemyCentroidLat = 0;
+	unit._cachedEnemyCentroidLng = 0;
+}
+
+function getUnitPersonnelFallback(unit) {
+	const sideIdx = Number.isInteger(unit?.sideIndex) ? unit.sideIndex : -1;
+	return sideIdx >= 0 && sideIdx < MAX_SIDES
+		? soldiersPerUnit[sideIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO
+		: CONFIG.UNIT_TO_SOLDIER_RATIO;
+}
+
+function getLiveFormationPersonnel(unit) {
+	return getFormationPersonnel(unit, {
+		nominalPersonnel: getUnitPersonnelFallback(unit),
+		baseHealth:
+			unit?.maxHealth ||
+			CONFIG.UNIT_HEALTH * (unit?.isAlpenjager ? CONFIG.ALPEN_HEALTH_MULT : 1),
+	});
+}
+
+function getLiveFormationStrength(unit) {
+	if (!unit || unit.kind === "armor") return 1;
+	return getFormationStrengthMultiplier(unit, {
+		referencePersonnel: CONFIG.UNIT_TO_SOLDIER_RATIO,
+		nominalPersonnel: getUnitPersonnelFallback(unit),
+		baseHealth:
+			unit.maxHealth ||
+			CONFIG.UNIT_HEALTH * (unit.isAlpenjager ? CONFIG.ALPEN_HEALTH_MULT : 1),
+	});
+}
+
+function returnUnitPersonnelToReserve(unit) {
+	const sideIdx = Number.isInteger(unit?.sideIndex) ? unit.sideIndex : -1;
+	if (sideIdx < 0 || sideIdx >= MAX_SIDES) return 0;
+	const personnel =
+		unit.kind === "armor"
+			? computeEquipmentPersonnel({ armoredVehicles: unit.equipment || 0 })
+			: getLiveFormationPersonnel(unit);
+	if (personnel > 0) {
+		sideRecruitableManpower[sideIdx] += personnel;
+	}
+	return personnel;
+}
+
+function getFormationCapacityStrength(unit) {
+	if (!unit || unit.kind === "armor") return 1;
+	if (Number.isFinite(unit.personnelCapacity)) {
+		return Math.max(0, unit.personnelCapacity / CONFIG.UNIT_TO_SOLDIER_RATIO);
+	}
+	return Math.max(0, getLiveFormationStrength(unit));
+}
+
+function setUnitFormationPersonnel(unit, personnel) {
+	if (!unit || unit.kind === "armor") return unit;
+	const wholePersonnel = Math.max(1, Math.round(Number(personnel) || 0));
+	const strengthMultiplier =
+		wholePersonnel / Math.max(1, CONFIG.UNIT_TO_SOLDIER_RATIO);
+	const terrainHealthMultiplier = unit.isAlpenjager
+		? CONFIG.ALPEN_HEALTH_MULT
+		: 1;
+	unit.personnel = wholePersonnel;
+	unit.personnelCapacity = wholePersonnel;
+	unit.nominalPersonnel = CONFIG.UNIT_TO_SOLDIER_RATIO;
+	unit.strengthMultiplier = strengthMultiplier;
+	unit.maxHealth =
+		CONFIG.UNIT_HEALTH * strengthMultiplier * terrainHealthMultiplier;
+	unit.health = unit.maxHealth;
+	return unit;
+}
+
+function compactVariableStrengthFormationsForSide(
+	sideIdx,
+	targetPersonnel = null,
+) {
+	const formations = units.filter(
+		(unit) => unit.sideIndex === sideIdx && unit.kind === "army",
+	);
+	if (formations.length === 0) return 0;
+	const existingPersonnel = formations.reduce(
+		(sum, unit) => sum + getLiveFormationPersonnel(unit),
+		0,
+	);
+	const totalPersonnel = Math.max(
+		formations.length,
+		Math.round(targetPersonnel ?? existingPersonnel),
+	);
+	const budget = Math.min(
+		formations.length,
+		chooseFormationBudget(totalPersonnel),
+	);
+	if (budget >= formations.length) {
+		const descriptors = distributeFormationPersonnel(
+			totalPersonnel,
+			formations.length,
+			{ nominalPersonnel: CONFIG.UNIT_TO_SOLDIER_RATIO },
+		);
+		for (let index = 0; index < formations.length; index++) {
+			setUnitFormationPersonnel(
+				formations[index],
+				descriptors[index].personnel,
+			);
+		}
+		soldiersPerUnit[sideIdx] = CONFIG.UNIT_TO_SOLDIER_RATIO;
+		return formations.length;
+	}
+
+	const countryGroups = new Map();
+	for (const formation of formations) {
+		let group = countryGroups.get(formation.sovereignId);
+		if (!group) {
+			group = [];
+			countryGroups.set(formation.sovereignId, group);
+		}
+		group.push(formation);
+	}
+	const groups = [...countryGroups.entries()].sort(
+		([leftId], [rightId]) => Number(leftId) - Number(rightId),
+	);
+	const minimumMarkers = Math.min(budget, groups.length);
+	const markerRemainder = Math.max(0, budget - minimumMarkers);
+	const markerQuotas = allocateLargestRemainderQuotas(
+		groups.map(([countryId, group]) => ({
+			countryId,
+			weight: group.length,
+		})),
+		markerRemainder,
+	);
+	const markerQuotaByCountry = new Map(
+		markerQuotas.map((entry) => [entry.countryId, entry.quota]),
+	);
+	for (let index = 0; index < minimumMarkers; index++) {
+		const countryId = Number(groups[index][0]);
+		markerQuotaByCountry.set(
+			countryId,
+			(markerQuotaByCountry.get(countryId) || 0) + 1,
+		);
+	}
+	const personnelQuotas = allocateLargestRemainderQuotas(
+		groups.map(([countryId, group]) => ({
+			countryId,
+			weight: group.length,
+		})),
+		totalPersonnel,
+	);
+	const personnelByCountry = new Map(
+		personnelQuotas.map((entry) => [entry.countryId, entry.quota]),
+	);
+	const retained = new Set();
+	for (const [rawCountryId, group] of groups) {
+		const countryId = Number(rawCountryId);
+		const quota = Math.min(
+			group.length,
+			markerQuotaByCountry.get(countryId) || 0,
+		);
+		if (quota <= 0) continue;
+		const descriptors = distributeFormationPersonnel(
+			personnelByCountry.get(countryId) || quota,
+			quota,
+			{ nominalPersonnel: CONFIG.UNIT_TO_SOLDIER_RATIO },
+		);
+		for (let markerIndex = 0; markerIndex < quota; markerIndex++) {
+			const sourceIndex = Math.min(
+				group.length - 1,
+				Math.floor((markerIndex * group.length) / quota),
+			);
+			const survivor = group[sourceIndex];
+			setUnitFormationPersonnel(survivor, descriptors[markerIndex].personnel);
+			retained.add(survivor);
+		}
+	}
+	units = units.filter(
+		(unit) =>
+			unit.sideIndex !== sideIdx || unit.kind !== "army" || retained.has(unit),
+	);
+	soldiersPerUnit[sideIdx] = CONFIG.UNIT_TO_SOLDIER_RATIO;
+	return retained.size;
+}
+
+function applyPendingBenchmarkForceOverride() {
+	const targetTotalPersonnel = _benchmarkForcePersonnelPerSide;
+	if (!Number.isFinite(targetTotalPersonnel) || targetTotalPersonnel <= 0) {
+		return;
+	}
+	for (let sideIdx = 0; sideIdx < sides.length; sideIdx++) {
+		manualSideManpower[sideIdx] = targetTotalPersonnel;
+		let equipmentPersonnel = 0;
+		for (const unit of units) {
+			if (
+				unit.sideIndex !== sideIdx ||
+				unit.kind !== "armor" ||
+				unit.health <= 0
+			) {
+				continue;
+			}
+			equipmentPersonnel += computeEquipmentPersonnel({
+				armoredVehicles: unit.equipment || 0,
+			});
+		}
+		for (const wing of airWings) {
+			if (
+				wing.sideIndex !== sideIdx ||
+				wing.equipment <= 0 ||
+				wing.state === AIR_WING_STATES.EVACUATED
+			) {
+				continue;
+			}
+			equipmentPersonnel += computeEquipmentPersonnel({
+				fighters: wing.role === "FIGHTER" ? wing.equipment : 0,
+				strikeAircraft: wing.role === "STRIKE" ? wing.equipment : 0,
+			});
+		}
+		compactVariableStrengthFormationsForSide(
+			sideIdx,
+			Math.max(1, Math.round(targetTotalPersonnel - equipmentPersonnel)),
+		);
+	}
+	for (const unit of units) unit.deployTicks = 0;
+	_benchmarkForcePersonnelPerSide = null;
+}
+
+function stableUnitCohort(unit, interval) {
+	const numericId = Math.abs(Number(unit?.id) || 0);
+	const stableId = Math.floor(numericId * 2_147_483_647) >>> 0;
+	return interval > 0 ? stableId % interval : 0;
+}
+
+function resetSimulationOptimizationRuntime() {
+	_simulationWorldGeneration++;
+	_simulationJobs.clear("world-reset");
+	soldiersPerUnit.fill(CONFIG.UNIT_TO_SOLDIER_RATIO);
+	_territoryCensusCommittedTick = Number.NEGATIVE_INFINITY;
+	_territoryCensusHasSnapshot = false;
+	_territoryCensusEpochTiles = [];
+	_territoryTileSummaries = [];
+	_territoryCensusTotals = null;
+	_territoryCensusSideSignature = "";
+	_territoryCensusRefreshPending = false;
+	_territoryCensusSnapshotReady = false;
+	_coastalTopologyReady = false;
+	_coastalLandIndices = [];
+	_pendingProposalSides.length = 0;
+	_pendingProposalSideSet.clear();
+	_retiredSidePersonnelByUid.clear();
+	_territoryDirtyTiles =
+		gridWidth > 0 && gridHeight > 0
+			? createDirtyTileTracker({ gridWidth, gridHeight, tileSize: 32 })
+			: null;
+	_territoryDirtyTiles?.markAll();
+}
+
+function scheduleCoastalTopologyJob() {
+	if (!landMask?.length || _simulationJobs.has("coastal-topology")) return;
+	const generation = _simulationWorldGeneration;
+	const coastal = [];
+	_simulationJobs.enqueue(
+		createDeterministicJob({
+			id: "coastal-topology",
+			generation,
+			totalItems: landMask.length,
+			maxItemsPerTurn: 80_000,
+			processRange(start, end) {
+				for (let index = start; index < end; index++) {
+					if (landMask[index] === 0) continue;
+					const column = index % gridWidth;
+					const row = Math.floor(index / gridWidth);
+					let coastalCell = false;
+					for (
+						let rowOffset = -1;
+						rowOffset <= 1 && !coastalCell;
+						rowOffset++
+					) {
+						for (let columnOffset = -1; columnOffset <= 1; columnOffset++) {
+							if (rowOffset === 0 && columnOffset === 0) continue;
+							const neighborRow = row + rowOffset;
+							const neighborColumn = column + columnOffset;
+							if (
+								neighborRow < 0 ||
+								neighborRow >= gridHeight ||
+								neighborColumn < 0 ||
+								neighborColumn >= gridWidth
+							) {
+								continue;
+							}
+							if (landMask[neighborRow * gridWidth + neighborColumn] === 0) {
+								coastalCell = true;
+								break;
+							}
+						}
+					}
+					if (coastalCell) coastal.push(index);
+				}
+			},
+			onComplete() {
+				if (generation !== _simulationWorldGeneration) return;
+				_coastalLandIndices = coastal;
+				_coastalTopologyReady = true;
+				for (let sideIdx = 0; sideIdx < sides.length; sideIdx++) {
+					if (sides[sideIdx]?.length) _planReassessNeeded[sideIdx] = true;
+				}
+			},
+		}),
+	);
+}
+
+function createTerritoryCensusTotals(maxCountryId) {
+	return {
+		owned: new Int32Array(maxCountryId + 1),
+		controlled: new Int32Array(maxCountryId + 1),
+		frontline: new Int32Array(maxCountryId + 1),
+		p1: 0,
+		p2: 0,
+	};
+}
+
+function applyTerritoryTileSummary(totals, summary, direction) {
+	if (!summary) return;
+	totals.p1 += summary.p1 * direction;
+	totals.p2 += summary.p2 * direction;
+	for (const [countryId, count] of summary.owned) {
+		if (countryId < totals.owned.length) {
+			totals.owned[countryId] += count * direction;
+		}
+	}
+	for (const [countryId, count] of summary.controlled) {
+		if (countryId < totals.controlled.length) {
+			totals.controlled[countryId] += count * direction;
+		}
+	}
+	for (const [countryId, count] of summary.frontline) {
+		if (countryId < totals.frontline.length) {
+			totals.frontline[countryId] += count * direction;
+		}
+	}
+}
+
+function buildTerritoryTileSummary(tileIndex, sideByCountry, liveCombatants) {
+	const bounds = _territoryDirtyTiles.bounds(tileIndex);
+	const summary = {
+		owned: new Map(),
+		controlled: new Map(),
+		frontline: new Map(),
+		p1: 0,
+		p2: 0,
+	};
+	for (let row = bounds.minY; row < bounds.maxY; row++) {
+		const rowOffset = row * gridWidth;
+		for (let column = bounds.minX; column < bounds.maxX; column++) {
+			const index = rowOffset + column;
+			if (landMask[index] !== 2) continue;
+			if (occupationMap[index] > 0) summary.p1++;
+			else if (occupationMap[index] < 0) summary.p2++;
+			const countryId = worldControlMap[index];
+			if (!liveCombatants.has(countryId)) continue;
+			summary.owned.set(countryId, (summary.owned.get(countryId) || 0) + 1);
+			const sideIndex = sideByCountry.get(countryId);
+			if (dominantSideMap[index] === sideIndex) {
+				summary.controlled.set(
+					countryId,
+					(summary.controlled.get(countryId) || 0) + 1,
+				);
+			}
+			let isFrontline = false;
+			if (column > 0) {
+				const neighborSide = sideByCountry.get(worldControlMap[index - 1]);
+				isFrontline =
+					neighborSide !== undefined &&
+					neighborSide !== sideIndex &&
+					areSidesHostile(sideIndex, neighborSide);
+			}
+			if (!isFrontline && column + 1 < gridWidth) {
+				const neighborSide = sideByCountry.get(worldControlMap[index + 1]);
+				isFrontline =
+					neighborSide !== undefined &&
+					neighborSide !== sideIndex &&
+					areSidesHostile(sideIndex, neighborSide);
+			}
+			if (!isFrontline && row > 0) {
+				const neighborSide = sideByCountry.get(
+					worldControlMap[index - gridWidth],
+				);
+				isFrontline =
+					neighborSide !== undefined &&
+					neighborSide !== sideIndex &&
+					areSidesHostile(sideIndex, neighborSide);
+			}
+			if (!isFrontline && row + 1 < gridHeight) {
+				const neighborSide = sideByCountry.get(
+					worldControlMap[index + gridWidth],
+				);
+				isFrontline =
+					neighborSide !== undefined &&
+					neighborSide !== sideIndex &&
+					areSidesHostile(sideIndex, neighborSide);
+			}
+			if (isFrontline) {
+				summary.frontline.set(
+					countryId,
+					(summary.frontline.get(countryId) || 0) + 1,
+				);
+			}
+		}
+	}
+	return summary;
+}
+
+function scheduleTerritoryCensus(
+	countryToSideMap,
+	combatantIds,
+	startRefresh = false,
+) {
+	if (!_territoryDirtyTiles || !worldControlMap?.length) return;
+	const sideSignature = `${[...countryToSideMap.entries()]
+		.sort(([left], [right]) => left - right)
+		.map(([countryId, sideIndex]) => `${countryId}:${sideIndex}`)
+		.join("|")}#${[...hostileSidePairs].sort().join(",")}`;
+	if (sideSignature !== _territoryCensusSideSignature) {
+		const maxCountryId = Math.max(countryMetadata.length, ...combatantIds, 0);
+		_territoryCensusSideSignature = sideSignature;
+		_territoryTileSummaries = [];
+		_territoryCensusTotals = createTerritoryCensusTotals(maxCountryId);
+		_territoryCensusEpochTiles = [];
+		_territoryDirtyTiles.clear();
+		_territoryDirtyTiles.markAll();
+		_territoryCensusHasSnapshot = false;
+		_territoryCensusRefreshPending = false;
+		_territoryCensusSnapshotReady = false;
+	}
+	const hasQueuedChanges = _territoryDirtyTiles.size() > 0;
+	if (
+		!_territoryCensusRefreshPending &&
+		(hasQueuedChanges ||
+			(!_territoryCensusSnapshotReady &&
+				(startRefresh || !_territoryCensusHasSnapshot)))
+	) {
+		// Freeze one deterministic epoch. Controller changes that occur while it is
+		// processed accumulate in the live dirty tracker for the next epoch. A
+		// completed candidate is revoked as soon as newer controller changes queue,
+		// preventing phase 133 from publishing a stale phase-0 snapshot.
+		_territoryCensusSnapshotReady = false;
+		_territoryCensusEpochTiles = _territoryDirtyTiles.consume();
+		_territoryCensusRefreshPending = _territoryCensusEpochTiles.length > 0;
+		_territoryCensusSnapshotReady = !_territoryCensusRefreshPending;
+	}
+}
+
+function processTerritoryCensusTiles(countryToSideMap, combatantIds) {
+	if (
+		!_territoryCensusRefreshPending ||
+		!_territoryDirtyTiles ||
+		!_territoryCensusTotals
+	) {
+		return;
+	}
+	const dirtyTiles = _territoryCensusEpochTiles.splice(0, 160);
+	for (const tileIndex of dirtyTiles) {
+		const previous = _territoryTileSummaries[tileIndex];
+		applyTerritoryTileSummary(_territoryCensusTotals, previous, -1);
+		const next = buildTerritoryTileSummary(
+			tileIndex,
+			countryToSideMap,
+			combatantIds,
+		);
+		_territoryTileSummaries[tileIndex] = next;
+		applyTerritoryTileSummary(_territoryCensusTotals, next, 1);
+	}
+	if (_territoryCensusEpochTiles.length > 0) return;
+	_territoryCensusRefreshPending = false;
+	_territoryCensusSnapshotReady = true;
+}
+
+function closeTerritoryCensusForDecision(countryToSideMap, combatantIds) {
+	// Phase 133 is the existing 200-tick decision boundary. Finish the bounded
+	// tile set here so surrender logic cannot use stale territory or starve while
+	// fronts keep changing. Ordinary ticks still process the same work in chunks.
+	while (
+		_territoryCensusRefreshPending ||
+		(_territoryDirtyTiles?.size() || 0) > 0
+	) {
+		if (!_territoryCensusRefreshPending) {
+			scheduleTerritoryCensus(countryToSideMap, combatantIds, true);
+		}
+		processTerritoryCensusTiles(countryToSideMap, combatantIds);
+	}
+}
+
+function publishTerritoryCensusSnapshot() {
+	if (
+		!_territoryCensusSnapshotReady ||
+		_territoryCensusRefreshPending ||
+		_territoryDirtyTiles?.size() > 0
+	) {
+		return false;
+	}
+	_cachedP1T = _territoryCensusTotals.p1;
+	_cachedP2T = _territoryCensusTotals.p2;
+	for (const country of sides.flat()) {
+		if (!country) continue;
+		country.lastOwnedCount = _territoryCensusTotals.owned[country.id] || 0;
+		country.lastControlledCount =
+			_territoryCensusTotals.controlled[country.id] || 0;
+		country.lastFrontlineCount =
+			_territoryCensusTotals.frontline[country.id] || 0;
+	}
+	_territoryCensusCommittedTick = _simTickCount;
+	_territoryCensusHasSnapshot = true;
+	_territoryCensusSnapshotReady = false;
+	return true;
 }
 
 function resetOperationalAiRuntime() {
@@ -2278,7 +2843,7 @@ function scheduleWarLifecycleCallback(
 }
 
 const PERF_COUNTER_DEFAULTS = {
-	_version: "V0.27.8",
+	_version: "V0.27.9",
 	_mode: "off",
 	_enabled: false,
 	plans: 0,
@@ -2338,6 +2903,20 @@ const PERF_COUNTER_DEFAULTS = {
 	economy: 0,
 	armor: 0,
 	airPower: 0,
+	// Tactical-grid workload and stale-target effectiveness counters.
+	tacticalFriendlyCandidatePairs: 0,
+	tacticalEnemyCandidateVisits: 0,
+	tacticalAcceptedPairs: 0,
+	tacticalFriendlyPairs: 0,
+	tacticalHostileCellVisits: 0,
+	tacticalCacheHits: 0,
+	tacticalCacheMisses: 0,
+	tacticalGhostInvalidations: 0,
+	tacticalFastLaneUnits: 0,
+	tacticalMaxBucketOccupancy: 0,
+	tacticalPeakBucketOccupancy: 0,
+	tacticalCellCount: 0,
+	tacticalInsertedUnits: 0,
 	// Water avoidance debug counters
 	coastDeflectHalved: 0,
 	knockbackBlocked: 0,
@@ -2508,12 +3087,19 @@ const _tickCountryToCityCount = new Map();
 const _tickCountryCapitalLost = new Map();
 const _tickCitiesBySovereign = new Map();
 const _tickMetadataById = new Map();
+const _tickCountryById = new Map();
 const _tickCityGridIndexSet = new Set();
 const _tickSideAllyIdSets = [];
 const _tickSideSupportIdSets = [];
 export const _tickUnitsBySide = [];
 const _tickUnitGridIdx = new Map();
 let _tickAllCombatants = [];
+let _unitLiveGeneration = 0;
+const _tacticalGrid = createTacticalGrid({ cellSize: 0.6 });
+let _planBfsSeen = new Uint32Array(0);
+let _planBfsParent = new Int32Array(0);
+let _planBfsQueue = new Int32Array(0);
+let _planBfsGeneration = 0;
 const STRATEGIC_COHORT_COUNT = 4;
 const CITY_CANDIDATE_CACHE_LIMIT = 32;
 const CITY_WATER_CHECK_LIMIT = 4;
@@ -4273,6 +4859,7 @@ import {
 	isMyTerritory,
 	myInfluenceAt,
 	resetSideInfluenceMaps,
+	setOccupationChangeListener,
 	syncOccupationFromSideInfluence,
 } from "./engine.js";
 import {
@@ -4285,6 +4872,14 @@ import {
 import { ControlMapLayer } from "./renderer.js";
 
 export { getGridIndex, resetSideInfluenceMaps };
+
+setOccupationChangeListener((cellIndex, change) => {
+	// Float influence changes are continuous; census totals only depend on which
+	// side controls a cell. Revisit the tile (and its border neighbors) when that
+	// discrete controller changes.
+	if (change?.previousSide === change?.nextSide) return;
+	_territoryDirtyTiles?.markCell(cellIndex);
+});
 
 influenceLayer = new ControlMapLayer().addTo(map);
 
@@ -5131,6 +5726,9 @@ export function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
 			continue;
 		}
 
+		// The batch limits map-marker/cell work. A compressed formation still
+		// touches the same cells as one ordinary marker, so charging its represented
+		// personnel here can permanently starve large formations from influence.
 		unitsProcessed++;
 		if (unitsProcessed > maxUnitsToProcess) break;
 
@@ -5180,6 +5778,8 @@ export function updatePersistentInfluence(p1Count, p2Count, countryToSideMap) {
 		if (isAtSea) teamMult *= 0.4;
 		if (u.kind === "armor") {
 			teamMult *= getArmorInfluenceMultiplier(!!u._armorSupported);
+		} else {
+			teamMult *= getLiveFormationStrength(u);
 		}
 
 		// Organic Push: Randomize push intensity per unit to create ragged, non-linear salients
@@ -6257,6 +6857,18 @@ export function spawnSingleUnit(
 	) {
 		return false;
 	}
+	const supplyFailed = capitalLostCountries?.has(sovereignId);
+	const nominalPersonnel = Math.max(
+		1,
+		Math.round(soldiersPerUnit[sideIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO),
+	);
+	const recruitedPersonnel = Math.max(
+		1,
+		Math.round(nominalPersonnel * (supplyFailed ? 0.4 : 1)),
+	);
+	if ((sideRecruitableManpower[sideIdx] || 0) < recruitedPersonnel) {
+		return false;
+	}
 	// Enforce per‑side unit cap: if this side is already at or above the limit, do not spawn.
 	const sideUnits = units.filter((u) => u.sideIndex === sideIdx).length;
 	const manualMP = manualSideManpower[sideIdx];
@@ -6268,8 +6880,6 @@ export function spawnSingleUnit(
 				)
 			: CONFIG.MAX_UNITS_PER_SIDE;
 	if (sideUnits >= effectiveMax) return false;
-
-	const supplyFailed = capitalLostCountries?.has(sovereignId);
 
 	// ── Spawn from friendly cities ──────────────────────────────────────
 	const friendlyCities = cities.filter((c) => {
@@ -6356,18 +6966,10 @@ export function spawnSingleUnit(
 	// Alpenjägers: mostly drawn from mountainous recruitment cells
 	const isAlpen = isMountainCell && gameplayRandom() < 0.4;
 
-	// Base health for this new unit
-	let unitHealth =
-		CONFIG.UNIT_HEALTH * (isAlpen ? CONFIG.ALPEN_HEALTH_MULT : 1);
-	// When supply has failed (capital captured), newly raised units are under‑equipped and fragile
-	if (supplyFailed) {
-		unitHealth *= 0.4; // 60% health penalty
-	}
-
 	const unitId = gameplayRandom();
 	const unitDiscipline = getUnitDiscipline({ id: unitId, sovereignId });
 	const unitCommandBand = economyState?.commandBand || COMMAND_BANDS.PAID;
-	units.push({
+	const unit = {
 		id: unitId,
 		kind: "army",
 		lat,
@@ -6376,7 +6978,7 @@ export function spawnSingleUnit(
 		sovereignId: sovereignId,
 		beneficiaryId: sovereignId,
 		isAlpenjager: !!isAlpen,
-		health: unitHealth,
+		health: CONFIG.UNIT_HEALTH,
 		lastAttack: 0,
 		deployTicks: 30,
 		// Phase 3 stale-target cache
@@ -6387,7 +6989,14 @@ export function spawnSingleUnit(
 		_discipline: unitDiscipline,
 		_commandBand: unitCommandBand,
 		_refusesOffense: unitDiscipline < commandRefusalShare(unitCommandBand),
-	});
+	};
+	setUnitFormationPersonnel(unit, nominalPersonnel);
+	if (supplyFailed) {
+		unit.health *= 0.4;
+		unit.personnel = Math.round(unit.personnelCapacity * 0.4);
+		unit.strengthMultiplier = unit.personnel / CONFIG.UNIT_TO_SOLDIER_RATIO;
+	}
+	units.push(unit);
 	if (warEconomyEnabled && gameState === "SIMULATING" && economyState) {
 		economyState.treasury = Math.max(
 			0,
@@ -6396,9 +7005,9 @@ export function spawnSingleUnit(
 	}
 
 	if (sideIdx >= 0 && sideIdx < MAX_SIDES) {
-		sideSoldiers[sideIdx] = Math.max(
+		sideRecruitableManpower[sideIdx] = Math.max(
 			0,
-			sideSoldiers[sideIdx] - soldiersPerUnit[sideIdx],
+			sideRecruitableManpower[sideIdx] - unit.personnel,
 		);
 	}
 
@@ -6913,6 +7522,115 @@ function findCountrySideIndex(countryId) {
 	return sides.findIndex((side) => side?.some((c) => c.id === countryId));
 }
 
+function getCountryLivePersonnel(countryId) {
+	let personnel = 0;
+	for (const unit of units) {
+		if (unit.sovereignId !== countryId || unit.health <= 0) continue;
+		if (unit.kind === "armor") {
+			personnel += computeEquipmentPersonnel({
+				armoredVehicles: unit.equipment || 0,
+			});
+		} else {
+			personnel += getLiveFormationPersonnel(unit);
+		}
+	}
+	for (const wing of airWings) {
+		if (
+			wing.sovereignId !== countryId ||
+			wing.equipment <= 0 ||
+			wing.state === AIR_WING_STATES.EVACUATED
+		) {
+			continue;
+		}
+		personnel += computeEquipmentPersonnel({
+			fighters: wing.role === "FIGHTER" ? wing.equipment : 0,
+			strikeAircraft: wing.role === "STRIKE" ? wing.equipment : 0,
+		});
+	}
+	return personnel;
+}
+
+function getSideLivePersonnel(sideIdx) {
+	return (sides[sideIdx] || []).reduce(
+		(total, country) => total + getCountryLivePersonnel(country.id),
+		0,
+	);
+}
+
+function clearSidePersonnelAccounting(sideIdx) {
+	if (sideIdx < 0 || sideIdx >= MAX_SIDES) return;
+	sideSoldiers[sideIdx] = 0;
+	initialSideSoldiers[sideIdx] = 0;
+	sideRecruitableManpower[sideIdx] = 0;
+	sideCasualties[sideIdx] = 0;
+	soldiersPerUnit[sideIdx] = CONFIG.UNIT_TO_SOLDIER_RATIO;
+}
+
+function preserveRetiredSidePersonnel(sideIdx) {
+	const sideUid = sideUids[sideIdx];
+	if (!sideUid) return;
+	_retiredSidePersonnelByUid.set(sideUid, {
+		personnel: Math.max(0, sideSoldiers[sideIdx] || 0),
+		initialPersonnel: Math.max(0, initialSideSoldiers[sideIdx] || 0),
+		casualties: Math.max(0, sideCasualties[sideIdx] || 0),
+	});
+}
+
+function releaseCountryPersonnelFromSide(
+	countryId,
+	sideIdx,
+	{ transferHistory = false } = {},
+) {
+	const side = sides[sideIdx] || [];
+	if (!side.some((country) => country.id === countryId)) return null;
+	const countryLivePersonnel = getCountryLivePersonnel(countryId);
+	const sideLivePersonnel = getSideLivePersonnel(sideIdx);
+	const countryCount = Math.max(1, side.length);
+	const liveShare = Math.min(
+		1,
+		sideLivePersonnel > 0
+			? countryLivePersonnel / sideLivePersonnel
+			: 1 / countryCount,
+	);
+	const casualties = Math.min(
+		Math.max(0, sideCasualties[sideIdx] || 0),
+		Math.max(0, countryCasualties.get(countryId) || 0),
+	);
+	const isOnlyCountry = side.length === 1;
+	const recruitable = Math.round(
+		Math.max(0, sideRecruitableManpower[sideIdx] || 0) * liveShare,
+	);
+	const surviving = Math.min(
+		Math.max(0, sideSoldiers[sideIdx] || 0),
+		countryLivePersonnel + recruitable,
+	);
+	const initial = isOnlyCountry
+		? Math.max(0, initialSideSoldiers[sideIdx] || 0)
+		: Math.min(
+				Math.max(0, initialSideSoldiers[sideIdx] || 0),
+				surviving + casualties,
+			);
+	sideSoldiers[sideIdx] = Math.max(0, sideSoldiers[sideIdx] - surviving);
+	sideRecruitableManpower[sideIdx] = Math.max(
+		0,
+		sideRecruitableManpower[sideIdx] - recruitable,
+	);
+	if (transferHistory) {
+		initialSideSoldiers[sideIdx] = Math.max(
+			0,
+			initialSideSoldiers[sideIdx] - initial,
+		);
+		sideCasualties[sideIdx] = Math.max(0, sideCasualties[sideIdx] - casualties);
+	}
+	return {
+		countryLivePersonnel,
+		surviving,
+		initial,
+		recruitable,
+		casualties,
+	};
+}
+
 function clearSideLandPlanSlots(sideIdx) {
 	if (sideIdx < 0) return;
 	if (sideIdx < _warPlan.length) _warPlan[sideIdx] = null;
@@ -6941,16 +7659,44 @@ function allocateIndependentSide(country, hostileSideIdx = -1) {
 		rebaseSecondaryWarPlanSlotsForSideAppend(sides.length);
 		sides.push([]);
 	}
+	preserveRetiredSidePersonnel(sideIdx);
 	clearSideHostilities(sideIdx);
+	clearSidePersonnelAccounting(sideIdx);
 	// An empty slot may belong to a side that was eliminated earlier in the run.
 	// A restored neutral or rebellion is a new side and needs a distinct stable UID
 	// so reports do not overwrite the eliminated side's history.
-	sideUids[sideIdx] = `side-${_nextSideUid++}`;
+	sideUids[sideIdx] = allocateSideUid();
 	ensureSideIdentities();
 	sides[sideIdx] = [country];
 	if (hostileSideIdx >= 0) setSidesHostile(sideIdx, hostileSideIdx, true);
 	else rebuildHostilityMatrix();
 	return sideIdx;
+}
+
+function prepareEmptySideForNewMembership(sideIdx) {
+	if (sideIdx < 0 || sideIdx >= MAX_SIDES) return false;
+	if (sides[sideIdx]?.length) return false;
+	ensureSideIdentities();
+	const previousUid = sideUids[sideIdx];
+	const hostilePeers = new Set();
+	for (const pair of hostileSidePairs) {
+		const [leftUid, rightUid] = pair.split("|");
+		if (leftUid === previousUid) hostilePeers.add(rightUid);
+		else if (rightUid === previousUid) hostilePeers.add(leftUid);
+	}
+	preserveRetiredSidePersonnel(sideIdx);
+	clearSideHostilities(sideIdx);
+	clearSidePersonnelAccounting(sideIdx);
+	if (!sides[sideIdx]) sides[sideIdx] = [];
+	sideUids[sideIdx] = allocateSideUid();
+	for (const peerUid of hostilePeers) {
+		const peerIndex = sideUids.indexOf(peerUid);
+		if (peerIndex >= 0 && sides[peerIndex]?.length) {
+			hostileSidePairs.add(sidePairKey(sideUids[sideIdx], peerUid));
+		}
+	}
+	rebuildHostilityMatrix();
+	return true;
 }
 
 function emitEconomyEvent(message, level = "info") {
@@ -7083,13 +7829,19 @@ function initializeWarEconomy() {
 		const startingUnits = units.filter(
 			(unit) => unit.sovereignId === country.id,
 		);
-		state.expectedArmyUnits = Math.max(territoryUnits, startingUnits.length);
+		const startingArmyEquivalents = startingUnits.reduce(
+			(total, unit) =>
+				total + (unit.kind === "armor" ? 0 : getLiveFormationStrength(unit)),
+			0,
+		);
+		state.expectedArmyUnits = Math.max(territoryUnits, startingArmyEquivalents);
 		const startingMandatoryPayroll = startingUnits.reduce(
 			(total, unit) =>
 				total +
 				(unit.kind === "armor"
 					? computeArmorPayroll(unit.equipment || 0)
-					: ECONOMY_CONFIG.PAYROLL_PER_UNIT),
+					: ECONOMY_CONFIG.PAYROLL_PER_UNIT *
+						getFormationCapacityStrength(unit)),
 			0,
 		);
 		state.baseIncome = Math.max(
@@ -7113,6 +7865,27 @@ function initializeWarEconomy() {
 function reinforceEquipmentFromReserves(countryId) {
 	const state = countryEquipment.get(countryId);
 	if (!state) return;
+	const sideIdx = findCountrySideIndex(countryId);
+	if (sideIdx < 0) return;
+	const claimCrewedEquipment = (requestedEquipment, crewPerEquipment) => {
+		const requested = Math.max(0, Math.floor(requestedEquipment || 0));
+		const crewSize = Math.max(0, Math.floor(crewPerEquipment || 0));
+		if (crewSize === 0) return requested;
+		const availableEquipment = Math.floor(
+			Math.max(0, sideRecruitableManpower[sideIdx] || 0) / crewSize,
+		);
+		const claimed = Math.min(requested, availableEquipment);
+		sideRecruitableManpower[sideIdx] = Math.max(
+			0,
+			sideRecruitableManpower[sideIdx] - claimed * crewSize,
+		);
+		return claimed;
+	};
+	const refundCrew = (equipment, crewPerEquipment) => {
+		sideRecruitableManpower[sideIdx] +=
+			Math.max(0, Math.floor(equipment || 0)) *
+			Math.max(0, Math.floor(crewPerEquipment || 0));
+	};
 	for (const unit of units) {
 		if (
 			unit.kind !== "armor" ||
@@ -7124,7 +7897,10 @@ function reinforceEquipmentFromReserves(countryId) {
 			0,
 			(unit.maxEquipment || 0) - (unit.equipment || 0),
 		);
-		const transfer = Math.min(missing, state.reserveArmor);
+		const transfer = claimCrewedEquipment(
+			Math.min(missing, state.reserveArmor),
+			COMBINED_ARMS_CONFIG.ARMOR_CREW_PER_VEHICLE,
+		);
 		if (transfer <= 0) continue;
 		unit.equipment += transfer;
 		state.reserveArmor -= transfer;
@@ -7140,13 +7916,14 @@ function reinforceEquipmentFromReserves(countryId) {
 		const reserve = state[reserveKey] || 0;
 		if (reserve <= 0) continue;
 		const missing = Math.max(0, wing.maxEquipment - wing.equipment);
-		const transfer = Math.min(missing, reserve);
+		const transfer = claimCrewedEquipment(
+			Math.min(missing, reserve),
+			COMBINED_ARMS_CONFIG.AIRCREW_PER_AIRCRAFT,
+		);
 		wing.equipment += transfer;
 		state[reserveKey] -= transfer;
 	}
 
-	const sideIdx = findCountrySideIndex(countryId);
-	if (sideIdx < 0) return;
 	const sideFormationCount = units.reduce(
 		(count, unit) => count + Number(unit.sideIndex === sideIdx),
 		0,
@@ -7171,8 +7948,12 @@ function reinforceEquipmentFromReserves(countryId) {
 			const targetSize = Math.ceil(
 				state.armorCapacity / Math.max(1, desiredArmorFormations),
 			);
-			const equipment = Math.min(targetSize, state.reserveArmor);
+			const equipment = claimCrewedEquipment(
+				Math.min(targetSize, state.reserveArmor),
+				COMBINED_ARMS_CONFIG.ARMOR_CREW_PER_VEHICLE,
+			);
 			if (
+				equipment > 0 &&
 				createArmorFormationAtIndex({
 					countryId,
 					sideIdx,
@@ -7183,6 +7964,8 @@ function reinforceEquipmentFromReserves(countryId) {
 				})
 			) {
 				state.reserveArmor -= equipment;
+			} else if (equipment > 0) {
+				refundCrew(equipment, COMBINED_ARMS_CONFIG.ARMOR_CREW_PER_VEHICLE);
 			}
 		}
 	}
@@ -7220,7 +8003,11 @@ function reinforceEquipmentFromReserves(countryId) {
 		const targetSize = Math.ceil(
 			state[capacityKey] / Math.max(1, desiredWings),
 		);
-		const equipment = Math.min(targetSize, state[reserveKey]);
+		const equipment = claimCrewedEquipment(
+			Math.min(targetSize, state[reserveKey]),
+			COMBINED_ARMS_CONFIG.AIRCREW_PER_AIRCRAFT,
+		);
+		if (equipment <= 0) continue;
 		state[reserveKey] -= equipment;
 		airWings.push({
 			id: `air-wing-${_nextAirWingId++}`,
@@ -7319,6 +8106,7 @@ function adjustCountryEquipment(countryId, category, delta) {
 	const reserveRemoval = Math.min(remaining, state[config.reserve] || 0);
 	state[config.reserve] -= reserveRemoval;
 	remaining -= reserveRemoval;
+	let returnedCrew = 0;
 	if (category === "armor") {
 		for (let index = units.length - 1; index >= 0 && remaining > 0; index--) {
 			const unit = units[index];
@@ -7326,6 +8114,7 @@ function adjustCountryEquipment(countryId, category, delta) {
 			const removed = Math.min(remaining, unit.equipment || 0);
 			unit.equipment -= removed;
 			remaining -= removed;
+			returnedCrew += removed * COMBINED_ARMS_CONFIG.ARMOR_CREW_PER_VEHICLE;
 			unit.health =
 				unit.equipment > 0
 					? CONFIG.UNIT_HEALTH *
@@ -7344,8 +8133,13 @@ function adjustCountryEquipment(countryId, category, delta) {
 			const removed = Math.min(remaining, wing.equipment || 0);
 			wing.equipment -= removed;
 			remaining -= removed;
+			returnedCrew += removed * COMBINED_ARMS_CONFIG.AIRCREW_PER_AIRCRAFT;
 			if (wing.equipment <= 0) airWings.splice(index, 1);
 		}
+	}
+	const sideIdx = findCountrySideIndex(countryId);
+	if (sideIdx >= 0 && returnedCrew > 0) {
+		sideRecruitableManpower[sideIdx] += returnedCrew;
 	}
 	summarizeLiveEquipment();
 	return true;
@@ -7640,6 +8434,8 @@ function applyDesertion() {
 			continue;
 		}
 		const healthLoss = Math.max(0, unit.health * rate);
+		const personnelBefore =
+			unit.kind === "armor" ? 0 : getLiveFormationPersonnel(unit);
 		unit.health -= healthLoss;
 		const sideIdx = unit.sideIndex;
 		if (sideIdx >= 0 && sideIdx < MAX_SIDES) {
@@ -7661,9 +8457,22 @@ function applyDesertion() {
 					(beforeEquipment - nextEquipment) *
 					COMBINED_ARMS_CONFIG.ARMOR_CREW_PER_VEHICLE;
 			} else {
-				soldierLoss =
-					(healthLoss / Math.max(1, CONFIG.UNIT_HEALTH)) *
-					(soldiersPerUnit[sideIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO);
+				soldierLoss = Math.min(personnelBefore, personnelBefore * rate);
+				unit.personnel = Math.max(0, Math.round(personnelBefore - soldierLoss));
+				unit.strengthMultiplier = unit.personnel / CONFIG.UNIT_TO_SOLDIER_RATIO;
+			}
+			if (unit.health <= 1) {
+				if (unit.kind === "armor") {
+					const residualEquipment = Math.max(0, unit.equipment || 0);
+					soldierLoss +=
+						residualEquipment * COMBINED_ARMS_CONFIG.ARMOR_CREW_PER_VEHICLE;
+					unit.equipment = 0;
+				} else {
+					const residualPersonnel = Math.max(0, unit.personnel || 0);
+					soldierLoss += residualPersonnel;
+					unit.personnel = 0;
+					unit.strengthMultiplier = 0;
+				}
 			}
 			sideSoldiers[sideIdx] = Math.max(0, sideSoldiers[sideIdx] - soldierLoss);
 		}
@@ -7820,7 +8629,7 @@ function launchRebellion(record) {
 		const y = Math.floor(idx / gridWidth);
 		const x = idx % gridWidth;
 		const unitId = gameplayRandom();
-		units.push({
+		const recruitedUnit = {
 			id: unitId,
 			kind: "army",
 			lat:
@@ -7845,13 +8654,35 @@ function launchRebellion(record) {
 			}),
 			_commandBand: COMMAND_BANDS.PAID,
 			_refusesOffense: false,
-		});
+		};
+		setUnitFormationPersonnel(
+			recruitedUnit,
+			Math.max(
+				1,
+				Math.round(
+					soldiersPerUnit[rebelSideIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO,
+				),
+			),
+		);
+		units.push(recruitedUnit);
 	}
 	initialSideSoldiers[rebelSideIdx] = Math.max(
 		spawnCount * CONFIG.UNIT_TO_SOLDIER_RATIO,
 		(meta.pop || 0) * 0.002,
 	);
 	sideSoldiers[rebelSideIdx] = initialSideSoldiers[rebelSideIdx];
+	sideRecruitableManpower[rebelSideIdx] = Math.max(
+		0,
+		sideSoldiers[rebelSideIdx] -
+			units.reduce(
+				(total, unit) =>
+					total +
+					(unit.sideIndex === rebelSideIdx && unit.kind !== "armor"
+						? getLiveFormationPersonnel(unit)
+						: 0),
+				0,
+			),
+	);
 	soldiersPerUnit[rebelSideIdx] = CONFIG.UNIT_TO_SOLDIER_RATIO;
 	meta.releasableBy = null;
 	meta.buffState = "buff";
@@ -8038,6 +8869,9 @@ function resolveRebellionFailure(rebellion) {
 	}
 	units = units.filter((unit) => unit.sovereignId !== rebellion.rebelId);
 	if (rebelSideIdx >= 0) {
+		sideSoldiers[rebelSideIdx] = 0;
+		sideRecruitableManpower[rebelSideIdx] = 0;
+		preserveRetiredSidePersonnel(rebelSideIdx);
 		sides[rebelSideIdx] = sides[rebelSideIdx].filter(
 			(country) => country.id !== rebellion.rebelId,
 		);
@@ -8134,6 +8968,14 @@ function restoreCountryPeacefully(record) {
 	};
 	const sideIdx = allocateIndependentSide(country, -1);
 	if (sideIdx < 0) return false;
+	const restoredPool = Math.max(
+		0,
+		Math.round((meta.pop || 0) * 0.002) ||
+			Math.round((record.coreCells || 0) * 200),
+	);
+	initialSideSoldiers[sideIdx] = restoredPool;
+	sideSoldiers[sideIdx] = restoredPool;
+	sideRecruitableManpower[sideIdx] = restoredPool;
 	for (let i = 0; i < deJureMap.length; i++) {
 		if (deJureMap[i] !== record.victimId || landMask[i] === 0) continue;
 		worldControlMap[i] = record.victimId;
@@ -8155,6 +8997,15 @@ function restoreCountryPeacefully(record) {
 	}
 	restoreNationalAirfields(record.victimId, sideIdx);
 	returnEvacuatedAircraftToNationalReserve(record.victimId);
+	const restoredLivePersonnel = getCountryLivePersonnel(record.victimId);
+	if (restoredLivePersonnel > sideSoldiers[sideIdx]) {
+		sideSoldiers[sideIdx] = restoredLivePersonnel;
+		initialSideSoldiers[sideIdx] = restoredLivePersonnel;
+	}
+	sideRecruitableManpower[sideIdx] = Math.max(
+		0,
+		sideSoldiers[sideIdx] - restoredLivePersonnel,
+	);
 	occupationEconomies.delete(record.victimId);
 	_occupationGarrisonPlans.delete(record.victimId);
 	clearOccupationGarrisonAssignments(record.victimId);
@@ -8362,7 +9213,7 @@ export function runWarEconomyCycle(force = false) {
 		const payroll =
 			unit.kind === "armor"
 				? computeArmorPayroll(unit.equipment || 0)
-				: ECONOMY_CONFIG.PAYROLL_PER_UNIT;
+				: ECONOMY_CONFIG.PAYROLL_PER_UNIT * getFormationCapacityStrength(unit);
 		payrollDueByCountry.set(
 			unit.sovereignId,
 			(payrollDueByCountry.get(unit.sovereignId) || 0) + payroll,
@@ -8419,7 +9270,9 @@ export function runWarEconomyCycle(force = false) {
 				if (unit.sideIndex !== annexerSideIdx) continue;
 				if (!unitCountsAsOccupationGarrison(unit)) continue;
 				const idx = getGridIndex(unit.lat, unit.lng);
-				if (idx !== -1 && deJureMap[idx] === record.victimId) garrisonUnits++;
+				if (idx !== -1 && deJureMap[idx] === record.victimId) {
+					garrisonUnits += getLiveFormationStrength(unit);
+				}
 			}
 		}
 		const requiredGarrison =
@@ -8847,7 +9700,15 @@ function applyOperationSpawnGroups(groups = []) {
 			_placeDivisionAt(point, activeOperationDefinition.playerCountryId);
 			const unit = units[units.length - 1];
 			if (unit?.sovereignId === activeOperationDefinition.playerCountryId) {
-				unit.health *= group.health ?? 1;
+				const strengthFactor = Math.max(0, group.health ?? 1);
+				unit.health *= strengthFactor;
+				if (unit.personnel !== undefined) {
+					unit.personnel = Math.round(
+						(unit.personnelCapacity || unit.personnel) * strengthFactor,
+					);
+					unit.strengthMultiplier =
+						unit.personnel / CONFIG.UNIT_TO_SOLDIER_RATIO;
+				}
 			}
 		}
 	}
@@ -9472,6 +10333,9 @@ function countryIdsForExperimentSide(side) {
 }
 
 function captureExperimentMetrics({ scanWorld = true } = {}) {
+	// Combat mutates unit and wing equipment between economy cycles. Refresh the
+	// combined active-plus-reserve ledger at the exact checkpoint/report boundary.
+	summarizeLiveEquipment();
 	const definitions = experimentSideDefinitions();
 	const countryToMetric = new Map();
 	const runtimeSideToMetric = new Map();
@@ -9504,6 +10368,8 @@ function captureExperimentMetrics({ scanWorld = true } = {}) {
 			: sideUids.indexOf(side.uid);
 		const runtimeSide =
 			runtimeSideIndex >= 0 ? sides[runtimeSideIndex] || [] : [];
+		const retiredPersonnel = _retiredSidePersonnelByUid.get(side.uid) || null;
+		const usesActiveLedger = runtimeSideIndex >= 0 && runtimeSide.length > 0;
 		if (runtimeSideIndex >= 0)
 			runtimeSideToMetric.set(runtimeSideIndex, metricIndex);
 		for (const country of runtimeSide) {
@@ -9529,15 +10395,13 @@ function captureExperimentMetrics({ scanWorld = true } = {}) {
 			capitals: 0,
 			personnel: activeCountries
 				? Math.max(0, sideSoldiers[runtimeSideIndex] || 0)
-				: 0,
-			initialPersonnel:
-				runtimeSideIndex >= 0
-					? Math.max(0, initialSideSoldiers[runtimeSideIndex] || 0)
-					: 0,
-			casualties:
-				runtimeSideIndex >= 0
-					? Math.max(0, sideCasualties[runtimeSideIndex] || 0)
-					: 0,
+				: Math.max(0, retiredPersonnel?.personnel || 0),
+			initialPersonnel: usesActiveLedger
+				? Math.max(0, initialSideSoldiers[runtimeSideIndex] || 0)
+				: Math.max(0, retiredPersonnel?.initialPersonnel || 0),
+			casualties: usesActiveLedger
+				? Math.max(0, sideCasualties[runtimeSideIndex] || 0)
+				: Math.max(0, retiredPersonnel?.casualties || 0),
 			formations: 0,
 			economy: 0,
 			income: 0,
@@ -9575,15 +10439,11 @@ function captureExperimentMetrics({ scanWorld = true } = {}) {
 	for (const [countryId, equipment] of countryEquipment) {
 		const metric = metrics[countryToMetric.get(countryId)];
 		if (!metric) continue;
-		metric.armor +=
-			(Number(equipment.currentArmor) || 0) +
-			(Number(equipment.reserveArmor) || 0);
-		metric.fighters +=
-			(Number(equipment.currentFighters) || 0) +
-			(Number(equipment.reserveFighters) || 0);
-		metric.strikeAircraft +=
-			(Number(equipment.currentStrike) || 0) +
-			(Number(equipment.reserveStrike) || 0);
+		// summarizeLiveEquipment() stores active markers plus reserves in current*.
+		// Adding reserve* again would double-count every undeployed vehicle/aircraft.
+		metric.armor += Number(equipment.currentArmor) || 0;
+		metric.fighters += Number(equipment.currentFighters) || 0;
+		metric.strikeAircraft += Number(equipment.currentStrike) || 0;
 		metric.equipment = metric.armor + metric.fighters + metric.strikeAircraft;
 	}
 
@@ -10236,6 +11096,7 @@ function restoreExperimentSides(spec) {
 	_attackers = sides[0];
 	_defenders = sides[1];
 	sideUids = definitions.map((side, index) => side.uid || `side-${index + 1}`);
+	synchronizeSideUidCounter();
 	hostileSidePairs.clear();
 	for (const hostility of spec.hostilities || []) {
 		const attacker = hostility.attackerSideUid || hostility.attacker;
@@ -10317,10 +11178,16 @@ function populateExperimentInterventionOptions() {
 			};
 		})
 		.sort((left, right) => left.countryName.localeCompare(right.countryName));
-	const sideOptions = sides.map((side, sideIndex) => ({
-		sideUid: sideUids[sideIndex],
-		sideName: getSideDisplayName(sideIndex, side),
-	}));
+	const sideOptions = sides.flatMap((side, sideIndex) =>
+		side?.length
+			? [
+					{
+						sideUid: sideUids[sideIndex],
+						sideName: getSideDisplayName(sideIndex, side),
+					},
+				]
+			: [],
+	);
 	_experimentUi.setInterventionOptions({ countries, sides: sideOptions });
 }
 
@@ -10462,6 +11329,7 @@ function handleManpowerIntervention(values) {
 	}
 	const amount = Math.max(1, Math.round(Number(values.amount) || 100000));
 	sideSoldiers[selected.sideIndex] += amount;
+	sideRecruitableManpower[selected.sideIndex] += amount;
 	finishExperimentIntervention("MANPOWER_GRANTED", selected, { amount });
 }
 
@@ -10625,12 +11493,14 @@ export async function _startWarInner() {
 	countryEconomy.clear();
 	clearCombinedArmsState();
 	resetOperationalAiRuntime();
+	resetSimulationOptimizationRuntime();
 	occupationEconomies.clear();
 	clearOccupationGarrisonAssignments();
 	_occupationGarrisonPlans.clear();
 	activeRebellions.clear();
 	economyEvents.length = 0;
 	economyPayCycle = 0;
+	capitalLostCountries = new Set();
 	if (_experimentRestoredSideUids) {
 		sideUids = [..._experimentRestoredSideUids];
 		hostileSidePairs.clear();
@@ -10706,6 +11576,7 @@ export async function _startWarInner() {
 		c._aiPrevControlled = undefined;
 		c._aiStallTicks = 0;
 		c._aiInitialCities = undefined;
+		c._aiInitialManpower = undefined;
 	});
 
 	// Cinematic Mode logic
@@ -10935,6 +11806,7 @@ export async function _startWarInner() {
 			}
 		}
 	}
+	scheduleCoastalTopologyJob();
 
 	// Set counts back to country objects
 	sides.forEach((side) => {
@@ -11206,6 +12078,9 @@ export async function _startWarInner() {
 			}
 		});
 	});
+	for (let sideIdx = 0; sideIdx < sides.length; sideIdx++) {
+		compactVariableStrengthFormationsForSide(sideIdx);
+	}
 
 	/**
 	 * Allied Cross‑Deployment:
@@ -11319,6 +12194,12 @@ export async function _startWarInner() {
 		}
 	});
 
+	// Automated performance cases describe an exact personnel budget, not a
+	// request to create that many independently simulated map markers. Apply the
+	// budget before economy, AI, and report baselines initialize so every system
+	// observes the same starting state.
+	applyPendingBenchmarkForceOverride();
+
 	loadingOverlay.style.display = "none";
 
 	if (
@@ -11329,17 +12210,52 @@ export async function _startWarInner() {
 	}
 
 	// Initialize displayed manpower, honoring any manual overrides if present.
-	// Manpower pool = territory cells × 5000 + cities × 50000 (floor: initial army size)
+	// Total personnel includes deployed formations plus an uncommitted reserve.
 	sideSoldiers.fill(0);
 	initialSideSoldiers.fill(0);
-	soldiersPerUnit.fill(CONFIG.UNIT_TO_SOLDIER_RATIO); // fixed 1000, NOT pool-derived
-	const sideUnitCounts = new Float64Array(MAX_SIDES);
+	sideRecruitableManpower.fill(0);
+	// Small wars keep one marker per nominal division; large wars retain exact
+	// personnel while using stronger, fewer formations.
+	const sideArmyFormationCounts = new Float64Array(MAX_SIDES);
+	const sideDeployedPersonnel = new Float64Array(MAX_SIDES);
 	const sideCellCounts = new Float64Array(MAX_SIDES);
 	const sideCityCounts = new Float64Array(MAX_SIDES);
 	for (let i = 0; i < units.length; i++) {
 		const sIdx = units[i].sideIndex;
-		if (sIdx >= 0 && sIdx < MAX_SIDES) sideUnitCounts[sIdx]++;
+		if (sIdx >= 0 && sIdx < MAX_SIDES) {
+			if (units[i].kind === "armor") {
+				sideDeployedPersonnel[sIdx] += computeEquipmentPersonnel({
+					armoredVehicles: units[i].equipment || 0,
+				});
+			} else {
+				sideArmyFormationCounts[sIdx]++;
+				sideDeployedPersonnel[sIdx] += getLiveFormationPersonnel(units[i]);
+			}
+		}
 	}
+	for (const wing of airWings) {
+		const sIdx = wing.sideIndex;
+		if (
+			sIdx < 0 ||
+			sIdx >= MAX_SIDES ||
+			wing.equipment <= 0 ||
+			wing.state === AIR_WING_STATES.EVACUATED
+		) {
+			continue;
+		}
+		sideDeployedPersonnel[sIdx] += computeEquipmentPersonnel({
+			fighters: wing.role === "FIGHTER" ? wing.equipment : 0,
+			strikeAircraft: wing.role === "STRIKE" ? wing.equipment : 0,
+		});
+	}
+	const activeWingSideIndices = new Set(
+		airWings
+			.filter(
+				(wing) =>
+					wing.equipment > 0 && wing.state !== AIR_WING_STATES.EVACUATED,
+			)
+			.map((wing) => wing.sideIndex),
+	);
 	// Count territory cells and cities per side
 	for (const [countryId, cellArr] of countryIndices) {
 		const sIdx = countryToSideMap.get(countryId);
@@ -11355,7 +12271,7 @@ export async function _startWarInner() {
 	}
 
 	for (let sIdx = 0; sIdx < MAX_SIDES; sIdx++) {
-		const initialArmyPool = sideUnitCounts[sIdx] * CONFIG.UNIT_TO_SOLDIER_RATIO;
+		const initialArmyPool = sideDeployedPersonnel[sIdx];
 		// Manpower = 1% of total population
 		let populationPool = 0;
 		for (const [countryId, _cellArr] of countryIndices) {
@@ -11374,11 +12290,23 @@ export async function _startWarInner() {
 				Math.round(sideCellCounts[sIdx] * 200) +
 				Math.round(sideCityCounts[sIdx] * 10000);
 		}
-		const autoPool = Math.max(initialArmyPool, populationPool);
-		initialSideSoldiers[sIdx] =
-			manualSideManpower[sIdx] !== null ? manualSideManpower[sIdx] : autoPool;
+		const hasActiveForce =
+			sideArmyFormationCounts[sIdx] > 0 || activeWingSideIndices.has(sIdx);
+		const autoPool = hasActiveForce
+			? Math.max(initialArmyPool, populationPool)
+			: initialArmyPool;
+		initialSideSoldiers[sIdx] = Math.max(
+			initialArmyPool,
+			manualSideManpower[sIdx] !== null ? manualSideManpower[sIdx] : autoPool,
+		);
 		sideSoldiers[sIdx] = initialSideSoldiers[sIdx];
-		// soldiersPerUnit stays at CONFIG.UNIT_TO_SOLDIER_RATIO (1000) — not pool-derived
+		sideRecruitableManpower[sIdx] = Math.max(
+			0,
+			sideSoldiers[sIdx] - initialArmyPool,
+		);
+		if (sideArmyFormationCounts[sIdx] > 0) {
+			soldiersPerUnit[sIdx] = CONFIG.UNIT_TO_SOLDIER_RATIO;
+		}
 	}
 
 	const bounds = L.latLngBounds([]);
@@ -11411,7 +12339,7 @@ export async function _startWarInner() {
 	}
 
 	// Automatically join all vassals of countries starting the war if not disabled
-	if (!disablePuppetsCheckbox.checked) {
+	if (!disablePuppetsCheckbox.checked && !_benchmarkSuppressAutomaticPuppets) {
 		sides.forEach((side, sIdx) => {
 			if (!side) return;
 			const initialVassals = [];
@@ -11638,12 +12566,73 @@ export function triggerRandomWar() {
  * Show benchmark results modal with frame timing statistics.
  */
 function restoreBenchmarkSettings() {
+	_benchmarkForcePersonnelPerSide = null;
+	_benchmarkSuppressAutomaticPuppets = false;
 	if (!_benchmarkRestoreSettings) return;
 	CONFIG.MAX_UNITS_PER_SIDE = _benchmarkRestoreSettings.maxUnitsPerSide;
 	if (noPeaceCheckbox) {
 		noPeaceCheckbox.checked = _benchmarkRestoreSettings.noPeaceChecked;
 	}
 	_benchmarkRestoreSettings = null;
+}
+
+function prepareIsolatedBenchmarkRun() {
+	invalidateWarLifecycleTimers();
+	if (animationFrameId !== null) {
+		cancelAnimationFrame(animationFrameId);
+		animationFrameId = null;
+	}
+	if (backgroundTickId) {
+		clearInterval(backgroundTickId);
+		backgroundTickId = null;
+	}
+	if (
+		initialWorldControlMapSnapshot?.length === worldControlMap?.length &&
+		initialDeJureMapSnapshot?.length === deJureMap?.length &&
+		initialProvinceMapSnapshot?.length === provinceMap?.length &&
+		initialLandMaskSnapshot?.length === landMask?.length
+	) {
+		worldControlMap.set(initialWorldControlMapSnapshot);
+		deJureMap.set(initialDeJureMapSnapshot);
+		provinceMap.set(initialProvinceMapSnapshot);
+		landMask.set(initialLandMaskSnapshot);
+		if (initialBiomeMaskSnapshot?.length === biomeMask?.length) {
+			biomeMask.set(initialBiomeMaskSnapshot);
+		}
+		if (initialCountryMetadataSnapshot) {
+			countryMetadata = deepClone(initialCountryMetadataSnapshot);
+		}
+		if (initialCitiesSnapshot) cities = deepClone(initialCitiesSnapshot);
+	}
+	occupationMap.fill(0);
+	resetSideInfluenceMaps();
+	primaryOccupierMap.fill(0);
+	units = [];
+	unitSpatialHash.clear();
+	for (const sideHash of unitHashBySide) sideHash.clear();
+	bombs = [];
+	explosions = [];
+	bases = [];
+	activeBattles = [];
+	_battleHash.clear();
+	activeRebellions.clear();
+	occupationEconomies.clear();
+	clearOccupationGarrisonAssignments();
+	_occupationGarrisonPlans.clear();
+	countryEconomy.clear();
+	clearCombinedArmsState();
+	resetOperationalAiRuntime();
+	latestCountryStats.clear();
+	sideSoldiers.fill(0);
+	initialSideSoldiers.fill(0);
+	sideRecruitableManpower.fill(0);
+	soldiersPerUnit.fill(CONFIG.UNIT_TO_SOLDIER_RATIO);
+	sideCasualties.fill(0);
+	countryCasualties.clear();
+	casualtyByAttacker.clear();
+	capitalLostCountries = new Set();
+	frameAccumulator = 0;
+	simFrameCount = 0;
 }
 
 function showBenchmarkResults() {
@@ -11681,8 +12670,16 @@ function showBenchmarkResults() {
 	}
 	const report = getPerfReportData();
 	if (benchmarkStatsEl) {
+		const initialPersonnel = _benchmarkMetadata?.initialPersonnelBySide || [];
+		const initialFormations =
+			_benchmarkMetadata?.initialFormationCountBySide || [];
+		const forceSummary = initialPersonnel.length
+			? ` &nbsp;|&nbsp; Personnel: ${initialPersonnel.map((value) => Math.round(value).toLocaleString()).join(" / ")} &nbsp;|&nbsp; Formations: ${initialFormations.join(" / ")}`
+			: _benchmarkUnitsPerSide
+				? ` &nbsp;|&nbsp; Nominal scale/side: ${_benchmarkUnitsPerSide.toLocaleString()}`
+				: "";
 		benchmarkStatsEl.innerHTML =
-			`Frames: ${_perfSamples.length} &nbsp;|&nbsp; Speed: ${simSpeed}x${_benchmarkUnitsPerSide ? ` &nbsp;|&nbsp; Units/side: ${_benchmarkUnitsPerSide}` : ""}<br>` +
+			`Frames: ${_perfSamples.length} &nbsp;|&nbsp; Speed: ${simSpeed}x${forceSummary}<br>` +
 			`Avg FPS: ${avgFps.toFixed(0)} &nbsp;|&nbsp; Min FPS: ${minFps.toFixed(0)} &nbsp;|&nbsp; Max FPS: ${maxFps.toFixed(0)}<br>` +
 			`Avg frame: ${avg.toFixed(1)}ms &nbsp;|&nbsp; P95: ${report.frames.p95.toFixed(1)}ms &nbsp;|&nbsp; P99: ${report.frames.p99.toFixed(1)}ms &nbsp;|&nbsp; Max: ${max.toFixed(1)}ms<br>` +
 			`Main work: ${report.frameStages.mainWork.avg.toFixed(1)}ms &nbsp;|&nbsp; Sim: ${report.frameStages.simulation.avg.toFixed(1)}ms &nbsp;|&nbsp; HUD: ${report.frameStages.hud.avg.toFixed(1)}ms &nbsp;|&nbsp; Render: ${report.frameStages.render.avg.toFixed(1)}ms<br>` +
@@ -11734,6 +12731,7 @@ export async function startBenchmark(options = {}) {
 		maxUnitsPerSide: CONFIG.MAX_UNITS_PER_SIDE,
 		noPeaceChecked: noPeaceCheckbox?.checked === true,
 	};
+	_benchmarkSuppressAutomaticPuppets = true;
 	if (requestedUnits !== null) {
 		CONFIG.MAX_UNITS_PER_SIDE = requestedUnits;
 		_benchmarkUnitsPerSide = requestedUnits;
@@ -11769,19 +12767,33 @@ export async function startBenchmark(options = {}) {
 		restoreBenchmarkSettings();
 		throw new Error("Russia or China not found in country data.");
 	}
+	prepareIsolatedBenchmarkRun();
+	const isolatedRussia = countryMetadata.find(
+		(meta) => meta?.name === "Russia",
+	);
+	const isolatedChina = countryMetadata.find(
+		(meta) =>
+			meta && typeof meta.name === "string" && meta.name.includes("China"),
+	);
+	if (!isolatedRussia || !isolatedChina) {
+		restoreBenchmarkSettings();
+		throw new Error(
+			"Russia or China missing after benchmark world restoration.",
+		);
+	}
 
 	const russia = {
-		id: metaRussia.id,
-		name: metaRussia.name,
-		color: metaRussia.color,
+		id: isolatedRussia.id,
+		name: isolatedRussia.name,
+		color: isolatedRussia.color,
 		role: "OFFENSE",
 		strategy: "BALANCED",
 		buffState: "none",
 	};
 	const china = {
-		id: metaChina.id,
-		name: metaChina.name,
-		color: metaChina.color,
+		id: isolatedChina.id,
+		name: isolatedChina.name,
+		color: isolatedChina.color,
 		role: "OFFENSE",
 		strategy: "BALANCED",
 		buffState: "none",
@@ -11795,37 +12807,26 @@ export async function startBenchmark(options = {}) {
 	// Scenario loading reapplies saved settings, so the programmatic benchmark
 	// cap must be restored immediately before war creation.
 	if (requestedUnits !== null) CONFIG.MAX_UNITS_PER_SIDE = requestedUnits;
+	_benchmarkForcePersonnelPerSide =
+		requestedUnits !== null
+			? requestedUnits * CONFIG.UNIT_TO_SOLDIER_RATIO
+			: null;
 	updateSidesUI();
 	await startWar();
-	if (requestedUnits !== null) {
-		const economyWasEnabled = warEconomyEnabled;
-		warEconomyEnabled = false;
-		for (let sideIndex = 0; sideIndex < sides.length; sideIndex++) {
-			const countryId = sides[sideIndex]?.[0]?.id;
-			if (!countryId) continue;
-			const benchmarkManpower =
-				requestedUnits * CONFIG.UNIT_TO_SOLDIER_RATIO * 4;
-			sideSoldiers[sideIndex] = Math.max(
-				sideSoldiers[sideIndex] || 0,
-				benchmarkManpower,
-			);
-			initialSideSoldiers[sideIndex] = Math.max(
-				initialSideSoldiers[sideIndex] || 0,
-				benchmarkManpower,
-			);
-			let currentCount = units.reduce(
-				(count, unit) => count + Number(unit.sideIndex === sideIndex),
-				0,
-			);
-			let attempts = 0;
-			while (currentCount < requestedUnits && attempts < requestedUnits * 2) {
-				if (spawnSingleUnit(sideIndex, countryId)) currentCount++;
-				attempts++;
-			}
-		}
-		warEconomyEnabled = economyWasEnabled;
-		for (const unit of units) unit.deployTicks = 0;
+	_benchmarkForcePersonnelPerSide = null;
+	if (gameState !== "SIMULATING") {
+		restoreBenchmarkSettings();
+		throw new Error("Benchmark war failed to initialize.");
 	}
+	const benchmarkInitialPersonnelBySide = sides.map(
+		(_side, sideIdx) => sideSoldiers[sideIdx] || 0,
+	);
+	const benchmarkInitialFormationCountBySide = sides.map((_side, sideIdx) =>
+		units.reduce(
+			(count, unit) => count + Number(unit.sideIndex === sideIdx),
+			0,
+		),
+	);
 	viewMode = benchmarkViewMode;
 	if (viewModeBtn) {
 		viewModeBtn.innerText = viewMode === "FLAG" ? "FLAG VIEW" : "POLITICAL";
@@ -11869,6 +12870,8 @@ export async function startBenchmark(options = {}) {
 		traceMarks: options.traceMarks === true,
 		durationMs,
 		warmupMs,
+		initialPersonnelBySide: benchmarkInitialPersonnelBySide,
+		initialFormationCountBySide: benchmarkInitialFormationCountBySide,
 		startedAt: new Date().toISOString(),
 	};
 	_perfBenchmarkEnd = performance.now() + durationMs;
@@ -11892,6 +12895,17 @@ export function activateCountryMidWar(country, sideIdx) {
 	if (!sides[sideIdx]) sides[sideIdx] = [];
 	if (!sides[sideIdx].some((member) => member.id === countryId)) {
 		sides[sideIdx].push(country);
+	}
+	const historicalCombatant = initialCombatants.find(
+		(entry) => entry.id === countryId,
+	);
+	if (historicalCombatant) historicalCombatant.sideIndex = sideIdx;
+	else {
+		initialCombatants.push({
+			id: countryId,
+			name: country.name,
+			sideIndex: sideIdx,
+		});
 	}
 
 	units.forEach((u) => {
@@ -12061,7 +13075,7 @@ export function activateCountryMidWar(country, sideIdx) {
 		const isAlpen = isMountainCell && gameplayRandom() < 0.4;
 
 		const unitId = gameplayRandom();
-		units.push({
+		const activatedUnit = {
 			id: unitId,
 			kind: "army",
 			lat:
@@ -12084,7 +13098,25 @@ export function activateCountryMidWar(country, sideIdx) {
 			_discipline: getUnitDiscipline({ id: unitId, sovereignId: countryId }),
 			_commandBand: COMMAND_BANDS.PAID,
 			_refusesOffense: false,
-		});
+		};
+		setUnitFormationPersonnel(
+			activatedUnit,
+			Math.max(
+				1,
+				Math.round(soldiersPerUnit[sideIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO),
+			),
+		);
+		units.push(activatedUnit);
+	}
+	const joiningLivePersonnel = getCountryLivePersonnel(countryId);
+	const unfundedPersonnel = Math.max(0, joiningLivePersonnel - joiningPool);
+	sideRecruitableManpower[sideIdx] += Math.max(
+		0,
+		joiningPool - joiningLivePersonnel,
+	);
+	if (unfundedPersonnel > 0) {
+		sideSoldiers[sideIdx] += unfundedPersonnel;
+		initialSideSoldiers[sideIdx] += unfundedPersonnel;
 	}
 	if (warEconomyEnabled && !countryEconomy.has(countryId)) {
 		const territoryUnits = estimateTerritoryArmyUnits(cellCount);
@@ -12102,13 +13134,19 @@ export function activateCountryMidWar(country, sideIdx) {
 				0,
 			),
 		});
-		state.expectedArmyUnits = Math.max(territoryUnits, actualFormations.length);
+		const actualArmyEquivalents = actualFormations.reduce(
+			(total, unit) =>
+				total + (unit.kind === "armor" ? 0 : getLiveFormationStrength(unit)),
+			0,
+		);
+		state.expectedArmyUnits = Math.max(territoryUnits, actualArmyEquivalents);
 		const mandatoryPayroll = actualFormations.reduce(
 			(total, unit) =>
 				total +
 				(unit.kind === "armor"
 					? computeArmorPayroll(unit.equipment || 0)
-					: ECONOMY_CONFIG.PAYROLL_PER_UNIT),
+					: ECONOMY_CONFIG.PAYROLL_PER_UNIT *
+						getFormationCapacityStrength(unit)),
 			0,
 		);
 		state.baseIncome = Math.max(
@@ -12318,7 +13356,9 @@ function serializeOperationalUnit(unit) {
 		lat: unit.lat,
 		lng: unit.lng,
 		health: unit.health,
-		maxHealth: CONFIG.UNIT_HEALTH,
+		maxHealth:
+			unit.maxHealth ||
+			CONFIG.UNIT_HEALTH * (unit.isAlpenjager ? CONFIG.ALPEN_HEALTH_MULT : 1),
 		equipment: unit.equipment || 0,
 		armorSupported: !!unit._armorSupported,
 		terrainSuitable:
@@ -12700,10 +13740,7 @@ function estimateLocalForces(sideIdx, lat, lng, radiusSq = 9.0) {
 		if (u.deployTicks > 0 || u.health <= 0) continue;
 		if (geoDistSq(u.lat, u.lng, lat, lng) > radiusSq) continue;
 		friendlies++;
-		friendlyHealth += estimateUnitCombatPower(u, {
-			armorEnabled,
-			airPowerEnabled,
-		});
+		friendlyHealth += operationalUnitPower(u);
 	}
 	const intel = _aiIntelBySide.get(sideUids[sideIdx]);
 	const known = intel
@@ -12875,6 +13912,26 @@ function canTraverseLandForPlan(idx, sideIdx, targetIdx) {
 	);
 }
 
+function acquirePlanBfsBuffers(total) {
+	if (_planBfsSeen.length !== total) {
+		_planBfsSeen = new Uint32Array(total);
+		_planBfsParent = new Int32Array(total);
+		_planBfsQueue = new Int32Array(total);
+		_planBfsGeneration = 0;
+	}
+	_planBfsGeneration = (_planBfsGeneration + 1) >>> 0;
+	if (_planBfsGeneration === 0) {
+		_planBfsSeen.fill(0);
+		_planBfsGeneration = 1;
+	}
+	return {
+		seen: _planBfsSeen,
+		parent: _planBfsParent,
+		queue: _planBfsQueue,
+		generation: _planBfsGeneration,
+	};
+}
+
 function findLandPathSummary(startIdx, targetIdx, sideIdx, maxVisited = 70000) {
 	if (startIdx === -1 || targetIdx === -1) return { reachable: false };
 	if (!canTraverseLandForPlan(startIdx, sideIdx, targetIdx)) {
@@ -12901,15 +13958,13 @@ function findLandPathSummary(startIdx, targetIdx, sideIdx, maxVisited = 70000) {
 		startIdx = replacement;
 	}
 	const total = landMask.length;
-	const seen = new Uint8Array(total);
-	const parent = new Int32Array(total);
-	parent.fill(-1);
-	const queue = new Int32Array(Math.min(total, maxVisited + 1));
+	const { seen, parent, queue, generation } = acquirePlanBfsBuffers(total);
 	let head = 0;
 	let tail = 0;
 	let visited = 0;
 	queue[tail++] = startIdx;
-	seen[startIdx] = 1;
+	seen[startIdx] = generation;
+	parent[startIdx] = -1;
 	const offsets = [1, -1, gridWidth, -gridWidth];
 	while (head < tail && visited < maxVisited) {
 		const cur = queue[head++];
@@ -12943,9 +13998,9 @@ function findLandPathSummary(startIdx, targetIdx, sideIdx, maxVisited = 70000) {
 				continue;
 			}
 			const ni = cur + off;
-			if (ni < 0 || ni >= total || seen[ni]) continue;
+			if (ni < 0 || ni >= total || seen[ni] === generation) continue;
 			if (!canTraverseLandForPlan(ni, sideIdx, targetIdx)) continue;
-			seen[ni] = 1;
+			seen[ni] = generation;
 			parent[ni] = cur;
 			if (tail < queue.length) queue[tail++] = ni;
 		}
@@ -12982,14 +14037,13 @@ function findSeaPathSummary(startIdx, targetIdx, maxVisited = 120000) {
 		return { reachable: false };
 	}
 	const total = landMask.length;
-	const seen = new Uint8Array(total);
-	const queue = new Int32Array(Math.min(total, maxVisited + 1));
+	const { seen, queue, generation } = acquirePlanBfsBuffers(total);
 	let head = 0;
 	let tail = 0;
 	let visited = 0;
 	let distanceCells = 0;
 	queue[tail++] = startIdx;
-	seen[startIdx] = 1;
+	seen[startIdx] = generation;
 	const offsets = [1, -1, gridWidth, -gridWidth];
 	while (head < tail && visited < maxVisited) {
 		const levelEnd = tail;
@@ -13005,8 +14059,14 @@ function findSeaPathSummary(startIdx, targetIdx, maxVisited = 120000) {
 					continue;
 				}
 				const ni = cur + off;
-				if (ni < 0 || ni >= total || seen[ni] || landMask[ni] !== 0) continue;
-				seen[ni] = 1;
+				if (
+					ni < 0 ||
+					ni >= total ||
+					seen[ni] === generation ||
+					landMask[ni] !== 0
+				)
+					continue;
+				seen[ni] = generation;
 				if (tail < queue.length) queue[tail++] = ni;
 			}
 		}
@@ -13189,6 +14249,16 @@ function buildOccupationGarrisonProposals(sideIdx) {
 	return proposals;
 }
 
+function selectEvenlySpaced(items, limit) {
+	if (items.length <= limit) return items;
+	const selected = new Array(limit);
+	const step = (items.length - 1) / Math.max(1, limit - 1);
+	for (let i = 0; i < limit; i++) {
+		selected[i] = items[Math.round(i * step)];
+	}
+	return selected;
+}
+
 /**
  * Proposal Engine: generate every possible plan candidate for a side.
  * Returns an array of lightweight proposal objects — no plan objects created yet.
@@ -13254,37 +14324,38 @@ export function generateAllProposals(sideIdx) {
 	}
 
 	// Friendly coastal staging cells (for naval proposals)
-	const friendlyCoastCells = [];
+	let friendlyCoastCells = [];
 	const sampledFriendly = new Set();
-	for (let gi = 0; gi < landMask.length; gi += 3) {
-		if (landMask[gi] === 0) continue;
-		if (dominantSideMap[gi] !== sideIdx) continue;
+	let enemyCoastalTiles = [];
+	const sampledEnemy = new Set();
+	const coastalStride = Math.max(
+		1,
+		Math.floor(_coastalLandIndices.length / 24_000),
+	);
+	for (
+		let coastalIndex = 0;
+		_coastalTopologyReady && coastalIndex < _coastalLandIndices.length;
+		coastalIndex += coastalStride
+	) {
+		const gi = _coastalLandIndices[coastalIndex];
 		const row = Math.floor(gi / gridWidth);
 		const col = gi % gridWidth;
-		let isCoastal = false;
-		for (let dr = -1; dr <= 1 && !isCoastal; dr++) {
-			for (let dc = -1; dc <= 1 && !isCoastal; dc++) {
-				if (dr === 0 && dc === 0) continue;
-				const nr = row + dr;
-				const nc = col + dc;
-				if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
-				if (landMask[nr * gridWidth + nc] === 0) isCoastal = true;
-			}
-		}
-		if (!isCoastal) continue;
 		const lat = row * CONFIG.GRID_RES - 90;
 		const lng = col * CONFIG.GRID_RES - 180;
 		const key = `${Math.floor(lat)}_${Math.floor(lng)}`;
+		if (dominantSideMap[gi] !== sideIdx) continue;
 		if (sampledFriendly.has(key)) continue;
 		sampledFriendly.add(key);
 		friendlyCoastCells.push({ lat, lng, idx: gi });
 	}
 
 	// Enemy coastal tiles (for naval and coastal defense)
-	const enemyCoastalTiles = [];
-	const sampledEnemy = new Set();
-	for (let gi = 0; gi < landMask.length; gi += 2) {
-		if (landMask[gi] === 0) continue;
+	for (
+		let coastalIndex = 0;
+		_coastalTopologyReady && coastalIndex < _coastalLandIndices.length;
+		coastalIndex += coastalStride
+	) {
+		const gi = _coastalLandIndices[coastalIndex];
 		if (dominantSideMap[gi] === sideIdx) continue;
 		const cellOwnerId = worldControlMap[gi];
 		const ownerSide = _tickCountryToSideMap.get(cellOwnerId);
@@ -13293,17 +14364,6 @@ export function generateAllProposals(sideIdx) {
 		if (myAllyIds.has(cellOwnerId)) continue;
 		const row = Math.floor(gi / gridWidth);
 		const col = gi % gridWidth;
-		let isCoastal = false;
-		for (let dr = -1; dr <= 1 && !isCoastal; dr++) {
-			for (let dc = -1; dc <= 1 && !isCoastal; dc++) {
-				if (dr === 0 && dc === 0) continue;
-				const nr = row + dr;
-				const nc = col + dc;
-				if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
-				if (landMask[nr * gridWidth + nc] === 0) isCoastal = true;
-			}
-		}
-		if (!isCoastal) continue;
 		const lat = row * CONFIG.GRID_RES - 90;
 		const lng = col * CONFIG.GRID_RES - 180;
 		const key = `${Math.floor(lat)}_${Math.floor(lng)}`;
@@ -13311,6 +14371,11 @@ export function generateAllProposals(sideIdx) {
 		sampledEnemy.add(key);
 		enemyCoastalTiles.push({ lat, lng, idx: gi });
 	}
+	// Strategic proposals need geographic coverage, not every coastal grid cell.
+	// Keep a deterministic world-order sample so quadratic zone and distance
+	// checks stay bounded even for large coalitions with continental coastlines.
+	friendlyCoastCells = selectEvenlySpaced(friendlyCoastCells, 96);
+	enemyCoastalTiles = selectEvenlySpaced(enemyCoastalTiles, 96);
 
 	// ── 1. CAPTURE_CITY proposals ──
 	const enemyCities = [];
@@ -13369,7 +14434,7 @@ export function generateAllProposals(sideIdx) {
 			};
 		})
 		.sort((a, b) => b._sortScore - a._sortScore)
-		.slice(0, 50);
+		.slice(0, 12);
 
 	for (const ec of prioritizedEnemyCities) {
 		// Score proximity to frontline
@@ -13837,7 +14902,7 @@ export function generateAllProposals(sideIdx) {
 				}
 			}
 			if (!bestStaging) continue;
-			if (navalPathChecks >= 80) continue;
+			if (navalPathChecks >= 12) continue;
 			navalPathChecks++;
 			const seaStart = findNearestSeaIdx(bestStaging.idx);
 			const seaTarget = findNearestSeaIdx(et.idx);
@@ -15999,7 +17064,13 @@ export function syncOccupationGarrisonAssignments(sideIdx = null) {
 						(a.id || 0) - (b.id || 0)
 					);
 				});
-			const assigned = candidates.slice(0, desired);
+			const assigned = [];
+			let assignedStrength = 0;
+			for (const candidate of candidates) {
+				if (assignedStrength >= desired) break;
+				assigned.push(candidate);
+				assignedStrength += getLiveFormationStrength(candidate);
+			}
 			const pointLoads = new Array(Math.max(1, points.length)).fill(0);
 			for (const unit of assigned) {
 				usedUnits.add(unit);
@@ -16039,7 +17110,7 @@ export function syncOccupationGarrisonAssignments(sideIdx = null) {
 			plan.assignedUnitIds = assigned.map((unit) => unit.id);
 			plan.activeUnitCount = 0;
 			const record = occupationEconomies.get(plan.victimId);
-			if (record) record.garrisonAssignedCount = assigned.length;
+			if (record) record.garrisonAssignedCount = assignedStrength;
 		}
 	}
 }
@@ -16155,10 +17226,23 @@ const NAVAL_ABORT_TICKS = 1800; // longer stall before aborting second-wave nava
 export function evaluateAllPlans() {
 	// ── Reassessment: run the proposal pipeline when triggers fire ──
 	const _tp = performance.now();
+	// Detect all sides that need new plans, but only generate proposals for one
+	// side per simulation tick. Proposal generation contains bounded pathfinding
+	// and coastal analysis; spreading it across ticks prevents several coalitions
+	// from creating the same main-thread spike without changing queue order.
 	for (let si = 0; si < sides.length; si++) {
 		if (!sides[si] || sides[si].length === 0) continue;
-
+		if (_pendingProposalSideSet.has(si)) continue;
 		if (shouldReassess(si)) {
+			_pendingProposalSides.push(si);
+			_pendingProposalSideSet.add(si);
+		}
+	}
+
+	const si = _pendingProposalSides.shift();
+	if (si !== undefined) {
+		_pendingProposalSideSet.delete(si);
+		if (sides[si] && sides[si].length > 0) {
 			window.__perf.proposalRuns++;
 			const forceReplace = !!_planReassessNeeded[si];
 			const commanderReplacement =
@@ -17294,7 +18378,7 @@ function applyLandUnitDamage(targetUnit, damage, attacker = null) {
 	let personnelLoss = 0;
 	if (targetUnit.kind === "armor") {
 		const beforeEquipment = Math.max(0, targetUnit.equipment || 0);
-		const nextHealth = Math.max(0, targetUnit.health - damage);
+		const nextHealth = Math.max(0, targetUnit.health - effectiveDamage);
 		const nextEquipment = Math.min(
 			beforeEquipment,
 			Math.max(
@@ -17309,14 +18393,32 @@ function applyLandUnitDamage(targetUnit, damage, attacker = null) {
 		targetUnit.equipment = nextEquipment;
 		personnelLoss = vehiclesLost * COMBINED_ARMS_CONFIG.ARMOR_CREW_PER_VEHICLE;
 	} else {
-		const sideIdx = targetUnit.sideIndex;
-		const ratio =
-			sideIdx >= 0 && sideIdx < MAX_SIDES
-				? soldiersPerUnit[sideIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO
-				: CONFIG.UNIT_TO_SOLDIER_RATIO;
-		personnelLoss = (effectiveDamage / CONFIG.UNIT_HEALTH) * ratio;
+		const beforePersonnel = getLiveFormationPersonnel(targetUnit);
+		const maxHealth = Math.max(1, targetUnit.maxHealth || CONFIG.UNIT_HEALTH);
+		const personnelCapacity = Math.max(
+			beforePersonnel,
+			targetUnit.personnelCapacity || beforePersonnel,
+		);
+		const nextHealth = Math.max(0, targetUnit.health - effectiveDamage);
+		const nextPersonnel = Math.min(
+			beforePersonnel,
+			Math.max(0, Math.round(personnelCapacity * (nextHealth / maxHealth))),
+		);
+		personnelLoss = beforePersonnel - nextPersonnel;
+		targetUnit.personnel = nextPersonnel;
+		targetUnit.strengthMultiplier =
+			targetUnit.personnel / CONFIG.UNIT_TO_SOLDIER_RATIO;
+		if (targetUnit.personnel <= 0) targetUnit.health = 0;
 	}
-	targetUnit.health -= damage;
+	targetUnit.health = Math.max(0, targetUnit.health - effectiveDamage);
+	const targetSideIndex = targetUnit.sideIndex;
+	if (targetSideIndex >= 0 && targetSideIndex < MAX_SIDES) {
+		sideCasualties[targetSideIndex] += personnelLoss;
+		sideSoldiers[targetSideIndex] = Math.max(
+			0,
+			sideSoldiers[targetSideIndex] - personnelLoss,
+		);
+	}
 	recordCountryCombatLoss(targetUnit.sovereignId, personnelLoss, attackerId);
 	return personnelLoss;
 }
@@ -17332,6 +18434,10 @@ function combinedArmsDamage(
 		(attacker._armorLandingPenaltyUntilTick || 0) > _simTickCount
 			? 0.3
 			: 1;
+	const formationStrength =
+		attacker?.kind === "army"
+			? Math.max(0, getLiveFormationStrength(attacker))
+			: 1;
 	return (
 		baseDamage *
 		getArmorCombatMultiplier(attacker?.kind, target?.kind, {
@@ -17340,7 +18446,8 @@ function combinedArmsDamage(
 			supported: !!attacker?._armorSupported,
 		}) *
 		(attacker?.kind === "armor" ? getQualityMultiplier(attacker.quality) : 1) *
-		landingMultiplier
+		landingMultiplier *
+		formationStrength
 	);
 }
 
@@ -17351,11 +18458,16 @@ function applyAirEquipmentLoss(wing, loss, attackerId = null) {
 	);
 	if (equipmentLoss <= 0) return;
 	wing.equipment -= equipmentLoss;
-	recordCountryCombatLoss(
-		wing.sovereignId,
-		equipmentLoss * COMBINED_ARMS_CONFIG.AIRCREW_PER_AIRCRAFT,
-		attackerId,
-	);
+	const personnelLoss =
+		equipmentLoss * COMBINED_ARMS_CONFIG.AIRCREW_PER_AIRCRAFT;
+	if (wing.sideIndex >= 0 && wing.sideIndex < MAX_SIDES) {
+		sideCasualties[wing.sideIndex] += personnelLoss;
+		sideSoldiers[wing.sideIndex] = Math.max(
+			0,
+			sideSoldiers[wing.sideIndex] - personnelLoss,
+		);
+	}
+	recordCountryCombatLoss(wing.sovereignId, personnelLoss, attackerId);
 }
 
 function applyStrategicStrike(target, damage, wing) {
@@ -17572,6 +18684,19 @@ export function performSimulationTick() {
 			"coastStuckAbandoned",
 		])
 			_perfSnap[k] = window.__perf[k] || 0;
+		for (const k of [
+			"tacticalFriendlyCandidatePairs",
+			"tacticalEnemyCandidateVisits",
+			"tacticalAcceptedPairs",
+			"tacticalFriendlyPairs",
+			"tacticalHostileCellVisits",
+			"tacticalCacheHits",
+			"tacticalCacheMisses",
+			"tacticalGhostInvalidations",
+			"tacticalFastLaneUnits",
+		]) {
+			_perfSnap[k] = window.__perf[k] || 0;
+		}
 	}
 	if (_frontlineLayoutApplyPendingMs || _frontlineSlotApplyPendingMs) {
 		const asyncApplyMs =
@@ -17643,11 +18768,14 @@ export function performSimulationTick() {
 	const combatantIds = _tickCombatantIds;
 	_tickCountryToSideMap.clear();
 	const countryToSideMap = _tickCountryToSideMap;
+	_tickCountryById.clear();
+	const _countryById = _tickCountryById;
 
 	sides.forEach((side, idx) => {
 		side.forEach((c) => {
 			combatantIds.add(c.id);
 			countryToSideMap.set(c.id, idx);
+			_countryById.set(c.id, c);
 			countryStats.set(c.id, { units: 0, controlled: 0, owned: 0 });
 		});
 	});
@@ -17663,10 +18791,15 @@ export function performSimulationTick() {
 	for (let i = 0; i < units.length; i++) {
 		const u = units[i];
 		const countsAsLandFormation = unitCountsForCapitulation(u);
-		if (countsAsLandFormation && u.sideIndex === 0) p1UnitsCount++;
-		else if (countsAsLandFormation && u.sideIndex === 1) p2UnitsCount++;
+		const formationEquivalent = countsAsLandFormation
+			? getLiveFormationStrength(u)
+			: 0;
+		if (countsAsLandFormation && u.sideIndex === 0)
+			p1UnitsCount += formationEquivalent;
+		else if (countsAsLandFormation && u.sideIndex === 1)
+			p2UnitsCount += formationEquivalent;
 		const s = countryStats.get(u.sovereignId);
-		if (s && countsAsLandFormation) s.units++;
+		if (s && countsAsLandFormation) s.units += formationEquivalent;
 	}
 
 	// 1. Update territory
@@ -17731,15 +18864,13 @@ export function performSimulationTick() {
 	// 1b. Territorial Integrity: Collapse deep pockets and isolated protrusions (Enclaves/Exclaves)
 	// We sample the grid to find territory that is surrounded by the enemy.
 	// This aggressively decays "border gore" and isolated bubbles.
-	// PERF: Phased — 3 heavy scans staggered across different ticks to avoid spike clustering.
-	//       Phase 0: territorial integrity (5k samples). Phase 100: occupationMap (2.88M cells).
-	//       Phase 200: worldControlMap frontier scan (2.88M cells). Interval: 300 sim-ticks.
+	// Full-map statistics run as deterministic fixed-size chunks. This keeps
+	// results atomic without producing a multi-million-cell frame spike.
 	const optimizationFactor = getOptimizationFactor();
 	const countInterval = 200;
 	const countPhase = _simTickCount % countInterval;
 	const shouldCountLand = countPhase === 0;
-	const shouldScanOccupancy = countPhase === 67;
-	const shouldScanFrontier = countPhase === 133;
+	const shouldScheduleTerritoryCensus = countPhase === 133;
 	if (shouldCountLand) {
 		const _tP0 = performance.now();
 		const integBase = 5000;
@@ -17794,23 +18925,17 @@ export function performSimulationTick() {
 	} // end territorial integrity
 
 	// 2. Statistics & Soldiers (Dynamic based on units)
-	// PERF: Full 2.88M-cell occupationMap scan — phase 67 (staggered from integrity)
-	if (shouldScanOccupancy) {
-		const _tP67 = performance.now();
-		let p1Tmp = 0,
-			p2Tmp = 0;
-		for (let i = 0; i < occupationMap.length; i++) {
-			if (landMask[i] === 2) {
-				// Match visual frontline threshold (0)
-				if (occupationMap[i] > 0) p1Tmp++;
-				else if (occupationMap[i] < 0) p2Tmp++;
-			}
-		}
-		_cachedP1T = p1Tmp;
-		_cachedP2T = p2Tmp;
-		window.__perf.phase67 =
-			(window.__perf.phase67 || 0) + performance.now() - _tP67;
+	scheduleTerritoryCensus(countryToSideMap, combatantIds, shouldCountLand);
+	const _tP133 = performance.now();
+	_simulationJobs.step(160_000);
+	processTerritoryCensusTiles(countryToSideMap, combatantIds);
+	if (shouldScheduleTerritoryCensus) {
+		closeTerritoryCensusForDecision(countryToSideMap, combatantIds);
+		publishTerritoryCensusSnapshot();
 	}
+	window.__perf.phase133 =
+		(window.__perf.phase133 || 0) + performance.now() - _tP133;
+	const territoryCensusFresh = _territoryCensusCommittedTick === _simTickCount;
 	const p1T = _cachedP1T,
 		p2T = _cachedP2T;
 	const _p1LandScore = p1T + p2T > 0 ? (p1T / (p1T + p2T)) * 100 : 50;
@@ -17835,9 +18960,25 @@ export function performSimulationTick() {
 	}
 	const unitHash = unitSpatialHash;
 	const HASH_SIZE = UNIT_HASH_CELL_SIZE;
+	_unitLiveGeneration++;
 	for (let i = 0; i < units.length; i++) {
 		const u = units[i];
 		if (Number.isNaN(u.lat) || Number.isNaN(u.lng)) continue;
+		u._liveGeneration = _unitLiveGeneration;
+		const country = _countryById.get(u.sovereignId);
+		let allyWeight = Math.max(0, getLiveFormationStrength(u));
+		if (country?.buffState === "super") allyWeight *= 200;
+		else if (country?.buffState === "buff") allyWeight *= 50;
+		u._tickAllyWeight = allyWeight;
+		u._tickLocalAllyCount = CONFIG.ENABLE_SIDE_HASH_COMBAT
+			? Math.max(0, getLiveFormationStrength(u))
+			: 1;
+		u._tickHasNearbyHostile = false;
+		u._tickCanSupportArmor =
+			u.kind !== "armor" &&
+			getLiveFormationStrength(u) > 0 &&
+			!getUnitCommandPolicy(u).refusesOffense;
+		u.repulsionVector = null;
 		const kx = Math.floor((u.lng + 180) / HASH_SIZE);
 		const ky = Math.floor((u.lat + 90) / HASH_SIZE);
 		const k = kx * 100 + ky;
@@ -17858,6 +18999,152 @@ export function performSimulationTick() {
 			sArr.push(u);
 		}
 	}
+	const _tTactical = performance.now();
+	if (CONFIG.ENABLE_SIDE_HASH_COMBAT) {
+		rebuildTacticalGrid(_tacticalGrid, units, {
+			getSide: (unit) =>
+				unit.health > 0 &&
+				(unit.kind === "armor" || getLiveFormationStrength(unit) > 0)
+					? unit.sideIndex
+					: null,
+			getStrength: (unit) => getLiveFormationStrength(unit),
+			getAllyWeight: (unit) => unit._tickAllyWeight || 1,
+			isSupport: (unit) => unit._tickCanSupportArmor === true,
+		});
+		let hostileCellVisits = 0;
+		const tacticalRadiusSq = 0.6 * 0.6;
+		for (let sideIdx = 0; sideIdx < sides.length; sideIdx++) {
+			const sideCells = _tacticalGrid.bySide.get(String(sideIdx));
+			if (!sideCells) continue;
+			for (const cell of sideCells.values()) {
+				let hasTaskForceUnit = false;
+				for (const unit of cell.units) {
+					if (unit._taskForceUid) {
+						hasTaskForceUnit = true;
+						break;
+					}
+				}
+				if (!hasTaskForceUnit) continue;
+				for (let hostileIdx = 0; hostileIdx < sides.length; hostileIdx++) {
+					if (!areSidesHostile(sideIdx, hostileIdx)) continue;
+					hostileCellVisits += forEachNeighborCell(
+						_tacticalGrid,
+						hostileIdx,
+						cell,
+						(hostileCell) => {
+							for (const unit of cell.units) {
+								if (!unit._taskForceUid) continue;
+								if (unit._tickHasNearbyHostile) continue;
+								for (const hostile of hostileCell.units) {
+									const deltaLat = unit.lat - hostile.lat;
+									let deltaLng = unit.lng - hostile.lng;
+									if (deltaLng > 180) deltaLng -= 360;
+									else if (deltaLng < -180) deltaLng += 360;
+									if (
+										deltaLat * deltaLat + deltaLng * deltaLng <=
+										tacticalRadiusSq
+									) {
+										unit._tickHasNearbyHostile = true;
+										break;
+									}
+								}
+							}
+						},
+						{ radiusCells: 1 },
+					);
+				}
+			}
+		}
+		let tacticalCandidatePairs = 0;
+		let tacticalAcceptedPairs = 0;
+		let tacticalFriendlyPairs = 0;
+		const repulsionRadiusSq = 0.45 * 0.45;
+		const armorSupportRadiusSq =
+			COMBINED_ARMS_CONFIG.ARMOR_SUPPORT_RADIUS_DEG ** 2;
+		for (let sideIdx = 0; sideIdx < sides.length; sideIdx++) {
+			const pairResult = forEachUnorderedNeighborPair(
+				_tacticalGrid,
+				sideIdx,
+				(left, right, distanceSq) => {
+					tacticalFriendlyPairs++;
+					const leftSkipsLocal =
+						left.navalAssigned || left.supplyAssigned || left.coastalAssigned;
+					const rightSkipsLocal =
+						right.navalAssigned ||
+						right.supplyAssigned ||
+						right.coastalAssigned;
+					if (!leftSkipsLocal) {
+						left._tickLocalAllyCount += right._tickAllyWeight || 1;
+					}
+					if (!rightSkipsLocal) {
+						right._tickLocalAllyCount += left._tickAllyWeight || 1;
+					}
+					if (
+						left.kind === "armor" &&
+						!leftSkipsLocal &&
+						right._tickCanSupportArmor &&
+						distanceSq < armorSupportRadiusSq
+					) {
+						left._armorSupported = true;
+						left._armorSupportLastTick = _simTickCount;
+					}
+					if (
+						right.kind === "armor" &&
+						!rightSkipsLocal &&
+						left._tickCanSupportArmor &&
+						distanceSq < armorSupportRadiusSq
+					) {
+						right._armorSupported = true;
+						right._armorSupportLastTick = _simTickCount;
+					}
+					const slotsReplaceRepulsion =
+						left._taskForceUid &&
+						right._taskForceUid &&
+						left._taskForceUid === right._taskForceUid &&
+						!left._tickHasNearbyHostile &&
+						!right._tickHasNearbyHostile;
+					if (
+						slotsReplaceRepulsion ||
+						distanceSq >= repulsionRadiusSq ||
+						distanceSq <= 0.00001
+					) {
+						return;
+					}
+					const distance = Math.sqrt(distanceSq);
+					let deltaLng = left.lng - right.lng;
+					if (deltaLng > 180) deltaLng -= 360;
+					else if (deltaLng < -180) deltaLng += 360;
+					const deltaLat = left.lat - right.lat;
+					if (!leftSkipsLocal) {
+						left.repulsionVector = left.repulsionVector || { lat: 0, lng: 0 };
+						left.repulsionVector.lat += deltaLat / distance;
+						left.repulsionVector.lng += deltaLng / distance;
+					}
+					if (!rightSkipsLocal) {
+						right.repulsionVector = right.repulsionVector || { lat: 0, lng: 0 };
+						right.repulsionVector.lat -= deltaLat / distance;
+						right.repulsionVector.lng -= deltaLng / distance;
+					}
+				},
+				{ radiusCells: 1, radiusSq: tacticalRadiusSq },
+			);
+			tacticalCandidatePairs += pairResult.candidatePairs;
+			tacticalAcceptedPairs += pairResult.acceptedPairs;
+		}
+		window.__perf.tacticalFriendlyCandidatePairs += tacticalCandidatePairs;
+		window.__perf.tacticalAcceptedPairs += tacticalAcceptedPairs;
+		window.__perf.tacticalFriendlyPairs += tacticalFriendlyPairs;
+		window.__perf.tacticalHostileCellVisits += hostileCellVisits;
+		window.__perf.tacticalMaxBucketOccupancy =
+			_tacticalGrid.counters.maxBucketOccupancy;
+		window.__perf.tacticalPeakBucketOccupancy = Math.max(
+			window.__perf.tacticalPeakBucketOccupancy || 0,
+			_tacticalGrid.counters.maxBucketOccupancy,
+		);
+		window.__perf.tacticalCellCount = _tacticalGrid.counters.cellCount;
+		window.__perf.tacticalInsertedUnits = _tacticalGrid.counters.insertedUnits;
+	}
+	window.__perf.unitAllyScan += performance.now() - _tTactical;
 	window.__perf.spatialHash =
 		(window.__perf.spatialHash || 0) + performance.now() - _tsh;
 
@@ -17896,6 +19183,8 @@ export function performSimulationTick() {
 			if (
 				unitsToRemove.has(u) ||
 				u.kind === "armor" ||
+				u.personnel !== undefined ||
+				(u.personnelCapacity || 0) > CONFIG.UNIT_TO_SOLDIER_RATIO ||
 				u.health >= maxMergedHealth ||
 				u.deployTicks > 0
 			)
@@ -17920,6 +19209,8 @@ export function performSimulationTick() {
 					other === u ||
 					unitsToRemove.has(other) ||
 					other.kind === "armor" ||
+					other.personnel !== undefined ||
+					(other.personnelCapacity || 0) > CONFIG.UNIT_TO_SOLDIER_RATIO ||
 					(CONFIG.ENABLE_SIDE_HASH_COMBAT
 						? false
 						: other.sideIndex === u.sideIndex) ||
@@ -17960,104 +19251,18 @@ export function performSimulationTick() {
 	}
 	window.__perf.consolidate =
 		(window.__perf.consolidate || 0) + performance.now() - _tConsolidate;
-	if (shouldScanFrontier) {
-		const _tP133 = performance.now();
-		recalculateAllBounds();
-		const countryFrontlines = new Map();
-		_allCombatants.forEach((c) => {
-			countryFrontlines.set(c.id, 0);
-		});
-		let _warCells = 0;
-		let _orphanWarCells = 0;
-		let minX = Infinity,
-			minY = Infinity,
-			maxX = -Infinity,
-			maxY = -Infinity;
-
-		for (let i = 0; i < worldControlMap.length; i++) {
-			if (landMask[i] === 2) {
-				_warCells++;
-				const y = Math.floor(i / gridWidth);
-				const x = i % gridWidth;
-				if (x < minX) minX = x;
-				if (x > maxX) maxX = x;
-				if (y < minY) minY = y;
-				if (y > maxY) maxY = y;
-
-				const sid = worldControlMap[i];
-				const stats = countryStats.get(sid);
-				if (!combatantIds.has(sid)) _orphanWarCells++;
-				if (stats) {
-					// Raw ownership in the active warzone, independent of occupation polarity.
-					// This is used by capitulation fail-safes for edge cases (exiled/naval remnants).
-					stats.owned++;
-					const sIdx = countryToSideMap.get(sid);
-					if (dominantSideMap[i] === sIdx) {
-						stats.controlled++;
-					}
-
-					// Count frontline cells for saturation check
-					const neighbors = [i + 1, i - 1, i + gridWidth, i - gridWidth];
-					let isFront = false;
-					for (const n of neighbors) {
-						if (n >= 0 && n < worldControlMap.length) {
-							const nid = worldControlMap[n];
-							const nsid = countryToSideMap.get(nid);
-							if (nid > 0 && nsid !== undefined && nsid !== sIdx) {
-								isFront = true;
-								break;
-							}
-						}
-					}
-					if (isFront) {
-						countryFrontlines.set(sid, countryFrontlines.get(sid) + 1);
-					}
-				}
-			}
-		}
-
-		// Determine saturation for each country
-		_allCombatants.forEach((c) => {
-			const stats = countryStats.get(c.id);
-			const frontCount = countryFrontlines.get(c.id) || 0;
-			// Strict Saturation Requirement: Nations must man 100% of their identified frontline before pushing.
-			const saturationThreshold = 1.0;
-			if (stats) {
-				if (stats.units >= frontCount * saturationThreshold) {
-					c.isSaturated = true;
-				} else if (stats.units < frontCount * 0.6) {
-					// Drop saturation if decimated below 60% coverage to force regrouping
-					c.isSaturated = false;
-				}
-			}
-		});
-		window.__perf.phase133 =
-			(window.__perf.phase133 || 0) + performance.now() - _tP133;
-	} else {
-		// Carry over stats from the last "counting" frame.
-		// For unitless countries, never inflate controlled/owned to initialCells —
-		// a country with no army can't be controlling territory it hasn't
-		// been counted for. Default to 0 so capitulation can fire promptly.
-		_allCombatants.forEach((c) => {
-			const stats = countryStats.get(c.id);
-			if (stats) {
-				const fallback = stats.units === 0 ? 0 : c.initialCells || 0;
-				stats.controlled =
-					c.lastControlledCount !== undefined
-						? c.lastControlledCount
-						: fallback;
-				stats.owned =
-					c.lastOwnedCount !== undefined ? c.lastOwnedCount : fallback;
-			}
-		});
-	}
-
-	// Persist stats for next frame's "non-counting" logic
+	// Consume only committed census data; partial tile refreshes never leak into AI or
+	// surrender decisions.
 	_allCombatants.forEach((c) => {
 		const stats = countryStats.get(c.id);
-		if (stats && shouldScanFrontier) {
-			c.lastControlledCount = stats.controlled;
-			c.lastOwnedCount = stats.owned;
+		if (!stats) return;
+		const fallback = stats.units === 0 ? 0 : c.initialCells || 0;
+		stats.controlled = c.lastControlledCount ?? fallback;
+		stats.owned = c.lastOwnedCount ?? fallback;
+		if (territoryCensusFresh) {
+			const frontCount = c.lastFrontlineCount || 0;
+			if (stats.units >= frontCount) c.isSaturated = true;
+			else if (stats.units < frontCount * 0.6) c.isSaturated = false;
 		}
 	});
 
@@ -18083,12 +19288,18 @@ export function performSimulationTick() {
 	// Overwhelming force: if one side has 10x more deployed personnel, all units attack evenly
 	const _overwhelmingForce = new Array(sides.length).fill(false);
 	if (sides.length === 2) {
-		const side0Units = unitsBySide[0].length;
-		const side1Units = unitsBySide[1].length;
-		if (side0Units > 0 && side1Units > 0) {
-			if (side0Units >= side1Units * 10) {
+		const side0Strength = unitsBySide[0].reduce(
+			(total, unit) => total + getLiveFormationStrength(unit),
+			0,
+		);
+		const side1Strength = unitsBySide[1].reduce(
+			(total, unit) => total + getLiveFormationStrength(unit),
+			0,
+		);
+		if (side0Strength > 0 && side1Strength > 0) {
+			if (side0Strength >= side1Strength * 10) {
 				_overwhelmingForce[0] = true;
-			} else if (side1Units >= side0Units * 10) {
+			} else if (side1Strength >= side0Strength * 10) {
 				_overwhelmingForce[1] = true;
 			}
 		}
@@ -18104,13 +19315,6 @@ export function performSimulationTick() {
 		_ug._isAtSea = idx === -1 || landMask[idx] === 0;
 	}
 
-	// Pre-build country lookup Map (avoids .find() per enemy per unit)
-	const _countryById = new Map();
-	for (let _csi = 0; _csi < sides.length; _csi++) {
-		for (let _cc = 0; _cc < sides[_csi].length; _cc++) {
-			_countryById.set(sides[_csi][_cc].id, sides[_csi][_cc]);
-		}
-	}
 	window.__perf.caches = (window.__perf.caches || 0) + performance.now() - _tbs;
 
 	const _tVictory = performance.now();
@@ -18400,12 +19604,16 @@ export function performSimulationTick() {
 				controlRatio > 0.45;
 
 			// UNDER_MOBILIZED: safe territory but severely under‑armied relative to manpower pool
-			const countrySideIdx = countryToSideMap.get(country.id);
-			const deployedPersonnel =
-				stats.units *
-				(soldiersPerUnit[countrySideIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO);
+			const deployedPersonnel = stats.units * CONFIG.UNIT_TO_SOLDIER_RATIO;
+			if (country._aiInitialManpower === undefined) {
+				const metadata = countryMetadata[country.id - 1] || country;
+				const estimatedPool = metadata?.pop
+					? Math.round(metadata.pop * 0.01)
+					: Math.round(initialLand * 200 + initCities * 10000);
+				country._aiInitialManpower = Math.max(deployedPersonnel, estimatedPool);
+			}
 			const mobilizationRatio =
-				deployedPersonnel / Math.max(1, initialSideSoldiers[countrySideIdx]);
+				deployedPersonnel / Math.max(1, country._aiInitialManpower);
 			const canUseUnderMobilized = mobilizationRatio < 0.75;
 
 			const lastStand =
@@ -18852,17 +20060,23 @@ export function performSimulationTick() {
 				absoluteCap = Math.max(15, Math.floor(absoluteCap * 0.3));
 			}
 			// MANPOWER: hard cap based on remaining side manpower
-			const mpCap =
-				sideSoldiers[sIdx] > 0
+			const recruitableFormationEquivalents =
+				sideRecruitableManpower[sIdx] > 0
 					? Math.ceil(
-							sideSoldiers[sIdx] /
+							sideRecruitableManpower[sIdx] /
 								(soldiersPerUnit[sIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO),
 						)
 					: 0;
-			if (mpCap === 0 && sideSoldiers[sIdx] <= 0) {
+			if (
+				recruitableFormationEquivalents === 0 &&
+				sideRecruitableManpower[sIdx] <= 0
+			) {
 				absoluteCap = 0; // no manpower = no more troops
-			} else if (mpCap > 0) {
-				absoluteCap = Math.min(absoluteCap, mpCap);
+			} else if (recruitableFormationEquivalents > 0) {
+				absoluteCap = Math.min(
+					absoluteCap,
+					currentUnits + recruitableFormationEquivalents,
+				);
 			}
 
 			const isTotalWar =
@@ -19046,6 +20260,14 @@ export function performSimulationTick() {
 
 		// Scrub NaN units immediately to prevent rendering crashes
 		if (Number.isNaN(u.lat) || Number.isNaN(u.lng)) {
+			returnUnitPersonnelToReserve(u);
+			units.splice(i, 1);
+			continue;
+		}
+		if (
+			u.health <= 0 ||
+			(u.kind !== "armor" && getLiveFormationStrength(u) <= 0)
+		) {
 			units.splice(i, 1);
 			continue;
 		}
@@ -19191,6 +20413,7 @@ export function performSimulationTick() {
 			const stats = countryStats.get(u.sovereignId);
 			if (stats && stats.controlled === 0) {
 				if (gameplayRandom() < 0.02) {
+					returnUnitPersonnelToReserve(u);
 					units.splice(i, 1);
 					continue;
 				}
@@ -19404,7 +20627,7 @@ export function performSimulationTick() {
 		const tacticalRadiusSq = 0.6 * 0.6;
 		const repulsionRadiusSq = 0.45 * 0.45;
 		let localEnemyCount = 0;
-		let localAllyCount = 1;
+		let localAllyCount = u._tickLocalAllyCount || 1;
 		let enemyCentroidLat = 0;
 		let enemyCentroidLng = 0;
 
@@ -19421,6 +20644,17 @@ export function performSimulationTick() {
 		const _isAlpen = !!u.isAlpenjager;
 		const hasOperationalAssignment =
 			gameMode === "CONQUEST" && !!u._taskForceUid;
+		const operationalFastLane = !!(
+			CONFIG.ENABLE_SIDE_HASH_COMBAT &&
+			hasOperationalAssignment &&
+			u._taskForceOrder?.target &&
+			!u._tickHasNearbyHostile &&
+			!isAtSea
+		);
+		if (operationalFastLane) {
+			target = u._taskForceOrder.target;
+			window.__perf.tacticalFastLaneUnits++;
+		}
 		if (u.kind === "armor") {
 			u._armorSupported =
 				_simTickCount - (u._armorSupportLastTick ?? Number.NEGATIVE_INFINITY) <=
@@ -19452,8 +20686,20 @@ export function performSimulationTick() {
 			}
 
 			// ── Phase 3: stale-target skip ──
-			let didStaleSkip = false;
+			let didStaleSkip = operationalFastLane;
 			if (
+				u._cachedTarget &&
+				(u._cachedTarget._liveGeneration !== _unitLiveGeneration ||
+					u._cachedTarget.health <= 0)
+			) {
+				if (u._cachedTarget._liveGeneration !== _unitLiveGeneration) {
+					window.__perf.tacticalGhostInvalidations++;
+				}
+				u._cachedTarget = null;
+				u._cachedLocalEnemyCount = 0;
+			}
+			if (
+				!operationalFastLane &&
 				CONFIG.ENABLE_STALE_TARGET_SKIP &&
 				u._cachedTarget &&
 				u._cachedTarget.health > 0 &&
@@ -19468,9 +20714,12 @@ export function performSimulationTick() {
 					simSpeed >= 3
 						? CONFIG.STALE_TARGET_MAX_CACHE_DIST_SQ_FAST
 						: CONFIG.STALE_TARGET_MAX_CACHE_DIST_SQ;
-				const staggerSkip =
-					(simFrameCount + u.id * 7) % staleScanInterval !== 0;
-				if (!movedCell && staggerSkip) {
+				const refreshDue =
+					_simTickCount - (u._lastFullScanTick ?? -staleScanInterval) >=
+						staleScanInterval &&
+					stableUnitCohort(u, staleScanInterval) ===
+						_simTickCount % staleScanInterval;
+				if (!movedCell && !refreshDue) {
 					const cached = u._cachedTarget;
 					let deLng = cached.lng - u.lng;
 					if (deLng > 180) deLng -= 360;
@@ -19478,10 +20727,13 @@ export function performSimulationTick() {
 					const cdSq = (u.lat - cached.lat) ** 2 + deLng ** 2;
 					if (cdSq <= staleMaxDistSq) {
 						target = cached;
-						localEnemyCount = 1;
-						enemyCentroidLat = cached.lat;
-						enemyCentroidLng = cached.lng;
+						localEnemyCount = Math.max(1, u._cachedLocalEnemyCount || 0);
+						enemyCentroidLat =
+							u._cachedEnemyCentroidLat || cached.lat * localEnemyCount;
+						enemyCentroidLng =
+							u._cachedEnemyCentroidLng || cached.lng * localEnemyCount;
 						didStaleSkip = true;
+						window.__perf.tacticalCacheHits++;
 						// Proximity damage vs cached target (same logic as full scan)
 						if (cdSq < 0.09) {
 							const inWarGrace = simFrameCount < warGraceEndTick;
@@ -19568,6 +20820,13 @@ export function performSimulationTick() {
 					}
 				}
 			}
+			if (
+				!operationalFastLane &&
+				CONFIG.ENABLE_STALE_TARGET_SKIP &&
+				!didStaleSkip
+			) {
+				window.__perf.tacticalCacheMisses++;
+			}
 
 			// ── Enemy pass: iterate each enemy side's hash cells ──
 			if (!didStaleSkip) {
@@ -19586,6 +20845,7 @@ export function performSimulationTick() {
 							if (!arr) continue;
 							for (let j = 0; j < arr.length; j++) {
 								const e = arr[j];
+								window.__perf.tacticalEnemyCandidateVisits++;
 								let deLng = e.lng - u.lng;
 								if (deLng > 180) deLng -= 360;
 								else if (deLng < -180) deLng += 360;
@@ -19651,7 +20911,7 @@ export function performSimulationTick() {
 									}
 								}
 								if (dSq < tacticalRadiusSq) {
-									let eWeight = 1;
+									let eWeight = Math.max(0, getLiveFormationStrength(e));
 									if (eAtSea) eWeight *= isAtSea ? 0.6 : 0.2;
 									if (eBuff === "super") eWeight *= 200;
 									else if (eBuff === "buff") eWeight *= 50;
@@ -19748,11 +21008,14 @@ export function performSimulationTick() {
 					}
 				}
 				// ── Phase 3: update stale-target cache after full scan ──
-				if (CONFIG.ENABLE_STALE_TARGET_SKIP && target) {
-					u._cachedTarget = target;
+				if (CONFIG.ENABLE_STALE_TARGET_SKIP) {
+					u._cachedTarget = target?.health !== undefined ? target : null;
 					u._cachedScanKx = kx;
 					u._cachedScanKy = ky;
-					u._lastFullScanTick = simFrameCount;
+					u._cachedLocalEnemyCount = localEnemyCount;
+					u._cachedEnemyCentroidLat = enemyCentroidLat;
+					u._cachedEnemyCentroidLng = enemyCentroidLng;
+					u._lastFullScanTick = _simTickCount;
 				}
 			}
 			// ── End stale-skip guard ──
@@ -19926,62 +21189,8 @@ export function performSimulationTick() {
 					_tEnemyDone;
 			}
 
-			// ── Ally pass: iterate own side's hash for repulsion ──
-			if (!skipAllyScan && !didStaleSkip) {
-				const allyHash = unitHashBySide[sideIndex];
-				for (let dy = -2; dy <= 2; dy++) {
-					for (let dx = -2; dx <= 2; dx++) {
-						if (fullScan && (dx < -1 || dx > 1 || dy < -1 || dy > 1)) continue;
-						let cx = kx + dx;
-						const cy = ky + dy;
-						if (cx < 0) cx += maxKx;
-						else if (cx >= maxKx) cx -= maxKx;
-						const arr = allyHash.get(cx * 100 + cy);
-						if (!arr) continue;
-						for (let j = 0; j < arr.length; j++) {
-							const e = arr[j];
-							if (e === u) continue;
-							let deLng = e.lng - u.lng;
-							if (deLng > 180) deLng -= 360;
-							else if (deLng < -180) deLng += 360;
-							const dSq = (u.lat - e.lat) ** 2 + deLng ** 2;
-							if (dSq < tacticalRadiusSq) {
-								if (
-									u.kind === "armor" &&
-									e.kind !== "armor" &&
-									e.sideIndex === u.sideIndex &&
-									!getUnitCommandPolicy(e).refusesOffense &&
-									dSq < COMBINED_ARMS_CONFIG.ARMOR_SUPPORT_RADIUS_DEG ** 2
-								) {
-									u._armorSupported = true;
-									u._armorSupportLastTick = _simTickCount;
-								}
-								let aWeight = 1;
-								const aSideIdx = countryToSideMap.get(e.sovereignId);
-								const aCountry =
-									aSideIdx !== undefined
-										? _countryById.get(e.sovereignId)
-										: null;
-								if (aCountry?.buffState === "super") aWeight *= 200;
-								else if (aCountry?.buffState === "buff") aWeight *= 50;
-								localAllyCount += aWeight;
-								if (dSq < repulsionRadiusSq && dSq > 0.00001) {
-									const d = Math.sqrt(dSq);
-									if (!u.repulsionVector)
-										u.repulsionVector = { lat: 0, lng: 0 };
-									u.repulsionVector.lat += (u.lat - e.lat) / d;
-									u.repulsionVector.lng += (u.lng - e.lng) / d;
-								}
-							}
-						}
-					}
-				}
-			}
-			const _tAllyDone = _detailedPerfEnabled ? performance.now() : 0;
-			if (_detailedPerfEnabled) {
-				window.__perf.unitAllyScan =
-					(window.__perf.unitAllyScan || 0) + _tAllyDone - _tGarrisonCoastal;
-			}
+			// Fine-grid allied density, armor support, and pair-once repulsion were
+			// precomputed once above instead of rescanning 9–25 coarse buckets per unit.
 		} else {
 			// ═══ Legacy scan (flag off): iterates global unitSpatialHash ═══
 			for (let dy = -2; dy <= 2; dy++) {
@@ -20010,6 +21219,7 @@ export function performSimulationTick() {
 						const dSq = (u.lat - e.lat) ** 2 + deLng ** 2;
 
 						if (isEnemy) {
+							window.__perf.tacticalEnemyCandidateVisits++;
 							const eIdx = _unitGridIdx.get(e) ?? -1;
 							const eAtSea = e._isAtSea;
 
@@ -20073,7 +21283,7 @@ export function performSimulationTick() {
 							}
 
 							if (dSq < tacticalRadiusSq) {
-								let eWeight = 1;
+								let eWeight = Math.max(0, getLiveFormationStrength(e));
 								if (eAtSea) eWeight *= isAtSea ? 0.6 : 0.2;
 
 								if (eBuff === "super") eWeight *= 200;
@@ -20440,7 +21650,7 @@ export function performSimulationTick() {
 
 		// Global Target Fallback (if no enemies were found in the local 6-degree spatial hash but enemies exist somewhere)
 		// Add scatter to avoid blob: ±1° random offset
-		if (!target && totalEnemiesCount > 0) {
+		if (!operationalFastLane && !target && totalEnemiesCount > 0) {
 			let bestCentroidDist = Infinity;
 			sideCentroids.forEach((centroids, idx) => {
 				const isEnemySide = areSidesHostile(sideIndex, idx);
@@ -20714,7 +21924,7 @@ export function performSimulationTick() {
 		// Nearby enemy-unit targets always win. City objectives are cached strategic
 		// guidance and only refresh on this unit's cohort at high load.
 		const hasDirectEnemyTarget = target && target.health !== undefined;
-		if (u._cityObjective) {
+		if (!operationalFastLane && u._cityObjective) {
 			const objective = u._cityObjective;
 			const objectiveSide = countryToSideMap.get(objective.ownerId);
 			const objectiveIdx = objective.gridIndex;
@@ -20732,6 +21942,7 @@ export function performSimulationTick() {
 		const cityCandidates = enemyCityCandidatesBySide[sideIndex] || [];
 		if (
 			!shouldMopUp &&
+			!operationalFastLane &&
 			!hasDirectEnemyTarget &&
 			aiProfile.targetCityWeight > 0 &&
 			cityCandidates.length > 0 &&
@@ -20792,7 +22003,7 @@ export function performSimulationTick() {
 				: null;
 			u._cityObjectiveTick = _simTickCount;
 		}
-		if (!hasDirectEnemyTarget && u._cityObjective) {
+		if (!operationalFastLane && !hasDirectEnemyTarget && u._cityObjective) {
 			const cityObjective = u._cityObjective;
 			if (target && target.lat !== undefined && target.lng !== undefined) {
 				const weight = aiProfile.targetCityWeight;
@@ -22525,7 +23736,8 @@ export function performSimulationTick() {
 						supported: !!u._armorSupported,
 					}) *
 					(u.kind === "armor" ? getQualityMultiplier(u.quality) : 1) *
-					attackerLandingMultiplier;
+					attackerLandingMultiplier *
+					(u.kind === "army" ? Math.max(0, getLiveFormationStrength(u)) : 1);
 				const uDmg =
 					CONFIG.COMBAT_DAMAGE *
 					0.8 *
@@ -22537,7 +23749,10 @@ export function performSimulationTick() {
 						supported: !!target._armorSupported,
 					}) *
 					(target.kind === "armor" ? getQualityMultiplier(target.quality) : 1) *
-					defenderLandingMultiplier;
+					defenderLandingMultiplier *
+					(target.kind === "army"
+						? Math.max(0, getLiveFormationStrength(target))
+						: 1);
 
 				if (
 					simFrameCount > 100 &&
@@ -22673,24 +23888,15 @@ export function performSimulationTick() {
 		}
 	}
 
-	// NOTE: even if sideSoldiers reach 0, sides remain on the field and can still recruit.
+	// A side can keep fighting at zero reserve, but it cannot recruit new formations.
 	window.__perf.unitLoop += performance.now() - _t3;
 	const _t4 = performance.now();
 	// 4. Individual Capitulation & Treaty Logic
 	const timeSinceTreaty = Date.now() - lastTreatyTime;
 
-	for (let sIdx = 0; sIdx < MAX_SIDES; sIdx++) {
-		if (initialSideSoldiers[sIdx] > 0) {
-			sideCasualties[sIdx] = Math.max(
-				0,
-				initialSideSoldiers[sIdx] - sideSoldiers[sIdx],
-			);
-		}
-	}
-
-	// Capitulation is evaluated only on the existing full frontier scan, so all
-	// countries use fresh land data without adding per-country map scans.
-	if (shouldScanFrontier) {
+	// Capitulation is evaluated only when a complete dirty-tile census commits, so
+	// every country observes one coherent territory snapshot.
+	if (territoryCensusFresh) {
 		for (let sIdx = 0; sIdx < sides.length; sIdx++) {
 			const side = sides[sIdx];
 			const hasActiveHostility = sides.some(
@@ -23033,8 +24239,7 @@ export function performSimulationTick() {
 				const vehicles = Math.max(0, Math.round(u.equipment || 0));
 				armorCounts[si] += vehicles;
 			} else {
-				const sp = soldiersPerUnit[si] || CONFIG.UNIT_TO_SOLDIER_RATIO;
-				soldierEsts[si] += (u.health / CONFIG.UNIT_HEALTH) * sp;
+				soldierEsts[si] += getLiveFormationPersonnel(u);
 			}
 		}
 	}
@@ -23078,6 +24283,7 @@ export function performSimulationTick() {
 		units: units.length,
 		cats: {},
 		reassess: {},
+		tactical: {},
 		water: {},
 	};
 	for (const k of _perfKeys)
@@ -23100,6 +24306,23 @@ export function performSimulationTick() {
 		"coastStuckAbandoned",
 	])
 		_tickEntry.water[k] = (window.__perf[k] || 0) - (_perfSnap[k] || 0);
+	for (const k of [
+		"tacticalFriendlyCandidatePairs",
+		"tacticalEnemyCandidateVisits",
+		"tacticalAcceptedPairs",
+		"tacticalFriendlyPairs",
+		"tacticalHostileCellVisits",
+		"tacticalCacheHits",
+		"tacticalCacheMisses",
+		"tacticalGhostInvalidations",
+		"tacticalFastLaneUnits",
+	]) {
+		_tickEntry.tactical[k] = (window.__perf[k] || 0) - (_perfSnap[k] || 0);
+	}
+	_tickEntry.tactical.maxBucketOccupancy =
+		window.__perf.tacticalMaxBucketOccupancy || 0;
+	_tickEntry.tactical.cellCount = window.__perf.tacticalCellCount || 0;
+	_tickEntry.tactical.insertedUnits = window.__perf.tacticalInsertedUnits || 0;
 	if (!window.__perf._history) window.__perf._history = [];
 	window.__perf._history.push(_tickEntry);
 	if (window.__perf._history.length > PERF_TICK_HISTORY_LIMIT) {
@@ -23336,6 +24559,97 @@ function getPerfReportData() {
 		}
 	}
 	const waterTotal = Object.values(waterTotals).reduce((s, v) => s + v, 0);
+	const tacticalCounterKeys = [
+		"tacticalFriendlyCandidatePairs",
+		"tacticalEnemyCandidateVisits",
+		"tacticalAcceptedPairs",
+		"tacticalFriendlyPairs",
+		"tacticalHostileCellVisits",
+		"tacticalCacheHits",
+		"tacticalCacheMisses",
+		"tacticalGhostInvalidations",
+		"tacticalFastLaneUnits",
+	];
+	const tacticalTotals = Object.fromEntries(
+		tacticalCounterKeys.map((key) => [key, 0]),
+	);
+	for (const entry of h) {
+		for (const key of tacticalCounterKeys) {
+			tacticalTotals[key] += entry.tactical?.[key] || 0;
+		}
+	}
+	const tacticalUnitTicks = h.reduce(
+		(total, entry) => total + Math.max(0, entry.units || 0),
+		0,
+	);
+	const tacticalMaxBucketOccupancy = h.length
+		? Math.max(...h.map((entry) => entry.tactical?.maxBucketOccupancy || 0))
+		: 0;
+	const tacticalAverageCellCount = n
+		? h.reduce((total, entry) => total + (entry.tactical?.cellCount || 0), 0) /
+			n
+		: 0;
+	const tacticalAverageInsertedUnits = n
+		? h.reduce(
+				(total, entry) => total + (entry.tactical?.insertedUnits || 0),
+				0,
+			) / n
+		: 0;
+	const tacticalCacheQueries =
+		tacticalTotals.tacticalCacheHits + tacticalTotals.tacticalCacheMisses;
+	const tactical = {
+		sampleTicks: n,
+		unitTicks: tacticalUnitTicks,
+		friendlyCandidatePairs: tacticalTotals.tacticalFriendlyCandidatePairs,
+		enemyCandidateVisits: tacticalTotals.tacticalEnemyCandidateVisits,
+		acceptedPairs: tacticalTotals.tacticalAcceptedPairs,
+		friendlyPairs: tacticalTotals.tacticalFriendlyPairs,
+		hostileCellVisits: tacticalTotals.tacticalHostileCellVisits,
+		cacheHits: tacticalTotals.tacticalCacheHits,
+		cacheMisses: tacticalTotals.tacticalCacheMisses,
+		ghostInvalidations: tacticalTotals.tacticalGhostInvalidations,
+		fastLaneUnits: tacticalTotals.tacticalFastLaneUnits,
+		friendlyCandidatePairsPerTick:
+			n > 0 ? tacticalTotals.tacticalFriendlyCandidatePairs / n : 0,
+		enemyCandidateVisitsPerUnitTick:
+			tacticalUnitTicks > 0
+				? tacticalTotals.tacticalEnemyCandidateVisits / tacticalUnitTicks
+				: 0,
+		acceptedPairsPerTick: n > 0 ? tacticalTotals.tacticalAcceptedPairs / n : 0,
+		friendlyPairsPerTick: n > 0 ? tacticalTotals.tacticalFriendlyPairs / n : 0,
+		hostileCellVisitsPerTick:
+			n > 0 ? tacticalTotals.tacticalHostileCellVisits / n : 0,
+		acceptanceRate:
+			tacticalTotals.tacticalFriendlyCandidatePairs > 0
+				? tacticalTotals.tacticalAcceptedPairs /
+					tacticalTotals.tacticalFriendlyCandidatePairs
+				: 0,
+		cacheHitRate:
+			tacticalCacheQueries > 0
+				? tacticalTotals.tacticalCacheHits / tacticalCacheQueries
+				: 0,
+		cacheMissesPerUnitTick:
+			tacticalUnitTicks > 0
+				? tacticalTotals.tacticalCacheMisses / tacticalUnitTicks
+				: 0,
+		ghostInvalidationsPerUnitTick:
+			tacticalUnitTicks > 0
+				? tacticalTotals.tacticalGhostInvalidations / tacticalUnitTicks
+				: 0,
+		fastLaneShare:
+			tacticalUnitTicks > 0
+				? tacticalTotals.tacticalFastLaneUnits / tacticalUnitTicks
+				: 0,
+		maxBucketOccupancy: tacticalMaxBucketOccupancy,
+		averageCellCount: tacticalAverageCellCount,
+		averageInsertedUnits: tacticalAverageInsertedUnits,
+		// Compatibility aliases used by reports written before the counters split.
+		candidateVisits:
+			tacticalTotals.tacticalFriendlyCandidatePairs +
+			tacticalTotals.tacticalEnemyCandidateVisits,
+		cellCount: tacticalAverageCellCount,
+		insertedUnits: tacticalAverageInsertedUnits,
+	};
 
 	const frameSummary = summarizeSamples(frameEntries.map((e) => e.ms));
 	const renderSummary = summarizeSamples(
@@ -23467,6 +24781,7 @@ function getPerfReportData() {
 			total: waterTotal,
 			...waterTotals,
 		},
+		tactical,
 		frontlineWorker: {
 			dispatches: window.__perf.frontlineWorkerDispatches || 0,
 			completed: window.__perf.frontlineWorkerCompleted || 0,
@@ -23575,6 +24890,12 @@ function formatPerfReport(data) {
 	);
 	lines.push(
 		`  scheduler: rendered ${data.scheduler.renderedFrames}/${data.scheduler.frames} frames | subticks ${data.scheduler.executedSubTicks}/${data.scheduler.requestedSubTicks} | cappedFrames ${data.scheduler.cappedSubTickFrames} | cappedSubticks ${data.scheduler.cappedSubTicks}`,
+	);
+	const tacticalCacheRate = ((data.tactical?.cacheHitRate || 0) * 100).toFixed(
+		1,
+	);
+	lines.push(
+		`  tactical grid: ${formatMs(data.tactical?.averageCellCount || 0)} cells/tick | max bucket ${data.tactical?.maxBucketOccupancy || 0} | enemy candidates ${formatMs(data.tactical?.enemyCandidateVisitsPerUnitTick || 0)}/unit-tick | friendly pairs ${formatMs(data.tactical?.acceptedPairsPerTick || 0)}/tick | cache ${tacticalCacheRate}% | fast lane ${((data.tactical?.fastLaneShare || 0) * 100).toFixed(1)}% | ghosts ${formatMs(data.tactical?.ghostInvalidationsPerUnitTick || 0)}/unit-tick`,
 	);
 	lines.push(
 		`  frontline worker: ${data.frontlineWorker.completed}/${data.frontlineWorker.dispatches} done | layout ${data.frontlineWorker.layoutCompleted}/${data.frontlineWorker.layoutDispatches} (${formatMs(data.frontlineWorker.lastLayoutDurationMs)}ms, max ${formatMs(data.frontlineWorker.maxLayoutDurationMs)}ms) | errors ${data.frontlineWorker.errors}/${data.frontlineWorker.layoutErrors} | stale ${data.frontlineWorker.staleResults} | ${data.frontlineWorker.busy ? "busy" : "idle"}${data.frontlineWorker.pending ? `, pending${data.frontlineWorker.pendingField ? " field" : ""}${data.frontlineWorker.pendingLayout ? " layout" : ""}` : ""}`,
@@ -24135,8 +25456,10 @@ export function updateLoop(now) {
 	if (casualtyContainer && simFrameCount % 5 === 0) {
 		let entriesKey = "";
 		const entriesFlat = [];
+		const activeIds = new Set(_tickAllCombatants.map((c) => c.id));
 		for (let sIdx = 0; sIdx < sides.length; sIdx++) {
 			if (!sides[sIdx] || sides[sIdx].length === 0) continue;
+			entriesKey += `side:${sIdx}|`;
 			const entries = initialCombatants.filter((c) => c.sideIndex === sIdx);
 			sides[sIdx].forEach((c) => {
 				if (!entries.some((e) => e.id === c.id)) {
@@ -24146,16 +25469,23 @@ export function updateLoop(now) {
 			if (entries.length === 0) continue;
 			for (const e of entries) {
 				entriesFlat.push({ ...e, side: sIdx });
-				entriesKey += `${e.id},`;
+				entriesKey += `${e.id}:${activeIds.has(e.id) ? "active" : "defeated"},`;
 			}
 		}
 		const structureChanged = entriesKey !== _casualtyStructureKey;
 		if (structureChanged) {
 			_casualtyStructureKey = entriesKey;
-			const activeIds = new Set(_tickAllCombatants.map((c) => c.id));
+			const primaryActiveCountryBySide = new Map();
+			for (const entry of entriesFlat) {
+				if (
+					activeIds.has(entry.id) &&
+					!primaryActiveCountryBySide.has(entry.side)
+				) {
+					primaryActiveCountryBySide.set(entry.side, entry.id);
+				}
+			}
 			let html = "";
 			let currentSide = -1;
-			let sidePos = 0;
 			for (const e of entriesFlat) {
 				const casualties = countryCasualties.get(e.id) || 0;
 				const formatted = influenceLayer.formatSoldiers(casualties);
@@ -24163,10 +25493,9 @@ export function updateLoop(now) {
 				if (e.side !== currentSide) {
 					if (currentSide !== -1) html += `</div>`;
 					currentSide = e.side;
-					sidePos = 0;
 					html += `<div class="casualty-side-list">`;
 				}
-				const isPrimary = sidePos === 0 && !isDefeated;
+				const isPrimary = primaryActiveCountryBySide.get(e.side) === e.id;
 				const meta = countryMetadata[e.id - 1];
 				let flagSrc = meta?.flagUrl || "";
 				if (meta?.tempFlag instanceof HTMLCanvasElement) {
@@ -24183,7 +25512,6 @@ export function updateLoop(now) {
 					html += `<span class="cas-side-mp hud-side-accent" data-sidemp="${currentSide}">${influenceLayer.formatSoldiers(mpRemaining)}</span>`;
 				}
 				html += `</div>`;
-				sidePos++;
 			}
 			if (currentSide !== -1) html += `</div>`;
 			casualtyContainer.innerHTML = html;
@@ -24800,11 +26128,13 @@ export function capitulateCountry(country, sideIndex) {
 	// Preserve the defeated nation's economic identity. The annexer receives a
 	// partial occupation yield and owes occupation costs through the war economy.
 	if (primaryAnnexerId > 0) registerOccupation(country.id, primaryAnnexerId);
+	releaseCountryPersonnelFromSide(country.id, sideIndex);
 	resolveCapitulatedEquipment(country.id, sideIndex);
 
 	// Remove the country from its alliance list
 	const cIdx = side.indexOf(country);
 	if (cIdx > -1) side.splice(cIdx, 1);
+	if (side.length === 0) preserveRetiredSidePersonnel(sideIndex);
 
 	// Clear targets for any units that were focusing on this specific country's theater
 	units.forEach((u) => {
@@ -25818,6 +27148,7 @@ if (quickRestartBtn) {
 		}
 		sideSoldiers.fill(0);
 		initialSideSoldiers.fill(0);
+		sideRecruitableManpower.fill(0);
 		soldiersPerUnit.fill(CONFIG.UNIT_TO_SOLDIER_RATIO);
 		sideCasualties.fill(0);
 
@@ -26153,6 +27484,7 @@ export function unilateralExitConflict(country, sideIdx) {
 		message: `${country.name} withdrew from the conflict.`,
 		major: true,
 	});
+	releaseCountryPersonnelFromSide(country.id, sideIdx);
 
 	for (let i = 0; i < worldControlMap.length; i++) {
 		if (landMask[i] !== 2) continue;
@@ -26181,9 +27513,15 @@ export function unilateralExitConflict(country, sideIdx) {
 	const side = sides[sideIdx];
 	const idx = side.findIndex((c) => c.id === country.id);
 	if (idx > -1) side.splice(idx, 1);
+	if (side.length === 0) preserveRetiredSidePersonnel(sideIdx);
 
 	// Purge units
 	units = units.filter((u) => u.sovereignId !== country.id);
+	for (let wingIndex = airWings.length - 1; wingIndex >= 0; wingIndex--) {
+		if (airWings[wingIndex].sovereignId === country.id) {
+			airWings.splice(wingIndex, 1);
+		}
+	}
 	units.forEach((u) => {
 		if (u.beneficiaryId === country.id) u.beneficiaryId = u.sovereignId;
 	});
@@ -26239,6 +27577,11 @@ export function _signSelectiveSideExit(sideIdx) {
 
 	_lastCapitulationTick = _simTickCount;
 	const exitingIds = new Set(side.map((c) => c.id));
+	// The formations and reserves leave the active war, while initial strength
+	// and accumulated casualties remain available to the after-action report.
+	sideSoldiers[sideIdx] = 0;
+	sideRecruitableManpower[sideIdx] = 0;
+	preserveRetiredSidePersonnel(sideIdx);
 
 	// Clean up territory controlled by exiting side
 	for (let i = 0; i < worldControlMap.length; i++) {
@@ -26284,6 +27627,11 @@ export function _signSelectiveSideExit(sideIdx) {
 
 	// Purge units belonging to exiting nations
 	units = units.filter((u) => !exitingIds.has(u.sovereignId));
+	for (let wingIndex = airWings.length - 1; wingIndex >= 0; wingIndex--) {
+		if (exitingIds.has(airWings[wingIndex].sovereignId)) {
+			airWings.splice(wingIndex, 1);
+		}
+	}
 	units.forEach((u) => {
 		if (exitingIds.has(u.beneficiaryId)) u.beneficiaryId = u.sovereignId;
 	});
@@ -26340,6 +27688,7 @@ export function _signSelectivePeace(exiter, target) {
 		message: `${target.name} signed a separate peace with ${exiter.name}.`,
 		major: true,
 	});
+	releaseCountryPersonnelFromSide(target.id, targetSideIdx);
 
 	// The 'target' (second nation clicked) is the one exiting the specific conflict engagement
 	for (let i = 0; i < worldControlMap.length; i++) {
@@ -26375,9 +27724,15 @@ export function _signSelectivePeace(exiter, target) {
 	const targetSide = sides[targetSideIdx];
 	const idx = targetSide.findIndex((c) => c.id === target.id);
 	if (idx > -1) targetSide.splice(idx, 1);
+	if (targetSide.length === 0) preserveRetiredSidePersonnel(targetSideIdx);
 
 	// 3. Purge units belonging to the target nation
 	units = units.filter((u) => u.sovereignId !== target.id);
+	for (let wingIndex = airWings.length - 1; wingIndex >= 0; wingIndex--) {
+		if (airWings[wingIndex].sovereignId === target.id) {
+			airWings.splice(wingIndex, 1);
+		}
+	}
 
 	// Reset beneficiary IDs for units that were supporting the leaving nation
 	units.forEach((u) => {
@@ -28178,35 +29533,23 @@ export function recruitNeutralMidWar(id, sideIdx) {
 	if (!meta) return;
 	const oldSideIdx = findCountrySideIndex(id);
 	if (oldSideIdx === sideIdx) return;
+	prepareEmptySideForNewMembership(sideIdx);
 	const oldSideName =
 		oldSideIdx >= 0 ? getSideDisplayName(oldSideIdx) : "Not in conflict";
 	if (oldSideIdx >= 0) {
 		const country = sides[oldSideIdx].find((candidate) => candidate.id === id);
-		const sourceCountryCount = Math.max(1, sides[oldSideIdx].length);
-		const sourceFormationCount = units.reduce(
-			(total, unit) => total + Number(unit.sideIndex === oldSideIdx),
-			0,
-		);
 		const countryFormationCount = units.reduce(
-			(total, unit) => total + Number(unit.sovereignId === id),
+			(count, unit) => count + Number(unit.sovereignId === id),
 			0,
 		);
-		const transferShare = Math.min(
-			1,
-			sourceFormationCount > 0
-				? countryFormationCount / sourceFormationCount
-				: 1 / sourceCountryCount,
-		);
-		const transferredPersonnel = Math.round(
-			Math.max(0, sideSoldiers[oldSideIdx] || 0) * transferShare,
-		);
-		const transferredInitialPersonnel = Math.round(
-			Math.max(0, initialSideSoldiers[oldSideIdx] || 0) * transferShare,
-		);
-		const transferredCasualties = Math.min(
-			Math.max(0, sideCasualties[oldSideIdx] || 0),
-			Math.max(0, countryCasualties.get(id) || 0),
-		);
+		const transfer = releaseCountryPersonnelFromSide(id, oldSideIdx, {
+			transferHistory: true,
+		}) || {
+			surviving: 0,
+			initial: 0,
+			recruitable: 0,
+			casualties: 0,
+		};
 
 		const oldCountryIndex = sides[oldSideIdx].findIndex(
 			(candidate) => candidate.id === id,
@@ -28216,21 +29559,14 @@ export function recruitNeutralMidWar(id, sideIdx) {
 		if (country && !sides[sideIdx].some((candidate) => candidate.id === id)) {
 			sides[sideIdx].push(country);
 		}
-		sideSoldiers[oldSideIdx] = Math.max(
-			0,
-			sideSoldiers[oldSideIdx] - transferredPersonnel,
+		sideSoldiers[sideIdx] += transfer.surviving;
+		sideRecruitableManpower[sideIdx] += transfer.recruitable;
+		initialSideSoldiers[sideIdx] += transfer.initial;
+		sideCasualties[sideIdx] += transfer.casualties;
+		const historicalCombatant = initialCombatants.find(
+			(entry) => entry.id === id,
 		);
-		sideSoldiers[sideIdx] += transferredPersonnel;
-		initialSideSoldiers[oldSideIdx] = Math.max(
-			0,
-			initialSideSoldiers[oldSideIdx] - transferredInitialPersonnel,
-		);
-		initialSideSoldiers[sideIdx] += transferredInitialPersonnel;
-		sideCasualties[oldSideIdx] = Math.max(
-			0,
-			sideCasualties[oldSideIdx] - transferredCasualties,
-		);
-		sideCasualties[sideIdx] += transferredCasualties;
+		if (historicalCombatant) historicalCombatant.sideIndex = sideIdx;
 
 		for (const unit of units) {
 			if (unit.sovereignId !== id) continue;
@@ -28285,7 +29621,7 @@ export function recruitNeutralMidWar(id, sideIdx) {
 				previousSideUid: sideUids[oldSideIdx] || null,
 				newSideUid: sideUids[sideIdx] || null,
 				transferredFormations: countryFormationCount,
-				transferredPersonnel,
+				transferredPersonnel: transfer.surviving,
 			},
 			major: true,
 		});
@@ -28583,7 +29919,7 @@ export function _placeDivisionAt(latlng, sovereignId) {
 	const isMountainCell = idx !== -1 && terrainMask && terrainMask[idx] > 0.35;
 	const isAlpen = isMountainCell && gameplayRandom() < 0.4;
 
-	units.push({
+	const placedUnit = {
 		id: gameplayRandom(),
 		kind: "army",
 		lat: latlng.lat,
@@ -28595,13 +29931,29 @@ export function _placeDivisionAt(latlng, sovereignId) {
 		health: CONFIG.UNIT_HEALTH * (isAlpen ? CONFIG.ALPEN_HEALTH_MULT : 1),
 		lastAttack: 0,
 		deployTicks: 10,
-	});
+	};
+	setUnitFormationPersonnel(
+		placedUnit,
+		Math.max(
+			1,
+			Math.round(soldiersPerUnit[sideIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO),
+		),
+	);
+	units.push(placedUnit);
 
 	if (sideIdx >= 0 && sideIdx < MAX_SIDES) {
-		sideSoldiers[sideIdx] = Math.max(
+		const representedPersonnel = getLiveFormationPersonnel(placedUnit);
+		const available = Math.max(0, sideRecruitableManpower[sideIdx] || 0);
+		const unfundedPersonnel = Math.max(0, representedPersonnel - available);
+		sideRecruitableManpower[sideIdx] = Math.max(
 			0,
-			sideSoldiers[sideIdx] - soldiersPerUnit[sideIdx],
+			available - representedPersonnel,
 		);
+		// God-mode placement may create a formation even when the reserve is empty.
+		if (unfundedPersonnel > 0) {
+			sideSoldiers[sideIdx] += unfundedPersonnel;
+			initialSideSoldiers[sideIdx] += unfundedPersonnel;
+		}
 	}
 
 	statusText.innerText = `MANUAL DEPLOYMENT: Division placed for ${countryMetadata[sovereignId - 1]?.name || "Nation"}`;
@@ -29893,6 +31245,7 @@ export function resetConflictSetupState() {
 	activeSideIndex = 0;
 	sideSoldiers.fill(0);
 	initialSideSoldiers.fill(0);
+	sideRecruitableManpower.fill(0);
 	soldiersPerUnit.fill(CONFIG.UNIT_TO_SOLDIER_RATIO);
 	sideCasualties.fill(0);
 	units = [];

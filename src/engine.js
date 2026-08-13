@@ -15,7 +15,15 @@ import {
 	worldControlMap,
 } from "./main.js";
 
+let occupationChangeListener = null;
+
+export function setOccupationChangeListener(listener) {
+	occupationChangeListener = typeof listener === "function" ? listener : null;
+}
+
 function syncOccupationFromSideInfluence(idx) {
+	const previousSide = dominantSideMap[idx];
+	const previousOccupation = occupationMap[idx];
 	let bestSide = -1,
 		bestVal = 0;
 	for (let s = 0; s < sideInfluenceMaps.length; s++) {
@@ -44,6 +52,14 @@ function syncOccupationFromSideInfluence(idx) {
 	} else {
 		dominantSideMap[idx] = -1;
 		occupationMap[idx] = 0;
+	}
+	if (occupationChangeListener && previousSide !== dominantSideMap[idx]) {
+		occupationChangeListener(idx, {
+			previousSide,
+			nextSide: dominantSideMap[idx],
+			previousOccupation,
+			nextOccupation: occupationMap[idx],
+		});
 	}
 }
 

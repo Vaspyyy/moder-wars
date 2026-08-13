@@ -1,6 +1,6 @@
 // Service Worker — cache-first for same-origin static assets
 
-const CACHE_VERSION = "mw-v0.27.8";
+const CACHE_VERSION = "mw-v0.27.9";
 const CACHE_NAME = `mw-cache-${CACHE_VERSION}`;
 
 const PRECACHE_URLS = [
@@ -12,8 +12,11 @@ const PRECACHE_URLS = [
 	"/src/ai-task-forces.js",
 	"/src/experiment.js",
 	"/src/experiment-ui.js",
+	"/src/formation-strength.js",
 	"/src/operations.js",
 	"/src/performance-profiler.js",
+	"/src/simulation-jobs.js",
+	"/src/tactical-grid.js",
 	"/src/config.js",
 	"/src/combined-arms.js",
 	"/src/air-power.js",

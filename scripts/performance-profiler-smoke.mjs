@@ -5,6 +5,7 @@ import {
 	normalizePerfSuiteCases,
 	perfBaselineStorageKey,
 	summarizePerfSuiteRuns,
+	summarizeTacticalPerfReports,
 } from "../src/performance-profiler.js";
 
 const cases = normalizePerfSuiteCases(
@@ -65,5 +66,32 @@ incompatible.cases[0].config = { ...incompatible.cases[0].config, seed: 999 };
 assert.equal(comparePerfSuites(incompatible, baseline).verdict, "INCOMPARABLE");
 assert.equal(comparePerfSuites(incompatible, baseline).incompatibleCaseCount, 1);
 assert.equal(perfBaselineStorageKey("before"), "mw_perf_baseline_v1:before");
+
+const tacticalSummary = summarizeTacticalPerfReports([
+	{
+		ticks: { count: 20 },
+		units: { avg: 100 },
+		tactical: {
+			friendlyCandidatePairs: 400,
+			enemyCandidateVisits: 2000,
+			acceptedPairs: 100,
+			cacheHits: 1500,
+			cacheMisses: 500,
+			fastLaneUnits: 1000,
+		},
+	},
+]);
+assert.equal(tacticalSummary.medianFriendlyCandidatePairsPerTick, 20);
+assert.equal(tacticalSummary.medianEnemyCandidateVisitsPerUnitTick, 1);
+assert.equal(tacticalSummary.medianAcceptanceRate, 0.25);
+assert.equal(tacticalSummary.medianComparableAcceptanceRate, 0.25);
+assert.equal(tacticalSummary.medianCacheHitRate, 0.75);
+assert.equal(tacticalSummary.medianFastLaneShare, 0.5);
+
+const legacyTactical = summarizeTacticalPerfReports([
+	{ tactical: { candidateVisits: 100, acceptedPairs: 25 } },
+]);
+assert.equal(legacyTactical.medianAcceptanceRate, 0.25);
+assert.equal(legacyTactical.medianComparableAcceptanceRate, null);
 
 console.log("Performance profiler smoke tests passed");
