@@ -11,6 +11,7 @@ import {
 	hubReturnState,
 	hubScenarioCache,
 	hubWasInEditor,
+	initMultiplayer,
 	libraryList,
 	mainMenu,
 	mapUi,
@@ -30,7 +31,14 @@ import {
 	tabScenariosBtn,
 } from "./main.js";
 
-function openHub(initialTab = "scenarios") {
+async function openHub(initialTab = "scenarios") {
+	if (!room) {
+		try {
+			await initMultiplayer();
+		} catch (error) {
+			console.warn("Community connection unavailable", error);
+		}
+	}
 	const fade = document.getElementById("fade-transition-overlay");
 	const isFromEditor =
 		gameState === "EDITOR_ACTIVE" ||

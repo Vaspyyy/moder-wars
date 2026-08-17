@@ -1,6 +1,20 @@
 import { CONFIG } from "./config.js";
-import { _geoCacheGet, _geoCachePut, fetchJSONWithCache } from "./geo.js";
 import {
+	_geoCacheGet,
+	_geoCachePut,
+	fetchJSONWithCache,
+	getDerivedRaster,
+	PARSED_GEO_CACHE_REVISION,
+	putDerivedRaster,
+} from "./geo.js";
+import { rasterizeGeoFeaturesInWorker } from "./geo-raster.js";
+import {
+	combineScenarioEarthRasters,
+	loadPrederivedEarthRaster,
+} from "./geo-raster-assets.js";
+import { beginLoadTrace } from "./load-profiler.js";
+import {
+	activateImageryProvider,
 	activeScenarioId,
 	airPowerEnabled,
 	applyEarthDeserts,
@@ -69,6 +83,7 @@ import {
 	missilesEnabled,
 	mountainsEnabled,
 	noNationsModal,
+	notifyPoliticalMapLoaded,
 	occupationMap,
 	paintMaskId,
 	parseColorToRGBA,
@@ -136,6 +151,7 @@ import {
 	worldHeightDeg,
 	worldWidthDeg,
 } from "./main.js";
+import { loadScenario } from "./scenario-codec.js";
 
 function getFeatureBounds(feature) {
 	const geom = feature?.geometry?.coordinates;
@@ -342,6 +358,17 @@ async function loadTerrain(res) {
 		loadingStatus.innerText = "Scanning Topography...";
 		loadingBar.style.width = "35%";
 
+		// Every user-selectable global grid currently exceeds this threshold. Check
+		// before downloading multi-megabyte physical GeoJSON that would be discarded
+		// immediately after parsing.
+		const totalCells = (gridWidth || 0) * (gridHeight || 0);
+		if (totalCells > 600000) {
+			terrainMask.fill(0);
+			loadingBar.style.width = "100%";
+			loadingStatus.innerText = "Terrain simplified for performance";
+			return;
+		}
+
 		// Fallback to 50m if 10m is selected for physical features, as 10m physical data is often missing/split differently
 		const terrainRes = res === "110m" ? "110m" : "50m";
 		const terrainUrl = `${CONFIG.GEOJSON_BASE}${terrainRes}/physical/ne_${terrainRes}_geography_regions_polys.json`;
@@ -367,11 +394,9 @@ async function loadTerrain(res) {
 		// PERFORMANCE GUARD:
 		// On very large grids or huge terrain datasets, skip heavy per‑cell terrain processing
 		// to avoid getting "stuck" on the Scanning Topography step (especially on mobile).
-		const totalCells = (gridWidth || 0) * (gridHeight || 0);
-		const isHugeGrid = totalCells > 600000; // ~ > 600k cells
 		const isHugeFeatureSet = features.length > 400;
 
-		if (isHugeGrid || isHugeFeatureSet) {
+		if (isHugeFeatureSet) {
 			console.warn(
 				"Terrain processing skipped for performance (cells:",
 				totalCells,
@@ -530,7 +555,157 @@ async function loadTerrain(res) {
 	}
 }
 
-async function loadCountries(url, isBlank = false, suppressUi = false) {
+function scheduleIdleLoad(task) {
+	if (typeof requestIdleCallback === "function") {
+		requestIdleCallback(() => task(), { timeout: 3000 });
+	} else {
+		setTimeout(() => task(), 750);
+	}
+}
+
+function mapResolutionFromUrl(url) {
+	return String(url).match(/\/(10m|50m|110m)\//)?.[1] || "110m";
+}
+
+async function loadEarthRaster({
+	gridResolution,
+	gridWidth: targetWidth,
+	gridHeight: targetHeight,
+	mapResolution,
+	onProgress,
+	sourceUrl,
+}) {
+	try {
+		const prepared = await loadPrederivedEarthRaster(gridResolution, {
+			mapResolution,
+		});
+		if (
+			prepared &&
+			prepared.landMask.length === targetWidth * targetHeight &&
+			prepared.deJureMap.length === targetWidth * targetHeight
+		) {
+			return { ...prepared, rawData: null };
+		}
+		if (prepared) {
+			console.warn(
+				"Prepared Earth raster dimensions do not match the selected grid; rebuilding",
+			);
+		}
+	} catch (error) {
+		console.warn("Prepared Earth raster unavailable; rebuilding", error);
+	}
+
+	const rasterOptions = {
+		sourceUrl,
+		sourceRevision: PARSED_GEO_CACHE_REVISION,
+		gridResolution,
+		gridWidth: targetWidth,
+		gridHeight: targetHeight,
+		blank: true,
+	};
+	const cached = await getDerivedRaster(rasterOptions);
+	if (cached?.arrays) {
+		const deJureMap = cached.arrays.deJureMap || cached.arrays.ownerMap || null;
+		if (
+			cached.arrays.landMask?.length === targetWidth * targetHeight &&
+			deJureMap?.length === targetWidth * targetHeight
+		) {
+			return {
+				...cached.arrays,
+				deJureMap,
+				featureCount: null,
+				rawData: null,
+				sourceUrl,
+			};
+		}
+	}
+
+	const rawData = await fetchJSONWithCache(sourceUrl);
+	const arrays = await rasterizeGeoFeaturesInWorker(
+		rawData.features,
+		{
+			gridResolution,
+			gridWidth: targetWidth,
+			gridHeight: targetHeight,
+			blank: true,
+			maskValue: 1,
+		},
+		onProgress,
+	);
+	const deJureMap = arrays.ownerMap;
+	const cacheArrays = {
+		landMask: arrays.landMask,
+		deJureMap,
+		featureBounds: arrays.featureBounds,
+	};
+	scheduleIdleLoad(() => {
+		putDerivedRaster(rasterOptions, cacheArrays).catch((error) =>
+			console.warn("Deferred Earth raster cache write failed", error),
+		);
+	});
+	return {
+		...arrays,
+		deJureMap,
+		featureCount: rawData.features.length,
+		rawData,
+		sourceUrl,
+	};
+}
+
+async function loadScenarioEarthRaster({
+	gridResolution,
+	gridWidth: targetWidth,
+	gridHeight: targetHeight,
+	mapResolution,
+	onProgress,
+}) {
+	const selectedSourceUrl = `${CONFIG.GEOJSON_BASE}${mapResolution}/cultural/ne_${mapResolution}_admin_0_countries.json`;
+	const selectedPromise = loadEarthRaster({
+		gridResolution,
+		gridWidth: targetWidth,
+		gridHeight: targetHeight,
+		mapResolution,
+		onProgress,
+		sourceUrl: selectedSourceUrl,
+	});
+	if (mapResolution === "110m") return selectedPromise;
+
+	// Built-in scenario country IDs follow the 110m Natural Earth feature order.
+	// Higher-detail sources use a different order, so use them only for coastline
+	// precision and retain the canonical 110m owner IDs for de-jure semantics.
+	const canonicalSourceUrl = `${CONFIG.GEOJSON_BASE}110m/cultural/ne_110m_admin_0_countries.json`;
+	const canonicalPromise = loadEarthRaster({
+		gridResolution,
+		gridWidth: targetWidth,
+		gridHeight: targetHeight,
+		mapResolution: "110m",
+		sourceUrl: canonicalSourceUrl,
+	});
+	const [selected, canonical] = await Promise.all([
+		selectedPromise,
+		canonicalPromise,
+	]);
+	return combineScenarioEarthRasters(selected, canonical);
+}
+
+let worldLoadGeneration = 0;
+
+async function loadCountries(
+	url,
+	isBlank = false,
+	suppressUi = false,
+	loadGenerationOverride = null,
+) {
+	const loadGeneration =
+		loadGenerationOverride === null
+			? ++worldLoadGeneration
+			: loadGenerationOverride;
+	const loadTrace = suppressUi
+		? null
+		: beginLoadTrace(isBlank ? "earth-editor" : "political-map", {
+				sourceUrl: url,
+				gridResolution: CONFIG.GRID_RES,
+			});
 	try {
 		if (!suppressUi) {
 			setLoadingThematic(false);
@@ -540,43 +715,185 @@ async function loadCountries(url, isBlank = false, suppressUi = false) {
 		}
 		loadingStatus.innerText = "Downloading GeoData...";
 		loadingBar.style.width = "10%";
+		let loadedBlankRaster = null;
+		const usePreparedBlankEarth = isBlank && !suppressUi;
 
-		await Promise.all([loadCities(), loadFlagCodes()]);
-		loadingBar.style.width = "20%";
-		loadingTip.innerText =
-			"Refining city coordinates for strategic deployment...";
+		if (usePreparedBlankEarth) {
+			loadingStatus.innerText = "Loading Prepared Landmasses...";
+			setCities([]);
+			const raster = await loadEarthRaster({
+				gridResolution: CONFIG.GRID_RES,
+				gridWidth,
+				gridHeight,
+				mapResolution: mapResolutionFromUrl(url),
+				sourceUrl: url,
+				onProgress(progress) {
+					const percent = Math.floor(
+						(progress.completed / Math.max(1, progress.total)) * 100,
+					);
+					loadingBar.style.width = `${percent}%`;
+					loadingStatus.innerText = `Scanning Landmasses: ${percent}%`;
+				},
+			});
+			worldControlMap.fill(0);
+			occupationMap.fill(0);
+			resetSideInfluenceMaps();
+			primaryOccupierMap.fill(0);
+			landMask.set(raster.landMask);
+			deJureMap.set(raster.deJureMap);
+			biomeMask.fill(0);
+			setCountryMetadata([]);
+			setRawGeoJsonData(raster.rawData);
+			applyEarthDeserts();
+			loadedBlankRaster = {
+				deJureMap: raster.deJureMap,
+				landMask: raster.landMask,
+			};
+			loadingBar.style.width = "100%";
+			loadingStatus.innerText = "Landmasses Ready";
+			loadTrace?.mark("prepared-earth-ready", {
+				assetBytes: raster.assetBytes || 0,
+				bytesSource: raster.sourceUrl,
+				features: raster.featureCount,
+			});
 
-		const data = await fetchJSONWithCache(url);
-		setRawGeoJsonData(data);
-		loadingBar.style.width = "30%";
-		loadingStatus.innerText = isBlank
-			? "Acquiring Topography..."
-			: "Processing Geopolitics...";
+			// Raw feature geometry, flags, and cities are editor conveniences rather
+			// than prerequisites for displaying the blank Earth canvas. Hydrate them
+			// after the editor becomes usable so they do not hold the loading screen.
+			scheduleIdleLoad(async () => {
+				if (loadGeneration !== worldLoadGeneration) return;
+				try {
+					const [, , data] = await Promise.all([
+						loadCities(() => loadGeneration === worldLoadGeneration, true),
+						loadFlagCodes(),
+						raster.rawData
+							? Promise.resolve(raster.rawData)
+							: fetchJSONWithCache(url),
+					]);
+					if (loadGeneration !== worldLoadGeneration) return;
+					setRawGeoJsonData(data);
+					setInitialCitiesSnapshot(deepClone(cities));
+					influenceLayer?.render();
+				} catch (error) {
+					console.warn("Deferred editor geography hydration failed:", error);
+				}
+			});
+		} else {
+			await Promise.all([loadCities(), loadFlagCodes()]);
+			loadTrace?.mark("support-data-ready");
+			loadingBar.style.width = "20%";
+			loadingTip.innerText =
+				"Refining city coordinates for strategic deployment...";
 
-		// Static countriesLayer removed to prevent outlines of annexed nations from persisting.
-		// Borders and coastlines are now entirely handled by the dynamic canvas overlay.
+			const data = await fetchJSONWithCache(url);
+			loadTrace?.mark("geodata-ready", {
+				features: data?.features?.length || 0,
+			});
+			setRawGeoJsonData(data);
+			loadingBar.style.width = "30%";
+			loadingStatus.innerText = isBlank
+				? "Acquiring Topography..."
+				: "Processing Geopolitics...";
+			loadingTip.innerText = isBlank
+				? "Cleaning political data..."
+				: "Calculating terrain influence grids...";
 
-		// Pre-compute basic landmask for better performance
-		loadingTip.innerText = isBlank
-			? "Cleaning political data..."
-			: "Calculating terrain influence grids...";
-		await updateLandMask(data.features, 1, isBlank);
+			if (isBlank) {
+				const rasterOptions = {
+					sourceUrl: url,
+					sourceRevision: PARSED_GEO_CACHE_REVISION,
+					gridResolution: CONFIG.GRID_RES,
+					gridWidth,
+					gridHeight,
+					blank: true,
+				};
+				const cached = await getDerivedRaster(rasterOptions);
+				let arrays = cached?.arrays || null;
+				if (!arrays) {
+					arrays = await rasterizeGeoFeaturesInWorker(
+						data.features,
+						{
+							gridResolution: CONFIG.GRID_RES,
+							gridWidth,
+							gridHeight,
+							blank: true,
+							maskValue: 1,
+						},
+						(progress) => {
+							const percent = Math.floor(
+								(progress.completed / Math.max(1, progress.total)) * 100,
+							);
+							loadingBar.style.width = `${percent}%`;
+							loadingStatus.innerText = `Scanning Landmasses: ${percent}%`;
+						},
+					);
+					const cacheArrays = {
+						landMask: arrays.landMask,
+						deJureMap: arrays.ownerMap,
+						featureBounds: arrays.featureBounds,
+					};
+					scheduleIdleLoad(() => putDerivedRaster(rasterOptions, cacheArrays));
+				}
+				worldControlMap.fill(0);
+				occupationMap.fill(0);
+				resetSideInfluenceMaps();
+				primaryOccupierMap.fill(0);
+				landMask.set(arrays.landMask);
+				deJureMap.set(arrays.deJureMap || arrays.ownerMap);
+				biomeMask.fill(0);
+				setCountryMetadata([]);
+				applyEarthDeserts();
+				loadedBlankRaster = {
+					deJureMap: arrays.deJureMap || arrays.ownerMap,
+					landMask: arrays.landMask,
+				};
+			} else {
+				worldControlMap.fill(0);
+				occupationMap.fill(0);
+				resetSideInfluenceMaps();
+				primaryOccupierMap.fill(0);
+				landMask.fill(0);
+				deJureMap.fill(0);
+				biomeMask.fill(0);
+				await updateLandMask(data.features, 1, false);
+			}
+		}
+		loadTrace?.mark("land-raster-ready");
 
-		// Generate provinces after landmask is set and worldControlMap is populated
-		generateProvinces();
+		// Blank geography has no political owners, so a full procedural province
+		// pass can only write zeroes. Avoid scanning the entire grid for that no-op.
+		if (isBlank) {
+			provinceMap.fill(0);
+			notifyPoliticalMapLoaded();
+		} else {
+			generateProvinces();
+		}
+		loadTrace?.mark("provinces-ready");
 
 		// Generate initial country centers and label data
-		recalculateAllBounds();
+		if (!isBlank || countryMetadata.some(Boolean)) recalculateAllBounds();
 
 		// Reset adjacency cache
 		setAdjacencyCache(null);
 
 		// Capture Instant Quick Restart Snapshots for the base map load
-		if (worldControlMap) {
-			setInitialWorldControlMapSnapshot(new Uint16Array(worldControlMap));
-			setInitialDeJureMapSnapshot(new Uint16Array(deJureMap));
-			setInitialProvinceMapSnapshot(new Int32Array(provinceMap));
-			setInitialLandMaskSnapshot(new Uint8Array(landMask));
+		if (worldControlMap && !suppressUi) {
+			setInitialWorldControlMapSnapshot(
+				isBlank
+					? new Uint16Array(worldControlMap.length)
+					: new Uint16Array(worldControlMap),
+			);
+			setInitialDeJureMapSnapshot(
+				loadedBlankRaster?.deJureMap || new Uint16Array(deJureMap),
+			);
+			setInitialProvinceMapSnapshot(
+				isBlank
+					? new Int32Array(provinceMap.length)
+					: new Int32Array(provinceMap),
+			);
+			setInitialLandMaskSnapshot(
+				loadedBlankRaster?.landMask || new Uint8Array(landMask),
+			);
 			setInitialCountryMetadataSnapshot(deepClone(countryMetadata));
 			setInitialCitiesSnapshot(deepClone(cities));
 		}
@@ -588,18 +905,23 @@ async function loadCountries(url, isBlank = false, suppressUi = false) {
 		} else {
 			terrainMask.fill(0);
 		}
+		loadTrace?.mark("terrain-ready");
 
 		if (!suppressUi) {
-			// Brief delay for visual confirmation
-			setTimeout(() => {
-				loadingOverlay.style.display = "none";
-				mapUi.style.display = "flex";
-			}, 500);
+			loadingOverlay.style.display = "none";
+			mapUi.style.display = "flex";
+			activateImageryProvider();
 		}
+		loadTrace?.finish({
+			cells: worldControlMap?.length || 0,
+			countries: countryMetadata.filter(Boolean).length,
+		});
 	} catch (err) {
+		loadTrace?.fail(err);
 		console.error("Failed to load geojson", err);
 		loadingStatus.innerText = "Error Loading Assets";
 		loadingStatus.style.color = "#ff4757";
+		if (suppressUi) throw err;
 	}
 }
 
@@ -1049,7 +1371,11 @@ function generatePresetData(name) {
 	};
 }
 
-async function performPresetLoad(fileOrBlob, targetMode = "EDITOR") {
+async function performPresetLoad(
+	fileOrBlob,
+	targetMode = "EDITOR",
+	options = {},
+) {
 	if (!fileOrBlob) return;
 
 	const MAX_PRESET_SIZE = 200 * 1024 * 1024;
@@ -1059,7 +1385,19 @@ async function performPresetLoad(fileOrBlob, targetMode = "EDITOR") {
 		return;
 	}
 
+	const loadGeneration = ++worldLoadGeneration;
+	const isCompiledSource =
+		typeof fileOrBlob === "string" ||
+		(typeof URL !== "undefined" && fileOrBlob instanceof URL);
 	let userChoice = { action: "skip" };
+	const loadTrace = beginLoadTrace("scenario", {
+		targetMode,
+		source:
+			typeof fileOrBlob === "string" ? fileOrBlob : fileOrBlob.name || "blob",
+		gridResolution: Number(
+			document.getElementById("grid-res-select")?.value || CONFIG.GRID_RES,
+		),
+	});
 
 	try {
 		// Reset Selector transition state if we're coming from there
@@ -1072,28 +1410,94 @@ async function performPresetLoad(fileOrBlob, targetMode = "EDITOR") {
 		loadingOverlay.style.display = "flex";
 		loadingStatus.innerText = "Processing Archives...";
 
-		const text = await fileOrBlob.text();
-		const data = JSON.parse(text);
-
-		if (!data?.metadata || !data.mapData) {
-			throw new Error("Invalid preset structure");
-		}
-
 		// Ensure engine is initialized with the CURRENT grid density before we use worldControlMap.
 		// This fixes cases where a preset was saved at a low grid density, but your settings are now higher.
 		const gridSelect = document.getElementById("grid-res-select");
 		const desiredGridRes = gridSelect
 			? parseFloat(gridSelect.value)
 			: CONFIG.GRID_RES;
+		const selectedMapResolution =
+			document.getElementById("map-res-select")?.value || "110m";
+		const targetGridWidth = Math.ceil(360 / desiredGridRes);
+		const targetGridHeight = Math.ceil(180 / desiredGridRes);
+		let compiledMaps = null;
+		let prederivedEarth = null;
+		let data;
+
+		if (isCompiledSource) {
+			const scenarioPromise = loadScenario(fileOrBlob, {
+				jsonFallbackUrl: options.jsonFallbackUrl,
+				targetGridRes: desiredGridRes,
+				targetWidth: targetGridWidth,
+				targetHeight: targetGridHeight,
+				onProgress(progress) {
+					if (progress.phase === "download") {
+						const ratio = Number(progress.ratio);
+						if (Number.isFinite(ratio)) {
+							const downloadPercent = Math.round(Math.min(1, ratio) * 100);
+							loadingBar.style.width = `${5 + Math.round(downloadPercent * 0.4)}%`;
+							loadingStatus.innerText = `Downloading Scenario: ${downloadPercent}%`;
+						}
+					} else if (progress.phase === "decompress") {
+						loadingBar.style.width = "48%";
+						loadingStatus.innerText = "Unpacking World Data...";
+					} else if (progress.phase === "decode") {
+						loadingBar.style.width = "55%";
+						loadingStatus.innerText = "Building Strategic Grid...";
+					}
+				},
+			});
+			const earthPromise = options.prederivedEarth
+				? loadScenarioEarthRaster({
+						gridResolution: desiredGridRes,
+						gridWidth: targetGridWidth,
+						gridHeight: targetGridHeight,
+						mapResolution: selectedMapResolution,
+						onProgress(progress) {
+							const ratio = progress.completed / Math.max(1, progress.total);
+							loadingBar.style.width = `${55 + Math.round(ratio * 20)}%`;
+							loadingStatus.innerText = `Scanning Landmasses: ${Math.round(ratio * 100)}%`;
+						},
+					})
+				: Promise.resolve(null);
+			[compiledMaps, prederivedEarth] = await Promise.all([
+				scenarioPromise,
+				earthPromise,
+			]);
+			data = compiledMaps.scenario;
+			loadTrace.mark("scenario-decoded", {
+				downloadBytes: compiledMaps.timing.downloadBytes,
+				earthRasterBytes: prederivedEarth?.assetBytes || 0,
+				format: compiledMaps.format,
+				entries: compiledMaps.entryCount,
+				downloadMs: compiledMaps.timing.downloadMs,
+				decompressMs: compiledMaps.timing.decompressMs,
+				decodeMs: compiledMaps.timing.decodeMs,
+				prederivedEarth: Boolean(prederivedEarth),
+			});
+		} else {
+			const text = await fileOrBlob.text();
+			data = JSON.parse(text);
+			loadTrace.mark("scenario-decoded", {
+				format: "json",
+				bytes: fileOrBlob.size || text.length,
+				entries: data?.mapData?.length || 0,
+			});
+		}
+
+		if (!data?.metadata || (!compiledMaps && !data.mapData)) {
+			throw new Error("Invalid preset structure");
+		}
 
 		if (!worldControlMap || CONFIG.GRID_RES !== desiredGridRes) {
 			// Update engine config to the desired grid resolution and reallocate all grid arrays.
 			CONFIG.GRID_RES = desiredGridRes;
-			initializeEngine();
+			initializeEngine(false);
 		} else {
 			// Sync settings state (mountains/provinces) even if resolution hasn't changed
-			initializeEngine();
+			initializeEngine(false);
 		}
+		loadTrace.mark("engine-ready", { cells: worldControlMap?.length || 0 });
 
 		// Always clear previous conflict setup / selection so old picks don't bleed into new scenarios
 		resetConflictSetupState();
@@ -1102,14 +1506,14 @@ async function performPresetLoad(fileOrBlob, targetMode = "EDITOR") {
 		if (data.imagery) {
 			// If this is a custom terrain map, we always use the preset's imagery
 			if (data.isCustomTerrain) {
-				setImageryProvider(data.imagery, false);
+				setImageryProvider(data.imagery, false, false);
 			} else {
 				// If it's NOT a custom map, ignore the preset's imagery and stick to current user settings
 				// But handle the case where it might need a fallback if none selected
 				const currentUserImagery = imagerySelect
 					? imagerySelect.value
 					: getCookie("mw_imagery") || "arcgis";
-				setImageryProvider(currentUserImagery, true);
+				setImageryProvider(currentUserImagery, true, false);
 			}
 		}
 		if (data.disableCountryGradient !== undefined) {
@@ -1212,12 +1616,36 @@ async function performPresetLoad(fileOrBlob, targetMode = "EDITOR") {
 			setReferenceOverlay(null);
 		}
 
-		// Optimization: Use cached GeoJSON if available to skip redundant network requests and processing
-		// But only if this isn't a custom painted map that doesn't need them
-		if (!rawGeoJsonData && !data.isCustomTerrain) {
+		// Built-in compiled scenarios already contain their control grid. Pair them
+		// with selected-resolution land and canonical 110m de-jure IDs without
+		// downloading or scanning Natural Earth GeoJSON.
+		if (compiledMaps) {
+			setRawGeoJsonData(prederivedEarth?.rawData || null);
+			worldControlMap.fill(0);
+			occupationMap.fill(0);
+			resetSideInfluenceMaps();
+			primaryOccupierMap.fill(0);
+			provinceMap.fill(0);
+			biomeMask.fill(0);
+			if (prederivedEarth && !data.isCustomTerrain) {
+				if (
+					prederivedEarth.landMask.length !== landMask.length ||
+					prederivedEarth.deJureMap.length !== deJureMap.length
+				) {
+					throw new Error(
+						"Prederived Earth raster dimensions do not match grid",
+					);
+				}
+				landMask.set(prederivedEarth.landMask);
+				deJureMap.set(prederivedEarth.deJureMap);
+			} else {
+				landMask.set(compiledMaps.land);
+				deJureMap.set(compiledMaps.deJure);
+			}
+		} else if (!rawGeoJsonData && !data.isCustomTerrain) {
 			const mapRes = document.getElementById("map-res-select").value;
 			const geoUrl = `${CONFIG.GEOJSON_BASE}${mapRes}/cultural/ne_${mapRes}_admin_0_countries.json`;
-			await loadCountries(geoUrl, true, true);
+			await loadCountries(geoUrl, true, true, loadGeneration);
 		} else if (!data.isCustomTerrain) {
 			// If we have GeoJSON, we still need to reset the masks but don't need to re-download
 			worldControlMap.fill(0);
@@ -1229,6 +1657,7 @@ async function performPresetLoad(fileOrBlob, targetMode = "EDITOR") {
 			deJureMap.fill(0);
 			// Land mask is usually preserved from first boot load but ensure it is ready
 		}
+		loadTrace.mark("geography-ready");
 
 		// Check for empty metadata and prompt for procedural generation
 		const metaList = data.metadata || [];
@@ -1250,6 +1679,7 @@ async function performPresetLoad(fileOrBlob, targetMode = "EDITOR") {
 
 		// Restore metadata and reconstruct RGBA values for rendering
 		const currentLang = getCookie("mw_lang") || "en";
+		const deferredFlagLoads = [];
 
 		// Reset and rebuild metadata
 		setCountryMetadata([]);
@@ -1316,7 +1746,9 @@ async function performPresetLoad(fileOrBlob, targetMode = "EDITOR") {
 			if (meta.flagUrl) {
 				meta.tempFlag = new Image();
 				meta.tempFlag.crossOrigin = "anonymous";
-				meta.tempFlag.src = meta.flagUrl;
+				deferredFlagLoads.push(() => {
+					meta.tempFlag.src = meta.flagUrl;
+				});
 			}
 
 			// Load alliance flag image (used in Alliance View for both regions and units)
@@ -1326,10 +1758,15 @@ async function performPresetLoad(fileOrBlob, targetMode = "EDITOR") {
 				meta.allianceFlagTempFlag.onload = () => {
 					if (influenceLayer) influenceLayer.render();
 				};
-				meta.allianceFlagTempFlag.src = meta.allianceFlagUrl;
+				deferredFlagLoads.push(() => {
+					meta.allianceFlagTempFlag.src = meta.allianceFlagUrl;
+				});
 			}
 
 			countryMetadata[m.id - 1] = meta;
+		});
+		loadTrace.mark("metadata-ready", {
+			countries: countryMetadata.filter(Boolean).length,
 		});
 
 		worldControlMap.fill(0);
@@ -1344,16 +1781,36 @@ async function performPresetLoad(fileOrBlob, targetMode = "EDITOR") {
 			landMask.fill(0);
 		}
 
-		// Coordinate Remapping: If source resolution differs from current engine settings,
-		// we re-project each point to the new grid coordinate system.
+		// Compiled scenarios arrive as target-resolution typed arrays from the worker.
+		// Legacy/community JSON keeps the existing main-thread remapping fallback.
 		const sourceRes = data.gridRes || CONFIG.GRID_RES;
 		const targetRes = CONFIG.GRID_RES;
 		const sourceGridWidth = Math.ceil(360 / sourceRes);
+		const mapData = data.mapData || [];
+		const totalEntries = compiledMaps
+			? compiledMaps.entryCount
+			: mapData.length;
 
-		const mapData = data.mapData;
-		const totalEntries = mapData.length;
-
-		if (sourceRes === targetRes) {
+		if (compiledMaps) {
+			for (const [name, source, target] of [
+				["control", compiledMaps.worldControl, worldControlMap],
+				["biome", compiledMaps.biome, biomeMask],
+				["province", compiledMaps.province, provinceMap],
+			]) {
+				if (source.length !== target.length) {
+					throw new Error(
+						`Compiled ${name} grid dimensions do not match engine`,
+					);
+				}
+				target.set(source);
+			}
+			if (data.isCustomTerrain || !prederivedEarth) {
+				if (compiledMaps.land.length !== landMask.length) {
+					throw new Error("Compiled land grid dimensions do not match engine");
+				}
+				landMask.set(compiledMaps.land);
+			}
+		} else if (sourceRes === targetRes) {
 			// Optimized bulk assignment
 			for (let i = 0; i < totalEntries; i++) {
 				const entry = mapData[i];
@@ -1410,6 +1867,7 @@ async function performPresetLoad(fileOrBlob, targetMode = "EDITOR") {
 				}
 			}
 		}
+		loadTrace.mark("control-map-ready", { entries: totalEntries });
 
 		// Restore mountain data
 		terrainMask.fill(0);
@@ -1429,9 +1887,13 @@ async function performPresetLoad(fileOrBlob, targetMode = "EDITOR") {
 				"110m";
 			await loadTerrain(resToUse);
 		}
+		loadTrace.mark("terrain-ready");
 
-		// Re-generate provinces for the loaded preset to ensure they respect the new borders
-		generateProvinces();
+		// Compiled loads already received an exact province grid from the worker.
+		// Legacy loads retain the procedural pass on the main thread.
+		if (compiledMaps) notifyPoliticalMapLoaded();
+		else generateProvinces();
+		loadTrace.mark("provinces-ready");
 
 		// Reset adjacency cache whenever map changes
 		setAdjacencyCache(null);
@@ -1453,6 +1915,7 @@ async function performPresetLoad(fileOrBlob, targetMode = "EDITOR") {
 		} else {
 			await loadCities();
 		}
+		loadTrace.mark("cities-ready", { cities: cities.length });
 
 		setGameMode(targetMode);
 		mainMenu.style.display = "none";
@@ -1486,32 +1949,70 @@ async function performPresetLoad(fileOrBlob, targetMode = "EDITOR") {
 		}
 
 		// Capture Instant Quick Restart Snapshots immediately upon scenario load
-		setInitialWorldControlMapSnapshot(new Uint16Array(worldControlMap));
-		setInitialDeJureMapSnapshot(new Uint16Array(deJureMap));
-		setInitialProvinceMapSnapshot(new Int32Array(provinceMap));
-		setInitialLandMaskSnapshot(new Uint8Array(landMask));
+		setInitialWorldControlMapSnapshot(
+			compiledMaps?.worldControl || new Uint16Array(worldControlMap),
+		);
+		setInitialDeJureMapSnapshot(
+			prederivedEarth?.deJureMap ||
+				compiledMaps?.deJure ||
+				new Uint16Array(deJureMap),
+		);
+		setInitialProvinceMapSnapshot(
+			compiledMaps?.province || new Int32Array(provinceMap),
+		);
+		setInitialLandMaskSnapshot(
+			prederivedEarth?.landMask ||
+				compiledMaps?.land ||
+				new Uint8Array(landMask),
+		);
 		setInitialCountryMetadataSnapshot(deepClone(countryMetadata));
 		setInitialCitiesSnapshot(deepClone(cities));
 
 		// Compute urban population per country for army size estimation
 		computeCountryUrbanPop();
 
-		setTimeout(async () => {
-			// If the user chose to generate random nations earlier, trigger it now after the grid is ready
-			if (metaList.length === 0 && userChoice.action === "generate") {
-				await spawnRandomNationsAcrossMap(userChoice.count);
-			}
+		// If the user chose to generate random nations earlier, trigger it now after
+		// the grid is ready. There is no artificial confirmation delay: the overlay
+		// closes as soon as the actual initialization work is complete.
+		if (metaList.length === 0 && userChoice.action === "generate") {
+			await spawnRandomNationsAcrossMap(userChoice.count);
+		}
 
-			recalculateAllBounds();
-			loadingOverlay.style.display = "none";
-			mapUi.style.display = "flex";
-			influenceLayer.render();
-			updateRestartVisibility();
-		}, 500);
-	} catch (err) {
-		console.error("Satellite Load Error:", err);
-		alert(`Error loading preset: ${err.message || "File may be corrupted"}`);
+		recalculateAllBounds();
 		loadingOverlay.style.display = "none";
+		mapUi.style.display = "flex";
+		activateImageryProvider();
+		influenceLayer.render();
+		updateRestartVisibility();
+		if (compiledMaps && !data.isCustomTerrain && !prederivedEarth?.rawData) {
+			const geoUrl = `${CONFIG.GEOJSON_BASE}${selectedMapResolution}/cultural/ne_${selectedMapResolution}_admin_0_countries.json`;
+			scheduleIdleLoad(async () => {
+				if (loadGeneration !== worldLoadGeneration) return;
+				try {
+					const rawData = await fetchJSONWithCache(geoUrl);
+					if (loadGeneration === worldLoadGeneration) {
+						setRawGeoJsonData(rawData);
+					}
+				} catch (error) {
+					console.warn("Deferred scenario geography hydration failed:", error);
+				}
+			});
+		}
+		scheduleIdleLoad(() => {
+			if (loadGeneration !== worldLoadGeneration) return;
+			for (const startFlagLoad of deferredFlagLoads) startFlagLoad();
+		});
+		return loadTrace.finish({
+			cells: worldControlMap.length,
+			countries: countryMetadata.filter(Boolean).length,
+			cities: cities.length,
+		});
+	} catch (err) {
+		loadTrace.fail(err);
+		console.error("Satellite Load Error:", err);
+		loadingOverlay.style.display = "none";
+		if (isCompiledSource) throw err;
+		alert(`Error loading preset: ${err.message || "File may be corrupted"}`);
 	}
 }
 

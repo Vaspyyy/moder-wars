@@ -1,5 +1,3 @@
-import JSZip from "jszip";
-
 import L from "leaflet";
 import {
 	createAiIntelObserverSnapshot,
@@ -106,6 +104,7 @@ import {
 	perfBaselineStorageKey,
 	summarizePerfSuiteRuns,
 } from "./performance-profiler.js";
+import { COMPILED_SCENARIO_URLS } from "./scenario-codec.js";
 import {
 	createDeterministicJob,
 	createDeterministicJobQueue,
@@ -136,6 +135,12 @@ import {
 	getDeJureControlBySide,
 	getSideLedger,
 } from "./territory-ledger.js";
+
+let _jsZipPromise = null;
+async function getJSZip() {
+	_jsZipPromise ||= import("jszip").then((module) => module.default);
+	return _jsZipPromise;
+}
 
 let _experimentSeed = normalizeSeed(createRandomSeed());
 let _gameplayRng = createSeededRng(_experimentSeed);
@@ -1496,20 +1501,28 @@ export const loadImmediate = async (url) => {
 	}
 };
 
-// Start loading the click sound instantly
-loadImmediate(clickUrl).then((buffer) => {
-	if (buffer) clickBuffer = buffer;
-});
+let _clickLoadPromise = null;
 
-export async function initAudio() {
-	// Resume context if suspended (common browser policy on first click)
+/** Unlock audio from a user gesture without starting the full soundtrack download. */
+export async function primeAudio() {
 	if (audioCtx.state === "suspended") {
 		try {
 			await audioCtx.resume();
-		} catch (_e) {
-			console.warn("AudioContext resume failed", _e);
+		} catch (error) {
+			console.warn("AudioContext resume failed", error);
 		}
 	}
+	if (!clickBuffer) {
+		_clickLoadPromise ||= loadImmediate(clickUrl).then((buffer) => {
+			if (buffer) clickBuffer = buffer;
+			return buffer;
+		});
+	}
+	return _clickLoadPromise;
+}
+
+export async function initAudio() {
+	await primeAudio();
 
 	if (isAudioLoading) return;
 
@@ -1788,10 +1801,9 @@ document.addEventListener(
 			audioCtx.resume().catch(() => {});
 		}
 
-		// Attempt to start OST on any interaction if not already playing
-		if (!bgMusicSource && !isAudioLoading) {
-			initAudio();
-		}
+		// Unlock only the tiny click sound here. Full soundtrack/effect downloads
+		// begin after the selected world has finished loading.
+		primeAudio();
 
 		const interactiveSelector =
 			'button, .menu-card, input, select, [role="button"], .side-header';
@@ -2926,7 +2938,7 @@ function scheduleWarLifecycleCallback(
 }
 
 const PERF_COUNTER_DEFAULTS = {
-	_version: "V0.27.10",
+	_version: "V0.27.11",
 	_mode: "off",
 	_enabled: false,
 	plans: 0,
@@ -4887,15 +4899,22 @@ function dispatchFrontlineWork(includeField = false, includeLayout = false) {
 export let baseImageryLayer = null;
 export const imagerySelect = document.getElementById("imagery-select");
 
-export function setImageryProvider(provider, persist = true) {
+let _selectedImageryProvider = "arcgis";
+
+export function setImageryProvider(
+	provider,
+	persist = true,
+	activate = gameState !== "MAIN_MENU",
+) {
 	if (!provider || provider === "undefined") provider = "arcgis";
+	_selectedImageryProvider = provider;
 
 	if (baseImageryLayer) {
 		map.removeLayer(baseImageryLayer);
 		baseImageryLayer = null;
 	}
 
-	if (provider === "arcgis") {
+	if (activate && provider === "arcgis") {
 		baseImageryLayer = L.tileLayer(
 			"https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
 			{
@@ -4905,7 +4924,7 @@ export function setImageryProvider(provider, persist = true) {
 			},
 		);
 		baseImageryLayer.addTo(map);
-	} else if (provider === "google") {
+	} else if (activate && provider === "google") {
 		baseImageryLayer = L.tileLayer(
 			"https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
 			{
@@ -4916,7 +4935,7 @@ export function setImageryProvider(provider, persist = true) {
 			},
 		);
 		baseImageryLayer.addTo(map);
-	} else if (provider === "google_cartoon") {
+	} else if (activate && provider === "google_cartoon") {
 		baseImageryLayer = L.tileLayer(
 			"https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
 			{
@@ -4943,6 +4962,10 @@ export function setImageryProvider(provider, persist = true) {
 		influenceLayer._forceRender = true;
 		if (typeof influenceLayer._update === "function") influenceLayer._update();
 	}
+}
+
+export function activateImageryProvider() {
+	setImageryProvider(_selectedImageryProvider, false, true);
 }
 
 /*
@@ -5062,6 +5085,11 @@ export function generateProvinces() {
 			provinceMap[idx] = getProvinceId(x, y, worldControlMap[idx]);
 		}
 	}
+	notifyPoliticalMapLoaded();
+}
+
+/** Invalidate political-map consumers after a precomputed grid is installed. */
+export function notifyPoliticalMapLoaded() {
 	_politicalMapRevision++;
 	_neutralBorderCacheSignature = "";
 	_territoryLedger?.markAllDirty();
@@ -6340,27 +6368,28 @@ export function applyEarthDeserts() {
 		{ lat: [35, 45], lng: [52, 72] }, // Central Asian (Kyzylkum/Kara-Kum)
 	];
 
-	for (let i = 0; i < landMask.length; i++) {
-		if (landMask[i] === 0) continue;
-
-		const y = Math.floor(i / gridWidth);
-		const x = i % gridWidth;
-		const lat = y * CONFIG.GRID_RES - 90;
-		const lng = x * CONFIG.GRID_RES - 180;
-
-		for (const d of deserts) {
-			if (
-				lat >= d.lat[0] &&
-				lat <= d.lat[1] &&
-				lng >= d.lng[0] &&
-				lng <= d.lng[1]
-			) {
+	const res = CONFIG.GRID_RES;
+	for (const desert of deserts) {
+		const yStart = Math.max(0, Math.ceil((desert.lat[0] + 90) / res));
+		const yEnd = Math.min(
+			gridHeight - 1,
+			Math.floor((desert.lat[1] + 90) / res),
+		);
+		const xStart = Math.max(0, Math.ceil((desert.lng[0] + 180) / res));
+		const xEnd = Math.min(
+			gridWidth - 1,
+			Math.floor((desert.lng[1] + 180) / res),
+		);
+		for (let y = yStart; y <= yEnd; y++) {
+			const lat = y * res - 90;
+			const rowOffset = y * gridWidth;
+			for (let x = xStart; x <= xEnd; x++) {
+				const index = rowOffset + x;
+				if (landMask[index] === 0) continue;
+				const lng = x * res - 180;
 				// Apply a sinus-based noise threshold to prevent perfectly rectangular deserts
-				const n = Math.sin(lat * 3.5) * Math.cos(lng * 3.5);
-				if (n > -0.85) {
-					biomeMask[i] = 1;
-				}
-				break;
+				const noise = Math.sin(lat * 3.5) * Math.cos(lng * 3.5);
+				if (noise > -0.85) biomeMask[index] = 1;
 			}
 		}
 	}
@@ -6729,13 +6758,16 @@ export function findCodeByName(name) {
 	return aliases[search] || null;
 }
 
-export async function loadCities() {
+export async function loadCities(
+	shouldApply = () => true,
+	preserveExistingCustom = false,
+) {
 	try {
 		// Upgrade to 50m resolution for a significantly higher city count (thousands vs hundreds)
 		const url =
 			"assets/geodata/50m/cultural/ne_50m_populated_places_simple.json";
 		const data = await fetchJSONWithCache(url);
-		cities = data.features.map((f, idx) => ({
+		const loadedCities = data.features.map((f, idx) => ({
 			id: idx + 1,
 			name: f.properties.name || f.properties.NAME || "City",
 			lat: f.geometry.coordinates[1],
@@ -6745,6 +6777,16 @@ export async function loadCities() {
 			ownerId: null,
 			isCustom: false,
 		}));
+		if (!shouldApply()) return false;
+		const customCities = preserveExistingCustom
+			? cities
+					.filter((city) => city?.isCustom)
+					.map((city, index) => ({
+						...city,
+						id: loadedCities.length + index + 1,
+					}))
+			: [];
+		setCities([...loadedCities, ...customCities]);
 
 		// Apply historical renames for the 1936 WW2 scenario
 		if (currentScenarioContext && currentScenarioContext.id === "ww2_1936") {
@@ -6757,8 +6799,10 @@ export async function loadCities() {
 				}
 			});
 		}
+		return true;
 	} catch (err) {
 		console.error("Failed to load cities", err);
+		return false;
 	}
 }
 
@@ -13070,10 +13114,10 @@ export async function startBenchmark(options = {}) {
 		mainMenu.style.display = "none";
 		try {
 			const url = "assets/maps/world map 2022.json";
-			const response = await fetch(url);
-			if (!response.ok) throw new Error("Failed to fetch modern map");
-			const blob = await response.blob();
-			await performPresetLoad(blob, "CONQUEST");
+			await performPresetLoad(COMPILED_SCENARIO_URLS.modern, "CONQUEST", {
+				jsonFallbackUrl: url,
+				prederivedEarth: true,
+			});
 		} catch (e) {
 			console.error(e);
 			alert("Failed to load 2022 Modern Day scenario.");
@@ -26812,6 +26856,14 @@ export async function resetGame() {
 		loadingStatus.innerText = "Reloading Scenario Assets...";
 		loadingOverlay.style.display = "flex";
 		try {
+			if (currentScenarioContext.compiledUrl) {
+				await performPresetLoad(currentScenarioContext.compiledUrl, gameMode, {
+					jsonFallbackUrl: currentScenarioContext.blobUrl,
+					prederivedEarth: true,
+				});
+				loadingOverlay.style.display = "none";
+				return;
+			}
 			const response = await fetch(currentScenarioContext.blobUrl);
 			if (!response.ok) throw new Error("Reload failed");
 			const blob = await response.blob();
@@ -28818,7 +28870,7 @@ window.importFromLibrary = async (id) => {
 };
 
 window.playFromHub = async (url, id, name, ownerUsername) => {
-	initAudio();
+	primeAudio();
 	setLoadingThematic(true);
 	loadingStatus.innerText = "Downloading Scenario...";
 	loadingOverlay.style.display = "flex";
@@ -28836,6 +28888,7 @@ window.playFromHub = async (url, id, name, ownerUsername) => {
 		activeScenarioId = ownerUsername === myUsername ? id : null;
 
 		await performPresetLoad(blob, "CONQUEST");
+		initAudio();
 
 		if (activeScenarioId) {
 			editorUpdateBtn.style.display = "block";
@@ -28850,7 +28903,7 @@ window.playFromHub = async (url, id, name, ownerUsername) => {
 };
 
 window.remixFromHub = async (url, sourceId, sourceName, ownerUsername) => {
-	initAudio();
+	primeAudio();
 	setLoadingThematic(true);
 	loadingStatus.innerText = "Downloading for Remix...";
 	loadingOverlay.style.display = "flex";
@@ -28864,6 +28917,7 @@ window.remixFromHub = async (url, sourceId, sourceName, ownerUsername) => {
 		if (!response.ok) throw new Error("Failed to fetch");
 		const blob = await response.blob();
 		await performPresetLoad(blob, "EDITOR");
+		initAudio();
 
 		currentScenarioContext = {
 			id: sourceId,
@@ -28907,11 +28961,8 @@ export function preloadAssets() {
 	});
 }
 
-// Initial preload trigger
-preloadAssets();
-
 // Initialization logic
-export function initializeEngine() {
+export function initializeEngine(refreshLoadedGeography = true) {
 	const gridRes = parseFloat(document.getElementById("grid-res-select").value);
 	const unitLimit = parseInt(
 		document.getElementById("unit-limit-select").value,
@@ -28956,9 +29007,11 @@ export function initializeEngine() {
 		terrainMask = new Float32Array(gridWidth * gridHeight);
 
 		// If we are already in a mode that has geography loaded, we should refresh it
-		if (rawGeoJsonData) {
+		if (rawGeoJsonData && refreshLoadedGeography) {
 			const isBlank = gameMode === "EDITOR";
-			updateLandMask(rawGeoJsonData.features, 1, isBlank);
+			updateLandMask(rawGeoJsonData.features, 1, isBlank).catch((error) => {
+				console.warn("Geography refresh failed:", error);
+			});
 		}
 	} else {
 		CONFIG.MAX_UNITS_PER_SIDE = unitLimit;
@@ -29039,8 +29092,7 @@ presetDefaultBtn.addEventListener("click", () => {
 });
 
 launchBtn.addEventListener("click", () => {
-	initAudio();
-	initMultiplayer();
+	primeAudio();
 	initializeEngine();
 
 	if (saveSkipCheckbox.checked) {
@@ -29103,11 +29155,8 @@ launchBtn.addEventListener("click", () => {
 
 // Auto-load settings on boot
 export function checkAutoLaunch() {
-	// Attempt to initialize audio context immediately on load (though it may be blocked until a click)
-	initAudio();
-
 	if (getCookie("mw_skip_settings") === "true") {
-		mapResSelect.value = getCookie("mw_map_res") || "50m";
+		mapResSelect.value = getCookie("mw_map_res") || "110m";
 		gridResSelect.value = getCookie("mw_grid_res") || "0.15";
 		unitLimitSelect.value = getCookie("mw_unit_limit") || "500";
 		const mtSaved = getCookie("mw_disable_mountains");
@@ -29169,15 +29218,12 @@ export function checkAutoLaunch() {
 
 		saveSkipCheckbox.checked = true;
 
-		initMultiplayer();
 		initializeEngine();
 
 		settingsOverlay.style.display = "none";
 		mainMenu.style.display = "flex";
 		gameState = "MAIN_MENU";
 		launchBtn.innerText = "Apply Changes";
-		// Ensure background music is running as soon as the main menu is shown
-		initAudio();
 
 		if (getCookie("mw_tutorial_finished") !== "true") {
 			startTutorial(conquestTutorialSteps, "mw_tutorial_finished");
@@ -29380,26 +29426,29 @@ choiceModernDay.onclick = async () => {
 		selector.style.transition = "all 0.4s ease";
 	}
 
-	initAudio();
+	primeAudio();
 	setLoadingThematic(true);
 	loadingStatus.innerText = "Loading Modern World Theater...";
 	loadingOverlay.style.display = "flex";
 
 	try {
 		const url = "assets/maps/world map 2022.json";
-		const response = await fetch(url);
-		if (!response.ok) throw new Error("Failed to fetch modern map");
-		const blob = await response.blob();
+		const compiledUrl = COMPILED_SCENARIO_URLS.modern;
 
 		currentScenarioContext = {
 			id: "world_map_2022",
 			name: "Modern Day",
 			ownerUsername: "System",
 			blobUrl: url,
+			compiledUrl,
 		};
 		activeScenarioId = null;
 
-		await performPresetLoad(blob, "CONQUEST");
+		await performPresetLoad(compiledUrl, "CONQUEST", {
+			jsonFallbackUrl: url,
+			prederivedEarth: true,
+		});
+		initAudio();
 		mainMenu.style.display = "none";
 	} catch (e) {
 		console.error(e);
@@ -29409,7 +29458,8 @@ choiceModernDay.onclick = async () => {
 		const mapRes = document.getElementById("map-res-select").value;
 		const geoUrl = `${CONFIG.GEOJSON_BASE}${mapRes}/cultural/ne_${mapRes}_admin_0_countries.json`;
 		mainMenu.style.display = "none";
-		loadCountries(geoUrl, false);
+		await loadCountries(geoUrl, false);
+		initAudio();
 	}
 };
 
@@ -29420,26 +29470,29 @@ choice1936Scenario.onclick = async () => {
 		selector.style.transform = "translateX(50px)";
 		selector.style.transition = "all 0.4s ease";
 	}
-	initAudio();
+	primeAudio();
 	setLoadingThematic(true);
 	loadingStatus.innerText = "Loading WW2 Peru Update...";
 	loadingOverlay.style.display = "flex";
 
 	try {
 		const url = "assets/maps/WW2 Peru Update.json";
-		const response = await fetch(url);
-		if (!response.ok) throw new Error("Failed to fetch WW2 Peru Update");
-		const blob = await response.blob();
+		const compiledUrl = COMPILED_SCENARIO_URLS.ww2;
 
 		currentScenarioContext = {
 			id: "ww2_peru_update",
 			name: "WW2 Peru Update",
 			ownerUsername: "System",
 			blobUrl: url,
+			compiledUrl,
 		};
 		activeScenarioId = null;
 
-		await performPresetLoad(blob, "CONQUEST");
+		await performPresetLoad(compiledUrl, "CONQUEST", {
+			jsonFallbackUrl: url,
+			prederivedEarth: true,
+		});
+		initAudio();
 		mainMenu.style.display = "none";
 	} catch (e) {
 		console.error(e);
@@ -29455,26 +29508,29 @@ choiceWW1Scenario.onclick = async () => {
 		selector.style.transform = "translateX(50px)";
 		selector.style.transition = "all 0.4s ease";
 	}
-	initAudio();
+	primeAudio();
 	setLoadingThematic(true);
 	loadingStatus.innerText = "Loading 1914 Theater...";
 	loadingOverlay.style.display = "flex";
 
 	try {
 		const url = "assets/maps/world_war_1__1914_.json";
-		const response = await fetch(url);
-		if (!response.ok) throw new Error("Failed to fetch 1914 map");
-		const blob = await response.blob();
+		const compiledUrl = COMPILED_SCENARIO_URLS.ww1;
 
 		currentScenarioContext = {
 			id: "ww1_1914",
 			name: "1914 Scenario",
 			ownerUsername: "System",
 			blobUrl: url,
+			compiledUrl,
 		};
 		activeScenarioId = null;
 
-		await performPresetLoad(blob, "CONQUEST");
+		await performPresetLoad(compiledUrl, "CONQUEST", {
+			jsonFallbackUrl: url,
+			prederivedEarth: true,
+		});
+		initAudio();
 		mainMenu.style.display = "none";
 	} catch (e) {
 		console.error(e);
@@ -31604,6 +31660,7 @@ if (editorSaveMultiBtn) {
 			return;
 		}
 
+		const JSZip = await getJSZip();
 		const ids = Array.from(selectedCountryIds);
 		const zip = new JSZip();
 
@@ -31673,6 +31730,7 @@ if (editorSaveAllZipBtn) {
 			return;
 		}
 
+		const JSZip = await getJSZip();
 		const zip = new JSZip();
 
 		// Build a quick presence map (which ids actually have tiles)
@@ -32375,6 +32433,7 @@ if (editorLoadZipBtn) {
 			loadingOverlay.style.display = "flex";
 
 			try {
+				const JSZip = await getJSZip();
 				const zip = await JSZip.loadAsync(file);
 				const files = Object.values(zip.files).filter(
 					(f) => !f.dir && f.name.toLowerCase().endsWith(".json"),
@@ -33027,10 +33086,10 @@ cancelSourceChoice.onclick = () => {
 	editorChoiceModal.style.display = "flex";
 };
 
-choiceSourceEarth.onclick = () => {
+choiceSourceEarth.onclick = async () => {
 	isCustomTerrain = false;
 	editorSourceModal.style.display = "none";
-	initAudio();
+	primeAudio();
 	gameMode = "EDITOR";
 	gameState = "EDITOR_ACTIVE";
 	currentScenarioContext = null;
@@ -33040,22 +33099,9 @@ choiceSourceEarth.onclick = () => {
 	mapUi.style.display = "flex";
 	editorToolbox.style.display = "flex";
 
-	// Ensure grid is ready
-	if (!worldControlMap) {
-		gridWidth = Math.ceil(360 / CONFIG.GRID_RES);
-		gridHeight = Math.ceil(180 / CONFIG.GRID_RES);
-		worldControlMap = new Uint16Array(gridWidth * gridHeight);
-		deJureMap = new Uint16Array(gridWidth * gridHeight);
-		provinceMap = new Int32Array(gridWidth * gridHeight);
-		flagProcessedBuffer = new Int32Array(gridWidth * gridHeight);
-		occupationMap = new Float32Array(gridWidth * gridHeight);
-		initSideInfluenceMaps();
-		primaryOccupierMap = new Uint16Array(gridWidth * gridHeight);
-		landMask = new Uint8Array(gridWidth * gridHeight);
-		terrainMask = new Float32Array(gridWidth * gridHeight);
-	}
-
-	loadCities();
+	// Allocate every grid buffer through the canonical engine path. This also
+	// keeps biome and influence buffers synchronized after resolution changes.
+	initializeEngine(false);
 	statusText.innerText = "Map Editor (Alpha)";
 	setupPanel.style.display = "none";
 	resetBtn.style.display = "block";
@@ -33064,7 +33110,8 @@ choiceSourceEarth.onclick = () => {
 	// Load real‑earth geography without establishing countries
 	const mapRes = document.getElementById("map-res-select").value;
 	const geoUrl = `${CONFIG.GEOJSON_BASE}${mapRes}/cultural/ne_${mapRes}_admin_0_countries.json`;
-	loadCountries(geoUrl, true);
+	await loadCountries(geoUrl, true);
+	initAudio();
 
 	if (getCookie("mw_editor_tutorial_finished") !== "true") {
 		startTutorial(editorTutorialSteps, "mw_editor_tutorial_finished");

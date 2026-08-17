@@ -4,5 +4,21 @@ window.onerror = (msg, _url, line, _col, err) => {
 };
 
 if ("serviceWorker" in navigator) {
-	navigator.serviceWorker.register("workers/service-worker.js");
+	// Register from the project root so the worker controls the game, not only
+	// requests below /workers/. Delay install/update traffic until the initial
+	// document and module graph are settled so first-load downloads do not compete.
+	const registerServiceWorker = () => {
+		navigator.serviceWorker.register("service-worker.js").catch((error) => {
+			console.warn("Service worker registration failed", error);
+		});
+	};
+	const scheduleRegistration = () => {
+		if (typeof requestIdleCallback === "function") {
+			requestIdleCallback(registerServiceWorker, { timeout: 5000 });
+		} else {
+			setTimeout(registerServiceWorker, 1000);
+		}
+	};
+	if (document.readyState === "complete") scheduleRegistration();
+	else window.addEventListener("load", scheduleRegistration, { once: true });
 }
