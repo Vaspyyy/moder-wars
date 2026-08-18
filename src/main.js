@@ -2960,7 +2960,7 @@ function scheduleWarLifecycleCallback(
 }
 
 const PERF_COUNTER_DEFAULTS = {
-	_version: "V0.27.13",
+	_version: "V0.27.14",
 	_mode: "off",
 	_enabled: false,
 	plans: 0,
@@ -11356,6 +11356,31 @@ function endingReasonForTreaty(type, winnerName = "") {
 	);
 }
 
+function reopenConflictSetupAfterWar() {
+	if (gameMode !== "CONQUEST") return;
+	activeExperimentRecorder = null;
+	activeExperimentSpec = null;
+	_experimentParentReport = null;
+	document.body.classList.remove("experiment-loop-active");
+
+	const setupAlreadyOpen =
+		gameState.startsWith("SELECTING") && setupPanel.style.display !== "none";
+	if (setupAlreadyOpen) return;
+
+	resetToSelection();
+	const nextSeed = createRandomSeed();
+	setExperimentSeed(nextSeed);
+	_experimentUi?.setSetupSeed(
+		nextSeed,
+		`Fresh seed ${nextSeed} generated for the next war.`,
+		"ready",
+	);
+	if (influenceLayer) {
+		influenceLayer.invalidate(RENDER_LAYERS.ALL);
+		influenceLayer.render();
+	}
+}
+
 function finalizeActiveExperiment({
 	type,
 	winnerSideIndex,
@@ -11428,8 +11453,9 @@ function finalizeActiveExperiment({
 	report.postTreatySnapshot = postTreaty;
 	latestWarReport = report;
 	persistWarReport(report);
-	_experimentUi?.hideWarDesk();
-	if (autoAfterActionReportCheckbox?.checked !== false) {
+	const autoOpenReport = autoAfterActionReportCheckbox?.checked !== false;
+	reopenConflictSetupAfterWar();
+	if (autoOpenReport) {
 		_experimentUi?.hideReportReopenButton();
 		_experimentUi?.showAfterActionReport(report);
 	} else {
@@ -33381,19 +33407,8 @@ _experimentUi = initExperimentUi({
 	onContinueWorld() {
 		_experimentUi.hideAfterActionReport();
 		if (latestWarReport) _experimentUi.showReportReopenButton();
-		activeExperimentRecorder = null;
-		activeExperimentSpec = null;
-		_experimentParentReport = null;
-		document.body.classList.remove("experiment-loop-active");
 		const continueRandomWars = randomWarMode;
-		resetToSelection();
-		const nextSeed = createRandomSeed();
-		setExperimentSeed(nextSeed);
-		_experimentUi.setSetupSeed(
-			nextSeed,
-			`Fresh seed ${nextSeed} generated for the next experiment.`,
-			"ready",
-		);
+		reopenConflictSetupAfterWar();
 		if (continueRandomWars) {
 			scheduleWarLifecycleCallback(() => triggerRandomWar(), 500);
 		}

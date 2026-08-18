@@ -3189,10 +3189,11 @@ const ControlMapLayer = L.Layer.extend({
 			overlaysCtx.scale(dpr, dpr);
 			ctx = overlaysCtx;
 
-			// Draw a white frame around the custom map extent so you can see where the world ends.
-			// For custom maps, this should match the world size set before the map loads:
+			// Show the custom map extent only while editing it. Keeping this frame out of
+			// simulations prevents the editor guide from leaking into live and final maps.
+			// It should match the world size set before the map loads:
 			// use explicit maxBounds if configured (blank canvas size), otherwise the full world.
-			if (isCustomTerrain) {
+			if (isCustomTerrain && gameMode === "EDITOR") {
 				let boundsToUse = null;
 				if (map.options.maxBounds) {
 					boundsToUse = map.options.maxBounds;
