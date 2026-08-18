@@ -2960,7 +2960,7 @@ function scheduleWarLifecycleCallback(
 }
 
 const PERF_COUNTER_DEFAULTS = {
-	_version: "V0.27.12",
+	_version: "V0.27.13",
 	_mode: "off",
 	_enabled: false,
 	plans: 0,
