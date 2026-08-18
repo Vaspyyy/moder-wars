@@ -257,7 +257,10 @@ export const TRANSLATIONS = {
 		DISABLE_MT: "DISABLE MOUNTAINS",
 		DISABLE_PUPPETS: "DISABLE PUPPETS (NO VASSAL CALL)",
 		INAUGURATE: "Inaugurate Conflict",
-		START_EXPERIMENT: "Start Experiment",
+		START_WAR: "Start War",
+		AUTO_AFTER_ACTION_REPORT: "Automatically Open After Action Report",
+		AUTO_AFTER_ACTION_REPORT_NOTE:
+			"When disabled, the final map remains visible and the report can be reopened manually.",
 		EXPERIMENT_SANDBOX: "Simulation Sandbox",
 		EXPERIMENT_SEED: "Seed",
 		EXPERIMENT_RANDOMIZE: "Randomize",
@@ -433,7 +436,10 @@ export const TRANSLATIONS = {
 		DISABLE_MT: "БЕЗ ГОР",
 		DISABLE_PUPPETS: "БЕЗ ВАССАЛОВ",
 		INAUGURATE: "Начать конфликт",
-		START_EXPERIMENT: "Запустить эксперимент",
+		START_WAR: "Начать войну",
+		AUTO_AFTER_ACTION_REPORT: "Автоматически открывать отчёт о войне",
+		AUTO_AFTER_ACTION_REPORT_NOTE:
+			"Если отключено, итоговая карта останется открытой, а отчёт можно будет открыть вручную.",
 		REBELLION: "Восстание",
 		POLITICAL: "ПОЛИТИЧЕСКАЯ",
 		ARROWS: "СТРЕЛКИ",
@@ -565,7 +571,10 @@ export const TRANSLATIONS = {
 		DISABLE_MT: "山岳無効",
 		DISABLE_PUPPETS: "傀儡国無効",
 		INAUGURATE: "紛争開始",
-		START_EXPERIMENT: "実験を開始",
+		START_WAR: "戦争を開始",
+		AUTO_AFTER_ACTION_REPORT: "戦後レポートを自動的に開く",
+		AUTO_AFTER_ACTION_REPORT_NOTE:
+			"無効にすると最終マップが表示されたままになり、レポートは手動で開けます。",
 		REBELLION: "反乱開始",
 		POLITICAL: "政治地図",
 		ARROWS: "進撃矢印",
@@ -687,7 +696,10 @@ export const TRANSLATIONS = {
 		DISABLE_MT: "DESACTIVAR MONTAÑAS",
 		DISABLE_PUPPETS: "DESACTIVAR PUPPETS",
 		INAUGURATE: "Inaugurar Conflicto",
-		START_EXPERIMENT: "Iniciar experimento",
+		START_WAR: "Iniciar guerra",
+		AUTO_AFTER_ACTION_REPORT: "Abrir automáticamente el informe de posguerra",
+		AUTO_AFTER_ACTION_REPORT_NOTE:
+			"Si está desactivado, el mapa final seguirá visible y el informe podrá abrirse manualmente.",
 		REBELLION: "Iniciar Rebelión",
 		POLITICAL: "POLÍTICO",
 		ARROWS: "FLECHAS",
@@ -806,7 +818,11 @@ export const TRANSLATIONS = {
 		FIGHT_TO_DEATH: "GUERRE À MORT (PAS DE PAIX)",
 		DISABLE_MISSILES: "DÉSACTIVER MISSILES",
 		INAUGURATE: "Inaugurer le Conflit",
-		START_EXPERIMENT: "Lancer l’expérience",
+		START_WAR: "Lancer la guerre",
+		AUTO_AFTER_ACTION_REPORT:
+			"Ouvrir automatiquement le rapport d’après-guerre",
+		AUTO_AFTER_ACTION_REPORT_NOTE:
+			"Si désactivé, la carte finale reste visible et le rapport peut être rouvert manuellement.",
 		REBELLION: "Lancer Rébellion",
 		POLITICAL: "POLITIQUE",
 		ARROWS: "FLÈCHES",
@@ -926,7 +942,10 @@ export const TRANSLATIONS = {
 		FIGHT_TO_DEATH: "KAMPF BIS ZUM TOD (KEIN FRIEDEN)",
 		DISABLE_MISSILES: "RAKETEN DEAKTIVIEREN",
 		INAUGURATE: "Konflikt eröffnen",
-		START_EXPERIMENT: "Experiment starten",
+		START_WAR: "Krieg starten",
+		AUTO_AFTER_ACTION_REPORT: "Gefechtsbericht automatisch öffnen",
+		AUTO_AFTER_ACTION_REPORT_NOTE:
+			"Wenn deaktiviert, bleibt die Endkarte sichtbar und der Bericht kann manuell geöffnet werden.",
 		REBELLION: "Rebellion starten",
 		POLITICAL: "POLITISCH",
 		ARROWS: "PFEILE",
@@ -1045,7 +1064,10 @@ export const TRANSLATIONS = {
 		FIGHT_TO_DEATH: "LUTA ATÉ A MORTE (SEM PAZ)",
 		DISABLE_MISSILES: "DESATIVAR MÍSSEIS",
 		INAUGURATE: "Inaugurar Conflito",
-		START_EXPERIMENT: "Iniciar experimento",
+		START_WAR: "Iniciar guerra",
+		AUTO_AFTER_ACTION_REPORT: "Abrir relatório pós-ação automaticamente",
+		AUTO_AFTER_ACTION_REPORT_NOTE:
+			"Quando desativado, o mapa final permanece visível e o relatório pode ser reaberto manualmente.",
 		REBELLION: "Iniciar Rebelião",
 		POLITICAL: "POLÍTICO",
 		ARROWS: "SETAS",
@@ -2938,7 +2960,7 @@ function scheduleWarLifecycleCallback(
 }
 
 const PERF_COUNTER_DEFAULTS = {
-	_version: "V0.27.11",
+	_version: "V0.27.12",
 	_mode: "off",
 	_enabled: false,
 	plans: 0,
@@ -3922,6 +3944,9 @@ export const disableAutoFullscreenCheckbox = document.getElementById(
 export const disableCountryGradientCheckbox = document.getElementById(
 	"disable-country-gradient-checkbox",
 );
+export const autoAfterActionReportCheckbox = document.getElementById(
+	"auto-after-action-report-checkbox",
+);
 export const useSystemFontCheckbox = document.getElementById(
 	"use-system-font-checkbox",
 );
@@ -3962,6 +3987,18 @@ if (disableCountryGradientCheckbox) {
 		setCookie(
 			"mw_disable_country_gradient",
 			e.target.checked ? "true" : "false",
+		);
+	});
+}
+if (autoAfterActionReportCheckbox) {
+	const savedPreference = getCookie("mw_auto_after_action_report");
+	if (savedPreference !== "") {
+		autoAfterActionReportCheckbox.checked = savedPreference === "true";
+	}
+	autoAfterActionReportCheckbox.addEventListener("change", (event) => {
+		setCookie(
+			"mw_auto_after_action_report",
+			event.target.checked ? "true" : "false",
 		);
 	});
 }
@@ -5748,10 +5785,16 @@ ffaToggleBtn.onclick = () => {
 };
 
 export const randomWarBtn = document.getElementById("random-war-btn");
+function updateRandomWarButton() {
+	const translationKey = randomWarMode ? "RANDOM_WAR_ON" : "RANDOM_WAR_OFF";
+	randomWarBtn.dataset.i18n = translationKey;
+	randomWarBtn.textContent = getTranslation(translationKey);
+	randomWarBtn.style.background = randomWarMode ? "#8e44ad" : "#9b59b6";
+}
+
 randomWarBtn.onclick = () => {
 	randomWarMode = !randomWarMode;
-	randomWarBtn.innerText = randomWarMode ? "Random War: ON" : "Random War: OFF";
-	randomWarBtn.style.background = randomWarMode ? "#8e44ad" : "#9b59b6";
+	updateRandomWarButton();
 
 	if (
 		randomWarMode &&
@@ -11386,8 +11429,14 @@ function finalizeActiveExperiment({
 	latestWarReport = report;
 	persistWarReport(report);
 	_experimentUi?.hideWarDesk();
-	_experimentUi?.hideReportReopenButton();
-	_experimentUi?.showAfterActionReport(report);
+	if (autoAfterActionReportCheckbox?.checked !== false) {
+		_experimentUi?.hideReportReopenButton();
+		_experimentUi?.showAfterActionReport(report);
+	} else {
+		_experimentUi?.renderAfterActionReport(report);
+		_experimentUi?.hideAfterActionReport();
+		_experimentUi?.showReportReopenButton();
+	}
 	return report;
 }
 
@@ -11430,8 +11479,7 @@ function applyExperimentOptionsToSetup(spec) {
 	}
 	ffaMode = !!options.ffa;
 	randomWarMode = !!options.randomWar;
-	randomWarBtn.innerText = randomWarMode ? "Random War: ON" : "Random War: OFF";
-	randomWarBtn.style.background = randomWarMode ? "#8e44ad" : "#9b59b6";
+	updateRandomWarButton();
 	ffaToggleBtn.style.border = ffaMode ? "2px solid #fff" : "none";
 	ffaToggleBtn.innerText = ffaMode ? "FFA: ON" : "FFA Mode";
 	warEconomyEnabled = options.warEconomy !== false;

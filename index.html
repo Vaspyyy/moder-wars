@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://esm.sh 'sha256-UbZTXngprJmMtanNXRwZ5Pi9M0w7gaPwpxlWfxaufYA='; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.websim.ai https://*.websim.com https://*.arcgisonline.com https://*.google.com wss:; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self';">
-    <title>MW-V0.27.11</title>
+    <title>MW-V0.27.12</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous" />
     <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
@@ -188,6 +188,11 @@
                         <input type="checkbox" id="disable-country-gradient-checkbox" style="width: 18px; height: 18px; accent-color: #3498db;">
                         <span>Disable Country Gradient</span>
                     </label>
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                        <input type="checkbox" id="auto-after-action-report-checkbox" style="width: 18px; height: 18px; accent-color: #e74c3c;" checked>
+                        <span data-i18n="AUTO_AFTER_ACTION_REPORT">Automatically Open After Action Report</span>
+                    </label>
+                    <small data-i18n="AUTO_AFTER_ACTION_REPORT_NOTE">When disabled, the final map remains visible and the report can be reopened manually.</small>
                 </div>
             </div>
             <div id="settings-tab-aud" class="settings-tab-pane" style="display:none">
@@ -589,13 +594,24 @@
                     </label>
                 </div>
 
-				<label
-					class="experiment-check experiment-basic-rule"
-					title="Disable peace deals. The war ends only when one side is defeated."
-				>
-					<input type="checkbox" id="no-peace-checkbox">
-					<span data-i18n="FIGHT_TO_DEATH">Fight to the Death</span>
-				</label>
+                <div class="experiment-basic-rules">
+					<label
+						class="experiment-check experiment-basic-rule"
+						title="Disable peace deals. The war ends only when one side is defeated."
+					>
+						<input type="checkbox" id="no-peace-checkbox">
+						<span data-i18n="FIGHT_TO_DEATH">Fight to the Death</span>
+					</label>
+                    <button
+                        id="random-war-btn"
+                        class="mini-btn experiment-basic-random-war"
+                        type="button"
+                        data-i18n="RANDOM_WAR_OFF"
+                        title="Periodically spawns extra AI wars between random neighboring countries during the simulation."
+                    >
+                        Random War: OFF
+                    </button>
+                </div>
 
                 <div id="estimated-force-balance" class="force-balance-card" role="status" aria-live="polite">
                     <span data-i18n="EXPERIMENT_FORCE_BALANCE">Estimated Force Balance</span>
@@ -635,15 +651,6 @@
                                     title="Free-for-all: each side fights everyone else instead of two big alliances."
                                 >
                                     FFA
-                                </button>
-                                <button
-                                    id="random-war-btn"
-                                    class="mini-btn experiment-secondary-btn experiment-button-grid--wide"
-                                    type="button"
-                                    data-i18n="RANDOM_WAR_OFF"
-                                    title="Periodically spawns extra AI wars between random neighboring countries during the simulation."
-                                >
-                                    Random War: OFF
                                 </button>
                             </div>
                         </details>
@@ -776,10 +783,10 @@
                     id="start-btn"
                     class="start-btn"
                     type="button"
-                    data-i18n="START_EXPERIMENT"
-                    title="Lock in this configuration and start the experiment."
+                    data-i18n="START_WAR"
+                    title="Lock in this configuration and start the war."
                 >
-                    Start Experiment
+                    Start War
                 </button>
             </footer>
         </section>

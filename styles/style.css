@@ -3720,8 +3720,14 @@ body.commander-active #force-peace-btn {
 	accent-color: var(--hud-color-active-border);
 }
 
-.experiment-basic-rule {
+.experiment-basic-rules {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px;
 	margin-top: 9px;
+}
+
+.experiment-basic-rule {
 	padding: 9px 10px;
 	color: #f4d7d3;
 	background: rgba(192, 57, 43, 0.1);
@@ -3731,6 +3737,15 @@ body.commander-active #force-peace-btn {
 
 .experiment-basic-rule input {
 	accent-color: #e74c3c;
+}
+
+.experiment-basic-random-war {
+	min-height: 36px;
+	padding: 9px 10px;
+	color: #f4eaff;
+	background: #9b59b6;
+	border: 1px solid rgba(187, 134, 252, 0.65);
+	border-radius: var(--hud-radius-sm);
 }
 
 .experiment-check--capture {
@@ -4765,6 +4780,7 @@ body.commander-active #reopen-report-btn {
 	}
 
 	.experiment-manpower-inputs,
+	.experiment-basic-rules,
 	.experiment-button-grid,
 	.experiment-check-grid {
 		grid-template-columns: 1fr;
