@@ -421,7 +421,9 @@ const ControlMapLayer = L.Layer.extend({
 		this._regionsRevision = 0;
 		this._visitId = 0;
 		this._zooming = false;
-		this._zoomStartZoom = map.getZoom();
+		this._zoomSettlePending = false;
+		this._renderedZoom = map.getZoom();
+		this._renderedCenter = map.getCenter();
 
 		// Append to map container directly to avoid double-transforms from mapPane/overlayPane
 		map.getContainer().appendChild(this._container);
@@ -441,35 +443,35 @@ const ControlMapLayer = L.Layer.extend({
 
 		this._onZoomStart = () => {
 			this._zooming = true;
-			this._zoomStartZoom = map.getZoom();
+			this._container.style.willChange = "transform";
 		};
 
 		this._onZoomAnim = (e) => {
 			// The canvas is viewport-locked, so it does not inherit Leaflet's
-			// animated map-pane transform. Match both its scale and translation.
-			const scale = map.getZoomScale(e.zoom, this._zoomStartZoom);
-			const oldTargetCenter = map.latLngToContainerPoint(e.center);
-			const newTargetCenter = map.getSize().divideBy(2);
-			const offset = newTargetCenter.subtract(
-				oldTargetCenter.multiplyBy(scale),
-			);
+			// animated map-pane transform. Always transform from the last completed
+			// canvas render so chained wheel gestures cannot accumulate drift.
+			const baseZoom = this._renderedZoom ?? map.getZoom();
+			const baseCenter = this._renderedCenter ?? map.getCenter();
+			const viewportCenter = map.getSize().divideBy(2);
+			const baseCenterWorld = map.project(baseCenter, baseZoom);
+			const targetCenterWorld = map.project(e.center, baseZoom);
+			const oldTargetCenter = targetCenterWorld
+				.subtract(baseCenterWorld)
+				.add(viewportCenter);
+			const scale = map.getZoomScale(e.zoom, baseZoom);
+			const offset = viewportCenter.subtract(oldTargetCenter.multiplyBy(scale));
 			this._container.style.transformOrigin = "0 0";
 			L.DomUtil.setTransform(this._container, offset, scale);
 		};
 
 		this._onZoomEnd = () => {
 			this._zooming = false;
-			// Remove CSS transform and re-render at final zoom
-			this._container.style.transform = "";
-			this._container.style.transformOrigin = "";
 			this._lastBounds = map.getBounds();
+			this._zoomSettlePending = true;
+			// Keep the transformed old frame visible until one complete final-zoom
+			// render can replace it atomically. requestRender schedules that frame in
+			// paused/menu views; the simulation loop force-admits it during a live war.
 			this.requestRender(RENDER_LAYERS.ALL);
-			// Satellite stabilization: trigger a delayed cleanup render to ensure
-			// grid projection aligns with final post-zoom viewport coordinates.
-			setTimeout(() => {
-				this._forceRender = true;
-				this.requestRender(RENDER_LAYERS.ALL);
-			}, 100);
 		};
 
 		map.on("move", this._onMove, this);
@@ -485,6 +487,7 @@ const ControlMapLayer = L.Layer.extend({
 		if (this._renderRaf) cancelAnimationFrame(this._renderRaf);
 		this._renderRaf = 0;
 		this._renderRequested = false;
+		this._zoomSettlePending = false;
 		if (this._container?.parentNode) {
 			this._container.parentNode.removeChild(this._container);
 		}
@@ -513,6 +516,18 @@ const ControlMapLayer = L.Layer.extend({
 		!isPaused &&
 		(gameState === "SIMULATING" ||
 			(godModeActive && preGodModeState === "SIMULATING")),
+
+	hasPendingZoomSettle: function () {
+		return this._zoomSettlePending === true && !this._zooming;
+	},
+
+	_commitZoomSettle: function () {
+		if (!this._zoomSettlePending) return;
+		this._zoomSettlePending = false;
+		this._container.style.transform = "";
+		this._container.style.transformOrigin = "";
+		this._container.style.willChange = "";
+	},
 
 	/**
 	 * Coalesces multiple paint requests into one animation-frame callback.
@@ -684,6 +699,10 @@ const ControlMapLayer = L.Layer.extend({
 	render: function () {
 		const _r0 = performance.now();
 		if (!worldControlMap || !landMask) return;
+		// The animated CSS transform owns presentation until zoomend. The main
+		// simulation loop calls render() directly, so it needs the same guard as
+		// renderer-owned requestAnimationFrame callbacks.
+		if (this._zooming) return;
 		if (this._renderRaf) {
 			cancelAnimationFrame(this._renderRaf);
 			this._renderRaf = 0;
@@ -3699,6 +3718,9 @@ const ControlMapLayer = L.Layer.extend({
 			this._invalidLayers &= ~RENDER_LAYERS.OVERLAYS;
 		}
 		mainCtx.drawImage(this._overlaysSurface, 0, 0);
+		this._renderedZoom = currentZoom;
+		this._renderedCenter = map.getCenter();
+		this._commitZoomSettle();
 
 		if (window.__perf)
 			window.__perf.render =

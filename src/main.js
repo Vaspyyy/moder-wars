@@ -4678,8 +4678,12 @@ export const map = L.map("map", {
 	dragging: true,
 	// Use viscosity so panning against the world-size box feels smooth instead of snapping back
 	maxBoundsViscosity: 1.0,
-	zoomSnap: 0.25,
-	wheelPxPerZoomLevel: 120,
+	// Fractional wheel targets avoid the visible quarter-level stepping that made
+	// trackpads and high-resolution mouse wheels feel jerky.
+	zoomSnap: 0,
+	zoomDelta: 0.25,
+	wheelDebounceTime: 24,
+	wheelPxPerZoomLevel: 90,
 });
 
 // Create Web Worker for async frontline field and layout rebuilds.
@@ -25751,13 +25755,17 @@ export function updateLoop(now) {
 	const cadenceDue = simFrameCount % renderCadence === 0;
 	const maxDeferredFrames = Math.max(2, renderCadence + 1);
 	const starvationDue = _renderAdmissionDeferredFrames >= maxDeferredFrames;
+	const zoomSettleDue =
+		typeof influenceLayer?.hasPendingZoomSettle === "function" &&
+		influenceLayer.hasPendingZoomSettle();
 	const renderAdmission = decideRenderAdmission({
-		visualDirty: cadenceDue || starvationDue,
+		visualDirty: zoomSettleDue || cadenceDue || starvationDue,
 		simulationWorkMs,
 		simulationBudgetMs: 12,
 		commitFlags: _frameSimulationCommitFlags,
 		framesSinceRender: _renderAdmissionDeferredFrames,
 		maxDeferredFrames,
+		force: zoomSettleDue,
 	});
 	const skipRenderThisFrame = !renderAdmission.admit;
 
