@@ -9835,6 +9835,7 @@ window.economyDebugReport = (countryId = null) => {
 };
 
 const NATIVE_RUNTIME_CHECKPOINT_SCHEMA = "native-runtime-checkpoint-v1";
+const NATIVE_RUNTIME_CHECKPOINT_V2_SCHEMA = "native-runtime-checkpoint-v2";
 
 function nativeRuntimeWarIsActive() {
 	return (
@@ -9888,6 +9889,113 @@ function encodeNativeRuntimeRuns(
 	if (coveredCells !== source.length) {
 		throw new Error(`${label} RLE coverage disagrees with its dense map`);
 	}
+	return runs;
+}
+
+function encodeNativeRuntimeSignedRuns(
+	source,
+	label,
+	minValue,
+	maxValue,
+	projectValue = null,
+) {
+	if (!source || !Number.isSafeInteger(source.length) || source.length <= 0) {
+		throw new Error(`${label} must be a non-empty dense map`);
+	}
+	const readValue = (index) => {
+		const sourceValue = Number(source[index]);
+		const value = Number(
+			projectValue ? projectValue(sourceValue, index) : sourceValue,
+		);
+		if (!Number.isSafeInteger(value) || value < minValue || value > maxValue) {
+			throw new Error(
+				`${label}[${index}] must be an integer from ${minValue} through ${maxValue}`,
+			);
+		}
+		return value;
+	};
+	const runs = [];
+	let runValue = readValue(0);
+	let runLength = 1;
+	for (let index = 1; index < source.length; index++) {
+		const value = readValue(index);
+		if (value === runValue) {
+			runLength++;
+			if (!Number.isSafeInteger(runLength)) {
+				throw new Error(`${label} contains an unsafe run length`);
+			}
+			continue;
+		}
+		runs.push([runLength, runValue]);
+		runValue = value;
+		runLength = 1;
+	}
+	runs.push([runLength, runValue]);
+	return runs;
+}
+
+function encodeNativeRuntimeFloat32BitRuns(source, label) {
+	if (!(source instanceof Float32Array) || source.length <= 0) {
+		throw new Error(`${label} must be a non-empty Float32Array`);
+	}
+	const bits = new Uint32Array(source.buffer, source.byteOffset, source.length);
+	return encodeNativeRuntimeRuns(bits, label, 0xffffffff);
+}
+
+function encodeNativeRuntimeOccupationBitRuns(
+	occupation,
+	dominance,
+	browserToNativeSide,
+	label,
+) {
+	if (
+		!(occupation instanceof Float32Array) ||
+		occupation.length <= 0 ||
+		dominance?.length !== occupation.length
+	) {
+		throw new Error(
+			`${label} requires equally sized Float32 occupation and dominance maps`,
+		);
+	}
+	const sourceBits = new Uint32Array(
+		occupation.buffer,
+		occupation.byteOffset,
+		occupation.length,
+	);
+	const readBits = (index) => {
+		const browserSide = Number(dominance[index]);
+		if (browserSide === -1) return 0;
+		if (!Number.isInteger(browserSide) || browserSide < 0) {
+			throw new Error(`${label} has invalid dominance at cell ${index}`);
+		}
+		const nativeSide = browserToNativeSide.get(browserSide);
+		if (nativeSide === undefined) {
+			throw new Error(
+				`${label} references undeclared browser side ${browserSide}`,
+			);
+		}
+		const magnitudeBits = sourceBits[index] & 0x7fffffff;
+		return nativeSide % 2 === 0
+			? magnitudeBits
+			: (magnitudeBits | 0x80000000) >>> 0;
+	};
+	const runs = [];
+	let runValue = readBits(0);
+	let runLength = 1;
+	for (let index = 1; index < occupation.length; index++) {
+		const value = readBits(index);
+		if (value === runValue) {
+			runLength++;
+			if (!Number.isSafeInteger(runLength)) {
+				throw new Error(`${label} contains an unsafe run length`);
+			}
+			continue;
+		}
+		runs.push([runLength, runValue]);
+		runValue = value;
+		runLength = 1;
+	}
+	runs.push([runLength, runValue]);
 	return runs;
 }
 
@@ -9958,6 +10066,113 @@ function nativeRuntimeTopology() {
 				sideIndex,
 			]),
 		),
+	};
+}
+
+function nativeRuntimeStableTopology() {
+	if (!_nativeRuntimeInitialCheckpoint) {
+		throw new Error(
+			"Native runtime v2 is unavailable before war initialization commits",
+		);
+	}
+	const countriesByBrowserSide = new Map();
+	const seenCountryIds = new Set();
+	for (const entry of initialCombatants) {
+		const countryId = Number(entry?.id);
+		const browserSideIndex = Number(entry?.sideIndex);
+		if (!Number.isInteger(countryId) || countryId <= 0) {
+			throw new Error(
+				"The stable combatant topology has an invalid country id",
+			);
+		}
+		if (
+			!Number.isInteger(browserSideIndex) ||
+			browserSideIndex < 0 ||
+			browserSideIndex >= MAX_SIDES
+		) {
+			throw new Error(`Country ${countryId} has an invalid stable side`);
+		}
+		if (seenCountryIds.has(countryId)) {
+			throw new Error(`Country ${countryId} appears twice in stable topology`);
+		}
+		seenCountryIds.add(countryId);
+		let countryIds = countriesByBrowserSide.get(browserSideIndex);
+		if (!countryIds) {
+			countryIds = [];
+			countriesByBrowserSide.set(browserSideIndex, countryIds);
+		}
+		countryIds.push(countryId);
+	}
+	const stable = Array.from(
+		countriesByBrowserSide,
+		([browserSideIndex, ids]) => ({
+			browserSideIndex,
+			countryIds: ids.sort((left, right) => left - right),
+		}),
+	).sort((left, right) => left.browserSideIndex - right.browserSideIndex);
+	if (stable.length < 2) {
+		throw new Error("Native runtime v2 needs at least two stable sides");
+	}
+	const browserToNativeSide = new Map(
+		stable.map(({ browserSideIndex }, sideIndex) => [
+			browserSideIndex,
+			sideIndex,
+		]),
+	);
+	const countryToSide = new Map();
+	const topologySides = stable.map(({ countryIds }, sideIndex) => {
+		for (const countryId of countryIds) countryToSide.set(countryId, sideIndex);
+		return { sideIndex, countryIds };
+	});
+	const activeSides = [];
+	for (const { browserSideIndex, countryIds } of stable) {
+		const currentIds = new Set(
+			(sides[browserSideIndex] || [])
+				.filter(Boolean)
+				.map((country) => country.id),
+		);
+		const active = countryIds.some(
+			(countryId) =>
+				currentIds.has(countryId) &&
+				countryEconomy.get(countryId)?.capitulated !== true,
+		);
+		if (active) activeSides.push(browserToNativeSide.get(browserSideIndex));
+	}
+	if (activeSides.length < 2) {
+		throw new Error("Native runtime v2 needs at least two active sides");
+	}
+	const compactHostility = [];
+	let activeHostileDirections = 0;
+	const activeSet = new Set(activeSides);
+	for (const left of stable) {
+		const leftNative = browserToNativeSide.get(left.browserSideIndex);
+		for (const right of stable) {
+			const rightNative = browserToNativeSide.get(right.browserSideIndex);
+			const hostile =
+				left.browserSideIndex === right.browserSideIndex
+					? 0
+					: Number(
+							hostilityMatrix[
+								left.browserSideIndex * MAX_SIDES + right.browserSideIndex
+							] || 0,
+						);
+			const compact = hostile === 1 ? 1 : 0;
+			compactHostility.push(compact);
+			if (compact && activeSet.has(leftNative) && activeSet.has(rightNative)) {
+				activeHostileDirections++;
+			}
+		}
+	}
+	if (activeHostileDirections === 0) {
+		throw new Error("Native runtime v2 has no hostility between active sides");
+	}
+	return {
+		sides: topologySides,
+		activeSides,
+		hostilityMatrix: compactHostility,
+		countryToSide,
+		browserToNativeSide,
+		stable,
 	};
 }
 
@@ -10037,9 +10252,13 @@ function nativeRuntimePolicyContext(topology, liveUnits) {
 	const sideFormationCounts = new Map();
 	for (const unit of liveUnits) {
 		if (!unitCountsForCapitulation(unit)) continue;
+		const nativeSide = topology.browserToNativeSide.get(unit.sideIndex);
+		if (nativeSide === undefined) {
+			throw new Error(`Live unit side ${unit.sideIndex} is outside topology`);
+		}
 		sideFormationCounts.set(
-			unit.sideIndex,
-			(sideFormationCounts.get(unit.sideIndex) || 0) +
+			nativeSide,
+			(sideFormationCounts.get(nativeSide) || 0) +
 				getLiveFormationStrength(unit),
 		);
 	}
@@ -10501,6 +10720,233 @@ function buildInitialNativeRuntimeCheckpoint() {
 	};
 }
 
+function nativeRuntimeCasualtiesByVictim(declaredCountryIds) {
+	const declared = new Set(declaredCountryIds);
+	return Object.fromEntries(
+		declaredCountryIds.map((victimId) => {
+			const attackers = casualtyByAttacker.get(victimId) || new Map();
+			const entries = Array.from(attackers, ([rawAttackerId, rawLoss]) => {
+				const attackerId = Number(rawAttackerId);
+				const loss = Number(rawLoss);
+				if (!Number.isInteger(attackerId) || !declared.has(attackerId)) {
+					throw new Error(
+						`Victim ${victimId} has casualties attributed outside stable topology`,
+					);
+				}
+				if (!Number.isFinite(loss) || loss < 0) {
+					throw new Error(
+						`Victim ${victimId} has invalid casualties for attacker ${attackerId}`,
+					);
+				}
+				return [attackerId, loss];
+			}).sort(([left], [right]) => left - right);
+			return [victimId, Object.fromEntries(entries)];
+		}),
+	);
+}
+
+function nativeRuntimeV2Territory(topology) {
+	const snapshot = flushTerritoryLedger();
+	const status = _territoryLedger?.getStatus();
+	if (!snapshot || !status) {
+		throw new Error("Native runtime v2 requires a committed territory census");
+	}
+	if (status.lastCommitError) {
+		throw new Error("Native runtime v2 territory census commit failed");
+	}
+	if (
+		status.activeGeneration !== null ||
+		status.dirtyTiles !== 0 ||
+		status.activeProcessedItems !== 0 ||
+		status.activeTotalItems !== 0 ||
+		snapshot.pendingDirtyTilesAtCommit !== 0 ||
+		snapshot.commitSequence !== status.commitSequence ||
+		snapshot.topologyRevision !== status.topologyRevision ||
+		snapshot.worldRevision !== status.worldRevision ||
+		snapshot.cityRevision !== status.cityRevision
+	) {
+		throw new Error(
+			"Native runtime v2 requires a clean, fully committed territory census",
+		);
+	}
+	const cellCount = gridWidth * gridHeight;
+	const denseMaps = [
+		["landMask", landMask],
+		["worldControlMap", worldControlMap],
+		["deJureMap", deJureMap],
+		["primaryOccupierMap", primaryOccupierMap],
+		["dominantSideMap", dominantSideMap],
+		["occupationMap", occupationMap],
+	];
+	if (!Number.isSafeInteger(cellCount) || cellCount <= 0) {
+		throw new Error("Native runtime v2 grid dimensions are invalid");
+	}
+	for (const [label, map] of denseMaps) {
+		if (map?.length !== cellCount) {
+			throw new Error(`${label} does not exactly cover the active grid`);
+		}
+	}
+	const sideInfluenceBitsRuns = topology.stable.map(
+		({ browserSideIndex }, sideIndex) => {
+			const influence = sideInfluenceMaps?.[browserSideIndex];
+			if (influence?.length !== cellCount) {
+				throw new Error(
+					`sideInfluenceMaps[${browserSideIndex}] does not cover the active grid`,
+				);
+			}
+			return encodeNativeRuntimeFloat32BitRuns(
+				influence,
+				`sideInfluenceBitsRuns[${sideIndex}]`,
+			);
+		},
+	);
+	return {
+		encoding: "rle-bits-v1",
+		maps: {
+			landRuns: encodeNativeRuntimeRuns(landMask, "landMask", 2),
+			worldControlRuns: encodeNativeRuntimeRuns(
+				worldControlMap,
+				"worldControlMap",
+				65535,
+			),
+			deJureRuns: encodeNativeRuntimeRuns(deJureMap, "deJureMap", 65535),
+			primaryOccupierRuns: encodeNativeRuntimeRuns(
+				primaryOccupierMap,
+				"primaryOccupierMap",
+				65535,
+			),
+			dominantSideRuns: encodeNativeRuntimeSignedRuns(
+				dominantSideMap,
+				"dominantSideMap",
+				-1,
+				topology.sides.length - 1,
+				(browserSideIndex) => {
+					if (browserSideIndex === -1) return -1;
+					const nativeSide = topology.browserToNativeSide.get(browserSideIndex);
+					if (nativeSide === undefined) {
+						throw new Error(
+							`dominantSideMap references undeclared browser side ${browserSideIndex}`,
+						);
+					}
+					return nativeSide;
+				},
+			),
+			occupationBitsRuns: encodeNativeRuntimeOccupationBitRuns(
+				occupationMap,
+				dominantSideMap,
+				topology.browserToNativeSide,
+				"occupationBitsRuns",
+			),
+			sideInfluenceBitsRuns,
+		},
+		revisions: {
+			topologyRevision: snapshot.topologyRevision,
+			worldRevision: snapshot.worldRevision,
+			cityRevision: snapshot.cityRevision,
+		},
+		committedCensus: {
+			generation: snapshot.generation,
+			commitSequence: snapshot.commitSequence,
+			mutationSequence: status.mutationSequence,
+			processedTiles: snapshot.processedTiles,
+			processedItems: snapshot.processedItems,
+		},
+	};
+}
+
+function buildMidWarNativeRuntimeCheckpoint({ steps = 1 } = {}) {
+	if (!nativeRuntimeWarIsActive()) {
+		throw new Error("No active war is available for native runtime export");
+	}
+	if (_simTickCount <= 0 && simFrameCount <= 0 && economyPayCycle <= 0) {
+		throw new Error(
+			"Native runtime v2 requires a mid-war state after simulation has advanced",
+		);
+	}
+	if (!Number.isSafeInteger(steps) || steps < 1) {
+		throw new TypeError("steps must be a positive safe integer");
+	}
+	if (
+		nativeRuntimeScenarioIdentity?.format !== "binary" ||
+		!/^[0-9a-f]{64}$/.test(nativeRuntimeScenarioIdentity.sha256 || "")
+	) {
+		throw new Error(
+			"The loaded scenario has no verified compiled MWSC SHA-256 identity",
+		);
+	}
+	if (!warEconomyEnabled) {
+		throw new Error("Native runtime v2 requires the browser war economy");
+	}
+	const topology = nativeRuntimeStableTopology();
+	const territory = nativeRuntimeV2Territory(topology);
+	const liveUnits = units.filter(
+		(unit) =>
+			unit &&
+			Number.isFinite(unit.health) &&
+			unit.health > 0 &&
+			(unit.kind === "armor" || getLiveFormationStrength(unit) > 0),
+	);
+	const policyContext = nativeRuntimePolicyContext(topology, liveUnits);
+	const checkpointUnits = liveUnits.map((unit, index) =>
+		serializeNativeRuntimeUnit(unit, index + 1, policyContext),
+	);
+	const declaredCountryIds = topology.sides.flatMap((side) => side.countryIds);
+	const declared = new Set(declaredCountryIds);
+	const economies = declaredCountryIds.map((countryId) => {
+		const state = countryEconomy.get(countryId);
+		if (!state) {
+			throw new Error(`Country ${countryId} has no live war-economy state`);
+		}
+		return serializeNativeRuntimeEconomy(state);
+	});
+	const occupations = Array.from(occupationEconomies.values())
+		.map((record) => {
+			if (!declared.has(record.victimId) || !declared.has(record.annexerId)) {
+				throw new Error(
+					`Occupation ${record.victimId}->${record.annexerId} is outside stable topology`,
+				);
+			}
+			return serializeNativeRuntimeOccupation(record);
+		})
+		.sort((left, right) => left.victimId - right.victimId);
+	const casualties = Object.fromEntries(
+		declaredCountryIds.map((countryId) => {
+			const loss = Number(countryCasualties.get(countryId) || 0);
+			if (!Number.isFinite(loss) || loss < 0) {
+				throw new Error(`Country ${countryId} has invalid live casualties`);
+			}
+			return [countryId, loss];
+		}),
+	);
+	return {
+		schema: NATIVE_RUNTIME_CHECKPOINT_V2_SCHEMA,
+		checkpointBoundary: "midWar",
+		scenario: {
+			sha256: nativeRuntimeScenarioIdentity.sha256,
+			name: nativeRuntimeScenarioIdentity.name,
+			gridRes: nativeRuntimeScenarioIdentity.gridRes,
+		},
+		geography:
+			typeof structuredClone === "function"
+				? structuredClone(_nativeRuntimeInitialCheckpoint.geography)
+				: JSON.parse(JSON.stringify(_nativeRuntimeInitialCheckpoint.geography)),
+		sides: topology.sides,
+		activeSides: topology.activeSides,
+		hostilityMatrix: topology.hostilityMatrix,
+		tick: _simTickCount,
+		frame: simFrameCount,
+		warGraceEnd: warGraceEndTick,
+		strategicCycle: economyPayCycle,
+		steps,
+		units: checkpointUnits,
+		economies,
+		occupations,
+		casualties,
+		casualtiesByVictim: nativeRuntimeCasualtiesByVictim(declaredCountryIds),
+		territory,
+	};
+}
+
 function captureInitialNativeRuntimeCheckpoint() {
 	try {
 		_nativeRuntimeInitialCheckpoint = buildInitialNativeRuntimeCheckpoint();
@@ -10534,11 +10980,18 @@ function cloneInitialNativeRuntimeCheckpoint({ steps = 1 } = {}) {
 	return checkpoint;
 }
 
+function createNativeRuntimeCheckpoint(options = {}) {
+	const version = options.version ?? 1;
+	if (version === 1) return cloneInitialNativeRuntimeCheckpoint(options);
+	if (version === 2) return buildMidWarNativeRuntimeCheckpoint(options);
+	throw new RangeError("Native runtime checkpoint version must be 1 or 2");
+}
+
 window.nativeRuntimeCheckpoint = async (options = {}) =>
-	cloneInitialNativeRuntimeCheckpoint(options);
+	createNativeRuntimeCheckpoint(options);
 
 window.downloadNativeRuntimeCheckpoint = async (options = {}) => {
-	const checkpoint = cloneInitialNativeRuntimeCheckpoint(options);
+	const checkpoint = createNativeRuntimeCheckpoint(options);
 	const blob = new Blob([`${JSON.stringify(checkpoint, null, 2)}\n`], {
 		type: "application/json",
 	});

@@ -1,0 +1,208 @@
+#!/usr/bin/env node
+
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const main = fs.readFileSync(path.join(root, "src/main.js"), "utf8");
+
+const signedStart = main.indexOf("function encodeNativeRuntimeRuns");
+const signedEnd = main.indexOf("\nfunction nativeRuntimeTopology", signedStart);
+assert.ok(signedStart >= 0 && signedEnd > signedStart, "v2 RLE encoders exist");
+const encoders = Function(
+	`"use strict";\n${main.slice(signedStart, signedEnd)}\nreturn { encodeNativeRuntimeSignedRuns, encodeNativeRuntimeFloat32BitRuns, encodeNativeRuntimeOccupationBitRuns };`,
+)();
+
+const floatBitPattern = Uint32Array.of(
+	0x00000000,
+	0x80000000,
+	0x3f800000,
+	0x3f800000,
+	0x7fc00001,
+	0x7fc00001,
+	0xff800000,
+);
+const floatSource = new Float32Array(floatBitPattern.buffer);
+const floatRuns = encoders.encodeNativeRuntimeFloat32BitRuns(
+	floatSource,
+	"float32",
+);
+assert.deepEqual(
+	floatRuns,
+	[
+		[1, 0x00000000],
+		[1, 0x80000000],
+		[2, 0x3f800000],
+		[2, 0x7fc00001],
+		[1, 0xff800000],
+	],
+	"Float32 RLE preserves exact u32 bits and emits maximal runs",
+);
+assert.deepEqual(
+	floatRuns.flatMap(([length, value]) => new Array(length).fill(value)),
+	Array.from(floatBitPattern),
+	"Float32 bit RLE roundtrips every element",
+);
+assert.deepEqual(
+	encoders.encodeNativeRuntimeSignedRuns(
+		Int8Array.of(-1, -1, 0, 0, 1, -1),
+		"dominance",
+		-1,
+		1,
+	),
+	[
+		[2, -1],
+		[2, 0],
+		[1, 1],
+		[1, -1],
+	],
+	"signed dominance RLE preserves neutral cells",
+);
+assert.throws(
+	() => encoders.encodeNativeRuntimeFloat32BitRuns([1], "wrong-type"),
+	/Float32Array/,
+);
+
+const browserOccupation = Float32Array.of(-7, -0.5, -0.5, 0.25, 0.25, 0.75);
+const browserDominance = Int8Array.of(-1, 1, 1, 2, 2, 2);
+const compactSides = new Map([
+	[1, 0],
+	[2, 1],
+]);
+const occupationRuns = encoders.encodeNativeRuntimeOccupationBitRuns(
+	browserOccupation,
+	browserDominance,
+	compactSides,
+	"occupation",
+);
+assert.deepEqual(
+	occupationRuns,
+	[
+		[1, 0x00000000],
+		[2, 0x3f000000],
+		[2, 0xbe800000],
+		[1, 0xbf400000],
+	],
+	"occupation sign follows compact native parity and equal projected bits form maximal runs",
+);
+const projectedOccupationBits = occupationRuns.flatMap(([length, value]) =>
+	new Array(length).fill(value),
+);
+assert.deepEqual(
+	projectedOccupationBits,
+	[0x00000000, 0x3f000000, 0x3f000000, 0xbe800000, 0xbe800000, 0xbf400000],
+	"browser sides 1/2 compact exactly to native occupation sides 0/1",
+);
+assert.equal(
+	projectedOccupationBits[0],
+	0,
+	"a cell without a dominant side exports canonical positive zero",
+);
+
+assert.match(main, /native-runtime-checkpoint-v2/);
+assert.match(main, /checkpointBoundary: "midWar"/);
+assert.match(main, /version === 1.*cloneInitialNativeRuntimeCheckpoint/s);
+assert.match(main, /version === 2.*buildMidWarNativeRuntimeCheckpoint/s);
+assert.match(main, /const version = options\.version \?\? 1/);
+
+const v1Start = main.indexOf("function buildInitialNativeRuntimeCheckpoint");
+const v1End = main.indexOf(
+	"function nativeRuntimeCasualtiesByVictim",
+	v1Start,
+);
+const v1Builder = main.slice(v1Start, v1End);
+assert.match(v1Builder, /schema: NATIVE_RUNTIME_CHECKPOINT_SCHEMA/);
+assert.match(v1Builder, /checkpointBoundary: "postStartWar"/);
+assert.doesNotMatch(v1Builder, /territory|casualtiesByVictim/);
+
+const v2Start = main.indexOf("function buildMidWarNativeRuntimeCheckpoint");
+const v2End = main.indexOf(
+	"function captureInitialNativeRuntimeCheckpoint",
+	v2Start,
+);
+const v2Builder = main.slice(v2Start, v2End);
+for (const field of [
+	"scenario",
+	"geography",
+	"sides",
+	"activeSides",
+	"hostilityMatrix",
+	"tick",
+	"frame",
+	"warGraceEnd",
+	"strategicCycle",
+	"steps",
+	"units",
+	"economies",
+	"occupations",
+	"casualties",
+	"casualtiesByVictim",
+	"territory",
+]) {
+	assert.match(v2Builder, new RegExp(`\\n\\t\\t${field}(?::|,)`));
+}
+
+const territoryStart = main.indexOf("function nativeRuntimeV2Territory");
+const territoryEnd = main.indexOf(
+	"function buildMidWarNativeRuntimeCheckpoint",
+	territoryStart,
+);
+const territoryBuilder = main.slice(territoryStart, territoryEnd);
+assert.ok(
+	territoryBuilder.indexOf("flushTerritoryLedger()") <
+		territoryBuilder.indexOf("_territoryLedger?.getStatus()"),
+	"v2 synchronously flushes the ledger before auditing census status",
+);
+for (const field of [
+	"landRuns",
+	"worldControlRuns",
+	"deJureRuns",
+	"primaryOccupierRuns",
+	"dominantSideRuns",
+	"occupationBitsRuns",
+	"sideInfluenceBitsRuns",
+]) {
+	assert.match(territoryBuilder, new RegExp(`\\n\\t\\t\\t${field}(?::|,)`));
+}
+for (const field of [
+	"topologyRevision",
+	"worldRevision",
+	"cityRevision",
+	"generation",
+	"commitSequence",
+	"mutationSequence",
+	"processedTiles",
+	"processedItems",
+]) {
+	assert.match(territoryBuilder, new RegExp(`\\n\\t\\t\\t${field}:`));
+}
+assert.match(territoryBuilder, /encoding: "rle-bits-v1"/);
+assert.match(
+	territoryBuilder,
+	/encodeNativeRuntimeRuns\(landMask, "landMask", 2\)/,
+);
+assert.match(territoryBuilder, /status\.activeGeneration !== null/);
+assert.match(territoryBuilder, /status\.dirtyTiles !== 0/);
+assert.match(territoryBuilder, /snapshot\.pendingDirtyTilesAtCommit !== 0/);
+assert.match(
+	territoryBuilder,
+	/encodeNativeRuntimeOccupationBitRuns\(\s*occupationMap,\s*dominantSideMap,\s*topology\.browserToNativeSide,/s,
+);
+
+const topologyStart = main.indexOf("function nativeRuntimeStableTopology");
+const topologyEnd = main.indexOf(
+	"function nativeRuntimeUnitIsEncircled",
+	topologyStart,
+);
+const topologyBuilder = main.slice(topologyStart, topologyEnd);
+assert.match(topologyBuilder, /for \(const entry of initialCombatants\)/);
+assert.match(topologyBuilder, /countryEconomy\.get\(countryId\)\?\.capitulated/);
+assert.match(topologyBuilder, /activeSides/);
+
+assert.match(v2Builder, /nativeRuntimeWarIsActive\(\)/);
+assert.match(v2Builder, /requires a mid-war state/);
+assert.match(v2Builder, /nativeRuntimeStableTopology\(\)/);
+
+console.log("Native runtime checkpoint v2 smoke tests passed.");
