@@ -9836,6 +9836,7 @@ window.economyDebugReport = (countryId = null) => {
 
 const NATIVE_RUNTIME_CHECKPOINT_SCHEMA = "native-runtime-checkpoint-v1";
 const NATIVE_RUNTIME_CHECKPOINT_V2_SCHEMA = "native-runtime-checkpoint-v2";
+const NATIVE_RUNTIME_BATTLEFIELD_SCHEMA = "native-battlefield-v1";
 
 function nativeRuntimeWarIsActive() {
 	return (
@@ -9940,6 +9941,38 @@ function encodeNativeRuntimeFloat32BitRuns(source, label) {
 	}
 	const bits = new Uint32Array(source.buffer, source.byteOffset, source.length);
 	return encodeNativeRuntimeRuns(bits, label, 0xffffffff);
+}
+
+function encodeNativeRuntimeFiniteFloat32BitRuns(source, label) {
+	if (!(source instanceof Float32Array) || source.length <= 0) {
+		throw new Error(`${label} must be a non-empty Float32Array`);
+	}
+	for (let index = 0; index < source.length; index++) {
+		if (
+			!Number.isFinite(source[index]) ||
+			source[index] < 0 ||
+			source[index] > 1
+		) {
+			throw new Error(`${label}[${index}] must be finite and within [0, 1]`);
+		}
+	}
+	const runs = encodeNativeRuntimeFloat32BitRuns(source, label);
+	let covered = 0;
+	let previousBits = null;
+	for (const [length, bits] of runs) {
+		if (!Number.isSafeInteger(length) || length <= 0) {
+			throw new Error(`${label} contains an invalid run length`);
+		}
+		if (previousBits === bits) {
+			throw new Error(`${label} contains adjacent non-maximal runs`);
+		}
+		covered += length;
+		previousBits = bits;
+	}
+	if (covered !== source.length) {
+		throw new Error(`${label} RLE coverage disagrees with its dense map`);
+	}
+	return runs;
 }
 
 function encodeNativeRuntimeOccupationBitRuns(
@@ -10458,8 +10491,7 @@ function resolveNativeRuntimeUnitPolicy(unit, context) {
 		aiPolicy: {
 			baseSpeed,
 			terrainSpeedMultiplier,
-			speedMultiplier:
-				landSpeedMultiplier * Number(aiProfile.speedMult || 1) * 0.8,
+			speedMultiplier: landSpeedMultiplier * Number(aiProfile.speedMult || 1),
 			planSpeedMultiplier: 1,
 			neutralPenalty: inNeutral ? 0.15 : 1,
 			pushReadiness: 1,
@@ -10854,6 +10886,203 @@ function nativeRuntimeV2Territory(topology) {
 	};
 }
 
+function nativeRuntimeV2Battlefield(topology, liveUnits) {
+	const cellCount = gridWidth * gridHeight;
+	if (
+		!Number.isSafeInteger(cellCount) ||
+		cellCount <= 0 ||
+		!(terrainMask instanceof Float32Array) ||
+		terrainMask.length !== cellCount
+	) {
+		throw new Error(
+			"Native runtime battlefield terrain must exactly cover the active grid",
+		);
+	}
+	const terrainIntensityBitsRuns = encodeNativeRuntimeFiniteFloat32BitRuns(
+		terrainMask,
+		"terrainIntensityBitsRuns",
+	);
+
+	const declaredCountryIds = topology.sides.flatMap((side) => side.countryIds);
+	const declaredCountryIdSet = new Set(declaredCountryIds);
+	if (declaredCountryIdSet.size !== declaredCountryIds.length) {
+		throw new Error("Native runtime battlefield countries must be unique");
+	}
+	const browserSideByCountryId = new Map();
+	for (const stableSide of topology.stable) {
+		for (const countryId of stableSide.countryIds) {
+			browserSideByCountryId.set(countryId, stableSide.browserSideIndex);
+		}
+	}
+	const liveCountryById = new Map();
+	for (const side of sides) {
+		for (const country of side || []) {
+			if (country) liveCountryById.set(country.id, country);
+		}
+	}
+
+	const urbanCenterIds = new Set();
+	const urbanCenters = activeTheaterCities
+		.map((city, index) => {
+			const id = Number(city?.id);
+			const countryId = Number(city?.sovereignId || city?.ownerId);
+			const lat = Number(city?.lat);
+			const lng = Number(city?.lng);
+			const cell = getGridIndex(lat, lng);
+			if (!Number.isSafeInteger(id) || id <= 0) {
+				throw new Error(`Battlefield urban center ${index} has an invalid id`);
+			}
+			if (urbanCenterIds.has(id)) {
+				throw new Error(`Battlefield urban center id ${id} is duplicated`);
+			}
+			urbanCenterIds.add(id);
+			if (
+				!Number.isInteger(countryId) ||
+				countryId <= 0 ||
+				!declaredCountryIdSet.has(countryId)
+			) {
+				throw new Error(
+					`Battlefield urban center ${id} references undeclared country ${countryId}`,
+				);
+			}
+			if (!Number.isFinite(lat) || !Number.isFinite(lng) || cell < 0) {
+				throw new Error(`Battlefield urban center ${id} is outside the grid`);
+			}
+			return { id, countryId, cell, lat, lng };
+		})
+		.sort((left, right) => left.cell - right.cell || left.id - right.id);
+
+	const config = {
+		unitSpeed: CONFIG.UNIT_SPEED,
+		unitNavalSpeed: CONFIG.UNIT_NAVAL_SPEED,
+		influenceRate: CONFIG.INFLUENCE_RATE,
+		influenceRadius: CONFIG.INFLUENCE_RADIUS,
+		encirclementRadius: CONFIG.ENCIRCLEMENT_RADIUS,
+		alpenMountainSpeedMultiplier: CONFIG.ALPEN_MTN_SPEED_MULT,
+		alpenCombatMultiplier: CONFIG.ALPEN_COMBAT_MULT,
+		// Native movement applies the browser's final 0.8 scale in its kernel.
+		nativeSpeedScale: 1,
+		activeCombatExclusionFrames: 5,
+		longWarFrameThreshold: 6000,
+		longWarDefenseMultiplier: 0.75,
+		armorSupportRadius: COMBINED_ARMS_CONFIG.ARMOR_SUPPORT_RADIUS_DEG,
+		armorSupportMemoryTicks: 12,
+	};
+	for (const [field, value] of Object.entries(config)) {
+		if (!Number.isFinite(value) || value < 0) {
+			throw new Error(`Native runtime battlefield config ${field} is invalid`);
+		}
+	}
+
+	const countries = declaredCountryIds.map((countryId) => {
+		const country = liveCountryById.get(countryId) || null;
+		const meta = countryMetadata[countryId - 1] || null;
+		const combatBuff = getEffectiveBuffState(country, meta);
+		const influenceBuff = country?.buffState || "none";
+		if (
+			!BUFF_STATES.includes(combatBuff) ||
+			!BUFF_STATES.includes(influenceBuff)
+		) {
+			throw new Error(`Country ${countryId} has an invalid battlefield buff`);
+		}
+		const attackBuffPercent = Number(country?.attackBuffPercent || 0);
+		const defenseBuffPercent = Number(country?.defenseBuffPercent || 0);
+		const aiSpeedMultiplier = Number(
+			aiCountryState.get(countryId)?.speedMult || 1,
+		);
+		if (
+			!Number.isFinite(attackBuffPercent) ||
+			!Number.isFinite(defenseBuffPercent) ||
+			!Number.isFinite(aiSpeedMultiplier) ||
+			aiSpeedMultiplier < 0
+		) {
+			throw new Error(`Country ${countryId} has invalid battlefield modifiers`);
+		}
+		const browserSideIndex = browserSideByCountryId.get(countryId);
+		if (browserSideIndex === undefined) {
+			throw new Error(`Country ${countryId} has no stable battlefield side`);
+		}
+		return {
+			countryId,
+			combatBuff,
+			influenceBuff,
+			attackBuffPercent,
+			defenseBuffPercent,
+			capitalLost: capitalLostCountries.has(countryId),
+			warPhase: _sideWarPhase[browserSideIndex] || "STALEMATE",
+			conquestMode: gameMode === "CONQUEST",
+			aiSpeedMultiplier,
+		};
+	});
+	if (countries.length !== declaredCountryIds.length) {
+		throw new Error(
+			"Native runtime battlefield country coverage is incomplete",
+		);
+	}
+
+	const battlefieldUnits = liveUnits.map((unit, index) => {
+		const unitId = index + 1;
+		const cohesionSeed = Number(unit.id);
+		if (!Number.isFinite(cohesionSeed) || cohesionSeed < 0) {
+			throw new Error(
+				`Battlefield unit ${unitId} has an invalid cohesion seed`,
+			);
+		}
+		const encircledTicks = Number(unit.encircledTicks || 0);
+		if (!Number.isSafeInteger(encircledTicks) || encircledTicks < 0) {
+			throw new Error(
+				`Battlefield unit ${unitId} has invalid encirclement history`,
+			);
+		}
+		let armorSupportLastTick = null;
+		if (unit._armorSupportLastTick != null) {
+			const supportTick = Number(unit._armorSupportLastTick);
+			if (
+				Number.isFinite(supportTick) &&
+				Number.isSafeInteger(supportTick) &&
+				supportTick >= 0
+			) {
+				armorSupportLastTick = supportTick;
+			} else if (supportTick !== Number.NEGATIVE_INFINITY) {
+				throw new Error(
+					`Battlefield unit ${unitId} has invalid armor support history`,
+				);
+			}
+		}
+		const lastAllyCount =
+			unit.lastAllyCount === undefined ? 1 : Number(unit.lastAllyCount);
+		if (!Number.isFinite(lastAllyCount) || lastAllyCount < 0) {
+			throw new Error(`Battlefield unit ${unitId} has an invalid ally count`);
+		}
+		return {
+			unitId,
+			isAlpenjager: !!unit.isAlpenjager,
+			cohesionSeed,
+			localTacticsExcluded: !!(
+				unit.navalAssigned ||
+				unit.supplyAssigned ||
+				unit.coastalAssigned
+			),
+			encircledTicks,
+			armorSupportLastTick,
+			lastAllyCount,
+		};
+	});
+	if (battlefieldUnits.length !== liveUnits.length) {
+		throw new Error("Native runtime battlefield unit coverage is incomplete");
+	}
+
+	return {
+		schema: NATIVE_RUNTIME_BATTLEFIELD_SCHEMA,
+		mountainsEnabled: !!mountainsEnabled,
+		terrainIntensityBitsRuns,
+		urbanCenters,
+		config,
+		countries,
+		units: battlefieldUnits,
+	};
+}
+
 function buildMidWarNativeRuntimeCheckpoint({ steps = 1 } = {}) {
 	if (!nativeRuntimeWarIsActive()) {
 		throw new Error("No active war is available for native runtime export");
@@ -10891,6 +11120,7 @@ function buildMidWarNativeRuntimeCheckpoint({ steps = 1 } = {}) {
 		serializeNativeRuntimeUnit(unit, index + 1, policyContext),
 	);
 	const declaredCountryIds = topology.sides.flatMap((side) => side.countryIds);
+	const battlefield = nativeRuntimeV2Battlefield(topology, liveUnits);
 	const declared = new Set(declaredCountryIds);
 	const economies = declaredCountryIds.map((countryId) => {
 		const state = countryEconomy.get(countryId);
@@ -10944,6 +11174,7 @@ function buildMidWarNativeRuntimeCheckpoint({ steps = 1 } = {}) {
 		casualties,
 		casualtiesByVictim: nativeRuntimeCasualtiesByVictim(declaredCountryIds),
 		territory,
+		battlefield,
 	};
 }
 

@@ -12,7 +12,7 @@ const signedStart = main.indexOf("function encodeNativeRuntimeRuns");
 const signedEnd = main.indexOf("\nfunction nativeRuntimeTopology", signedStart);
 assert.ok(signedStart >= 0 && signedEnd > signedStart, "v2 RLE encoders exist");
 const encoders = Function(
-	`"use strict";\n${main.slice(signedStart, signedEnd)}\nreturn { encodeNativeRuntimeSignedRuns, encodeNativeRuntimeFloat32BitRuns, encodeNativeRuntimeOccupationBitRuns };`,
+	`"use strict";\n${main.slice(signedStart, signedEnd)}\nreturn { encodeNativeRuntimeSignedRuns, encodeNativeRuntimeFloat32BitRuns, encodeNativeRuntimeFiniteFloat32BitRuns, encodeNativeRuntimeOccupationBitRuns };`,
 )();
 
 const floatBitPattern = Uint32Array.of(
@@ -65,6 +65,55 @@ assert.throws(
 	/Float32Array/,
 );
 
+const terrainBits = Uint32Array.of(
+	0x00000000,
+	0x80000000,
+	0x3f000000,
+	0x3f000000,
+	0x3f400000,
+);
+const terrainRuns = encoders.encodeNativeRuntimeFiniteFloat32BitRuns(
+	new Float32Array(terrainBits.buffer),
+	"terrain",
+);
+assert.deepEqual(
+	terrainRuns,
+	[
+		[1, 0x00000000],
+		[1, 0x80000000],
+		[2, 0x3f000000],
+		[1, 0x3f400000],
+	],
+	"finite terrain RLE preserves exact float bits and emits maximal runs",
+);
+assert.equal(
+	terrainRuns.reduce((covered, [length]) => covered + length, 0),
+	terrainBits.length,
+	"finite terrain RLE exactly covers its dense map",
+);
+for (let index = 1; index < terrainRuns.length; index++) {
+	assert.notEqual(
+		terrainRuns[index - 1][1],
+		terrainRuns[index][1],
+		"finite terrain RLE has no adjacent equal-bit runs",
+	);
+}
+for (const invalidTerrain of [
+	Number.NaN,
+	Number.POSITIVE_INFINITY,
+	-0.25,
+	1.25,
+]) {
+	assert.throws(
+		() =>
+			encoders.encodeNativeRuntimeFiniteFloat32BitRuns(
+				Float32Array.of(0, invalidTerrain),
+				"terrain",
+			),
+		/finite and within \[0, 1\]/,
+	);
+}
+
 const browserOccupation = Float32Array.of(-7, -0.5, -0.5, 0.25, 0.25, 0.75);
 const browserDominance = Int8Array.of(-1, 1, 1, 2, 2, 2);
 const compactSides = new Map([
@@ -116,6 +165,7 @@ const v1Builder = main.slice(v1Start, v1End);
 assert.match(v1Builder, /schema: NATIVE_RUNTIME_CHECKPOINT_SCHEMA/);
 assert.match(v1Builder, /checkpointBoundary: "postStartWar"/);
 assert.doesNotMatch(v1Builder, /territory|casualtiesByVictim/);
+assert.doesNotMatch(v1Builder, /battlefield/);
 
 const v2Start = main.indexOf("function buildMidWarNativeRuntimeCheckpoint");
 const v2End = main.indexOf(
@@ -140,8 +190,79 @@ for (const field of [
 	"casualties",
 	"casualtiesByVictim",
 	"territory",
+	"battlefield",
 ]) {
 	assert.match(v2Builder, new RegExp(`\\n\\t\\t${field}(?::|,)`));
+}
+
+const battlefieldStart = main.indexOf("function nativeRuntimeV2Battlefield");
+const battlefieldEnd = main.indexOf(
+	"function buildMidWarNativeRuntimeCheckpoint",
+	battlefieldStart,
+);
+assert.ok(
+	battlefieldStart >= 0 && battlefieldEnd > battlefieldStart,
+	"v2 battlefield builder exists",
+);
+const battlefieldBuilder = main.slice(battlefieldStart, battlefieldEnd);
+assert.match(battlefieldBuilder, /schema: NATIVE_RUNTIME_BATTLEFIELD_SCHEMA/);
+assert.match(battlefieldBuilder, /mountainsEnabled: !!mountainsEnabled/);
+assert.match(
+	battlefieldBuilder,
+	/encodeNativeRuntimeFiniteFloat32BitRuns\(\s*terrainMask,/s,
+);
+assert.match(battlefieldBuilder, /terrainMask\.length !== cellCount/);
+assert.match(battlefieldBuilder, /countries\.length !== declaredCountryIds\.length/);
+assert.match(battlefieldBuilder, /battlefieldUnits\.length !== liveUnits\.length/);
+assert.match(battlefieldBuilder, /nativeSpeedScale: 1,/);
+for (const field of [
+	"unitSpeed",
+	"unitNavalSpeed",
+	"influenceRate",
+	"influenceRadius",
+	"encirclementRadius",
+	"alpenMountainSpeedMultiplier",
+	"alpenCombatMultiplier",
+	"nativeSpeedScale",
+	"activeCombatExclusionFrames",
+	"longWarFrameThreshold",
+	"longWarDefenseMultiplier",
+	"armorSupportRadius",
+	"armorSupportMemoryTicks",
+]) {
+	assert.match(battlefieldBuilder, new RegExp(`\\n\\t\\t${field}:`));
+}
+assert.doesNotMatch(
+	main,
+	/speedMultiplier:\s*landSpeedMultiplier\s*\*\s*Number\(aiProfile\.speedMult \|\| 1\)\s*\*\s*0\.8/,
+	"the movement kernel owns the final 0.8 scale",
+);
+assert.match(
+	battlefieldBuilder,
+	/return \{ id, countryId, cell, lat, lng \}/,
+);
+for (const field of [
+	"combatBuff",
+	"influenceBuff",
+	"attackBuffPercent",
+	"defenseBuffPercent",
+	"capitalLost",
+	"warPhase",
+	"conquestMode",
+	"aiSpeedMultiplier",
+]) {
+	assert.match(battlefieldBuilder, new RegExp(`\\n\\t\\t\\t${field}(?::|,)`));
+}
+for (const field of [
+	"unitId",
+	"isAlpenjager",
+	"cohesionSeed",
+	"localTacticsExcluded",
+	"encircledTicks",
+	"armorSupportLastTick",
+	"lastAllyCount",
+]) {
+	assert.match(battlefieldBuilder, new RegExp(`\\n\\t\\t\\t${field}(?::|,)`));
 }
 
 const territoryStart = main.indexOf("function nativeRuntimeV2Territory");
