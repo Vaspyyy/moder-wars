@@ -123,6 +123,7 @@ import {
 	setIsCustomTerrain,
 	setLoadingThematic,
 	setMissilesEnabled,
+	setNativeRuntimeScenarioIdentity,
 	setRawGeoJsonData,
 	setRefAboveTerrain,
 	setReferenceImageUrl,
@@ -1386,6 +1387,7 @@ async function performPresetLoad(
 	}
 
 	const loadGeneration = ++worldLoadGeneration;
+	setNativeRuntimeScenarioIdentity(null);
 	const isCompiledSource =
 		typeof fileOrBlob === "string" ||
 		(typeof URL !== "undefined" && fileOrBlob instanceof URL);
@@ -1916,6 +1918,15 @@ async function performPresetLoad(
 			await loadCities();
 		}
 		loadTrace.mark("cities-ready", { cities: cities.length });
+		if (compiledMaps?.sourceIdentity?.format === "binary") {
+			setNativeRuntimeScenarioIdentity({
+				format: "binary",
+				name: compiledMaps.sourceIdentity.name,
+				sha256: compiledMaps.sourceIdentity.sha256,
+				gridRes: CONFIG.GRID_RES,
+				sourceUrl: compiledMaps.sourceIdentity.url,
+			});
+		}
 
 		setGameMode(targetMode);
 		mainMenu.style.display = "none";

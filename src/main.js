@@ -2910,6 +2910,10 @@ export let currentUsername = null;
 export let flagCodes = null;
 export let isMuted = false;
 export let currentScenarioContext = null; // { id, name, ownerUsername }
+export let nativeRuntimeScenarioIdentity = null;
+let _nativeRuntimeInitialCheckpoint = null;
+let _nativeRuntimeCheckpointError =
+	"No post-startWar checkpoint has been captured";
 export let hubReturnState = null;
 export let hubWasInEditor = false;
 export let godModeActive = false;
@@ -2919,6 +2923,21 @@ export let buffedSideIdx;
 export let preGodModeState = "SIMULATING";
 export const latestCountryStats = new Map();
 export let disableFullscreen = getCookie("mw_disable_fullscreen") === "true";
+
+export function setNativeRuntimeScenarioIdentity(identity) {
+	_nativeRuntimeInitialCheckpoint = null;
+	_nativeRuntimeCheckpointError =
+		"No post-startWar checkpoint has been captured";
+	nativeRuntimeScenarioIdentity = identity
+		? Object.freeze({
+				format: identity.format,
+				name: identity.name,
+				sha256: identity.sha256,
+				gridRes: Number(identity.gridRes),
+				sourceUrl: identity.sourceUrl || null,
+			})
+		: null;
+}
 
 // Experiment Loop state is kept apart from the mutable simulation objects.
 // Specs and reports retain serializable ids, uids, options, metrics, and events
@@ -9815,6 +9834,728 @@ window.economyDebugReport = (countryId = null) => {
 	};
 };
 
+const NATIVE_RUNTIME_CHECKPOINT_SCHEMA = "native-runtime-checkpoint-v1";
+
+function nativeRuntimeWarIsActive() {
+	return (
+		gameState === "SIMULATING" ||
+		(godModeActive && preGodModeState === "SIMULATING")
+	);
+}
+
+function encodeNativeRuntimeRuns(
+	source,
+	label,
+	maxValue = Number.MAX_SAFE_INTEGER,
+	projectValue = null,
+) {
+	if (!source || !Number.isSafeInteger(source.length) || source.length <= 0) {
+		throw new Error(`${label} must be a non-empty dense map`);
+	}
+	const readValue = (index) => {
+		const sourceValue = Number(source[index]);
+		if (!Number.isSafeInteger(sourceValue) || sourceValue < 0) {
+			throw new Error(`${label}[${index}] must be a non-negative integer`);
+		}
+		const value = Number(
+			projectValue ? projectValue(sourceValue, index) : sourceValue,
+		);
+		if (!Number.isSafeInteger(value) || value < 0 || value > maxValue) {
+			throw new Error(
+				`${label}[${index}] must be an integer from 0 through ${maxValue}`,
+			);
+		}
+		return value;
+	};
+	const runs = [];
+	let runValue = readValue(0);
+	let runLength = 1;
+	for (let index = 1; index < source.length; index++) {
+		const value = readValue(index);
+		if (value === runValue) {
+			runLength++;
+			if (!Number.isSafeInteger(runLength)) {
+				throw new Error(`${label} contains an unsafe run length`);
+			}
+			continue;
+		}
+		runs.push([runLength, runValue]);
+		runValue = value;
+		runLength = 1;
+	}
+	runs.push([runLength, runValue]);
+	const coveredCells = runs.reduce((total, [length]) => total + length, 0);
+	if (coveredCells !== source.length) {
+		throw new Error(`${label} RLE coverage disagrees with its dense map`);
+	}
+	return runs;
+}
+
+function nativeRuntimeTopology() {
+	const active = [];
+	const countryToSide = new Map();
+	for (
+		let browserSideIndex = 0;
+		browserSideIndex < sides.length;
+		browserSideIndex++
+	) {
+		const countryIds = (sides[browserSideIndex] || [])
+			.filter(Boolean)
+			.map((country) => Number(country.id));
+		if (countryIds.length === 0) continue;
+		const sideIndex = active.length;
+		for (const countryId of countryIds) {
+			if (!Number.isInteger(countryId) || countryId <= 0) {
+				throw new Error(
+					`Side ${browserSideIndex} contains an invalid country id`,
+				);
+			}
+			if (countryToSide.has(countryId)) {
+				throw new Error(`Country ${countryId} appears in more than one side`);
+			}
+			countryToSide.set(countryId, sideIndex);
+		}
+		active.push({ browserSideIndex, sideIndex, countryIds });
+	}
+	if (active.length < 2) {
+		throw new Error(
+			"A native runtime checkpoint needs at least two active sides",
+		);
+	}
+
+	const compactHostility = [];
+	let hostileDirections = 0;
+	for (const left of active) {
+		for (const right of active) {
+			const hostile =
+				left.browserSideIndex === right.browserSideIndex
+					? 0
+					: Number(
+							hostilityMatrix[
+								left.browserSideIndex * MAX_SIDES + right.browserSideIndex
+							] || 0,
+						);
+			compactHostility.push(hostile === 1 ? 1 : 0);
+			if (hostile === 1) hostileDirections++;
+		}
+	}
+	if (hostileDirections === 0) {
+		throw new Error(
+			"The active sides do not have an active directed hostility",
+		);
+	}
+	return {
+		sides: active.map(({ sideIndex, countryIds }) => ({
+			sideIndex,
+			countryIds,
+		})),
+		activeSides: active.map(({ sideIndex }) => sideIndex),
+		hostilityMatrix: compactHostility,
+		countryToSide,
+		browserToNativeSide: new Map(
+			active.map(({ browserSideIndex, sideIndex }) => [
+				browserSideIndex,
+				sideIndex,
+			]),
+		),
+	};
+}
+
+function nativeRuntimeUnitIsEncircled(unit, gridIndex) {
+	if (
+		gridIndex < 0 ||
+		landMask[gridIndex] === 0 ||
+		["buff", "super"].includes(
+			getEffectiveBuffState(
+				sides[unit.sideIndex]?.find(
+					(country) => country.id === unit.sovereignId,
+				),
+				countryMetadata[unit.sovereignId - 1] || null,
+			),
+		)
+	) {
+		return false;
+	}
+	const radiusCells = Math.round(CONFIG.ENCIRCLEMENT_RADIUS / CONFIG.GRID_RES);
+	const row = Math.floor(gridIndex / gridWidth);
+	const column = gridIndex % gridWidth;
+	const diagonal = Math.round(radiusCells * 0.7);
+	const offsets = [
+		[0, radiusCells],
+		[0, -radiusCells],
+		[radiusCells, 0],
+		[-radiusCells, 0],
+		[diagonal, diagonal],
+		[-diagonal, -diagonal],
+		[diagonal, -diagonal],
+		[-diagonal, diagonal],
+	];
+	let enemyCount = 0;
+	for (const [columnOffset, rowOffset] of offsets) {
+		const nextRow = row + rowOffset;
+		const nextColumn = column + columnOffset;
+		if (
+			nextRow < 0 ||
+			nextRow >= gridHeight ||
+			nextColumn < 0 ||
+			nextColumn >= gridWidth
+		) {
+			continue;
+		}
+		const index = nextRow * gridWidth + nextColumn;
+		if (landMask[index] > 0 && isEnemyTerritory(index, unit.sideIndex)) {
+			enemyCount++;
+		}
+	}
+	return enemyCount / offsets.length > 0.875;
+}
+
+function nativeRuntimePolicyContext(topology, liveUnits) {
+	const countryById = new Map();
+	const supportCountryIds = new Set();
+	for (const side of sides) {
+		for (const country of side || []) {
+			if (!country) continue;
+			countryById.set(country.id, country);
+			if (country.role === "SUPPORT") supportCountryIds.add(country.id);
+		}
+	}
+	const activeCityCells = new Set();
+	const citiesBySovereign = new Map();
+	for (const city of activeTheaterCities) {
+		const index = getGridIndex(city.lat, city.lng);
+		if (index >= 0) activeCityCells.add(index);
+		const sovereign = city.sovereignId || city.ownerId;
+		if (!sovereign) continue;
+		let countryCities = citiesBySovereign.get(sovereign);
+		if (!countryCities) {
+			countryCities = [];
+			citiesBySovereign.set(sovereign, countryCities);
+		}
+		countryCities.push(city);
+	}
+	const sideFormationCounts = new Map();
+	for (const unit of liveUnits) {
+		if (!unitCountsForCapitulation(unit)) continue;
+		sideFormationCounts.set(
+			unit.sideIndex,
+			(sideFormationCounts.get(unit.sideIndex) || 0) +
+				getLiveFormationStrength(unit),
+		);
+	}
+	return {
+		...topology,
+		countryById,
+		supportCountryIds,
+		activeCityCells,
+		citiesBySovereign,
+		sideFormationCounts,
+		rebelDeJureByCountry: new Map(
+			Array.from(activeRebellions.keys(), (countryId) => [
+				countryId,
+				countryId,
+			]),
+		),
+	};
+}
+
+function resolveNativeRuntimeUnitPolicy(unit, context) {
+	const gridIndex = getGridIndex(unit.lat, unit.lng);
+	const isAtSea = gridIndex < 0 || landMask[gridIndex] === 0;
+	const mountainIntensity =
+		mountainsEnabled && gridIndex >= 0
+			? Math.max(0, Number(terrainMask[gridIndex]) || 0)
+			: 0;
+	const mountain = mountainIntensity > 0;
+	const country = context.countryById.get(unit.sovereignId) || null;
+	const meta = countryMetadata[unit.sovereignId - 1] || null;
+	const effectiveBuff = getEffectiveBuffState(country, meta);
+	const commandPolicy = getUnitCommandPolicy(unit);
+	const aiProfile = aiCountryState.get(unit.sovereignId) || {
+		speedMult: 1,
+		forceDefensive: false,
+	};
+
+	let dealtMultiplier = 1;
+	let takenMultiplier = 1;
+	let terrainSpeedMultiplier = 1;
+	if (unit.victoryBoostTicks > 0) {
+		dealtMultiplier *= 1.4;
+		terrainSpeedMultiplier *= 1.3;
+	}
+	if (capitalLostCountries.has(unit.sovereignId)) {
+		dealtMultiplier *= 0.8;
+		takenMultiplier *= 1.15;
+		terrainSpeedMultiplier *= 0.9;
+	}
+	const warPhase = _sideWarPhase[unit.sideIndex];
+	if (warPhase === "COLLAPSING") dealtMultiplier *= 0.7;
+	else if (gameMode !== "CONQUEST" && warPhase === "ADVANCING") {
+		dealtMultiplier *= 1.15;
+	}
+	if (effectiveBuff === "buff") {
+		dealtMultiplier = 2.5;
+		takenMultiplier = 0.6;
+		terrainSpeedMultiplier = 1.3;
+	} else if (effectiveBuff === "super") {
+		dealtMultiplier = 10;
+		takenMultiplier = 0.2;
+		terrainSpeedMultiplier = 1.8;
+	} else if (effectiveBuff === "godly") {
+		dealtMultiplier = 40;
+		takenMultiplier = 0.015;
+		terrainSpeedMultiplier = 2.2;
+	} else if (effectiveBuff === "weakened") {
+		dealtMultiplier = 0.7;
+		takenMultiplier = 1.4;
+		terrainSpeedMultiplier = 0.7;
+	} else if (effectiveBuff === "crippled") {
+		dealtMultiplier = 0.4;
+		takenMultiplier = 2.5;
+		terrainSpeedMultiplier = 0.7;
+	}
+	const attackFactor = 1 + Number(country?.attackBuffPercent || 0) / 100;
+	const defenseFactor = 1 + Number(country?.defenseBuffPercent || 0) / 100;
+	if (attackFactor > 0) dealtMultiplier *= attackFactor;
+	if (defenseFactor > 0.01) takenMultiplier *= 1 / defenseFactor;
+	if (mountain) {
+		terrainSpeedMultiplier *= 1 - 0.65 * mountainIntensity;
+		dealtMultiplier *= 1 - 0.4 * mountainIntensity;
+		takenMultiplier *= 1 - 0.4 * mountainIntensity;
+	}
+	if (unit.isAlpenjager) {
+		if (mountain) terrainSpeedMultiplier *= CONFIG.ALPEN_MTN_SPEED_MULT;
+		dealtMultiplier *= CONFIG.ALPEN_COMBAT_MULT;
+		takenMultiplier *= 1 / CONFIG.ALPEN_COMBAT_MULT;
+	}
+
+	const encircled = nativeRuntimeUnitIsEncircled(unit, gridIndex);
+	if (encircled && !["buff", "super"].includes(effectiveBuff)) {
+		const duration =
+			(unit.encircledTicks || 0) > 180
+				? 0.15
+				: (unit.encircledTicks || 0) > 60
+					? 0.2
+					: 0.25;
+		dealtMultiplier *= duration;
+		takenMultiplier *= 4;
+	}
+
+	let urban = context.activeCityCells.has(gridIndex);
+	let defenseBonus = 1;
+	if (!isAtSea && gridIndex >= 0) {
+		if (deJureMap[gridIndex] === unit.sovereignId) defenseBonus *= 0.65;
+		if (
+			worldControlMap[gridIndex] === unit.sovereignId &&
+			Math.abs(getControlValue(unit.lat, unit.lng)) < 0.2
+		) {
+			defenseBonus *= 0.85;
+		}
+		for (const city of context.citiesBySovereign.get(unit.sovereignId) || []) {
+			if ((unit.lat - city.lat) ** 2 + (unit.lng - city.lng) ** 2 < 0.04) {
+				defenseBonus *= 0.45;
+				urban = true;
+				break;
+			}
+		}
+	}
+
+	const ownInfluence =
+		gridIndex >= 0
+			? Number(sideInfluenceMaps[unit.sideIndex]?.[gridIndex] || 0)
+			: 0;
+	const landSpeedMultiplier =
+		!isAtSea &&
+		gridIndex >= 0 &&
+		dominantSideMap[gridIndex] === unit.sideIndex &&
+		ownInfluence > 0.5
+			? 1.8
+			: 1.2;
+	const ownerId = gridIndex >= 0 ? worldControlMap[gridIndex] : 0;
+	const inNeutral =
+		!isAtSea && ownerId > 0 && !context.countryToSide.has(ownerId);
+	let baseSpeed = isAtSea ? CONFIG.UNIT_NAVAL_SPEED : CONFIG.UNIT_SPEED;
+	if (unit.kind === "armor") {
+		baseSpeed *= getArmorSpeedMultiplier({ urban, mountain, atSea: isAtSea });
+	}
+
+	let influenceRadius = CONFIG.INFLUENCE_RADIUS;
+	let influenceMultiplier = 1;
+	if (mountain) {
+		influenceRadius *= 1 - mountainIntensity * 0.65;
+		influenceMultiplier *= 1 - mountainIntensity * 0.5;
+	}
+	if (country?.buffState === "buff") influenceMultiplier = 2.5;
+	else if (country?.buffState === "super") influenceMultiplier = 8;
+	else if (country?.buffState === "godly") {
+		influenceMultiplier = 45;
+		influenceRadius *= 0.5;
+	} else if (country?.buffState === "weakened") influenceMultiplier = 0.7;
+	else if (country?.buffState === "crippled") influenceMultiplier = 0.4;
+	if (attackFactor > 0) influenceMultiplier *= attackFactor;
+	if (unit.victoryBoostTicks > 0) {
+		influenceMultiplier *= 3;
+		influenceRadius *= 1.4;
+	}
+	if (isAtSea) influenceMultiplier *= 0.4;
+	if (unit.kind === "armor") {
+		influenceMultiplier *= getArmorInfluenceMultiplier(!!unit._armorSupported);
+	} else {
+		influenceMultiplier *= getLiveFormationStrength(unit);
+	}
+	const temporalSeed = Number(unit.id);
+	if (!Number.isFinite(temporalSeed)) {
+		throw new Error("Unit influence temporal seed must be finite");
+	}
+	let baseInfluence = CONFIG.INFLUENCE_RATE;
+	const sideZero = context.sideFormationCounts.get(0) || 0;
+	const sideOne = context.sideFormationCounts.get(1) || 0;
+	if (sideZero > 0 && sideOne === 0) baseInfluence *= 6;
+	if (sideOne > 0 && sideZero === 0) baseInfluence *= 6;
+	// Native owns the logical-tick ramp and temporal noise. This base delta keeps
+	// stable terrain, formation, equipment, buff, and collapse multipliers.
+	const influenceDelta = baseInfluence * influenceMultiplier;
+	const protectedOwnerIds =
+		(country?.role || "OFFENSE") === "OFFENSE"
+			? Array.from(context.supportCountryIds)
+					.filter(
+						(countryId) =>
+							context.countryToSide.get(countryId) !==
+							context.countryToSide.get(unit.sovereignId),
+					)
+					.sort((left, right) => left - right)
+			: [];
+	const beneficiaryCountryId = unit.beneficiaryId || unit.sovereignId;
+	if (!context.countryToSide.has(beneficiaryCountryId)) {
+		throw new Error(
+			`Unit ${unit.sovereignId} references undeclared beneficiary ${beneficiaryCountryId}`,
+		);
+	}
+
+	return {
+		isAtSea,
+		encircled,
+		commandPolicy,
+		aiPolicy: {
+			baseSpeed,
+			terrainSpeedMultiplier,
+			speedMultiplier:
+				landSpeedMultiplier * Number(aiProfile.speedMult || 1) * 0.8,
+			planSpeedMultiplier: 1,
+			neutralPenalty: inNeutral ? 0.15 : 1,
+			pushReadiness: 1,
+			dealtMultiplier,
+			takenMultiplier,
+			defenseBonus,
+			longWarDefense: simFrameCount > 6000 ? 0.75 : 1,
+			mountain,
+			urban,
+			isReserve: unit._taskForceRole === "RESERVE",
+			reinforcementEligible:
+				unit.health / Math.max(1, unit.maxHealth || CONFIG.UNIT_HEALTH) < 0.45,
+			encircled,
+			deployUntilTick:
+				_simTickCount + Math.max(0, Math.ceil(Number(unit.deployTicks) || 0)),
+			garrisonExcluded: unit._occupationGarrisonVictimId != null,
+		},
+		influencePolicy: {
+			radius: influenceRadius,
+			delta: influenceDelta,
+			temporalSeed,
+			concentrationBonus: Math.min(2.5, (unit.lastAllyCount || 1) / 5),
+			beneficiaryCountryId,
+			protectedOwnerIds,
+			rebelDeJure: context.rebelDeJureByCountry.get(unit.sovereignId) || null,
+			creditDeJure: null,
+			creditDeJureByCountry: Object.fromEntries(
+				Array.from(context.rebelDeJureByCountry.entries()).sort(
+					([left], [right]) => left - right,
+				),
+			),
+			refusesOffense: commandPolicy.refusesOffense,
+		},
+	};
+}
+
+function serializeNativeRuntimeUnit(unit, id, context) {
+	const side = context.browserToNativeSide.get(unit.sideIndex);
+	if (side === undefined) {
+		throw new Error(`Unit for country ${unit.sovereignId} has no active side`);
+	}
+	if (context.countryToSide.get(unit.sovereignId) !== side) {
+		throw new Error(
+			`Unit for country ${unit.sovereignId} disagrees with its active side`,
+		);
+	}
+	const resolved = resolveNativeRuntimeUnitPolicy(unit, context);
+	const maxHealth =
+		unit.maxHealth ||
+		CONFIG.UNIT_HEALTH * (unit.isAlpenjager ? CONFIG.ALPEN_HEALTH_MULT : 1);
+	const equipment =
+		unit.kind === "armor" ? Math.max(0, Math.round(unit.equipment || 0)) : 0;
+	const maxEquipment =
+		unit.kind === "armor"
+			? Math.max(equipment, Math.round(unit.maxEquipment || equipment))
+			: 0;
+	const personnel =
+		unit.kind === "armor"
+			? equipment * COMBINED_ARMS_CONFIG.ARMOR_CREW_PER_VEHICLE
+			: Math.max(0, Math.round(getLiveFormationPersonnel(unit)));
+	const personnelCapacity =
+		unit.kind === "armor"
+			? maxEquipment * COMBINED_ARMS_CONFIG.ARMOR_CREW_PER_VEHICLE
+			: Math.max(
+					personnel,
+					Math.round(unit.personnelCapacity || getUnitPersonnelFallback(unit)),
+				);
+	let allyWeight = Math.max(0, getLiveFormationStrength(unit));
+	const visibleBuff = context.countryById.get(unit.sovereignId)?.buffState;
+	if (visibleBuff === "super") allyWeight *= 200;
+	else if (visibleBuff === "buff") allyWeight *= 50;
+	return {
+		id,
+		side,
+		countryId: unit.sovereignId,
+		kind: unit.kind === "armor" ? "armor" : "army",
+		lat: unit.lat,
+		lng: unit.lng,
+		health: unit.health,
+		maxHealth,
+		personnel,
+		personnelCapacity,
+		equipment,
+		maxEquipment,
+		quality: Number.isFinite(unit.quality) ? unit.quality : 50,
+		transport: !!unit.isTransport,
+		armorSupported: !!unit._armorSupported,
+		landingPenaltyActive:
+			unit.kind === "armor" &&
+			(unit._armorLandingPenaltyUntilTick || 0) > _simTickCount,
+		atSea: resolved.isAtSea,
+		lastCombatTick: Math.max(0, Math.round(unit.lastCombatTick || 0)),
+		victoryBoostTicks: Math.max(0, Math.round(unit.victoryBoostTicks || 0)),
+		dirLat: Number(unit.dirLat || 0),
+		dirLng: Number(unit.dirLng || 0),
+		coastStuckTicks: Math.max(0, Math.round(unit._coastStuckTicks || 0)),
+		armorLandingPenaltyUntilTick: Math.max(
+			0,
+			Math.round(unit._armorLandingPenaltyUntilTick || 0),
+		),
+		isSupport:
+			typeof unit._tickCanSupportArmor === "boolean"
+				? unit._tickCanSupportArmor
+				: unit.kind !== "armor" && !resolved.commandPolicy.refusesOffense,
+		allyWeight,
+		aiPolicy: resolved.aiPolicy,
+		influencePolicy: resolved.influencePolicy,
+	};
+}
+
+function serializeNativeRuntimeEconomy(state) {
+	return {
+		countryId: state.countryId,
+		economicStrength: state.economicStrength,
+		baseIncome: state.baseIncome,
+		treasury: state.treasury,
+		income: state.income,
+		occupationYield: state.occupationYield,
+		payrollDue: state.payrollDue,
+		occupationDue: state.occupationDue,
+		payrollCoverage: state.payrollCoverage,
+		occupationCoverage: state.occupationCoverage,
+		arrearsCycles: state.arrearsCycles,
+		commandBand: state.commandBand,
+		mutinyRecoveryCycles: state.mutinyRecoveryCycles,
+		initialCoreCells: state.initialCoreCells,
+		initialCityPopulation: state.initialCityPop,
+		coreControlRatio: state.coreControlRatio,
+		cityControlRatio: state.cityControlRatio,
+		capitalHeld: state.capitalHeld,
+		lastEventBand: state.lastEventBand,
+		capitulated: !!state.capitulated,
+	};
+}
+
+function serializeNativeRuntimeOccupation(record) {
+	return {
+		victimId: record.victimId,
+		annexerId: record.annexerId,
+		baseIncome: record.baseIncome,
+		coreCells: record.coreCells,
+		expectedArmyUnits: record.expectedArmyUnits,
+		resistance: record.resistance,
+		occupationCoverage: record.occupationCoverage,
+		garrisonCoverage: record.garrisonCoverage,
+		garrisonAssigned: record.garrisonAssignedCount || 0,
+		requiredGarrison: record.requiredGarrison,
+		heldRatio: record.heldRatio,
+		activeRebellion: activeRebellions.has(record.victimId),
+		queuedAtCycle: record.queuedAtCycle || 0,
+		cooldownUntilCycle: record.cooldownUntilCycle || 0,
+	};
+}
+
+function buildInitialNativeRuntimeCheckpoint() {
+	if (!nativeRuntimeWarIsActive()) {
+		throw new Error("No active war is available for native runtime export");
+	}
+	if (_simTickCount !== 0 || simFrameCount !== 0 || economyPayCycle !== 0) {
+		throw new Error(
+			"The v1 native runtime handoff must be captured before the first simulation tick",
+		);
+	}
+	if (
+		nativeRuntimeScenarioIdentity?.format !== "binary" ||
+		!/^[0-9a-f]{64}$/.test(nativeRuntimeScenarioIdentity.sha256 || "")
+	) {
+		throw new Error(
+			"The loaded scenario has no verified compiled MWSC SHA-256 identity",
+		);
+	}
+	if (!warEconomyEnabled) {
+		throw new Error(
+			"Native runtime v1 requires the browser war economy to be enabled",
+		);
+	}
+	const cellCount = worldControlMap?.length;
+	if (
+		!Number.isSafeInteger(cellCount) ||
+		cellCount <= 0 ||
+		landMask?.length !== cellCount ||
+		deJureMap?.length !== cellCount ||
+		gridWidth * gridHeight !== cellCount
+	) {
+		throw new Error(
+			"Native runtime geography maps must exactly cover the active grid",
+		);
+	}
+	const geography = {
+		// Browser value 2 marks active-theater land; native reconstructs that
+		// transient marker from the declared sides after restoring base geography.
+		landRuns: encodeNativeRuntimeRuns(landMask, "landMask", 1, (value) =>
+			value === 0 ? 0 : 1,
+		),
+		deJureRuns: encodeNativeRuntimeRuns(deJureMap, "deJureMap", 65535),
+		worldControlRuns: encodeNativeRuntimeRuns(
+			worldControlMap,
+			"worldControlMap",
+			65535,
+		),
+	};
+	const topology = nativeRuntimeTopology();
+	const liveUnits = units.filter(
+		(unit) =>
+			unit &&
+			Number.isFinite(unit.health) &&
+			unit.health > 0 &&
+			(unit.kind === "armor" || getLiveFormationStrength(unit) > 0),
+	);
+	const policyContext = nativeRuntimePolicyContext(topology, liveUnits);
+	const checkpointUnits = liveUnits.map((unit, index) =>
+		serializeNativeRuntimeUnit(unit, index + 1, policyContext),
+	);
+	const declaredCountryIds = topology.sides.flatMap((side) => side.countryIds);
+	const economies = declaredCountryIds.map((countryId) => {
+		const state = countryEconomy.get(countryId);
+		if (!state) {
+			throw new Error(`Country ${countryId} has no live war-economy state`);
+		}
+		return serializeNativeRuntimeEconomy(state);
+	});
+	const declared = new Set(declaredCountryIds);
+	const occupations = Array.from(occupationEconomies.values()).map((record) => {
+		if (!declared.has(record.victimId) || !declared.has(record.annexerId)) {
+			throw new Error(
+				`Occupation ${record.victimId}->${record.annexerId} is outside the declared sides`,
+			);
+		}
+		return serializeNativeRuntimeOccupation(record);
+	});
+	const casualties = Object.fromEntries(
+		declaredCountryIds.map((countryId) => [
+			countryId,
+			Math.max(0, Number(countryCasualties.get(countryId) || 0)),
+		]),
+	);
+	return {
+		schema: NATIVE_RUNTIME_CHECKPOINT_SCHEMA,
+		checkpointBoundary: "postStartWar",
+		scenario: {
+			sha256: nativeRuntimeScenarioIdentity.sha256,
+			name: nativeRuntimeScenarioIdentity.name,
+			gridRes: nativeRuntimeScenarioIdentity.gridRes,
+		},
+		geography,
+		sides: topology.sides,
+		activeSides: topology.activeSides,
+		hostilityMatrix: topology.hostilityMatrix,
+		tick: _simTickCount,
+		frame: simFrameCount,
+		warGraceEnd: warGraceEndTick,
+		strategicCycle: economyPayCycle,
+		steps: 1,
+		units: checkpointUnits,
+		economies,
+		occupations,
+		casualties,
+	};
+}
+
+function captureInitialNativeRuntimeCheckpoint() {
+	try {
+		_nativeRuntimeInitialCheckpoint = buildInitialNativeRuntimeCheckpoint();
+		_nativeRuntimeCheckpointError = null;
+	} catch (error) {
+		_nativeRuntimeInitialCheckpoint = null;
+		_nativeRuntimeCheckpointError = error?.message || String(error);
+		console.info(
+			`[MW] Native runtime checkpoint unavailable: ${_nativeRuntimeCheckpointError}`,
+		);
+	}
+}
+
+function cloneInitialNativeRuntimeCheckpoint({ steps = 1 } = {}) {
+	if (!nativeRuntimeWarIsActive()) {
+		throw new Error("No active war is available for native runtime export");
+	}
+	if (!_nativeRuntimeInitialCheckpoint) {
+		throw new Error(
+			`Native runtime checkpoint unavailable: ${_nativeRuntimeCheckpointError}`,
+		);
+	}
+	if (!Number.isSafeInteger(steps) || steps < 1) {
+		throw new TypeError("steps must be a positive safe integer");
+	}
+	const checkpoint =
+		typeof structuredClone === "function"
+			? structuredClone(_nativeRuntimeInitialCheckpoint)
+			: JSON.parse(JSON.stringify(_nativeRuntimeInitialCheckpoint));
+	checkpoint.steps = steps;
+	return checkpoint;
+}
+
+window.nativeRuntimeCheckpoint = async (options = {}) =>
+	cloneInitialNativeRuntimeCheckpoint(options);
+
+window.downloadNativeRuntimeCheckpoint = async (options = {}) => {
+	const checkpoint = cloneInitialNativeRuntimeCheckpoint(options);
+	const blob = new Blob([`${JSON.stringify(checkpoint, null, 2)}\n`], {
+		type: "application/json",
+	});
+	const url = URL.createObjectURL(blob);
+	const link = document.createElement("a");
+	const scenarioSlug =
+		checkpoint.scenario.name
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, "-")
+			.replace(/^-|-$/g, "") || "scenario";
+	link.href = url;
+	link.download = `${scenarioSlug}.native-runtime-checkpoint.json`;
+	link.click();
+	setTimeout(() => URL.revokeObjectURL(url), 0);
+	return checkpoint;
+};
+
 export function setGameTimeFromInputs() {
 	if (!timeSystemCheckbox?.checked) {
 		gameTimeEnabled = false;
@@ -11907,6 +12648,9 @@ export async function startWar() {
 
 export async function _startWarInner() {
 	invalidateWarLifecycleTimers();
+	_nativeRuntimeInitialCheckpoint = null;
+	_nativeRuntimeCheckpointError =
+		"War initialization has not reached the native runtime handoff boundary";
 	const experimentSeed =
 		gameMode === "CONQUEST"
 			? prepareExperimentSetupForStart()
@@ -12859,6 +13603,9 @@ export async function _startWarInner() {
 		updateExperimentWarDesk(true);
 	}
 
+	// Capture the only state-complete v1 handoff: scenario setup, unit deployment,
+	// economy initialization, and AI setup are finished, but territory has not ticked.
+	captureInitialNativeRuntimeCheckpoint();
 	requestAnimationFrame(updateLoop);
 }
 

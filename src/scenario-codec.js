@@ -2,6 +2,25 @@ const MAGIC = new Uint8Array([0x4d, 0x57, 0x53, 0x43]); // MWSC
 const VERSION = 2;
 const HEADER_BYTES = 20;
 
+/** Return the lowercase SHA-256 digest of an ArrayBuffer or typed-array view. */
+export async function sha256Hex(input) {
+	if (!globalThis.crypto?.subtle) {
+		throw new Error("SHA-256 is unavailable in this runtime");
+	}
+	const bytes =
+		input instanceof Uint8Array
+			? input
+			: ArrayBuffer.isView(input)
+				? new Uint8Array(input.buffer, input.byteOffset, input.byteLength)
+				: new Uint8Array(input);
+	const digest = new Uint8Array(
+		await globalThis.crypto.subtle.digest("SHA-256", bytes),
+	);
+	return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join(
+		"",
+	);
+}
+
 // Content-addressed query revisions keep the persistent runtime cache fast
 // without allowing rebuilt packages with stable filenames to remain stale.
 export const COMPILED_SCENARIO_URLS = Object.freeze({

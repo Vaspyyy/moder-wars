@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
-import { decodeScenarioBinary } from "../src/scenario-codec.js";
+import {
+	decodeScenarioBinary,
+	sha256Hex,
+} from "../src/scenario-codec.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const pairs = [
@@ -69,9 +73,15 @@ function legacyRemap(original, targetGridRes) {
 
 for (const [jsonName, binaryName] of pairs) {
 	const original = JSON.parse(fs.readFileSync(path.join(root, "assets/maps", jsonName), "utf8"));
-	const binaryBytes = gunzipSync(
-		fs.readFileSync(path.join(root, "assets/maps/compiled", binaryName)),
+	const compressedBytes = fs.readFileSync(
+		path.join(root, "assets/maps/compiled", binaryName),
 	);
+	assert.equal(
+		await sha256Hex(compressedBytes),
+		createHash("sha256").update(compressedBytes).digest("hex"),
+		`${binaryName}: raw package SHA-256`,
+	);
+	const binaryBytes = gunzipSync(compressedBytes);
 	const decoded = decodeScenarioBinary(binaryBytes);
 	const expectedScenario = { ...original };
 	delete expectedScenario.mapData;

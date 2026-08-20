@@ -1,6 +1,7 @@
 import {
 	decodeScenarioBinary,
 	decodeScenarioJson,
+	sha256Hex,
 } from "../src/scenario-codec.js";
 
 const now = () => performance.now();
@@ -75,16 +76,31 @@ self.onmessage = async ({ data }) => {
 	try {
 		let decoded;
 		let source = "binary";
+		let sourceIdentity = null;
 		const downloadStartedAt = now();
 		try {
 			const downloadedBytes = await fetchBytes(data.url, source);
 			const downloadMs = now() - downloadStartedAt;
+			let sha256 = null;
+			try {
+				sha256 = await sha256Hex(downloadedBytes);
+			} catch (hashError) {
+				console.warn("[MW] Compiled scenario identity unavailable:", hashError);
+			}
 			const decompressStartedAt = now();
 			const bytes = await decompressScenario(downloadedBytes);
 			const decompressMs = now() - decompressStartedAt;
 			progress("decode", { source });
 			const decodeStartedAt = now();
 			decoded = decodeScenarioBinary(bytes, data);
+			if (sha256) {
+				sourceIdentity = {
+					format: source,
+					name: decoded.scenario?.name || "Unnamed scenario",
+					sha256,
+					url: data.url,
+				};
+			}
 			decoded.timing = {
 				downloadBytes: downloadedBytes.length,
 				downloadMs,
@@ -112,6 +128,7 @@ self.onmessage = async ({ data }) => {
 			};
 		}
 		decoded.format = source;
+		decoded.sourceIdentity = sourceIdentity;
 		progress("complete", { source, loaded: decoded.entryCount });
 		self.postMessage({ type: "result", result: decoded }, [
 			decoded.worldControl.buffer,
