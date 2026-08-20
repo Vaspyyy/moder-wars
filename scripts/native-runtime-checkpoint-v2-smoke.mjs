@@ -166,6 +166,7 @@ assert.match(v1Builder, /schema: NATIVE_RUNTIME_CHECKPOINT_SCHEMA/);
 assert.match(v1Builder, /checkpointBoundary: "postStartWar"/);
 assert.doesNotMatch(v1Builder, /territory|casualtiesByVictim/);
 assert.doesNotMatch(v1Builder, /battlefield/);
+assert.doesNotMatch(v1Builder, /policyContext, true/);
 
 const v2Start = main.indexOf("function buildMidWarNativeRuntimeCheckpoint");
 const v2End = main.indexOf(
@@ -173,6 +174,7 @@ const v2End = main.indexOf(
 	v2Start,
 );
 const v2Builder = main.slice(v2Start, v2End);
+assert.match(v2Builder, /serializeNativeRuntimeUnit\(unit, index \+ 1, policyContext, true\)/);
 for (const field of [
 	"scenario",
 	"geography",
@@ -215,6 +217,16 @@ assert.match(battlefieldBuilder, /terrainMask\.length !== cellCount/);
 assert.match(battlefieldBuilder, /countries\.length !== declaredCountryIds\.length/);
 assert.match(battlefieldBuilder, /battlefieldUnits\.length !== liveUnits\.length/);
 assert.match(battlefieldBuilder, /nativeSpeedScale: 1,/);
+for (const field of [
+	"discipline",
+	"refusesOffense",
+	"returnHome",
+	"selfDefenseOnly",
+	"homeTarget",
+	"transitionCycle",
+]) {
+	assert.match(main, new RegExp(`\\n\\s+${field}(?::|,)`));
+}
 for (const field of [
 	"unitSpeed",
 	"unitNavalSpeed",
@@ -321,6 +333,16 @@ const topologyBuilder = main.slice(topologyStart, topologyEnd);
 assert.match(topologyBuilder, /for \(const entry of initialCombatants\)/);
 assert.match(topologyBuilder, /countryEconomy\.get\(countryId\)\?\.capitulated/);
 assert.match(topologyBuilder, /activeSides/);
+
+const armorSpawnStart = main.indexOf("function createArmorFormationAtIndex");
+const armorSpawnEnd = main.indexOf(
+	"function initializeCombinedArms",
+	armorSpawnStart,
+);
+const armorSpawn = main.slice(armorSpawnStart, armorSpawnEnd);
+assert.match(armorSpawn, /countryEconomy\.get\(countryId\)\?\.commandBand/);
+assert.match(armorSpawn, /commandRefusalShare\(unitCommandBand\)/);
+assert.doesNotMatch(armorSpawn, /_commandBand: COMMAND_BANDS\.PAID/);
 
 assert.match(v2Builder, /nativeRuntimeWarIsActive\(\)/);
 assert.match(v2Builder, /requires a mid-war state/);

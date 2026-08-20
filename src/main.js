@@ -7588,6 +7588,12 @@ function createArmorFormationAtIndex({
 	const x = cellIndex % gridWidth;
 	const pushBack = frontVector ? CONFIG.GRID_RES * 1.25 : 0;
 	const unitId = gameplayRandom();
+	const unitDiscipline = getUnitDiscipline({
+		id: unitId,
+		sovereignId: countryId,
+	});
+	const unitCommandBand =
+		countryEconomy.get(countryId)?.commandBand || COMMAND_BANDS.PAID;
 	const unit = {
 		id: unitId,
 		kind: "armor",
@@ -7615,9 +7621,9 @@ function createArmorFormationAtIndex({
 		_cachedScanKx: -999,
 		_cachedScanKy: -999,
 		_lastFullScanTick: 0,
-		_discipline: getUnitDiscipline({ id: unitId, sovereignId: countryId }),
-		_commandBand: COMMAND_BANDS.PAID,
-		_refusesOffense: false,
+		_discipline: unitDiscipline,
+		_commandBand: unitCommandBand,
+		_refusesOffense: unitDiscipline < commandRefusalShare(unitCommandBand),
 		_armorSupported: false,
 	};
 	units.push(unit);
@@ -8836,6 +8842,7 @@ function updateUnitCommandState(countryId, previousBand, nextBand) {
 		unit._refusesOffense =
 			getUnitDiscipline(unit) < commandRefusalShare(nextBand);
 		unit._economyHomeTarget = homeTarget ? { ...homeTarget } : null;
+		unit._commandTransitionCycle = economyPayCycle;
 	}
 	const name = countryMetadata[countryId - 1]?.name || `Country ${countryId}`;
 	const severity =
@@ -10528,7 +10535,12 @@ function resolveNativeRuntimeUnitPolicy(unit, context) {
 	};
 }
 
-function serializeNativeRuntimeUnit(unit, id, context) {
+function serializeNativeRuntimeUnit(
+	unit,
+	id,
+	context,
+	includeLiveCommand = false,
+) {
 	const side = context.browserToNativeSide.get(unit.sideIndex);
 	if (side === undefined) {
 		throw new Error(`Unit for country ${unit.sovereignId} has no active side`);
@@ -10539,6 +10551,32 @@ function serializeNativeRuntimeUnit(unit, id, context) {
 		);
 	}
 	const resolved = resolveNativeRuntimeUnitPolicy(unit, context);
+	const discipline = getUnitDiscipline(unit);
+	if (!Number.isFinite(discipline) || discipline < 0 || discipline >= 1) {
+		throw new Error(`Unit ${unit.sovereignId} has invalid command discipline`);
+	}
+	let commandHomeTarget = null;
+	if (unit._economyHomeTarget) {
+		const lat = Number(unit._economyHomeTarget.lat);
+		const lng = Number(unit._economyHomeTarget.lng);
+		const cell = getGridIndex(lat, lng);
+		if (!Number.isFinite(lat) || !Number.isFinite(lng) || cell < 0) {
+			throw new Error(
+				`Unit ${unit.sovereignId} has invalid command home target`,
+			);
+		}
+		commandHomeTarget = { cell, lat, lng };
+	}
+	const commandTransitionCycle = Number(unit._commandTransitionCycle || 0);
+	if (
+		!Number.isSafeInteger(commandTransitionCycle) ||
+		commandTransitionCycle < 0 ||
+		commandTransitionCycle > economyPayCycle
+	) {
+		throw new Error(
+			`Unit ${unit.sovereignId} has invalid command transition cycle`,
+		);
+	}
 	const maxHealth =
 		unit.maxHealth ||
 		CONFIG.UNIT_HEALTH * (unit.isAlpenjager ? CONFIG.ALPEN_HEALTH_MULT : 1);
@@ -10598,6 +10636,19 @@ function serializeNativeRuntimeUnit(unit, id, context) {
 				: unit.kind !== "armor" && !resolved.commandPolicy.refusesOffense,
 		allyWeight,
 		aiPolicy: resolved.aiPolicy,
+		...(includeLiveCommand
+			? {
+					commandPolicy: {
+						band: resolved.commandPolicy.band,
+						discipline,
+						refusesOffense: resolved.commandPolicy.refusesOffense,
+						returnHome: resolved.commandPolicy.returnHome,
+						selfDefenseOnly: resolved.commandPolicy.selfDefenseOnly,
+						homeTarget: commandHomeTarget,
+						transitionCycle: commandTransitionCycle,
+					},
+				}
+			: {}),
 		influencePolicy: resolved.influencePolicy,
 	};
 }
@@ -11117,7 +11168,7 @@ function buildMidWarNativeRuntimeCheckpoint({ steps = 1 } = {}) {
 	);
 	const policyContext = nativeRuntimePolicyContext(topology, liveUnits);
 	const checkpointUnits = liveUnits.map((unit, index) =>
-		serializeNativeRuntimeUnit(unit, index + 1, policyContext),
+		serializeNativeRuntimeUnit(unit, index + 1, policyContext, true),
 	);
 	const declaredCountryIds = topology.sides.flatMap((side) => side.countryIds);
 	const battlefield = nativeRuntimeV2Battlefield(topology, liveUnits);
