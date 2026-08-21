@@ -151,9 +151,11 @@ assert.equal(
 );
 
 assert.match(main, /native-runtime-checkpoint-v2/);
+assert.match(main, /native-runtime-checkpoint-v3/);
 assert.match(main, /checkpointBoundary: "midWar"/);
 assert.match(main, /version === 1.*cloneInitialNativeRuntimeCheckpoint/s);
 assert.match(main, /version === 2.*buildMidWarNativeRuntimeCheckpoint/s);
+assert.match(main, /version === 3.*buildMidWarNativeRuntimeCheckpointV3/s);
 assert.match(main, /const version = options\.version \?\? 1/);
 
 const v1Start = main.indexOf("function buildInitialNativeRuntimeCheckpoint");
@@ -175,6 +177,7 @@ const v2End = main.indexOf(
 );
 const v2Builder = main.slice(v2Start, v2End);
 assert.match(v2Builder, /serializeNativeRuntimeUnit\(unit, index \+ 1, policyContext, true\)/);
+assert.doesNotMatch(v2Builder, /influenceRuntime/);
 for (const field of [
 	"scenario",
 	"geography",
@@ -196,6 +199,44 @@ for (const field of [
 ]) {
 	assert.match(v2Builder, new RegExp(`\\n\\t\\t${field}(?::|,)`));
 }
+
+const influenceRuntimeStart = main.indexOf(
+	"function nativeRuntimeV3InfluenceRuntime",
+);
+const influenceRuntimeEnd = main.indexOf(
+	"function buildMidWarNativeRuntimeCheckpointV3",
+	influenceRuntimeStart,
+);
+assert.ok(
+	influenceRuntimeStart >= 0 && influenceRuntimeEnd > influenceRuntimeStart,
+	"v3 influence runtime builder exists",
+);
+const influenceRuntimeBuilder = main.slice(
+	influenceRuntimeStart,
+	influenceRuntimeEnd,
+);
+assert.match(influenceRuntimeBuilder, /ensureInfluenceFrontierQueue\(\)/);
+assert.match(
+	influenceRuntimeBuilder,
+	/_influenceFrontierQueue\.slice\(_influenceFrontierCursor\)/,
+);
+assert.match(
+	influenceRuntimeBuilder,
+	/_influenceFrontierPriorityQueue\.slice\(\s*_influenceFrontierPriorityCursor,?\s*\)/s,
+);
+assert.match(influenceRuntimeBuilder, /queuedCells\.push\(\[cell, state\]\)/);
+assert.match(influenceRuntimeBuilder, /schema: NATIVE_INFLUENCE_RUNTIME_SCHEMA/);
+
+const v3Start = main.indexOf("function buildMidWarNativeRuntimeCheckpointV3");
+const v3End = main.indexOf("function createNativeRuntimeCheckpoint", v3Start);
+assert.ok(v3Start >= 0 && v3End > v3Start, "v3 checkpoint builder exists");
+const v3Builder = main.slice(v3Start, v3End);
+assert.match(v3Builder, /buildMidWarNativeRuntimeCheckpoint\(options\)/);
+assert.match(v3Builder, /schema: NATIVE_RUNTIME_CHECKPOINT_V3_SCHEMA/);
+assert.match(
+	v3Builder,
+	/influenceRuntime: nativeRuntimeV3InfluenceRuntime\(\)/,
+);
 
 const battlefieldStart = main.indexOf("function nativeRuntimeV2Battlefield");
 const battlefieldEnd = main.indexOf(
@@ -348,4 +389,4 @@ assert.match(v2Builder, /nativeRuntimeWarIsActive\(\)/);
 assert.match(v2Builder, /requires a mid-war state/);
 assert.match(v2Builder, /nativeRuntimeStableTopology\(\)/);
 
-console.log("Native runtime checkpoint v2 smoke tests passed.");
+console.log("Native runtime checkpoint v2/v3 smoke tests passed.");

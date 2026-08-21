@@ -9843,7 +9843,9 @@ window.economyDebugReport = (countryId = null) => {
 
 const NATIVE_RUNTIME_CHECKPOINT_SCHEMA = "native-runtime-checkpoint-v1";
 const NATIVE_RUNTIME_CHECKPOINT_V2_SCHEMA = "native-runtime-checkpoint-v2";
+const NATIVE_RUNTIME_CHECKPOINT_V3_SCHEMA = "native-runtime-checkpoint-v3";
 const NATIVE_RUNTIME_BATTLEFIELD_SCHEMA = "native-battlefield-v1";
+const NATIVE_INFLUENCE_RUNTIME_SCHEMA = "native-influence-runtime-v1";
 
 function nativeRuntimeWarIsActive() {
 	return (
@@ -11262,11 +11264,78 @@ function cloneInitialNativeRuntimeCheckpoint({ steps = 1 } = {}) {
 	return checkpoint;
 }
 
+function nativeRuntimeV3InfluenceRuntime() {
+	ensureInfluenceFrontierQueue();
+	const cellCount = gridWidth * gridHeight;
+	if (
+		!Number.isSafeInteger(cellCount) ||
+		cellCount <= 0 ||
+		_influenceFrontierQueued.length !== cellCount
+	) {
+		throw new Error(
+			"Native influence runtime queue does not match the active grid",
+		);
+	}
+	if (
+		!Number.isSafeInteger(_influenceFrontierCursor) ||
+		_influenceFrontierCursor < 0 ||
+		_influenceFrontierCursor > _influenceFrontierQueue.length ||
+		!Number.isSafeInteger(_influenceFrontierPriorityCursor) ||
+		_influenceFrontierPriorityCursor < 0 ||
+		_influenceFrontierPriorityCursor > _influenceFrontierPriorityQueue.length
+	) {
+		throw new Error("Native influence runtime queue cursor is invalid");
+	}
+	const regularQueue = _influenceFrontierQueue.slice(_influenceFrontierCursor);
+	const priorityQueue = _influenceFrontierPriorityQueue.slice(
+		_influenceFrontierPriorityCursor,
+	);
+	for (const [label, queue] of [
+		["regularQueue", regularQueue],
+		["priorityQueue", priorityQueue],
+	]) {
+		for (let position = 0; position < queue.length; position++) {
+			const cell = queue[position];
+			if (!Number.isSafeInteger(cell) || cell < 0 || cell >= cellCount) {
+				throw new Error(
+					`Native influence runtime ${label}[${position}] is outside the active grid`,
+				);
+			}
+		}
+	}
+	const queuedCells = [];
+	for (let cell = 0; cell < _influenceFrontierQueued.length; cell++) {
+		const state = _influenceFrontierQueued[cell];
+		if (state > 2) {
+			throw new Error(
+				`Native influence runtime queued cell ${cell} has invalid state ${state}`,
+			);
+		}
+		if (state !== 0) queuedCells.push([cell, state]);
+	}
+	return {
+		schema: NATIVE_INFLUENCE_RUNTIME_SCHEMA,
+		regularQueue,
+		priorityQueue,
+		queuedCells,
+	};
+}
+
+function buildMidWarNativeRuntimeCheckpointV3(options = {}) {
+	const checkpoint = buildMidWarNativeRuntimeCheckpoint(options);
+	return {
+		...checkpoint,
+		schema: NATIVE_RUNTIME_CHECKPOINT_V3_SCHEMA,
+		influenceRuntime: nativeRuntimeV3InfluenceRuntime(),
+	};
+}
+
 function createNativeRuntimeCheckpoint(options = {}) {
 	const version = options.version ?? 1;
 	if (version === 1) return cloneInitialNativeRuntimeCheckpoint(options);
 	if (version === 2) return buildMidWarNativeRuntimeCheckpoint(options);
-	throw new RangeError("Native runtime checkpoint version must be 1 or 2");
+	if (version === 3) return buildMidWarNativeRuntimeCheckpointV3(options);
+	throw new RangeError("Native runtime checkpoint version must be 1, 2, or 3");
 }
 
 window.nativeRuntimeCheckpoint = async (options = {}) =>
