@@ -9844,6 +9844,8 @@ window.economyDebugReport = (countryId = null) => {
 const NATIVE_RUNTIME_CHECKPOINT_SCHEMA = "native-runtime-checkpoint-v1";
 const NATIVE_RUNTIME_CHECKPOINT_V2_SCHEMA = "native-runtime-checkpoint-v2";
 const NATIVE_RUNTIME_CHECKPOINT_V3_SCHEMA = "native-runtime-checkpoint-v3";
+const NATIVE_RUNTIME_CHECKPOINT_V4_SCHEMA = "native-runtime-checkpoint-v4";
+const NATIVE_SIDE_DYNAMICS_SCHEMA = "native-side-dynamics-v1";
 const NATIVE_RUNTIME_BATTLEFIELD_SCHEMA = "native-battlefield-v1";
 const NATIVE_INFLUENCE_RUNTIME_SCHEMA = "native-influence-runtime-v1";
 
@@ -11330,12 +11332,133 @@ function buildMidWarNativeRuntimeCheckpointV3(options = {}) {
 	};
 }
 
+function nativeRuntimeV4SideDynamics(topology) {
+	const records = topology.stable.map(
+		({ browserSideIndex }, nativeSideIndex) => {
+			if (
+				topology.browserToNativeSide.get(browserSideIndex) !== nativeSideIndex
+			) {
+				throw new Error(
+					"Native side dynamics stable-side mapping is inconsistent",
+				);
+			}
+			const sideUid =
+				sideUids[browserSideIndex] || `side-${browserSideIndex + 1}`;
+			const retired = _retiredSidePersonnelByUid.get(sideUid) || null;
+			const currentPersonnel = retired
+				? Number(retired.personnel)
+				: Number(sideSoldiers[browserSideIndex]);
+			const initialPersonnel = retired
+				? Number(retired.initialPersonnel)
+				: Number(initialSideSoldiers[browserSideIndex]);
+			const history = (_sideMomentumHistory[browserSideIndex] || []).map(
+				(entry) => ({
+					frame: Number(entry.tick),
+					controlled: Number(entry.controlled),
+				}),
+			);
+			if (history.length > 10)
+				throw new Error("Native side dynamics history exceeds 10 entries");
+			for (let index = 0; index < history.length; index++) {
+				const entry = history[index];
+				if (
+					!Number.isSafeInteger(entry.frame) ||
+					entry.frame < 0 ||
+					entry.frame > simFrameCount
+				)
+					throw new Error("Native side dynamics history has an invalid frame");
+				if (!Number.isSafeInteger(entry.controlled) || entry.controlled < 0)
+					throw new Error(
+						"Native side dynamics history has invalid controlled cells",
+					);
+				if (index > 0 && entry.frame < history[index - 1].frame)
+					throw new Error("Native side dynamics history is not ordered");
+			}
+			if (!Number.isFinite(currentPersonnel) || currentPersonnel < 0)
+				throw new Error("Native side dynamics personnel is invalid");
+			if (!Number.isFinite(initialPersonnel) || initialPersonnel < 0)
+				throw new Error("Native side dynamics initial personnel is invalid");
+			const warPhase = _sideWarPhase[browserSideIndex] || "STALEMATE";
+			const posture = _sidePosture[browserSideIndex] || "BALANCED";
+			const activeCountries = sides[browserSideIndex] || [];
+			let hasLastStand = false;
+			let hasOffensiveDesperation = false;
+			for (const country of activeCountries) {
+				const mode = aiCountryState.get(country.id)?.mode;
+				if (mode === AI_POSTURE.LAST_STAND) hasLastStand = true;
+				if (mode === AI_POSTURE.OFFENSIVE_DESPERATION)
+					hasOffensiveDesperation = true;
+			}
+			const postureOverride = hasLastStand
+				? "DEFENSIVE"
+				: hasOffensiveDesperation
+					? "OFFENSIVE"
+					: activeCountries.length > 0 &&
+							_defenderReactionPlan[browserSideIndex]
+						? "DEFENSIVE"
+						: null;
+			if (
+				!["ADVANCING", "STALEMATE", "RETREATING", "COLLAPSING"].includes(
+					warPhase,
+				)
+			)
+				throw new Error("Native side dynamics phase is invalid");
+			if (!["OFFENSIVE", "BALANCED", "DEFENSIVE"].includes(posture))
+				throw new Error("Native side dynamics posture is invalid");
+			return {
+				sideIndex: nativeSideIndex,
+				initialPersonnel,
+				personnel: currentPersonnel,
+				momentumHistory: history,
+				warPhase,
+				posture,
+				postureOverride,
+			};
+		},
+	);
+	return { schema: NATIVE_SIDE_DYNAMICS_SCHEMA, sides: records };
+}
+
+function nativeRuntimeV4BaseAiSpeedMultiplier(countryId) {
+	const mode = aiCountryState.get(countryId)?.mode;
+	if (mode === AI_POSTURE.OFFENSIVE_DESPERATION) return 1.08;
+	if (mode === AI_POSTURE.DEFENSIVE_DESPERATION) return 0.96;
+	if (mode === AI_POSTURE.LAST_STAND) return 0.92;
+	return 1;
+}
+
+function buildMidWarNativeRuntimeCheckpointV4(options = {}) {
+	const checkpoint = buildMidWarNativeRuntimeCheckpointV3(options);
+	const topology = nativeRuntimeStableTopology();
+	// V2/v3 intentionally freeze the currently resolved speed. V4 recomputes
+	// side posture, so carry the country-mode base and let native apply/remove
+	// the posture cap each tick instead of baking the export-time cap forever.
+	const battlefield = {
+		...checkpoint.battlefield,
+		countries: checkpoint.battlefield.countries.map((country) => ({
+			...country,
+			aiSpeedMultiplier: nativeRuntimeV4BaseAiSpeedMultiplier(
+				country.countryId,
+			),
+		})),
+	};
+	return {
+		...checkpoint,
+		schema: NATIVE_RUNTIME_CHECKPOINT_V4_SCHEMA,
+		battlefield,
+		sideDynamics: nativeRuntimeV4SideDynamics(topology),
+	};
+}
+
 function createNativeRuntimeCheckpoint(options = {}) {
 	const version = options.version ?? 1;
 	if (version === 1) return cloneInitialNativeRuntimeCheckpoint(options);
 	if (version === 2) return buildMidWarNativeRuntimeCheckpoint(options);
 	if (version === 3) return buildMidWarNativeRuntimeCheckpointV3(options);
-	throw new RangeError("Native runtime checkpoint version must be 1, 2, or 3");
+	if (version === 4) return buildMidWarNativeRuntimeCheckpointV4(options);
+	throw new RangeError(
+		"Native runtime checkpoint version must be 1, 2, 3, or 4",
+	);
 }
 
 window.nativeRuntimeCheckpoint = async (options = {}) =>

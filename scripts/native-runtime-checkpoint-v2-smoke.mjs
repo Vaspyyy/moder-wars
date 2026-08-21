@@ -152,10 +152,13 @@ assert.equal(
 
 assert.match(main, /native-runtime-checkpoint-v2/);
 assert.match(main, /native-runtime-checkpoint-v3/);
+assert.match(main, /native-runtime-checkpoint-v4/);
+assert.match(main, /native-side-dynamics-v1/);
 assert.match(main, /checkpointBoundary: "midWar"/);
 assert.match(main, /version === 1.*cloneInitialNativeRuntimeCheckpoint/s);
 assert.match(main, /version === 2.*buildMidWarNativeRuntimeCheckpoint/s);
 assert.match(main, /version === 3.*buildMidWarNativeRuntimeCheckpointV3/s);
+assert.match(main, /version === 4.*buildMidWarNativeRuntimeCheckpointV4/s);
 assert.match(main, /const version = options\.version \?\? 1/);
 
 const v1Start = main.indexOf("function buildInitialNativeRuntimeCheckpoint");
@@ -178,6 +181,160 @@ const v2End = main.indexOf(
 const v2Builder = main.slice(v2Start, v2End);
 assert.match(v2Builder, /serializeNativeRuntimeUnit\(unit, index \+ 1, policyContext, true\)/);
 assert.doesNotMatch(v2Builder, /influenceRuntime/);
+assert.doesNotMatch(v2Builder, /sideDynamics/);
+const v3DynamicsStart = main.indexOf("function buildMidWarNativeRuntimeCheckpointV3");
+const v3DynamicsEnd = main.indexOf("function nativeRuntimeV4SideDynamics", v3DynamicsStart);
+const v3DynamicsBuilder = main.slice(v3DynamicsStart, v3DynamicsEnd);
+assert.doesNotMatch(v3DynamicsBuilder, /sideDynamics/);
+const v4Start = main.indexOf("function nativeRuntimeV4SideDynamics");
+const v4End = main.indexOf("function createNativeRuntimeCheckpoint", v4Start);
+const v4Builder = main.slice(v4Start, v4End);
+assert.match(v4Builder, /browserToNativeSide/);
+assert.match(v4Builder, /sideIndex: nativeSideIndex/);
+assert.doesNotMatch(v4Builder, /browserSideIndex,|sideUid,|countryIds:|activeCountryIds|capitulatedCountryIds/);
+assert.match(v4Builder, /sideSoldiers\[browserSideIndex\]/);
+assert.match(v4Builder, /initialSideSoldiers\[browserSideIndex\]/);
+assert.match(v4Builder, /_sideMomentumHistory\[browserSideIndex\]/);
+assert.match(v4Builder, /frame: Number\(entry\.tick\)/);
+assert.match(v4Builder, /_sideWarPhase\[browserSideIndex\]/);
+assert.match(v4Builder, /_sidePosture\[browserSideIndex\]/);
+assert.match(v4Builder, /postureOverride/);
+assert.match(v4Builder, /AI_POSTURE\.LAST_STAND/);
+assert.match(v4Builder, /AI_POSTURE\.OFFENSIVE_DESPERATION/);
+assert.match(v4Builder, /_defenderReactionPlan\[browserSideIndex\]/);
+assert.match(v4Builder, /nativeRuntimeV4BaseAiSpeedMultiplier/);
+assert.match(v4Builder, /battlefield,/);
+assert.match(v4Builder, /history.length > 10/);
+assert.match(v4Builder, /entry.frame > simFrameCount/);
+assert.match(v4Builder, /entry.frame < history\[index - 1\].frame/);
+assert.match(v4Builder, /Native side dynamics phase is invalid/);
+assert.match(v4Builder, /Native side dynamics posture is invalid/);
+
+const sideDynamicsEnd = main.indexOf(
+	"function buildMidWarNativeRuntimeCheckpointV4",
+	v4Start,
+);
+const aiProfiles = new Map([[1, { mode: "LAST_STAND" }]]);
+const aiPostures = {
+	LAST_STAND: "LAST_STAND",
+	OFFENSIVE_DESPERATION: "OFFENSIVE_DESPERATION",
+	DEFENSIVE_DESPERATION: "DEFENSIVE_DESPERATION",
+};
+const defenderReactionPlans = [true, true];
+const v4Helpers = Function(
+	"sideUids",
+	"_retiredSidePersonnelByUid",
+	"sideSoldiers",
+	"initialSideSoldiers",
+	"_sideMomentumHistory",
+	"simFrameCount",
+	"_sideWarPhase",
+	"_sidePosture",
+	"NATIVE_SIDE_DYNAMICS_SCHEMA",
+	"sides",
+	"aiCountryState",
+	"AI_POSTURE",
+	"_defenderReactionPlan",
+	`"use strict";\n${main.slice(v4Start, sideDynamicsEnd)}\nreturn { sideDynamics: nativeRuntimeV4SideDynamics, baseSpeed: nativeRuntimeV4BaseAiSpeedMultiplier };`,
+)(
+	["active-side", "retired-side"],
+	new Map([
+		[
+			"retired-side",
+			{ personnel: 125.5, initialPersonnel: 400 },
+		],
+	]),
+	Float64Array.of(700.25, 0),
+	Float64Array.of(1_000, 0),
+	[
+		[
+			{ tick: 37, controlled: 100 },
+			{ tick: 237, controlled: 105 },
+		],
+		[{ tick: 37, controlled: 20 }],
+	],
+	237,
+	["ADVANCING", "RETREATING"],
+	["OFFENSIVE", "DEFENSIVE"],
+	"native-side-dynamics-v1",
+	[[{ id: 1 }], []],
+	aiProfiles,
+	aiPostures,
+	defenderReactionPlans,
+);
+const makeSideDynamics = v4Helpers.sideDynamics;
+const sideDynamics = makeSideDynamics({
+	stable: [{ browserSideIndex: 0 }, { browserSideIndex: 1 }],
+	browserToNativeSide: new Map([
+		[0, 0],
+		[1, 1],
+	]),
+});
+assert.deepEqual(sideDynamics, {
+	schema: "native-side-dynamics-v1",
+	sides: [
+		{
+			sideIndex: 0,
+			initialPersonnel: 1_000,
+			personnel: 700.25,
+			momentumHistory: [
+				{ frame: 37, controlled: 100 },
+				{ frame: 237, controlled: 105 },
+			],
+			warPhase: "ADVANCING",
+			posture: "OFFENSIVE",
+			postureOverride: "DEFENSIVE",
+		},
+		{
+			sideIndex: 1,
+			initialPersonnel: 400,
+			personnel: 125.5,
+			momentumHistory: [{ frame: 37, controlled: 20 }],
+			warPhase: "RETREATING",
+			posture: "DEFENSIVE",
+			postureOverride: null,
+		},
+	],
+});
+aiProfiles.set(1, { mode: "OFFENSIVE_DESPERATION" });
+assert.equal(
+	makeSideDynamics({
+		stable: [{ browserSideIndex: 0 }, { browserSideIndex: 1 }],
+		browserToNativeSide: new Map([
+			[0, 0],
+			[1, 1],
+		]),
+	}).sides[0].postureOverride,
+	"OFFENSIVE",
+);
+assert.equal(v4Helpers.baseSpeed(1), 1.08);
+aiProfiles.set(1, { mode: "DEFENSIVE_DESPERATION" });
+assert.equal(v4Helpers.baseSpeed(1), 0.96);
+aiProfiles.set(1, { mode: "LAST_STAND" });
+assert.equal(v4Helpers.baseSpeed(1), 0.92);
+aiProfiles.clear();
+assert.equal(v4Helpers.baseSpeed(1), 1);
+assert.equal(
+	makeSideDynamics({
+		stable: [{ browserSideIndex: 0 }, { browserSideIndex: 1 }],
+		browserToNativeSide: new Map([
+			[0, 0],
+			[1, 1],
+		]),
+	}).sides[0].postureOverride,
+	"DEFENSIVE",
+);
+defenderReactionPlans[0] = false;
+assert.equal(
+	makeSideDynamics({
+		stable: [{ browserSideIndex: 0 }, { browserSideIndex: 1 }],
+		browserToNativeSide: new Map([
+			[0, 0],
+			[1, 1],
+		]),
+	}).sides[0].postureOverride,
+	null,
+);
 for (const field of [
 	"scenario",
 	"geography",
@@ -389,4 +546,4 @@ assert.match(v2Builder, /nativeRuntimeWarIsActive\(\)/);
 assert.match(v2Builder, /requires a mid-war state/);
 assert.match(v2Builder, /nativeRuntimeStableTopology\(\)/);
 
-console.log("Native runtime checkpoint v2/v3 smoke tests passed.");
+console.log("Native runtime checkpoint v2/v3/v4 smoke tests passed.");
