@@ -9845,6 +9845,8 @@ const NATIVE_RUNTIME_CHECKPOINT_SCHEMA = "native-runtime-checkpoint-v1";
 const NATIVE_RUNTIME_CHECKPOINT_V2_SCHEMA = "native-runtime-checkpoint-v2";
 const NATIVE_RUNTIME_CHECKPOINT_V3_SCHEMA = "native-runtime-checkpoint-v3";
 const NATIVE_RUNTIME_CHECKPOINT_V4_SCHEMA = "native-runtime-checkpoint-v4";
+const NATIVE_RUNTIME_CHECKPOINT_V5_SCHEMA = "native-runtime-checkpoint-v5";
+const NATIVE_OPERATIONAL_AI_SCHEMA = "native-operational-ai-v1";
 const NATIVE_SIDE_DYNAMICS_SCHEMA = "native-side-dynamics-v1";
 const NATIVE_RUNTIME_BATTLEFIELD_SCHEMA = "native-battlefield-v1";
 const NATIVE_INFLUENCE_RUNTIME_SCHEMA = "native-influence-runtime-v1";
@@ -11450,14 +11452,473 @@ function buildMidWarNativeRuntimeCheckpointV4(options = {}) {
 	};
 }
 
+function buildMidWarNativeRuntimeCheckpointV5(options = {}) {
+	const checkpoint = buildMidWarNativeRuntimeCheckpointV4(options);
+	const topology = nativeRuntimeStableTopology();
+	const liveUnits = units.filter(
+		(unit) =>
+			unit &&
+			Number.isFinite(unit.health) &&
+			unit.health > 0 &&
+			(unit.kind === "armor" || getLiveFormationStrength(unit) > 0),
+	);
+	const nativeUnitId = new Map(
+		liveUnits.map((unit, index) => [String(unit.id), index + 1]),
+	);
+	const browserToNative = topology.browserToNativeSide;
+	const nativeSide = (browserIndex) => browserToNative.get(browserIndex);
+	const safe = (value, label, fallback = null) => {
+		const result = Number(value);
+		if (Number.isFinite(result)) return result;
+		if (fallback !== null) return fallback;
+		throw new Error(`${label} is not finite`);
+	};
+	const unsigned = (value, label, fallback = null) => {
+		const result = Number(value);
+		if (Number.isSafeInteger(result) && result >= 0) return result;
+		if (fallback !== null) return fallback;
+		throw new Error(`${label} is not an unsigned safe integer`);
+	};
+	const checkpointTick = unsigned(checkpoint.tick, "checkpoint.tick");
+	const historicalTick = (value, label, fallback = null) => {
+		const result = unsigned(value, label, fallback);
+		if (result > checkpointTick)
+			throw new Error(`${label} is newer than the checkpoint`);
+		return result;
+	};
+	const compareText = (left, right) =>
+		left < right ? -1 : left > right ? 1 : 0;
+	const requiredText = (value, label) => {
+		if (value == null || String(value).trim() === "")
+			throw new Error(`${label} is missing`);
+		return String(value);
+	};
+	const nonNegative = (value, label) => {
+		const result = safe(value, label);
+		if (result < 0) throw new Error(`${label} is negative`);
+		return result;
+	};
+	const fraction = (value, label) => {
+		const result = safe(value, label);
+		if (result < 0 || result > 1) throw new Error(`${label} is outside [0, 1]`);
+		return result;
+	};
+	const knownCountryIds = new Set(
+		checkpoint.economies.map((economy) => Number(economy.countryId)),
+	);
+	const nativeUnitSide = new Map(
+		checkpoint.units.map((unit) => [unit.id, Number(unit.side)]),
+	);
+	const point = (value, label) => {
+		if (value == null) return null;
+		const lat = safe(value.lat, `${label}.lat`);
+		const lng = safe(value.lng, `${label}.lng`);
+		if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+			throw new Error(`${label} is outside renderer-safe world bounds`);
+		}
+		return { lat, lng };
+	};
+	const sideRecords = topology.stable
+		.map(({ browserSideIndex }, sideIndex) => {
+			const intel = _aiIntelBySide.get(sideUids[browserSideIndex]);
+			const contacts = Object.values(intel?.contacts || [])
+				.map((contact) => {
+					const enemyIndex = sideUids.indexOf(contact.enemySideUid);
+					const unitId = nativeUnitId.get(String(contact.unitId));
+					if (
+						enemyIndex < 0 ||
+						unitId == null ||
+						nativeSide(enemyIndex) == null ||
+						!areSidesHostile(browserSideIndex, enemyIndex)
+					)
+						return null;
+					const contactPoint = point(contact, "intel contact");
+					const countryId =
+						contact.countryId == null
+							? null
+							: unsigned(contact.countryId, "intel.countryId");
+					if (
+						countryId != null &&
+						(countryId > 65535 || !knownCountryIds.has(countryId))
+					)
+						throw new Error("Native intel contact country is not declared");
+					const observedTick = unsigned(
+						contact.observedTick,
+						"intel.observedTick",
+					);
+					if (observedTick > checkpointTick)
+						throw new Error(
+							"Native intel contact is newer than the checkpoint",
+						);
+					const baseConfidence = safe(
+						contact.baseConfidence,
+						"intel.baseConfidence",
+					);
+					const confidence = safe(contact.confidence, "intel.confidence");
+					if (
+						baseConfidence < 0 ||
+						baseConfidence > 1 ||
+						confidence < 0 ||
+						confidence > 1
+					)
+						throw new Error("Native intel confidence is outside [0, 1]");
+					if (!["FRESH", "STALE", "DEGRADED"].includes(contact.status))
+						throw new Error("Native intel contact status is invalid");
+					const ageTicks = unsigned(contact.ageTicks, "intel.ageTicks");
+					if (ageTicks > checkpointTick - observedTick)
+						throw new Error("Native intel contact age exceeds elapsed time");
+					return {
+						key: String(contact.key),
+						enemySideIndex: nativeSide(enemyIndex),
+						sectorId: String(contact.sectorId),
+						unitId,
+						countryId,
+						domain: String(contact.domain),
+						kind: String(contact.kind),
+						lat: contactPoint.lat,
+						lng: contactPoint.lng,
+						velocityLat: safe(contact.velocityLat, "intel.velocityLat"),
+						velocityLng: safe(contact.velocityLng, "intel.velocityLng"),
+						observedPower: nonNegative(
+							contact.observedPower,
+							"intel.observedPower",
+						),
+						baseConfidence,
+						confidence,
+						observedTick,
+						ageTicks,
+						status: contact.status,
+						source: String(contact.source),
+					};
+				})
+				.filter(Boolean)
+				.sort((a, b) => compareText(a.key, b.key));
+			const prewarEnemyPower = [];
+			for (const enemy of topology.stable) {
+				const enemyBrowser = enemy.browserSideIndex;
+				if (!areSidesHostile(browserSideIndex, enemyBrowser)) continue;
+				const power =
+					_aiPrewarEnemyPowerBySide.get(
+						`${sideUids[browserSideIndex]}|${sideUids[enemyBrowser]}`,
+					) ?? 0;
+				const numericPower = nonNegative(power, "prewarEnemyPower");
+				prewarEnemyPower.push({
+					sideIndex: nativeSide(enemyBrowser),
+					power: numericPower,
+				});
+			}
+			const rawIntelConfig = intel?.config || {
+				scanIntervalTicks: 150,
+				freshTicks: 300,
+				staleTicks: 1200,
+				expireTicks: 1800,
+			};
+			const intelConfig = {
+				scanIntervalTicks: Math.max(
+					1,
+					unsigned(rawIntelConfig.scanIntervalTicks, "intel.scanIntervalTicks"),
+				),
+				freshTicks: Math.max(
+					1,
+					unsigned(rawIntelConfig.freshTicks, "intel.freshTicks"),
+				),
+				staleTicks: unsigned(rawIntelConfig.staleTicks, "intel.staleTicks"),
+				expireTicks: unsigned(rawIntelConfig.expireTicks, "intel.expireTicks"),
+			};
+			if (
+				intelConfig.freshTicks > intelConfig.staleTicks ||
+				intelConfig.staleTicks > intelConfig.expireTicks
+			)
+				throw new Error("Native intel decay windows are not ordered");
+			const dynamics = checkpoint.sideDynamics.sides[sideIndex];
+			const hasLastStand = (sides[browserSideIndex] || []).some(
+				(country) =>
+					aiCountryState.get(country.id)?.mode === AI_POSTURE.LAST_STAND,
+			);
+			const hasDefensiveDesperation = (sides[browserSideIndex] || []).some(
+				(country) =>
+					aiCountryState.get(country.id)?.mode ===
+					AI_POSTURE.DEFENSIVE_DESPERATION,
+			);
+			const override = dynamics?.postureOverride
+				? {
+						posture: dynamics.postureOverride,
+						source:
+							dynamics.postureOverride === "OFFENSIVE"
+								? "OFFENSIVE_DESPERATION"
+								: hasLastStand
+									? "LAST_STAND"
+									: hasDefensiveDesperation
+										? "DEFENSIVE_DESPERATION"
+										: "DEFENDER_REACTION",
+						startedTick: checkpointTick,
+						expiresTick: null,
+						sequence: sideIndex + 1,
+					}
+				: null;
+			return {
+				sideIndex,
+				hostileSideIndices: prewarEnemyPower.map((entry) => entry.sideIndex),
+				intel: {
+					lastScanTick:
+						Number(intel?.lastScanTick) < 0
+							? 0
+							: historicalTick(intel?.lastScanTick, "intel.lastScanTick", 0),
+					revision: unsigned(intel?.revision, "intel.revision", 0),
+					config: intelConfig,
+					prewarEnemyPower,
+					contacts,
+				},
+				override,
+			};
+		})
+		.sort((a, b) => a.sideIndex - b.sideIndex);
+	const taskForces = [];
+	const claimedTaskForceUnits = new Set();
+	for (const entry of topology.stable) {
+		const browserIndex = entry.browserSideIndex;
+		for (const force of _aiTaskForcesBySide.get(sideUids[browserIndex]) || []) {
+			const forceProgress = safe(force.progress, "taskForce.progress");
+			if (forceProgress < 0 || forceProgress > 1)
+				throw new Error(`Native task force ${force.id} progress is invalid`);
+			const members = (force.assignedUnitIds || [])
+				.map((id) => {
+					const unitId = nativeUnitId.get(String(id));
+					if (unitId == null) return null;
+					const role = force.unitRoles?.[String(id)]?.role || "LINE";
+					if (nativeUnitSide.get(unitId) !== nativeSide(browserIndex))
+						return null;
+					let routeProgress = forceProgress;
+					if (force.phase === "ATTACKING")
+						routeProgress =
+							role === "SPEARHEAD"
+								? Math.min(1, 0.35 + forceProgress * 0.75)
+								: role === "LINE"
+									? Math.min(1, 0.2 + forceProgress * 0.85)
+									: role === "SUPPORT"
+										? Math.min(0.72, 0.1 + forceProgress * 0.58)
+										: forceProgress >= 0.4
+											? Math.min(0.45, forceProgress * 0.5)
+											: 0;
+					return {
+						unitId,
+						role,
+						assignedTick: historicalTick(
+							force.unitRoles?.[String(id)]?.assignedTick ?? force.createdTick,
+							"taskForce.member.assignedTick",
+						),
+						routeProgress,
+					};
+				})
+				.filter(Boolean)
+				.sort((a, b) => a.unitId - b.unitId);
+			for (const member of members) {
+				if (!["SPEARHEAD", "LINE", "RESERVE", "SUPPORT"].includes(member.role))
+					throw new Error(
+						`Native task force member ${member.unitId} has invalid role`,
+					);
+				if (claimedTaskForceUnits.has(member.unitId))
+					throw new Error(
+						`Native unit ${member.unitId} belongs to multiple task forces`,
+					);
+				claimedTaskForceUnits.add(member.unitId);
+			}
+			if (!members.length) continue;
+			if (
+				![
+					"ASSEMBLING",
+					"ATTACKING",
+					"CONSOLIDATING",
+					"CULMINATED",
+					"WITHDRAWING",
+					"REGROUPING",
+					"COMPLETE",
+				].includes(force.phase) ||
+				!["AGGRESSIVE", "BALANCED", "DEFENSIVE"].includes(force.posture)
+			)
+				throw new Error(`Native task force ${force.id} has invalid state`);
+			const memberIds = new Set(members.map((member) => member.unitId));
+			const reserveUnitIds = (force.reserveUnitIds || [])
+				.map((id) => nativeUnitId.get(String(id)))
+				.filter((id) => id != null && memberIds.has(id))
+				.sort((a, b) => a - b);
+			if (new Set(reserveUnitIds).size !== reserveUnitIds.length)
+				throw new Error(`Native task force ${force.id} repeats a reserve unit`);
+			const maxAssignedUnits = unsigned(
+				force.maxAssignedUnits,
+				"taskForce.maxAssignedUnits",
+			);
+			if (maxAssignedUnits === 0)
+				throw new Error(`Native task force ${force.id} has zero capacity`);
+			taskForces.push({
+				id: requiredText(force.id, "taskForce.id"),
+				signature: requiredText(force.signature, "taskForce.signature"),
+				sideIndex: nativeSide(browserIndex),
+				planSignature: requiredText(
+					force.planSignature,
+					"taskForce.planSignature",
+				),
+				planType: requiredText(force.planType, "taskForce.planType"),
+				theaterId: force.theaterId == null ? null : String(force.theaterId),
+				target: point(force.target, `taskForce ${force.id}.target`),
+				stagingAnchor: point(
+					force.stagingAnchor,
+					`taskForce ${force.id}.stagingAnchor`,
+				),
+				route: (force.route || []).map((anchor, index) => {
+					const routePoint = point(
+						anchor,
+						`taskForce ${force.id}.route[${index}]`,
+					);
+					if (routePoint == null)
+						throw new Error(
+							`Native task force ${force.id} route has null point`,
+						);
+					return routePoint;
+				}),
+				phase: force.phase,
+				posture: force.posture,
+				members,
+				reserveUnitIds,
+				desiredPower: nonNegative(force.desiredPower, "taskForce.desiredPower"),
+				launchPower: nonNegative(force.launchPower, "taskForce.launchPower"),
+				currentPower: nonNegative(force.currentPower, "taskForce.currentPower"),
+				peakPower: nonNegative(force.peakPower, "taskForce.peakPower"),
+				readiness: fraction(force.readiness, "taskForce.readiness"),
+				maxAssignedUnits,
+				createdTick: historicalTick(force.createdTick, "taskForce.createdTick"),
+				phaseStartedTick: historicalTick(
+					force.phaseStartedTick,
+					"taskForce.phaseStartedTick",
+				),
+				lastProgressTick: historicalTick(
+					force.lastProgressTick,
+					"taskForce.lastProgressTick",
+				),
+				lastRecoveryTick: historicalTick(
+					force.lastRecoveryTick,
+					"taskForce.lastRecoveryTick",
+				),
+				recoveryPower: nonNegative(
+					force.recoveryPower,
+					"taskForce.recoveryPower",
+				),
+				progress: forceProgress,
+				withdrawalAnchor: point(
+					force.withdrawalAnchor,
+					`taskForce ${force.id}.withdrawalAnchor`,
+				),
+				completionReason:
+					force.completionReason == null
+						? null
+						: String(force.completionReason),
+				outcome: force.outcome == null ? null : String(force.outcome),
+				severeSurprise: !!force.severeSurprise,
+				parentTaskForceId:
+					force.parentTaskForceId == null
+						? null
+						: String(force.parentTaskForceId),
+				supplyInvalidatedTick:
+					force.supplyInvalidatedTick == null
+						? null
+						: historicalTick(
+								force.supplyInvalidatedTick,
+								"taskForce.supplyInvalidatedTick",
+							),
+				intentRevision: unsigned(
+					force.intentRevision,
+					"taskForce.intentRevision",
+					0,
+				),
+			});
+		}
+	}
+	taskForces.sort((a, b) => compareText(a.id, b.id));
+	for (let index = 1; index < taskForces.length; index++)
+		if (taskForces[index - 1].id === taskForces[index].id)
+			throw new Error(`Native task force id ${taskForces[index].id} repeats`);
+	const countryDesperation = [];
+	for (const entry of topology.stable)
+		for (const country of sides[entry.browserSideIndex] || []) {
+			const state = aiCountryState.get(country.id) || {};
+			const countryId = unsigned(country.id, "desperation.countryId");
+			if (countryId > 65535 || !knownCountryIds.has(countryId))
+				throw new Error(
+					`Native desperation country ${countryId} is not declared`,
+				);
+			const mode = state.mode || "NORMAL";
+			if (
+				![
+					"NORMAL",
+					"LAST_STAND",
+					"DEFENSIVE_DESPERATION",
+					"OFFENSIVE_DESPERATION",
+					"UNDER_MOBILIZED",
+				].includes(mode)
+			)
+				throw new Error(
+					`Native country ${countryId} desperation mode is invalid`,
+				);
+			countryDesperation.push({
+				countryId,
+				mode,
+				initialCities:
+					country._aiInitialCities == null
+						? null
+						: unsigned(country._aiInitialCities, "desperation.initialCities"),
+				initialManpower:
+					country._aiInitialManpower == null
+						? null
+						: nonNegative(
+								country._aiInitialManpower,
+								"desperation.initialManpower",
+							),
+				previousControlled:
+					country._aiPrevControlled == null
+						? null
+						: unsigned(
+								country._aiPrevControlled,
+								"desperation.previousControlled",
+							),
+				stallTicks: unsigned(
+					country._aiStallTicks,
+					"desperation.stallTicks",
+					0,
+				),
+			});
+		}
+	countryDesperation.sort((a, b) => a.countryId - b.countryId);
+	const overrideEvents = sideRecords
+		.filter((side) => side.override)
+		.map((side) => ({ ...side.override, sideIndex: side.sideIndex }))
+		.sort((a, b) => a.sequence - b.sequence);
+	return {
+		...checkpoint,
+		schema: NATIVE_RUNTIME_CHECKPOINT_V5_SCHEMA,
+		operationalAi: {
+			schema: NATIVE_OPERATIONAL_AI_SCHEMA,
+			sides: sideRecords,
+			taskForces,
+			countryDesperation,
+			overrideEvents,
+			nextOverrideSequence:
+				overrideEvents.reduce(
+					(maximum, event) => Math.max(maximum, event.sequence),
+					0,
+				) + 1,
+		},
+	};
+}
+
 function createNativeRuntimeCheckpoint(options = {}) {
 	const version = options.version ?? 1;
 	if (version === 1) return cloneInitialNativeRuntimeCheckpoint(options);
 	if (version === 2) return buildMidWarNativeRuntimeCheckpoint(options);
 	if (version === 3) return buildMidWarNativeRuntimeCheckpointV3(options);
 	if (version === 4) return buildMidWarNativeRuntimeCheckpointV4(options);
+	if (version === 5) return buildMidWarNativeRuntimeCheckpointV5(options);
 	throw new RangeError(
-		"Native runtime checkpoint version must be 1, 2, 3, or 4",
+		"Native runtime checkpoint version must be 1, 2, 3, 4, or 5",
 	);
 }
 

@@ -187,7 +187,10 @@ const v3DynamicsEnd = main.indexOf("function nativeRuntimeV4SideDynamics", v3Dyn
 const v3DynamicsBuilder = main.slice(v3DynamicsStart, v3DynamicsEnd);
 assert.doesNotMatch(v3DynamicsBuilder, /sideDynamics/);
 const v4Start = main.indexOf("function nativeRuntimeV4SideDynamics");
-const v4End = main.indexOf("function createNativeRuntimeCheckpoint", v4Start);
+const v4End = main.indexOf(
+	"function buildMidWarNativeRuntimeCheckpointV5",
+	v4Start,
+);
 const v4Builder = main.slice(v4Start, v4End);
 assert.match(v4Builder, /browserToNativeSide/);
 assert.match(v4Builder, /sideIndex: nativeSideIndex/);
