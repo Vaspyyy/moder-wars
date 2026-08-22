@@ -9846,7 +9846,10 @@ const NATIVE_RUNTIME_CHECKPOINT_V2_SCHEMA = "native-runtime-checkpoint-v2";
 const NATIVE_RUNTIME_CHECKPOINT_V3_SCHEMA = "native-runtime-checkpoint-v3";
 const NATIVE_RUNTIME_CHECKPOINT_V4_SCHEMA = "native-runtime-checkpoint-v4";
 const NATIVE_RUNTIME_CHECKPOINT_V5_SCHEMA = "native-runtime-checkpoint-v5";
+const NATIVE_RUNTIME_CHECKPOINT_V6_SCHEMA = "native-runtime-checkpoint-v6";
 const NATIVE_OPERATIONAL_AI_SCHEMA = "native-operational-ai-v1";
+const NATIVE_OPERATIONAL_EXECUTION_SCHEMA = "native-operational-execution-v1";
+const NATIVE_AIR_POWER_SCHEMA = "native-air-v2";
 const NATIVE_SIDE_DYNAMICS_SCHEMA = "native-side-dynamics-v1";
 const NATIVE_RUNTIME_BATTLEFIELD_SCHEMA = "native-battlefield-v1";
 const NATIVE_INFLUENCE_RUNTIME_SCHEMA = "native-influence-runtime-v1";
@@ -11910,6 +11913,653 @@ function buildMidWarNativeRuntimeCheckpointV5(options = {}) {
 	};
 }
 
+function buildMidWarNativeRuntimeCheckpointV6(options = {}) {
+	const checkpoint = buildMidWarNativeRuntimeCheckpointV5(options);
+	const topology = nativeRuntimeStableTopology();
+	const liveUnits = units.filter(
+		(unit) =>
+			unit &&
+			Number.isFinite(unit.health) &&
+			unit.health > 0 &&
+			(unit.kind === "armor" || getLiveFormationStrength(unit) > 0),
+	);
+	const nativeUnitId = new Map(
+		liveUnits.map((unit, index) => [String(unit.id), index + 1]),
+	);
+	const checkpointUnitById = new Map(
+		checkpoint.units.map((unit) => [unit.id, unit]),
+	);
+	const nativeSide = (browserSideIndex, label) => {
+		const side = topology.browserToNativeSide.get(browserSideIndex);
+		if (side === undefined)
+			throw new Error(`${label} has no stable native side`);
+		return side;
+	};
+	const noIntegerFallback = Symbol("no-integer-fallback");
+	const safeInteger = (value, label, fallback = noIntegerFallback) => {
+		if (value == null && fallback !== noIntegerFallback) return fallback;
+		if (value == null)
+			throw new Error(`${label} is not an unsigned safe integer`);
+		const result = Number(value);
+		if (!Number.isSafeInteger(result) || result < 0)
+			throw new Error(`${label} is not an unsigned safe integer`);
+		return result;
+	};
+	const safeNumber = (value, label) => {
+		const result = Number(value);
+		if (!Number.isFinite(result)) throw new Error(`${label} is not finite`);
+		return result;
+	};
+	const boundedFraction = (value, label, fallback) => {
+		const result = value == null ? fallback : safeNumber(value, label);
+		if (result < 0 || result > 1) throw new Error(`${label} is outside [0, 1]`);
+		return result;
+	};
+	const requiredText = (value, label) => {
+		const text = String(value ?? "").trim();
+		const hasControlCharacter = Array.from(text).some((character) => {
+			const code = character.charCodeAt(0);
+			return code < 32 || code === 127;
+		});
+		if (!text || text.length > 256 || hasControlCharacter)
+			throw new Error(`${label} is invalid`);
+		return text;
+	};
+	const point = (value, label) => {
+		if (!value) throw new Error(`${label} is missing`);
+		const lat = safeNumber(value.lat, `${label}.lat`);
+		const lng = safeNumber(value.lng, `${label}.lng`);
+		if (lat < -90 || lat > 90 || lng < -180 || lng > 180)
+			throw new Error(`${label} is outside renderer-safe world bounds`);
+		return { lat, lng };
+	};
+	const distanceSquared = (left, right) => {
+		const dLat = right.lat - left.lat;
+		let dLng = right.lng - left.lng;
+		if (dLng > 180) dLng -= 360;
+		else if (dLng < -180) dLng += 360;
+		return dLat * dLat + dLng * dLng;
+	};
+	const frameTickToNativeTick = (value, label, fallbackFrame = null) => {
+		const frameTick = safeInteger(value, label, fallbackFrame);
+		if (frameTick > checkpoint.frame)
+			throw new Error(`${label} is newer than the checkpoint frame`);
+		const elapsedFrames = checkpoint.frame - frameTick;
+		return checkpoint.tick - Math.min(checkpoint.tick, elapsedFrames);
+	};
+	const sideForTarget = (plan, ownBrowserSide) => {
+		if (plan.targetSideUid != null) {
+			const browserIndex = sideUids.indexOf(plan.targetSideUid);
+			if (browserIndex >= 0 && browserIndex !== ownBrowserSide)
+				return topology.browserToNativeSide.get(browserIndex) ?? null;
+		}
+		const targetCountry = Number(plan.targetCountryId || 0);
+		if (targetCountry > 0) {
+			const targetNativeSide = checkpoint.sides.findIndex((side) =>
+				side.countryIds.includes(targetCountry),
+			);
+			const ownNativeSide = topology.browserToNativeSide.get(ownBrowserSide);
+			if (targetNativeSide >= 0 && targetNativeSide !== ownNativeSide)
+				return targetNativeSide;
+		}
+		const ownNativeSide = topology.browserToNativeSide.get(ownBrowserSide);
+		if (ownNativeSide == null) return null;
+		for (let candidate = 0; candidate < checkpoint.sides.length; candidate++) {
+			if (
+				candidate !== ownNativeSide &&
+				checkpoint.hostilityMatrix[
+					ownNativeSide * checkpoint.sides.length + candidate
+				] === 1
+			)
+				return candidate;
+		}
+		return null;
+	};
+
+	const claimedUnitIds = new Set(
+		checkpoint.units
+			.filter((unit) => unit.aiPolicy?.garrisonExcluded)
+			.map((unit) => unit.id),
+	);
+	for (const taskForce of checkpoint.operationalAi.taskForces)
+		for (const member of taskForce.members || [])
+			claimedUnitIds.add(member.unitId);
+	const navalOperations = [];
+	const operationByBrowserPlan = new Map();
+	const planDefinitions = [
+		{
+			plans: _navalPlan,
+			kind: "INVASION",
+			idKind: "invasion",
+			role: "NAVAL_INVASION",
+			matches: (unit, plan) =>
+				unit.navalAssigned && unit.sideIndex === plan.browserSideIndex,
+		},
+		{
+			plans: _navalSupplyPlan,
+			kind: "SUPPLY",
+			idKind: "supply",
+			role: "NAVAL_SUPPLY",
+			matches: (unit, plan) =>
+				unit.supplyAssigned && unit.sideIndex === plan.browserSideIndex,
+		},
+		{
+			plans: _transportPlan,
+			kind: "FAST_TRANSPORT",
+			idKind: "transport",
+			role: "FAST_TRANSPORT",
+			matches: (unit, plan) =>
+				unit.sideIndex === plan.browserSideIndex &&
+				unit._transportPlanSignature === plan.signature,
+		},
+	];
+	for (const definition of planDefinitions) {
+		for (const entry of topology.stable) {
+			const browserSideIndex = entry.browserSideIndex;
+			const rawPlan = definition.plans[browserSideIndex];
+			if (!rawPlan) continue;
+			const side = nativeSide(
+				browserSideIndex,
+				`Native ${definition.idKind} plan`,
+			);
+			const target = point(
+				rawPlan.target,
+				`Native ${definition.idKind} plan target`,
+			);
+			const signature = requiredText(
+				rawPlan.signature ||
+					`${side}:${rawPlan.type || definition.kind}:${target.lat}:${target.lng}`,
+				`Native ${definition.idKind} plan signature`,
+			);
+			const memberUnits = liveUnits
+				.filter((unit) =>
+					definition.matches(unit, {
+						...rawPlan,
+						browserSideIndex,
+						signature,
+					}),
+				)
+				.map((unit) => ({ unit, unitId: nativeUnitId.get(String(unit.id)) }))
+				.filter(({ unitId }) => unitId != null && !claimedUnitIds.has(unitId))
+				.sort((left, right) => left.unitId - right.unitId);
+			const startedTick = frameTickToNativeTick(
+				rawPlan.startedTick,
+				`Native ${definition.idKind} plan startedTick`,
+				checkpoint.frame,
+			);
+			const members = memberUnits.map(({ unitId }) => {
+				claimedUnitIds.add(unitId);
+				return {
+					unitId,
+					role: definition.role,
+					assignedTick: startedTick,
+				};
+			});
+			const firstMemberCountry = members.length
+				? checkpointUnitById.get(members[0].unitId)?.countryId
+				: null;
+			const country = safeInteger(
+				firstMemberCountry || sides[browserSideIndex]?.[0]?.id,
+				`Native ${definition.idKind} plan country`,
+			);
+			if (country <= 0 || country > 65535)
+				throw new Error(`Native ${definition.idKind} plan country is invalid`);
+			const stagingSource =
+				rawPlan.stagingPoint ||
+				rawPlan.arrowPoints?.[0] ||
+				memberUnits[0]?.unit ||
+				rawPlan.target;
+			const staging = point(
+				stagingSource,
+				`Native ${definition.idKind} plan staging`,
+			);
+			const routeSource = Array.isArray(rawPlan.route)
+				? rawPlan.route
+				: Array.isArray(rawPlan._waypoints) && rawPlan._waypoints.length
+					? rawPlan._waypoints
+					: Array.isArray(rawPlan.arrowPoints)
+						? rawPlan.arrowPoints.slice(1, -1)
+						: [];
+			const route = routeSource.map((routePoint, index) =>
+				point(routePoint, `Native ${definition.idKind} route[${index}]`),
+			);
+			const routeIndex = safeInteger(
+				rawPlan.routeIndex ?? rawPlan._routeIndex,
+				`Native ${definition.idKind} routeIndex`,
+				0,
+			);
+			if (routeIndex > route.length)
+				throw new Error(`Native ${definition.idKind} routeIndex exceeds route`);
+			let phase;
+			if (definition.kind === "FAST_TRANSPORT") {
+				phase = "TRANSIT";
+			} else {
+				phase = String(rawPlan.phase || "GATHERING").toUpperCase();
+				const allowed =
+					definition.kind === "INVASION"
+						? ["GATHERING", "EMBARKATION", "TRANSIT", "LANDING"]
+						: ["GATHERING", "EMBARKATION", "TRANSIT", "DELIVERED"];
+				if (!allowed.includes(phase))
+					throw new Error(`Native ${definition.idKind} phase is invalid`);
+			}
+			const fallbackProgress = {
+				GATHERING: 0,
+				EMBARKATION: 0.2,
+				TRANSIT: 0.45,
+				LANDING: 0.75,
+				DELIVERED: 0.75,
+			}[phase];
+			const lastProgressTick = frameTickToNativeTick(
+				rawPlan.lastProgressTick,
+				`Native ${definition.idKind} plan lastProgressTick`,
+				rawPlan.startedTick ?? checkpoint.frame,
+			);
+			const phaseStartedTick = frameTickToNativeTick(
+				rawPlan.phaseStartedTick,
+				`Native ${definition.idKind} plan phaseStartedTick`,
+				rawPlan.lastProgressTick ?? rawPlan.startedTick ?? checkpoint.frame,
+			);
+			const operation = {
+				id: `execution-${side}-${definition.idKind}`,
+				signature,
+				kind: definition.kind,
+				phase,
+				side,
+				country,
+				enemySide:
+					definition.kind === "INVASION"
+						? sideForTarget(rawPlan, browserSideIndex)
+						: null,
+				maxAssignedUnits: Math.max(
+					1,
+					safeInteger(
+						rawPlan.maxAssignedUnits,
+						`Native ${definition.idKind} maxAssignedUnits`,
+						5,
+					),
+					members.length,
+				),
+				members,
+				staging,
+				target,
+				route,
+				routeIndex,
+				progress: boundedFraction(
+					rawPlan.progress,
+					`Native ${definition.idKind} progress`,
+					fallbackProgress,
+				),
+				startedTick,
+				phaseStartedTick: Math.max(startedTick, phaseStartedTick),
+				lastProgressTick: Math.max(startedTick, lastProgressTick),
+				completionReason: null,
+			};
+			navalOperations.push(operation);
+			operationByBrowserPlan.set(rawPlan, operation);
+		}
+	}
+	if (
+		new Set(navalOperations.map((operation) => operation.signature)).size !==
+		navalOperations.length
+	)
+		throw new Error("Native operational execution repeats a plan signature");
+	navalOperations.sort((left, right) =>
+		left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
+	);
+
+	const defenderReactions = [];
+	for (const entry of topology.stable) {
+		const browserSideIndex = entry.browserSideIndex;
+		const rawReaction = _defenderReactionPlan[browserSideIndex];
+		if (!rawReaction) continue;
+		const enemyBrowserSide = safeInteger(
+			rawReaction.enemySideIdx,
+			"Native defender reaction enemySideIdx",
+		);
+		const side = nativeSide(browserSideIndex, "Native defender reaction");
+		const enemySide = nativeSide(
+			enemyBrowserSide,
+			"Native defender reaction enemy",
+		);
+		if (side === enemySide)
+			throw new Error("Native defender reaction targets its own side");
+		const target = point(rawReaction.target, "Native defender reaction target");
+		const enemyNavalPlan = _navalPlan[enemyBrowserSide];
+		const enemyNavalOperation = enemyNavalPlan
+			? operationByBrowserPlan.get(enemyNavalPlan)
+			: null;
+		let kind;
+		let threatSignature;
+		if (enemyNavalOperation?.phase === "TRANSIT") {
+			kind = "NAVAL_TRANSIT";
+			threatSignature = enemyNavalOperation.signature;
+		} else if (enemyNavalOperation?.phase === "LANDING") {
+			kind = "LANDING";
+			threatSignature = enemyNavalOperation.signature;
+		} else {
+			const matchingTaskForce = checkpoint.operationalAi.taskForces
+				.filter(
+					(force) =>
+						force.sideIndex === enemySide &&
+						force.phase === "ATTACKING" &&
+						force.target &&
+						distanceSquared(force.target, target) <= 1e-6,
+				)
+				.sort((left, right) =>
+					left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
+				)[0];
+			if (!matchingTaskForce) continue;
+			kind = "LAND_OFFENSIVE";
+			threatSignature = requiredText(
+				matchingTaskForce.planSignature,
+				"Native land defender threat signature",
+			);
+		}
+		const unitIds = liveUnits
+			.filter(
+				(unit) =>
+					unit.sideIndex === browserSideIndex && unit._defenderReactTarget,
+			)
+			.map((unit) => nativeUnitId.get(String(unit.id)))
+			.filter((unitId) => unitId != null && !claimedUnitIds.has(unitId))
+			.sort((left, right) => left - right);
+		for (const unitId of unitIds) claimedUnitIds.add(unitId);
+		const rawMaxUnits = safeInteger(
+			rawReaction.maxUnits,
+			"Native defender reaction maxUnits",
+			0,
+		);
+		const maxUnits =
+			kind === "LANDING"
+				? Math.max(rawMaxUnits, unitIds.length)
+				: Math.max(1, rawMaxUnits, unitIds.length);
+		const startedTick = frameTickToNativeTick(
+			rawReaction.startedTick,
+			"Native defender reaction startedTick",
+			checkpoint.frame,
+		);
+		const lastProgressTick = frameTickToNativeTick(
+			rawReaction.lastProgressTick,
+			"Native defender reaction lastProgressTick",
+			rawReaction.startedTick ?? checkpoint.frame,
+		);
+		const assignedDistances = unitIds.map((unitId) => {
+			const unit = liveUnits[unitId - 1];
+			return distanceSquared(unit, target);
+		});
+		const sequence = defenderReactions.length + 1;
+		defenderReactions.push({
+			id: `reaction-${side}-${sequence}`,
+			sequence,
+			threatSignature,
+			side,
+			enemySide,
+			kind,
+			target,
+			unitIds,
+			maxUnits,
+			startedTick,
+			lastProgressTick: Math.max(startedTick, lastProgressTick),
+			bestDistanceSquared: assignedDistances.length
+				? Math.min(...assignedDistances)
+				: null,
+			landingDefeatedTick:
+				kind === "LANDING" && Number(rawReaction._landingDefeatedTick) > 0
+					? frameTickToNativeTick(
+							rawReaction._landingDefeatedTick,
+							"Native defender reaction landingDefeatedTick",
+						)
+					: null,
+		});
+	}
+	defenderReactions.sort(
+		(left, right) =>
+			left.side - right.side ||
+			left.sequence - right.sequence ||
+			(left.id < right.id ? -1 : left.id > right.id ? 1 : 0),
+	);
+	const countryCoverage = checkpoint.economies
+		.map((economy) => {
+			const countryId = safeInteger(
+				economy.countryId,
+				"Native air coverage countryId",
+			);
+			if (countryId <= 0 || countryId > 65535)
+				throw new Error(`Native air coverage country ${countryId} is invalid`);
+			const operationsCoverage = safeNumber(
+				countryEquipment.get(countryId)?.airOperationsCoverage ?? 1,
+				`Native air coverage for country ${countryId}`,
+			);
+			if (operationsCoverage < 0 || operationsCoverage > 1)
+				throw new Error(
+					`Native air coverage for country ${countryId} is outside [0, 1]`,
+				);
+			return { countryId, operationsCoverage };
+		})
+		.sort((left, right) => left.countryId - right.countryId);
+	if (
+		new Set(countryCoverage.map((coverage) => coverage.countryId)).size !==
+		countryCoverage.length
+	)
+		throw new Error("Native air coverage repeats a country");
+
+	const sortedAirfields = [...airfields].sort((left, right) =>
+		String(left.id) < String(right.id)
+			? -1
+			: String(left.id) > String(right.id)
+				? 1
+				: 0,
+	);
+	const airfieldId = new Map();
+	for (let index = 0; index < sortedAirfields.length; index++) {
+		const key = String(sortedAirfields[index].id);
+		if (airfieldId.has(key)) throw new Error(`Duplicate airfield id ${key}`);
+		airfieldId.set(key, index + 1);
+	}
+	const serializedAirfields = sortedAirfields.map((field) => {
+		const health = safeNumber(field.health, `Airfield ${field.id} health`);
+		if (health < 0 || health > 100)
+			throw new Error(`Airfield ${field.id} health is outside [0, 100]`);
+		const disabled = !!field.disabled;
+		if (health === 0 && !disabled)
+			throw new Error(`Airfield ${field.id} has zero health but is enabled`);
+		const ownerCountryId = safeInteger(
+			field.ownerId,
+			`Airfield ${field.id} ownerId`,
+		);
+		const controllerCountryId = safeInteger(
+			field.controllerId || field.ownerId,
+			`Airfield ${field.id} controllerId`,
+		);
+		if (
+			ownerCountryId <= 0 ||
+			ownerCountryId > 65535 ||
+			controllerCountryId <= 0 ||
+			controllerCountryId > 65535
+		)
+			throw new Error(`Airfield ${field.id} has an invalid country`);
+		const location = point(field, `Airfield ${field.id}`);
+		return {
+			id: airfieldId.get(String(field.id)),
+			side: nativeSide(field.sideIndex, `Airfield ${field.id}`),
+			ownerCountryId,
+			controllerCountryId,
+			lat: location.lat,
+			lng: location.lng,
+			capacity: field.isCapital ? 3 : 2,
+			health,
+			disabled,
+			captureRepairCycles: safeInteger(
+				field.captureRepairCycles,
+				`Airfield ${field.id} captureRepairCycles`,
+				0,
+			),
+			capital: !!field.isCapital,
+		};
+	});
+	const sortedWings = airWings
+		.filter((wing) => Number(wing.equipment) > 0)
+		.sort((left, right) =>
+			String(left.id) < String(right.id)
+				? -1
+				: String(left.id) > String(right.id)
+					? 1
+					: 0,
+		);
+	const airWingId = new Map();
+	for (let index = 0; index < sortedWings.length; index++) {
+		const key = String(sortedWings[index].id);
+		if (airWingId.has(key)) throw new Error(`Duplicate air wing id ${key}`);
+		airWingId.set(key, index + 1);
+	}
+	const serializedWings = sortedWings.map((wing) => {
+		const id = airWingId.get(String(wing.id));
+		const role = String(wing.role || "").toUpperCase();
+		if (!["FIGHTER", "STRIKE"].includes(role))
+			throw new Error(`Air wing ${wing.id} role is invalid`);
+		let state = String(wing.state || "GROUNDED").toUpperCase();
+		if (
+			![
+				"GROUNDED",
+				"PATROL",
+				"INTERCEPT",
+				"ATTACKING",
+				"RETURNING",
+				"REARMING",
+				"EVACUATED",
+			].includes(state)
+		)
+			throw new Error(`Air wing ${wing.id} state is invalid`);
+		const basedFieldId = airfieldId.get(String(wing.airfieldId));
+		if (basedFieldId == null)
+			throw new Error(`Air wing ${wing.id} references a missing airfield`);
+		let returnAirfieldId = null;
+		let targetKind = null;
+		let targetId = null;
+		if (state === "INTERCEPT") {
+			if (role !== "FIGHTER")
+				throw new Error(`Air wing ${wing.id} has an invalid intercept role`);
+			targetKind = "AIR_WING";
+			targetId = airWingId.get(String(wing.targetId));
+			if (targetId == null || targetId === id) state = "RETURNING";
+		} else if (state === "ATTACKING") {
+			if (role !== "STRIKE")
+				throw new Error(`Air wing ${wing.id} has an invalid strike role`);
+			targetKind = String(wing.targetType || "").toUpperCase();
+			if (targetKind === "AIRFIELD") {
+				targetId = airfieldId.get(String(wing.targetId));
+			} else if (targetKind === "ARMY" || targetKind === "ARMOR") {
+				targetId = nativeUnitId.get(String(wing.targetId));
+			} else {
+				throw new Error(`Air wing ${wing.id} target type is invalid`);
+			}
+			if (targetId == null) state = "RETURNING";
+		}
+		if (state === "RETURNING") {
+			returnAirfieldId =
+				airfieldId.get(String(wing.returnFieldId || wing.airfieldId)) ||
+				basedFieldId;
+			targetKind = null;
+			targetId = null;
+		} else if (state !== "INTERCEPT" && state !== "ATTACKING") {
+			returnAirfieldId = null;
+			targetKind = null;
+			targetId = null;
+		}
+		const count = safeInteger(wing.equipment, `Air wing ${wing.id} equipment`);
+		const maxCount = safeInteger(
+			wing.maxEquipment,
+			`Air wing ${wing.id} maxEquipment`,
+			count,
+		);
+		if (count <= 0 || maxCount <= 0 || count > maxCount)
+			throw new Error(`Air wing ${wing.id} equipment is invalid`);
+		const quality = safeNumber(
+			wing.quality ?? 50,
+			`Air wing ${wing.id} quality`,
+		);
+		if (quality < 0 || quality > 100)
+			throw new Error(`Air wing ${wing.id} quality is outside [0, 100]`);
+		const location = point(wing, `Air wing ${wing.id}`);
+		const rawRearmTicks = safeInteger(
+			wing.rearmTicks,
+			`Air wing ${wing.id} rearmTicks`,
+			0,
+		);
+		const rearmTicks = state === "REARMING" ? rawRearmTicks : 0;
+		if (state === "REARMING" && rearmTicks === 0)
+			throw new Error(`Air wing ${wing.id} is rearming without a timer`);
+		const enduranceTicks = safeInteger(
+			wing.enduranceTicks,
+			`Air wing ${wing.id} enduranceTicks`,
+			0,
+		);
+		if (enduranceTicks >= 600)
+			throw new Error(`Air wing ${wing.id} enduranceTicks is invalid`);
+		let nextMissionTick = null;
+		if (wing.nextMissionTick != null) {
+			nextMissionTick = safeInteger(
+				wing.nextMissionTick,
+				`Air wing ${wing.id} nextMissionTick`,
+			);
+			if (nextMissionTick % 6 !== 0)
+				throw new Error(`Air wing ${wing.id} nextMissionTick is not aligned`);
+		}
+		const sovereignCountryId = safeInteger(
+			wing.sovereignId,
+			`Air wing ${wing.id} sovereignId`,
+		);
+		if (sovereignCountryId <= 0 || sovereignCountryId > 65535)
+			throw new Error(`Air wing ${wing.id} sovereign country is invalid`);
+		return {
+			id,
+			side: nativeSide(wing.sideIndex, `Air wing ${wing.id}`),
+			sovereignCountryId,
+			airfieldId: basedFieldId,
+			returnAirfieldId,
+			role,
+			quality,
+			maxCount,
+			count,
+			lat: location.lat,
+			lng: location.lng,
+			state,
+			targetKind,
+			targetId,
+			rearmTicks,
+			cooldownTicks: safeInteger(
+				wing.cooldownTicks,
+				`Air wing ${wing.id} cooldownTicks`,
+				0,
+			),
+			enduranceTicks,
+			nextMissionTick,
+			forceMission: !!wing.forceMission,
+		};
+	});
+
+	return {
+		...checkpoint,
+		schema: NATIVE_RUNTIME_CHECKPOINT_V6_SCHEMA,
+		operationalExecution: {
+			schema: NATIVE_OPERATIONAL_EXECUTION_SCHEMA,
+			navalOperations,
+			defenderReactions,
+			nextReactionSequence:
+				defenderReactions.reduce(
+					(maximum, reaction) => Math.max(maximum, reaction.sequence),
+					0,
+				) + 1,
+		},
+		airPower: {
+			schema: NATIVE_AIR_POWER_SCHEMA,
+			countryCoverage,
+			airfields: serializedAirfields,
+			wings: serializedWings,
+		},
+	};
+}
+
 function createNativeRuntimeCheckpoint(options = {}) {
 	const version = options.version ?? 1;
 	if (version === 1) return cloneInitialNativeRuntimeCheckpoint(options);
@@ -11917,8 +12567,9 @@ function createNativeRuntimeCheckpoint(options = {}) {
 	if (version === 3) return buildMidWarNativeRuntimeCheckpointV3(options);
 	if (version === 4) return buildMidWarNativeRuntimeCheckpointV4(options);
 	if (version === 5) return buildMidWarNativeRuntimeCheckpointV5(options);
+	if (version === 6) return buildMidWarNativeRuntimeCheckpointV6(options);
 	throw new RangeError(
-		"Native runtime checkpoint version must be 1, 2, 3, 4, or 5",
+		"Native runtime checkpoint version must be 1, 2, 3, 4, 5, or 6",
 	);
 }
 

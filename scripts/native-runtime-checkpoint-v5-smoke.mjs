@@ -6,7 +6,7 @@ assert.match(main, /native-runtime-checkpoint-v5/);
 assert.match(main, /native-operational-ai-v1/);
 assert.match(main, /function buildMidWarNativeRuntimeCheckpointV5/);
 assert.match(main, /if \(version === 5\) return buildMidWarNativeRuntimeCheckpointV5/);
-assert.match(main, /Native runtime checkpoint version must be 1, 2, 3, 4, or 5/);
+assert.match(main, /Native runtime checkpoint version must be 1, 2, 3, 4, 5, or 6/);
 for (const field of [
 	"hostileSideIndices", "prewarEnemyPower", "lastScanTick", "revision",
 	"assignedTick", "routeProgress", "supplyInvalidatedTick", "intentRevision",
