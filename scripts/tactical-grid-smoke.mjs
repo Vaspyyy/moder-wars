@@ -88,11 +88,7 @@ assert.equal(grid.counters.maxBucketOccupancy, 2);
 const homeCell = getTacticalCell(grid, 0, 0.1, 0.1);
 assert.ok(homeCell);
 assert.equal(homeCell.count, 2);
-assert.equal(homeCell.totalStrength, 6);
-assert.equal(homeCell.totalAllyWeight, 3);
-assert.equal(homeCell.weightedStrength, 10);
-assert.ok(Math.abs(homeCell.centroidLat - 1 / 6) < 1e-12);
-assert.ok(Math.abs(homeCell.centroidLng - 1 / 6) < 1e-7);
+assert.deepEqual(homeCell.units, units.slice(0, 2));
 assert.equal(getTacticalSideCells(grid, 1)?.size, 1);
 const neighborCells = [];
 assert.equal(

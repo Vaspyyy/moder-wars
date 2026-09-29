@@ -2,14 +2,11 @@ import assert from "node:assert/strict";
 
 import {
 	claimFixedItemRange,
-	createChunkedArrayCensus,
 	createDeterministicJob,
 	createDeterministicJobQueue,
 	createDirtyTileTracker,
 	createFixedItemCursor,
-	createGenerationKeyedCache,
 	neighboringTileIndices,
-	plannerCacheKey,
 	runDeterministicJobChunk,
 	tileBoundsForIndex,
 	tileCoordinatesForCell,
@@ -81,56 +78,25 @@ assert.deepEqual(queueOrder, [
 	"b:4-5",
 ]);
 
-const values = Uint16Array.from({ length: 11 }, (_, index) => index + 1);
-let committed = null;
-let commitCount = 0;
-const census = createChunkedArrayCensus({
-	id: "territory-census",
-	generation: 12,
-	source: values,
-	createAccumulator: () => ({ sum: 0, even: 0 }),
-	visit(accumulator, value) {
-		accumulator.sum += value;
-		if (value % 2 === 0) accumulator.even++;
-	},
-	finalize: (accumulator) => Object.freeze({ ...accumulator }),
-	commit(result, context) {
-		commitCount++;
-		committed = { result, context };
-	},
-});
-const censusQueue = createDeterministicJobQueue({
-	itemBudget: 4,
-	maxItemsPerJobTurn: 4,
-});
-censusQueue.enqueue(census);
-censusQueue.step();
-censusQueue.step();
-assert.equal(committed, null, "partial census chunks must not be observable");
-censusQueue.step();
-assert.equal(commitCount, 1);
-assert.deepEqual(committed, {
-	result: { sum: 66, even: 5 },
-	context: { id: "territory-census", generation: 12, totalItems: 11 },
-});
-assert.equal(census.committed, true);
-assert.equal(census.status, "COMPLETE");
-
-let cancelledCommit = false;
-const cancelledCensus = createChunkedArrayCensus({
-	id: "cancelled-census",
-	source: [1, 2, 3],
-	createAccumulator: () => 0,
-	visit: () => {},
-	commit: () => {
-		cancelledCommit = true;
-	},
+// Resetting a world cancels partial jobs without publishing completion.
+let completed = false;
+let cancellationReason = null;
+const cancellable = createDeterministicJob({
+	id: "coast-reset",
+	totalItems: 3,
+	processRange: () => {},
+	onComplete: () => { completed = true; },
+	onCancel: (job) => { cancellationReason = job.metadata.cancelReason; },
 });
 const cancellationQueue = createDeterministicJobQueue({ itemBudget: 1 });
-cancellationQueue.enqueue(cancelledCensus);
+cancellationQueue.enqueue(cancellable);
 cancellationQueue.step();
-assert.equal(cancellationQueue.cancel("cancelled-census", "world-changed"), true);
-assert.equal(cancelledCommit, false);
+assert.equal(cancellable.cursor, 1);
+cancellationQueue.clear("world-changed");
+assert.equal(cancellable.status, "CANCELLED");
+assert.equal(completed, false);
+assert.equal(cancellationReason, "world-changed");
+assert.equal(cancellationQueue.size(), 0);
 
 assert.deepEqual(tileCoordinatesForCell(32 + 32 * 70, 70), {
 	cellX: 32,
@@ -161,29 +127,5 @@ assert.deepEqual(dirty.peek(), [3, 4, 5, 6, 7, 8]);
 dirty.clear();
 assert.equal(dirty.markCellXY(0, 0), 4);
 assert.deepEqual(dirty.consume(), [0, 1, 3, 4]);
-
-const cache = createGenerationKeyedCache({ generation: 3 });
-const topologyKey = plannerCacheKey("blue", "red", "LAND");
-let factoryRuns = 0;
-const topology = cache.getOrCreate("topology", topologyKey, () => {
-	factoryRuns++;
-	return { component: 7 };
-});
-assert.deepEqual(topology, { component: 7 });
-assert.equal(
-	cache.getOrCreate("topology", topologyKey, () => {
-		factoryRuns++;
-		return { component: 99 };
-	}),
-	topology,
-);
-assert.equal(factoryRuns, 1);
-assert.equal(cache.size("topology"), 1);
-assert.equal(cache.set("reachability", "blue:red", true, 2), false);
-assert.equal(cache.setGeneration(4), true);
-assert.equal(cache.get("topology", topologyKey), undefined);
-assert.equal(cache.set("reachability", "blue:red", true, 3), false);
-assert.equal(cache.set("reachability", "blue:red", true, 4), true);
-assert.equal(cache.get("reachability", "blue:red", 4), true);
 
 console.log("Simulation job smoke tests passed");

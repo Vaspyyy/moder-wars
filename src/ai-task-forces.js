@@ -580,7 +580,7 @@ export function advanceAiTaskForce(taskForce, context = {}) {
 
 	const unfavorable =
 		context.forceRatio == null ? false : finite(context.forceRatio) < 1;
-	const defensivePlan = ["DEFEND", "DEFEND_CITY"].includes(
+	const defensivePlan = ["DEFEND"].includes(
 		String(next.planType || "").toUpperCase(),
 	);
 	const stalledTicks = Math.max(0, tick - next.lastProgressTick);

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {readFileSync,existsSync} from "node:fs";
+import {createMenuControls} from "../src/menu-controls.js";
 const main=readFileSync(new URL("../src/main.js",import.meta.url),"utf8");
 const html=readFileSync(new URL("../index.html",import.meta.url),"utf8");
 const worker=readFileSync(new URL("../workers/service-worker.js",import.meta.url),"utf8");
@@ -12,6 +13,12 @@ for(const id of ["experiment-seed-input","randomize-seed-btn","force-mode-select
  assert.equal(html.includes(`id="${id}"`),false,`${id} removed`);
 assert.ok(html.indexOf('id="ffa-toggle-btn"')<html.indexOf('id="sides-container"'));
 assert.doesNotMatch(main,/createNativeRuntimeCheckpoint|_aiIntelBySide|activeExperimentRecorder|occupationGarrisonPlans|countryEconomy|airWings|armorEnabled/);
-assert.match(main,/startBtn.addEventListener\("click"/);
+let clicks=0;
+let onStart;
+const controls=createMenuControls({startBtn:{addEventListener(event,handler){assert.equal(event,"click");onStart=handler;}},startWar(){clicks++;}});
+controls.bindStartBtnClick();
+assert.equal(typeof onStart,"function");
+onStart();
+assert.equal(clicks,1,"setup start action dispatches one war command");
 assert.match(worker,/src\/war-overview.js/);
 console.log("Removed subsystem and setup checks passed");

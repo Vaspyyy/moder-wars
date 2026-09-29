@@ -109,13 +109,13 @@ const transfers = selectMajorityOwnerTransfers([
 assert.equal(transfers.get(10), 2);
 assert.equal(transfers.get(11), 3);
 
-const mainSource = readFileSync(
-	new URL("../src/main.js", import.meta.url),
+const resolutionSource = readFileSync(
+	new URL("../src/conflict-resolution.js", import.meta.url),
 	"utf8",
 );
-const transferCaptureIndex = mainSource.indexOf("treatyTransfers.push(");
-const warCellCleanupIndex = mainSource.indexOf(
-	"landMask[i] = 1;",
+const transferCaptureIndex = resolutionSource.indexOf("treatyTransfers.push(");
+const warCellCleanupIndex = resolutionSource.indexOf(
+	"runtime.landMask[i] = 1;",
 	transferCaptureIndex,
 );
 assert.ok(transferCaptureIndex >= 0);

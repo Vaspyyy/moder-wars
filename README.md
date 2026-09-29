@@ -29,7 +29,7 @@ The current **Choose Era** menu exposes one playable era:
 ## What You Can Do
 
 - **PLAY** opens the 2022 Modern Day era and starts the conflict setup. The Basic panel covers AI posture and war rules, with + Side and FFA above the side cards. Optional manpower totals, date, and capture rules remain under Advanced. The simulation uses ground formations, naval planning, and optional missiles.
-- **War Overview** shows with manpower, casualties, and the percentage of original territory retained for each side and its countries. Country manpower shows deployed personnel; side manpower includes pooled reserves. Country rows are indented beneath their side totals.
+- **War Overview** shows manpower, casualties, and the percentage of original territory retained for each side and its countries. Country manpower shows deployed personnel; side manpower includes pooled reserves. Country rows are indented beneath their side totals.
 - **EDITOR** redraws borders, creates countries, manages cities, and saves or loads scenarios.
 - **COMMUNITY** browses, uploads, remixes, and downloads shared scenarios or countries.
 - **SETTINGS** groups preferences into Gameplay, Display, Audio, Interface, and Advanced. Benchmark and performance tuning live under Advanced.
@@ -64,3 +64,13 @@ The title screen uses a dedicated vector backdrop with bundled 50m geography and
 Vanilla JavaScript, Leaflet map, Canvas overlay, IndexedDB GeoJSON cache, and Web Workers for frontline and GeoJSON processing.
 
 The live overview keeps only current values. Intelligence/contact memory, economy, rebellions, armor, air power, occupation garrisons, experiment recording, rematches, interventions, and native runtime checkpoint exports have been removed. Existing scenario files still load; obsolete options are ignored.
+
+## Code organization
+
+`src/main.js` owns shared application state and startup. Live getter/setter bindings in `runtime-context.js` let feature controllers observe replaced arrays and current state without importing `main.js`. These controllers cover setup, conflict lifecycle, AI planning, simulation ticks, menus, community tools, and editor actions. This is an incremental split: shared state still belongs to the application, rather than a fully independent simulation store.
+
+`src/editor.js` wires editor tools; `geography-loader.js` and `scenario-loader.js` handle geography and scenario loading. `src/renderer.js` owns the Canvas layer and caches, with separate terrain, unit, label, overlay, and flag passes. Translation data, language application, audio, settings, and exports also have their own modules.
+
+Commander mode has been retired, including its menus, briefing, HUD, operation definitions, and simulation branches. Conquest AI, task forces, tactical spatial buckets, cached decisions, workers, profiling, and benchmarks remain.
+
+Run `biome check .` after editing. Individual offline checks live in `scripts/*-smoke.mjs`; the module graph check requires `node --experimental-vm-modules scripts/module-graph-smoke.mjs`. It verifies imports and offline-cache coverage without evaluating game code. `render-passes-smoke.mjs` additionally accepts `MW_RENDER_BASELINE` for an optional renderer comparison and uses native Canvas when available for flag-clipping checks. These scripts are offline checks, not interactive playtests.

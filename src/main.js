@@ -1,11 +1,1528 @@
-import L from "leaflet";
+import { createLiveContext } from "./runtime-context.js";
+
+// Shared live binding bridge. Systems receive commands/state without importing main.js.
+const applicationRuntime = createLiveContext(
+	{
+		activeTheaterCities: () => activeTheaterCities,
+		_influenceCityGridSource: () => _influenceCityGridSource,
+		_influenceCityGridSourceLength: () => _influenceCityGridSourceLength,
+		_influenceCityGridWorldGeneration: () => _influenceCityGridWorldGeneration,
+		_simulationWorldGeneration: () => _simulationWorldGeneration,
+		sides: () => sides,
+		_influenceCoalitionSignature: () => _influenceCoalitionSignature,
+		_influenceActiveSideIndices: () => _influenceActiveSideIndices,
+		_tickSideAllyIdSets: () => _tickSideAllyIdSets,
+		_tickCityGridIndexSet: () => _tickCityGridIndexSet,
+		getGridIndex: () => getGridIndex,
+		areSidesHostile: () => areSidesHostile,
+		_tickSideSupportIdSets: () => _tickSideSupportIdSets,
+		MAX_SIDES: () => MAX_SIDES,
+		_influenceHostileSideIndices: () => _influenceHostileSideIndices,
+		gridWidth: () => gridWidth,
+		gridHeight: () => gridHeight,
+		_influenceFrontierQueued: () => _influenceFrontierQueued,
+		_influenceFrontierWorldGeneration: () => _influenceFrontierWorldGeneration,
+		_influenceFrontierQueue: () => _influenceFrontierQueue,
+		_influenceFrontierCursor: () => _influenceFrontierCursor,
+		_influenceFrontierPriorityQueue: () => _influenceFrontierPriorityQueue,
+		_influenceFrontierPriorityCursor: () => _influenceFrontierPriorityCursor,
+		INFLUENCE_FRONTIER_BACKLOG_LIMIT: () => INFLUENCE_FRONTIER_BACKLOG_LIMIT,
+		INFLUENCE_FRONTIER_PRIORITY_LIMIT: () => INFLUENCE_FRONTIER_PRIORITY_LIMIT,
+		dominantSideMap: () => dominantSideMap,
+		landMask: () => landMask,
+		syncOccupationFromSideInfluence: () => syncOccupationFromSideInfluence,
+		sideInfluenceMaps: () => sideInfluenceMaps,
+		_influenceNeighborDx: () => _influenceNeighborDx,
+		_influenceNeighborDy: () => _influenceNeighborDy,
+		primaryOccupierMap: () => primaryOccupierMap,
+		_influenceNeighborCountryIds: () => _influenceNeighborCountryIds,
+		_influenceNeighborCountryCounts: () => _influenceNeighborCountryCounts,
+		_tickCountryById: () => _tickCountryById,
+		CONFIG: () => CONFIG,
+		getOptimizationFactor: () => getOptimizationFactor,
+		_simTickCount: () => _simTickCount,
+		units: () => units,
+		stableUnitCohort: () => stableUnitCohort,
+		simFrameCount: () => simFrameCount,
+		mountainsEnabled: () => mountainsEnabled,
+		terrainMask: () => terrainMask,
+		getLiveFormationStrength: () => getLiveFormationStrength,
+		worldControlMap: () => worldControlMap,
+		occupationMap: () => occupationMap,
+		_territoryLedger: () => _territoryLedger,
+		influenceLayer: () => influenceLayer,
+		deJureMap: () => deJureMap,
+		_territoryLedgerSnapshot: () => _territoryLedgerSnapshot,
+		_cachedP1T: () => _cachedP1T,
+		_cachedP2T: () => _cachedP2T,
+		_cachedSideTerritoryCounts: () => _cachedSideTerritoryCounts,
+		_cachedSideTerritoryPcts: () => _cachedSideTerritoryPcts,
+		getSideLedger: () => getSideLedger,
+		_territoryLedgerDecisionTick: () => _territoryLedgerDecisionTick,
+		getCountryLedger: () => getCountryLedger,
+		_territoryLedgerCitiesSource: () => _territoryLedgerCitiesSource,
+		_territoryLedgerCitiesLength: () => _territoryLedgerCitiesLength,
+		_territoryLedgerAppliedCitiesRevision: () =>
+			_territoryLedgerAppliedCitiesRevision,
+		_territoryLedgerCitiesRevision: () => _territoryLedgerCitiesRevision,
+		createTerritoryLedger: () => createTerritoryLedger,
+		sideUids: () => sideUids,
+		hostilityMatrix: () => hostilityMatrix,
+		_frameSimulationCommitFlags: () => _frameSimulationCommitFlags,
+		createPerfState: () => createPerfState,
+		_frontlineLayoutApplyPendingMs: () => _frontlineLayoutApplyPendingMs,
+		_frontlineSlotApplyPendingMs: () => _frontlineSlotApplyPendingMs,
+		gameState: () => gameState,
+		godModeActive: () => godModeActive,
+		preGodModeState: () => preGodModeState,
+		_tickAllCombatants: () => _tickAllCombatants,
+		activeBattles: () => activeBattles,
+		_battleHash: () => _battleHash,
+		latestCountryStats: () => latestCountryStats,
+		_tickCombatantIds: () => _tickCombatantIds,
+		_tickCountryToSideMap: () => _tickCountryToSideMap,
+		updatePersistentInfluence: () => updatePersistentInfluence,
+		isSimulationPhaseDue: () => isSimulationPhaseDue,
+		_simulationJobs: () => _simulationJobs,
+		stepTerritoryLedger: () => stepTerritoryLedger,
+		unitSpatialHash: () => unitSpatialHash,
+		UNIT_HASH_CELL_SIZE: () => UNIT_HASH_CELL_SIZE,
+		_unitLiveGeneration: () => _unitLiveGeneration,
+		frontlineFieldTick: () => frontlineFieldTick,
+		FRONTLINE_FIELD_UPDATE_INTERVAL: () => FRONTLINE_FIELD_UPDATE_INTERVAL,
+		_frontlinePolyTick: () => _frontlinePolyTick,
+		FRONTLINE_POLY_UPDATE_INTERVAL: () => FRONTLINE_POLY_UPDATE_INTERVAL,
+		_workerBusy: () => _workerBusy,
+		_frontlineWorkerPendingField: () => _frontlineWorkerPendingField,
+		_frontlineWorkerPendingLayout: () => _frontlineWorkerPendingLayout,
+		_tickUnitsBySide: () => _tickUnitsBySide,
+		_tickUnitGridIdx: () => _tickUnitGridIdx,
+		_tickCountryToCityCount: () => _tickCountryToCityCount,
+		_tickCountryCapitalLost: () => _tickCountryCapitalLost,
+		capitalLostCountries: () => capitalLostCountries,
+		refreshLiveCombatPower: () => refreshLiveCombatPower,
+		_sidePosture: () => _sidePosture,
+		evaluateAllPlans: () => evaluateAllPlans,
+		updateOperationalAiTaskForces: () => updateOperationalAiTaskForces,
+		recordPerfMeasure: () => recordPerfMeasure,
+		_politicalMapRevision: () => _politicalMapRevision,
+		adjacencyCache: () => adjacencyCache,
+		_neutralBorderCacheSignature: () => _neutralBorderCacheSignature,
+		_neutralBorderPolys: () => _neutralBorderPolys,
+		cities: () => cities,
+		getEnemyCityCandidatesBySide: () => getEnemyCityCandidatesBySide,
+		_tickCitiesBySovereign: () => _tickCitiesBySovereign,
+		_tickMetadataById: () => _tickMetadataById,
+		aiCountryState: () => aiCountryState,
+		getEffectiveBuffState: () => getEffectiveBuffState,
+		_sideWarPhase: () => _sideWarPhase,
+		getControlValue: () => getControlValue,
+		isEnemyTerritory: () => isEnemyTerritory,
+		isMyTerritory: () => isMyTerritory,
+		myInfluenceAt: () => myInfluenceAt,
+		getBorderDirection: () => getBorderDirection,
+		_strategicTargetGeneration: () => _strategicTargetGeneration,
+		simSpeed: () => simSpeed,
+		STRATEGIC_COHORT_COUNT: () => STRATEGIC_COHORT_COUNT,
+		CITY_OBJECTIVE_REFRESH_INTERVAL: () => CITY_OBJECTIVE_REFRESH_INTERVAL,
+		returnUnitPersonnelToReserve: () => returnUnitPersonnelToReserve,
+		normalizeLongitudeDelta: () => normalizeLongitudeDelta,
+		warGraceEndTick: () => warGraceEndTick,
+		formationDamage: () => formationDamage,
+		_battleKey: () => _battleKey,
+		unitHashBySide: () => unitHashBySide,
+		_neutralGarrisonPlan: () => _neutralGarrisonPlan,
+		_coastalDefensePlan: () => _coastalDefensePlan,
+		clearUnitStrategicTargets: () => clearUnitStrategicTargets,
+		_mopUpOwnedCellCache: () => _mopUpOwnedCellCache,
+		selectNearestMopUpCell: () => selectNearestMopUpCell,
+		CITY_WATER_CHECK_LIMIT: () => CITY_WATER_CHECK_LIMIT,
+		_warPlan: () => _warPlan,
+		_navalPlan: () => _navalPlan,
+		_navalSupplyPlan: () => _navalSupplyPlan,
+		geoDistSq: () => geoDistSq,
+		_transportPlan: () => _transportPlan,
+		_frontlinePolys: () => _frontlinePolys,
+		lastTreatyTime: () => lastTreatyTime,
+		_lastCapitulationTick: () => _lastCapitulationTick,
+		treatyAlert: () => treatyAlert,
+		bombsDisabled: () => bombsDisabled,
+		gameTimeDate: () => gameTimeDate,
+		gameTimeEnabled: () => gameTimeEnabled,
+		_cachedSideUnitCounts: () => _cachedSideUnitCounts,
+		_cachedSideSoldierEsts: () => _cachedSideSoldierEsts,
+		PERF_TICK_HISTORY_LIMIT: () => PERF_TICK_HISTORY_LIMIT,
+		applyLandUnitDamage: () => applyLandUnitDamage,
+		flushTerritoryLedger: () => flushTerritoryLedger,
+		publishTerritoryLedgerSnapshot: () => publishTerritoryLedgerSnapshot,
+		sideSoldiers: () => sideSoldiers,
+		rebuildTacticalGrid: () => rebuildTacticalGrid,
+		_tacticalGrid: () => _tacticalGrid,
+		forEachNeighborCell: () => forEachNeighborCell,
+		forEachUnorderedNeighborPair: () => forEachUnorderedNeighborPair,
+		dispatchFrontlineWork: () => dispatchFrontlineWork,
+		consolidateOverlappingUnits: () => consolidateOverlappingUnits,
+		selectAssignedMopUpCountryId: () => selectAssignedMopUpCountryId,
+		AI_DESPERATION: () => AI_DESPERATION,
+		AI_POSTURE: () => AI_POSTURE,
+		countryMetadata: () => countryMetadata,
+		_sideMomentumHistory: () => _sideMomentumHistory,
+		initialSideSoldiers: () => initialSideSoldiers,
+		getKnownEnemyPowerForSide: () => getKnownEnemyPowerForSide,
+		_defenderReactionPlan: () => _defenderReactionPlan,
+		manualSideManpower: () => manualSideManpower,
+		sideRecruitableManpower: () => sideRecruitableManpower,
+		soldiersPerUnit: () => soldiersPerUnit,
+		AI_MOBILIZATION: () => AI_MOBILIZATION,
+		spawnSingleUnit: () => spawnSingleUnit,
+		updateGroundFormation: () => updateGroundFormation,
+		evaluateCountryCapitulation: () => evaluateCountryCapitulation,
+		capitulateCountry: () => capitulateCountry,
+		getActiveHostilePairs: () => getActiveHostilePairs,
+		evaluateGlobalConflict: () => evaluateGlobalConflict,
+		applyTreaty: () => applyTreaty,
+		peaceTreatiesDisabled: () => peaceTreatiesDisabled,
+		showTreatyOffer: () => showTreatyOffer,
+		bombs: () => bombs,
+		playExplosionSound: () => playExplosionSound,
+		explosions: () => explosions,
+		bases: () => bases,
+		launchBomb: () => launchBomb,
+		getLiveFormationPersonnel: () => getLiveFormationPersonnel,
+		importCountrySearch: () => importCountrySearch,
+		renderImportCountryCards: () => renderImportCountryCards,
+		endTutorial: () => endTutorial,
+		tutorialPrevBtn: () => tutorialPrevBtn,
+		currentTutorialStep: () => currentTutorialStep,
+		updateTutorialUI: () => updateTutorialUI,
+		imagerySelect: () => imagerySelect,
+		setImageryProvider: () => setImageryProvider,
+		addSideBtn: () => addSideBtn,
+		activeSideIndex: () => activeSideIndex,
+		rebuildManpowerInputs: () => rebuildManpowerInputs,
+		updateSidesUI: () => updateSidesUI,
+		ffaToggleBtn: () => ffaToggleBtn,
+		ffaMode: () => ffaMode,
+		randomWarBtn: () => randomWarBtn,
+		randomWarMode: () => randomWarMode,
+		updateRandomWarButton: () => updateRandomWarButton,
+		triggerRandomWar: () => triggerRandomWar,
+		viewModeBtn: () => viewModeBtn,
+		viewMode: () => viewMode,
+		recalculateAllBounds: () => recalculateAllBounds,
+		allianceViewCheckbox: () => allianceViewCheckbox,
+		allianceViewEnabled: () => allianceViewEnabled,
+		arrowsToggleBtn: () => arrowsToggleBtn,
+		battlesToggleBtn: () => battlesToggleBtn,
+		showBattleIndicators: () => showBattleIndicators,
+		labelsToggleBtn: () => labelsToggleBtn,
+		showCountryLabels: () => showCountryLabels,
+		countryLabelAnchors: () => countryLabelAnchors,
+		citiesToggleBtn: () => citiesToggleBtn,
+		showNonCapitalCities: () => showNonCapitalCities,
+		warplansToggleBtn: () => warplansToggleBtn,
+		showWarPlans: () => showWarPlans,
+		setCookie: () => setCookie,
+		showWarplansCheckbox: () => showWarplansCheckbox,
+		showLabelsCheckbox: () => showLabelsCheckbox,
+		showCitiesCheckbox: () => showCitiesCheckbox,
+		showBattlesCheckbox: () => showBattlesCheckbox,
+		showAllianceCheckbox: () => showAllianceCheckbox,
+		noPeaceCheckbox: () => noPeaceCheckbox,
+		useSecretSoundsCheckbox: () => useSecretSoundsCheckbox,
+		useSecretSounds: () => useSecretSounds,
+		setSecretSounds: () => setSecretSounds,
+		setupDisableMountainsCheckbox: () => setupDisableMountainsCheckbox,
+		mainDisableMountainsCheckbox: () => mainDisableMountainsCheckbox,
+		loadTerrain: () => loadTerrain,
+		restartScenarioBtn: () => restartScenarioBtn,
+		resetGame: () => resetGame,
+		resetBtn: () => resetBtn,
+		forcePeaceBtn: () => forcePeaceBtn,
+		statusText: () => statusText,
+		peaceSelection1: () => peaceSelection1,
+		updateLoop: () => updateLoop,
+		pauseBtn: () => pauseBtn,
+		togglePause: () => togglePause,
+		ffBtn: () => ffBtn,
+		currentSpeedIndex: () => currentSpeedIndex,
+		SPEED_STEPS: () => SPEED_STEPS,
+		setSpeed: () => setSpeed,
+		speedDownBtn: () => speedDownBtn,
+		speedUpBtn: () => speedUpBtn,
+		customTrackInput: () => customTrackInput,
+		loadingStatus: () => loadingStatus,
+		loadingOverlay: () => loadingOverlay,
+		setCustomTrack: () => setCustomTrack,
+		stopBackgroundMusic: () => stopBackgroundMusic,
+		initAudio: () => initAudio,
+		clearCustomTrackBtn: () => clearCustomTrackBtn,
+		tabScenariosBtn: () => tabScenariosBtn,
+		switchHubTab: () => switchHubTab,
+		tabCountriesBtn: () => tabCountriesBtn,
+		tabFlagsBtn: () => tabFlagsBtn,
+		presetLowBtn: () => presetLowBtn,
+		settingsController: () => settingsController,
+		presetDefaultBtn: () => presetDefaultBtn,
+		launchBtn: () => launchBtn,
+		primeAudio: () => primeAudio,
+		initializeEngine: () => initializeEngine,
+		saveSkipCheckbox: () => saveSkipCheckbox,
+		settingsOverlay: () => settingsOverlay,
+		mainMenu: () => mainMenu,
+		mapUi: () => mapUi,
+		currentScenarioContext: () => currentScenarioContext,
+		gameMode: () => gameMode,
+		applyLanguage: () => applyLanguage,
+		mainSettingsBtn: () => mainSettingsBtn,
+		benchmarkBtn: () => benchmarkBtn,
+		startBenchmark: () => startBenchmark,
+		benchmarkDismissBtn: () => benchmarkDismissBtn,
+		benchmarkResults: () => benchmarkResults,
+		isPaused: () => isPaused,
+		startTutorial: () => startTutorial,
+		conquestTutorialSteps: () => conquestTutorialSteps,
+		ingameSettingsBtn: () => ingameSettingsBtn,
+		closeSettingsBtn: () => closeSettingsBtn,
+		playModeBtn: () => playModeBtn,
+		selectScenario: () => selectScenario,
+		choiceModernDay: () => choiceModernDay,
+		enterScenarioBtn: () => enterScenarioBtn,
+		queuedScenarioAction: () => queuedScenarioAction,
+		choice1936Scenario: () => choice1936Scenario,
+		choiceWW1Scenario: () => choiceWW1Scenario,
+		createScenarioHandler: () => createScenarioHandler,
+		scenarioMenuDependencies: () => scenarioMenuDependencies,
+		cancelConquestChoice: () => cancelConquestChoice,
+		conquestChoiceModal: () => conquestChoiceModal,
+		closeReleaseModalBtn: () => closeReleaseModalBtn,
+		releaseModal: () => releaseModal,
+		cancelCreateBtn: () => cancelCreateBtn,
+		createCountryModal: () => createCountryModal,
+		brushSizeSlider: () => brushSizeSlider,
+		brushSize: () => brushSize,
+		brushSizeVal: () => brushSizeVal,
+		editingCountryId: () => editingCountryId,
+		selectingOverlordForId: () => selectingOverlordForId,
+		countryInspector: () => countryInspector,
+		map: () => map,
+		mapSettingsCancelBtn: () => mapSettingsCancelBtn,
+		mapSettingsModal: () => mapSettingsModal,
+		mapSettingsApplyBtn: () => mapSettingsApplyBtn,
+		mapSettingsNameInput: () => mapSettingsNameInput,
+		mapSettingsWidthInput: () => mapSettingsWidthInput,
+		mapSettingsHeightInput: () => mapSettingsHeightInput,
+		mapSettingsMissilesCheckbox: () => mapSettingsMissilesCheckbox,
+		worldWidthDeg: () => worldWidthDeg,
+		worldHeightDeg: () => worldHeightDeg,
+		mapName: () => mapName,
+		missilesEnabled: () => missilesEnabled,
+		disableBombsCheckbox: () => disableBombsCheckbox,
+		getCookie: () => getCookie,
+		applyWorldBounds: () => applyWorldBounds,
+		customSatelliteUrl: () => customSatelliteUrl,
+		customSatelliteImg: () => customSatelliteImg,
+		importCountryCancelBtn: () => importCountryCancelBtn,
+		importCountryModal: () => importCountryModal,
+		leaderboardBtn: () => leaderboardBtn,
+		openLeaderboard: () => openLeaderboard,
+		closeLeaderboardBtn: () => closeLeaderboardBtn,
+		leaderboardOverlay: () => leaderboardOverlay,
+		closeHubBtn: () => closeHubBtn,
+		closeHub: () => closeHub,
+		minimizeSetupBtn: () => minimizeSetupBtn,
+		setupPanel: () => setupPanel,
+		minimizeStatsBtn: () => minimizeStatsBtn,
+		statsPanel: () => statsPanel,
+		minimizeStatusBtn: () => minimizeStatusBtn,
+		startBtn: () => startBtn,
+		startWar: () => startWar,
+		quickRestartBtn: () => quickRestartBtn,
+		ensurePerfLongTaskObserver: () => ensurePerfLongTaskObserver,
+		_perfSamples: () => _perfSamples,
+		_perfFrameTimeSum: () => _perfFrameTimeSum,
+		_perfFrameCount: () => _perfFrameCount,
+		_perfLastTime: () => _perfLastTime,
+		_perfPendingFrameEntry: () => _perfPendingFrameEntry,
+		getPerfReportData: () => getPerfReportData,
+		formatPerfReport: () => formatPerfReport,
+		_perfTraceMeasureCount: () => _perfTraceMeasureCount,
+		runPerfSuite: () => runPerfSuite,
+		formatPerfSuite: () => formatPerfSuite,
+		_lastPerfSuite: () => _lastPerfSuite,
+		_lastPerfSuiteRuns: () => _lastPerfSuiteRuns,
+		perfBaselineStorageKey: () => perfBaselineStorageKey,
+		loadPerfBaseline: () => loadPerfBaseline,
+		comparePerfSuites: () => comparePerfSuites,
+		formatPerfComparison: () => formatPerfComparison,
+		cityEditMode: () => cityEditMode,
+		editingCityId: () => editingCityId,
+		handleCountryClick: () => handleCountryClick,
+		getAiOperationsSnapshot: () => getAiOperationsSnapshot,
+		invalidateTerritoryLedgerCities: () => invalidateTerritoryLedgerCities,
+		cityInspector: () => cityInspector,
+		openCityInspector: () => openCityInspector,
+		findCityAtLatLng: () => findCityAtLatLng,
+		coordsDisplay: () => coordsDisplay,
+		isCustomTerrain: () => isCustomTerrain,
+		disableCountryGradientCheckbox: () => disableCountryGradientCheckbox,
+		disableCountryGradient: () => disableCountryGradient,
+		isPainting: () => isPainting,
+		lastPaintLatLng: () => lastPaintLatLng,
+		paintAt: () => paintAt,
+		paintMaskId: () => paintMaskId,
+		applyPaintAt: () => applyPaintAt,
+		editorUpdateBtn: () => editorUpdateBtn,
+		activeScenarioId: () => activeScenarioId,
+		setLoadingThematic: () => setLoadingThematic,
+		generatePresetData: () => generatePresetData,
+		room: () => room,
+		shareCountryBtn: () => shareCountryBtn,
+		shareCountryNameInput: () => shareCountryNameInput,
+		shareCountryDescInput: () => shareCountryDescInput,
+		shareCountryModal: () => shareCountryModal,
+		shareFlagBtn: () => shareFlagBtn,
+		shareFlagNameInput: () => shareFlagNameInput,
+		shareFlagDescInput: () => shareFlagDescInput,
+		shareFlagModal: () => shareFlagModal,
+		cancelShareFlagBtn: () => cancelShareFlagBtn,
+		confirmShareFlagBtn: () => confirmShareFlagBtn,
+		cancelShareCountryBtn: () => cancelShareCountryBtn,
+		confirmShareCountryBtn: () => confirmShareCountryBtn,
+		editorSaveBtn: () => editorSaveBtn,
+		editorLoadBtn: () => editorLoadBtn,
+		performPresetLoad: () => performPresetLoad,
+		editorSaveMultiBtn: () => editorSaveMultiBtn,
+		selectedCountryIds: () => selectedCountryIds,
+		downloadCountriesZip: () => downloadCountriesZip,
+		collectCountryCells: () => collectCountryCells,
+		getJSZip: () => getJSZip,
+		editorSaveAllZipBtn: () => editorSaveAllZipBtn,
+		importScenarioSelect: () => importScenarioSelect,
+		lastImportScenarioKey: () => lastImportScenarioKey,
+		importScenarioBuffer: () => importScenarioBuffer,
+		selectedImportCountryId: () => selectedImportCountryId,
+		importCountryCardList: () => importCountryCardList,
+		loadScenarioForCountryImportFromUrl: () =>
+			loadScenarioForCountryImportFromUrl,
+		importScenarioFileInput: () => importScenarioFileInput,
+		loadScenarioForCountryImportFromBlob: () =>
+			loadScenarioForCountryImportFromBlob,
+		importCountryConfirmBtn: () => importCountryConfirmBtn,
+		importSingleCountryFromScenario: () => importSingleCountryFromScenario,
+		editorLoadZipBtn: () => editorLoadZipBtn,
+		parseColorToRGBA: () => parseColorToRGBA,
+		editorShareBtn: () => editorShareBtn,
+		uploadNameInput: () => uploadNameInput,
+		uploadDescInput: () => uploadDescInput,
+		uploadDetailsModal: () => uploadDetailsModal,
+		godBombBtn: () => godBombBtn,
+		godBombActive: () => godBombActive,
+		godBombSourceId: () => godBombSourceId,
+		godModeBtn: () => godModeBtn,
+		getTranslation: () => getTranslation,
+		editorToolbox: () => editorToolbox,
+		editorHubBtn: () => editorHubBtn,
+		editorLibraryBtn: () => editorLibraryBtn,
+		editorExitBtn: () => editorExitBtn,
+		editorTestBtn: () => editorTestBtn,
+		editorUnclaimBtn: () => editorUnclaimBtn,
+		updateRestartVisibility: () => updateRestartVisibility,
+		editorPaintBtn: () => editorPaintBtn,
+		editorFillBtn: () => editorFillBtn,
+		editorTerrainBtn: () => editorTerrainBtn,
+		editorPlaceDivisionBtn: () => editorPlaceDivisionBtn,
+		brushControls: () => brushControls,
+		terrainControls: () => terrainControls,
+		animationFrameId: () => animationFrameId,
+		unclaimSelectedCountry: () => unclaimSelectedCountry,
+		closeInspectorBtn: () => closeInspectorBtn,
+		backgroundTickId: () => backgroundTickId,
+		frameAccumulator: () => frameAccumulator,
+		tickGameTime: () => tickGameTime,
+		performSimulationTick: () => performSimulationTick,
+		updateCountryFlag: () => updateCountryFlag,
+		scenarioHubModal: () => scenarioHubModal,
+		globalChatClose: () => globalChatClose,
+		globalChatModal: () => globalChatModal,
+		globalChatSend: () => globalChatSend,
+		globalChatInput: () => globalChatInput,
+		itemCommentSubmit: () => itemCommentSubmit,
+		currentCommentItemType: () => currentCommentItemType,
+		currentCommentItemId: () => currentCommentItemId,
+		itemCommentInput: () => itemCommentInput,
+		currentEditingCommentId: () => currentEditingCommentId,
+		currentReplyParentId: () => currentReplyParentId,
+		itemReplyIndicator: () => itemReplyIndicator,
+		itemCancelReplyBtn: () => itemCancelReplyBtn,
+		closeItemModalBtn: () => closeItemModalBtn,
+		itemCommentModal: () => itemCommentModal,
+		commentsUnsubscribe: () => commentsUnsubscribe,
+		cancelUploadBtn: () => cancelUploadBtn,
+		confirmUploadBtn: () => confirmUploadBtn,
+		L: () => L,
+		isPointInFeature: () => isPointInFeature,
+		provinceMap: () => provinceMap,
+		getProvinceId: () => getProvinceId,
+		clearCellInfluence: () => clearCellInfluence,
+		activateCountryMidWar: () => activateCountryMidWar,
+		editorCreateBtn: () => editorCreateBtn,
+		editorMapSettingsBtn: () => editorMapSettingsBtn,
+		editorToolsPage1Btn: () => editorToolsPage1Btn,
+		updateEditorToolPage: () => updateEditorToolPage,
+		editorToolsPage2Btn: () => editorToolsPage2Btn,
+		editorToolsPage3Btn: () => editorToolsPage3Btn,
+		editorToolsPage4Btn: () => editorToolsPage4Btn,
+		editorToolsPage5Btn: () => editorToolsPage5Btn,
+		setupOptions: () => setupOptions,
+		_attackers: () => _attackers,
+		_defenders: () => _defenders,
+		openHub: () => openHub,
+		saveCountryLocally: () => saveCountryLocally,
+		loadCountryFromPC: () => loadCountryFromPC,
+		editorImportCountryBtn: () => editorImportCountryBtn,
+		openImportCountryModal: () => openImportCountryModal,
+		editorFlagLibraryBtn: () => editorFlagLibraryBtn,
+		cancelEditorChoice: () => cancelEditorChoice,
+		editorChoiceModal: () => editorChoiceModal,
+		choiceExternalEditor: () => choiceExternalEditor,
+		choiceIngameEditor: () => choiceIngameEditor,
+		editorSourceModal: () => editorSourceModal,
+		cancelSourceChoice: () => cancelSourceChoice,
+		choiceSourceEarth: () => choiceSourceEarth,
+		loadCountries: () => loadCountries,
+		editorTutorialSteps: () => editorTutorialSteps,
+		choiceSourceBlank: () => choiceSourceBlank,
+		confirmCreateBtn: () => confirmCreateBtn,
+		newCountryNameInput: () => newCountryNameInput,
+		newCountryColorInput: () => newCountryColorInput,
+		newCountryFlagInput: () => newCountryFlagInput,
+		customCountryData: () => customCountryData,
+		inspectNameInput: () => inspectNameInput,
+		inspectHubFlagBtn: () => inspectHubFlagBtn,
+		inspectFetchFlagBtn: () => inspectFetchFlagBtn,
+		findCodeByName: () => findCodeByName,
+		rawGeoJsonData: () => rawGeoJsonData,
+		inspectFlagInput: () => inspectFlagInput,
+		inspectColorPicker: () => inspectColorPicker,
+		inspectColorSwatch: () => inspectColorSwatch,
+		inspectPaintBtn: () => inspectPaintBtn,
+		inspectAnnexClickBtn: () => inspectAnnexClickBtn,
+		annexCountryBtn: () => annexCountryBtn,
+		annexCountryInput: () => annexCountryInput,
+		annexFeatureToCountry: () => annexFeatureToCountry,
+		addAllyBtn: () => addAllyBtn,
+		selectingAllyForId: () => selectingAllyForId,
+		clearAlliesBtn: () => clearAlliesBtn,
+		markAllianceCacheDirty: () => markAllianceCacheDirty,
+		openInspector: () => openInspector,
+		allianceFlagInput: () => allianceFlagInput,
+		getAllianceRootId: () => getAllianceRootId,
+		inspectBuffBtn: () => inspectBuffBtn,
+		cycleBuffState: () => cycleBuffState,
+		BUFF_METADATA: () => BUFF_METADATA,
+		cityNameInput: () => cityNameInput,
+		cityOwnerSelect: () => cityOwnerSelect,
+		cityCapitalCheckbox: () => cityCapitalCheckbox,
+		cityMoveBtn: () => cityMoveBtn,
+		cityDeleteBtn: () => cityDeleteBtn,
+		cityCloseBtn: () => cityCloseBtn,
+		editorCityNewBtn: () => editorCityNewBtn,
+		editorCityClearBtn: () => editorCityClearBtn,
+		playClickSound: () => playClickSound,
+		referenceImageUrl: () => referenceImageUrl,
+		referenceOverlay: () => referenceOverlay,
+		refScale: () => refScale,
+		refOpacity: () => refOpacity,
+		updateRefHandles: () => updateRefHandles,
+		refAboveCheckbox: () => refAboveCheckbox,
+		refAboveTerrain: () => refAboveTerrain,
+		clearRefHandles: () => clearRefHandles,
+		_aiDebugPlans: () => _aiDebugPlans,
+		_aiPlanMemory: () => _aiPlanMemory,
+		_benchmarkSuppressAutomaticPuppets: () =>
+			_benchmarkSuppressAutomaticPuppets,
+		_frontIntelBySide: () => _frontIntelBySide,
+		_mopUpDeJureCellCache: () => _mopUpDeJureCellCache,
+		_planReassessNeeded: () => _planReassessNeeded,
+		_proposalReassessTick: () => _proposalReassessTick,
+		_sidePrevControlled: () => _sidePrevControlled,
+		_sidePrevPosture: () => _sidePrevPosture,
+		_sidePrevStrengthRatio: () => _sidePrevStrengthRatio,
+		_warOverviewLastUpdate: () => _warOverviewLastUpdate,
+		_warOverviewSides: () => _warOverviewSides,
+		activeTutorialSet: () => activeTutorialSet,
+		advanceTutorial: () => advanceTutorial,
+		allocateLargestRemainderQuotas: () => allocateLargestRemainderQuotas,
+		applyBroadSetupPosture: () => applyBroadSetupPosture,
+		applyPendingBenchmarkForceOverride: () =>
+			applyPendingBenchmarkForceOverride,
+		biomeMask: () => biomeMask,
+		cacheMopUpCell: () => cacheMopUpCell,
+		casualtyByAttacker: () => casualtyByAttacker,
+		casualtyPanel: () => casualtyPanel,
+		cinematicMode: () => cinematicMode,
+		clearSideLandPlanSlots: () => clearSideLandPlanSlots,
+		clearUnitCommandAssignments: () => clearUnitCommandAssignments,
+		compactVariableStrengthFormationsForSide: () =>
+			compactVariableStrengthFormationsForSide,
+		countryCasualties: () => countryCasualties,
+		createArmyFormation: () => createArmyFormation,
+		deepClone: () => deepClone,
+		DEFAULT_SIDE_COLORS: () => DEFAULT_SIDE_COLORS,
+		disablePuppetsCheckbox: () => disablePuppetsCheckbox,
+		formatGameDate: () => formatGameDate,
+		gameDateDisplay: () => gameDateDisplay,
+		gameTimeAccumulatorMs: () => gameTimeAccumulatorMs,
+		generals: () => generals,
+		generateProvinces: () => generateProvinces,
+		getCountryLivePersonnel: () => getCountryLivePersonnel,
+		getSideDisplayName: () => getSideDisplayName,
+		initialBiomeMaskSnapshot: () => initialBiomeMaskSnapshot,
+		initialCitiesSnapshot: () => initialCitiesSnapshot,
+		initialCombatants: () => initialCombatants,
+		initialCountryMetadataSnapshot: () => initialCountryMetadataSnapshot,
+		initialDeJureMapSnapshot: () => initialDeJureMapSnapshot,
+		initializeOperationalAiRuntime: () => initializeOperationalAiRuntime,
+		initialLandMaskSnapshot: () => initialLandMaskSnapshot,
+		initialProvinceMapSnapshot: () => initialProvinceMapSnapshot,
+		initialWorldControlMapSnapshot: () => initialWorldControlMapSnapshot,
+		invalidateFrontlineField: () => invalidateFrontlineField,
+		invalidateWarLifecycleTimers: () => invalidateWarLifecycleTimers,
+		loadingBar: () => loadingBar,
+		mediaRecorder: () => mediaRecorder,
+		playPeaceSound: () => playPeaceSound,
+		playWarAmbiance: () => playWarAmbiance,
+		playWarStartSound: () => playWarStartSound,
+		rebuildStatsPanel: () => rebuildStatsPanel,
+		reconcileOperationalAiLifecycle: () => reconcileOperationalAiLifecycle,
+		recordedChunks: () => recordedChunks,
+		recruitNeutralMidWar: () => recruitNeutralMidWar,
+		releaseCountryPersonnelFromSide: () => releaseCountryPersonnelFromSide,
+		removeCountryFormations: () => removeCountryFormations,
+		RENDER_LAYERS: () => RENDER_LAYERS,
+		reopenConflictSetupAfterWar: () => reopenConflictSetupAfterWar,
+		resetOperationalAiRuntime: () => resetOperationalAiRuntime,
+		resetSideHostilities: () => resetSideHostilities,
+		resetSideInfluenceMaps: () => resetSideInfluenceMaps,
+		resetSimulationOptimizationRuntime: () =>
+			resetSimulationOptimizationRuntime,
+		scheduleCoastalTopologyJob: () => scheduleCoastalTopologyJob,
+		scheduleWarLifecycleCallback: () => scheduleWarLifecycleCallback,
+		selectEligibleCasualtyAttackers: () => selectEligibleCasualtyAttackers,
+		selectMajorityOwnerTransfers: () => selectMajorityOwnerTransfers,
+		selectOccupationController: () => selectOccupationController,
+		setGameTimeFromInputs: () => setGameTimeFromInputs,
+		setUnitFormationPersonnel: () => setUnitFormationPersonnel,
+		sideCasualties: () => sideCasualties,
+		sideColors: () => sideColors,
+		stopWarAmbiance: () => stopWarAmbiance,
+		timeDayInput: () => timeDayInput,
+		timeMonthInput: () => timeMonthInput,
+		timeYearInput: () => timeYearInput,
+		treatyMsg: () => treatyMsg,
+		tutorialActive: () => tutorialActive,
+		unitCountsDiv: () => unitCountsDiv,
+		updateFfaSetupUi: () => updateFfaSetupUi,
+		updateWarOverview: () => updateWarOverview,
+		timeSystemCheckbox: () => timeSystemCheckbox,
+		gameTimeDayDurationMs: () => gameTimeDayDurationMs,
+		rgbaRe: () => rgbaRe,
+		sidesContainer: () => sidesContainer,
+		estimateUnitsForCountry: () => estimateUnitsForCountry,
+		openReleaseModal: () => openReleaseModal,
+		currentUsername: () => currentUsername,
+		renderHub: () => renderHub,
+		hubCountryCache: () => hubCountryCache,
+		libraryList: () => libraryList,
+		escapeHtml: () => escapeHtml,
+		openItemModal: () => openItemModal,
+		hubFlagCache: () => hubFlagCache,
+		flagLibraryList: () => flagLibraryList,
+		globalChatList: () => globalChatList,
+		globalChatUnsubscribe: () => globalChatUnsubscribe,
+		initMultiplayer: () => initMultiplayer,
+		itemCommentsList: () => itemCommentsList,
+		itemModalTitle: () => itemModalTitle,
+		itemModalDesc: () => itemModalDesc,
+		itemModalActions: () => itemModalActions,
+		itemModalPreview: () => itemModalPreview,
+		itemModalPlayBtn: () => itemModalPlayBtn,
+		itemModalRemixBtn: () => itemModalRemixBtn,
+		importScenarioCountriesCache: () => importScenarioCountriesCache,
+		refHandles: () => refHandles,
+		isInsideWorldBoxLatLng: () => isInsideWorldBoxLatLng,
+		allyList: () => allyList,
+		unilateralExitConflict: () => unilateralExitConflict,
+		recruitNewSideMidWar: () => recruitNewSideMidWar,
+		inspectFlagPreview: () => inspectFlagPreview,
+		releasableListContainer: () => releasableListContainer,
+		generatePuppetFlag: () => generatePuppetFlag,
+		rebaseSecondaryWarPlanSlotsForSideAppend: () =>
+			rebaseSecondaryWarPlanSlotsForSideAppend,
+		ensureSideIdentities: () => ensureSideIdentities,
+		rebuildHostilityMatrix: () => rebuildHostilityMatrix,
+		hostileSidePairs: () => hostileSidePairs,
+		sidePairKey: () => sidePairKey,
+		findCountrySideIndex: () => findCountrySideIndex,
+		prepareEmptySideForNewMembership: () => prepareEmptySideForNewMembership,
+		_benchmarkForcePersonnelPerSide: () => _benchmarkForcePersonnelPerSide,
+		_benchmarkRestoreSettings: () => _benchmarkRestoreSettings,
+		_benchmarkTimeoutId: () => _benchmarkTimeoutId,
+		benchmarkStatsEl: () => benchmarkStatsEl,
+		_benchmarkResolve: () => _benchmarkResolve,
+		_benchmarkReject: () => _benchmarkReject,
+		_benchmarkMetadata: () => _benchmarkMetadata,
+		_benchmarkUnitsPerSide: () => _benchmarkUnitsPerSide,
+		_isBenchmarking: () => _isBenchmarking,
+		_isBenchmarkWarmingUp: () => _isBenchmarkWarmingUp,
+		perfOverlay: () => perfOverlay,
+		_perfBenchmarkEnd: () => _perfBenchmarkEnd,
+		COMPILED_SCENARIO_URLS: () => COMPILED_SCENARIO_URLS,
+		PERF_COUNTER_DEFAULTS: () => PERF_COUNTER_DEFAULTS,
+		_perfLongTaskObserver: () => _perfLongTaskObserver,
+		PERF_LONG_TASK_HISTORY_LIMIT: () => PERF_LONG_TASK_HISTORY_LIMIT,
+		PERF_MEMORY_HISTORY_LIMIT: () => PERF_MEMORY_HISTORY_LIMIT,
+		mapResSelect: () => mapResSelect,
+		PERF_FRAME_HISTORY_LIMIT: () => PERF_FRAME_HISTORY_LIMIT,
+		PERF_SPIKE_HISTORY_LIMIT: () => PERF_SPIKE_HISTORY_LIMIT,
+		PERF_EXCLUSIVE_PHASES: () => PERF_EXCLUSIVE_PHASES,
+		_aiTaskForcesBySide: () => _aiTaskForcesBySide,
+		_frontlineWorkerPending: () => _frontlineWorkerPending,
+		normalizePerfSuiteCases: () => normalizePerfSuiteCases,
+		summarizePerfSuiteRuns: () => summarizePerfSuiteRuns,
+		recordPerfMemorySample: () => recordPerfMemorySample,
+		_planBfsGeneration: () => _planBfsGeneration,
+		_planBfsParent: () => _planBfsParent,
+		_planBfsQueue: () => _planBfsQueue,
+		_planBfsSeen: () => _planBfsSeen,
+		operationalUnitPower: () => operationalUnitPower,
+		_aiLastOperationsTick: () => _aiLastOperationsTick,
+		_aiOperationsDirty: () => _aiOperationsDirty,
+		_aiPendingLandingHandoffs: () => _aiPendingLandingHandoffs,
+		_aiTaskForceTransitionById: () => _aiTaskForceTransitionById,
+		estimateLocalForces: () => estimateLocalForces,
+		findLandPathSummary: () => findLandPathSummary,
+		getPlanSignature: () => getPlanSignature,
+		getSideStrategyProfile: () => getSideStrategyProfile,
+		lngDelta: () => lngDelta,
+		requestOperationalAiReassessment: () => requestOperationalAiReassessment,
+		_coastalLandIndices: () => _coastalLandIndices,
+		_coastalTopologyReady: () => _coastalTopologyReady,
+		findNearestSeaIdx: () => findNearestSeaIdx,
+		findSeaPathSummary: () => findSeaPathSummary,
+		operationalLocalRisk: () => operationalLocalRisk,
+		_pendingProposalSides: () => _pendingProposalSides,
+		_pendingProposalSideSet: () => _pendingProposalSideSet,
+		generateAllProposals: () => generateAllProposals,
+		NAVAL_STALL_TICKS: () => NAVAL_STALL_TICKS,
+		scoreProposal: () => scoreProposal,
+		selectPlans: () => selectPlans,
+	},
+	{
+		_influenceCityGridSource: (value) => {
+			_influenceCityGridSource = value;
+		},
+		_influenceCityGridSourceLength: (value) => {
+			_influenceCityGridSourceLength = value;
+		},
+		_influenceCityGridWorldGeneration: (value) => {
+			_influenceCityGridWorldGeneration = value;
+		},
+		_influenceCoalitionSignature: (value) => {
+			_influenceCoalitionSignature = value;
+		},
+		_influenceFrontierQueued: (value) => {
+			_influenceFrontierQueued = value;
+		},
+		_influenceFrontierWorldGeneration: (value) => {
+			_influenceFrontierWorldGeneration = value;
+		},
+		_influenceFrontierQueue: (value) => {
+			_influenceFrontierQueue = value;
+		},
+		_influenceFrontierCursor: (value) => {
+			_influenceFrontierCursor = value;
+		},
+		_influenceFrontierPriorityQueue: (value) => {
+			_influenceFrontierPriorityQueue = value;
+		},
+		_influenceFrontierPriorityCursor: (value) => {
+			_influenceFrontierPriorityCursor = value;
+		},
+		_territoryLedgerSnapshot: (value) => {
+			_territoryLedgerSnapshot = value;
+		},
+		_cachedP1T: (value) => {
+			_cachedP1T = value;
+		},
+		_cachedP2T: (value) => {
+			_cachedP2T = value;
+		},
+		_cachedSideTerritoryCounts: (value) => {
+			_cachedSideTerritoryCounts = value;
+		},
+		_cachedSideTerritoryPcts: (value) => {
+			_cachedSideTerritoryPcts = value;
+		},
+		_territoryLedgerDecisionTick: (value) => {
+			_territoryLedgerDecisionTick = value;
+		},
+		_territoryLedgerCitiesSource: (value) => {
+			_territoryLedgerCitiesSource = value;
+		},
+		_territoryLedgerCitiesLength: (value) => {
+			_territoryLedgerCitiesLength = value;
+		},
+		_territoryLedgerAppliedCitiesRevision: (value) => {
+			_territoryLedgerAppliedCitiesRevision = value;
+		},
+		_territoryLedgerCitiesRevision: (value) => {
+			_territoryLedgerCitiesRevision = value;
+		},
+		_territoryLedger: (value) => {
+			_territoryLedger = value;
+		},
+		_frontlineLayoutApplyPendingMs: (value) => {
+			_frontlineLayoutApplyPendingMs = value;
+		},
+		_frontlineSlotApplyPendingMs: (value) => {
+			_frontlineSlotApplyPendingMs = value;
+		},
+		_simTickCount: (value) => {
+			_simTickCount = value;
+		},
+		_tickAllCombatants: (value) => {
+			_tickAllCombatants = value;
+		},
+		activeBattles: (value) => {
+			activeBattles = value;
+		},
+		_unitLiveGeneration: (value) => {
+			_unitLiveGeneration = value;
+		},
+		capitalLostCountries: (value) => {
+			capitalLostCountries = value;
+		},
+		_sidePosture: (value) => {
+			_sidePosture = value;
+		},
+		_neutralBorderCacheSignature: (value) => {
+			_neutralBorderCacheSignature = value;
+		},
+		_neutralBorderPolys: (value) => {
+			_neutralBorderPolys = value;
+		},
+		_cachedSideUnitCounts: (value) => {
+			_cachedSideUnitCounts = value;
+		},
+		_cachedSideSoldierEsts: (value) => {
+			_cachedSideSoldierEsts = value;
+		},
+		bombs: (value) => {
+			bombs = value;
+		},
+		currentTutorialStep: (value) => {
+			currentTutorialStep = value;
+		},
+		activeSideIndex: (value) => {
+			activeSideIndex = value;
+		},
+		ffaMode: (value) => {
+			ffaMode = value;
+		},
+		randomWarMode: (value) => {
+			randomWarMode = value;
+		},
+		gameState: (value) => {
+			gameState = value;
+		},
+		viewMode: (value) => {
+			viewMode = value;
+		},
+		allianceViewEnabled: (value) => {
+			allianceViewEnabled = value;
+		},
+		showBattleIndicators: (value) => {
+			showBattleIndicators = value;
+		},
+		showCountryLabels: (value) => {
+			showCountryLabels = value;
+		},
+		showNonCapitalCities: (value) => {
+			showNonCapitalCities = value;
+		},
+		showWarPlans: (value) => {
+			showWarPlans = value;
+		},
+		peaceTreatiesDisabled: (value) => {
+			peaceTreatiesDisabled = value;
+		},
+		mountainsEnabled: (value) => {
+			mountainsEnabled = value;
+		},
+		peaceSelection1: (value) => {
+			peaceSelection1 = value;
+		},
+		isPaused: (value) => {
+			isPaused = value;
+		},
+		brushSize: (value) => {
+			brushSize = value;
+		},
+		selectingOverlordForId: (value) => {
+			selectingOverlordForId = value;
+		},
+		mapName: (value) => {
+			mapName = value;
+		},
+		missilesEnabled: (value) => {
+			missilesEnabled = value;
+		},
+		bombsDisabled: (value) => {
+			bombsDisabled = value;
+		},
+		customSatelliteUrl: (value) => {
+			customSatelliteUrl = value;
+		},
+		customSatelliteImg: (value) => {
+			customSatelliteImg = value;
+		},
+		_perfSamples: (value) => {
+			_perfSamples = value;
+		},
+		_perfFrameTimeSum: (value) => {
+			_perfFrameTimeSum = value;
+		},
+		_perfFrameCount: (value) => {
+			_perfFrameCount = value;
+		},
+		_perfLastTime: (value) => {
+			_perfLastTime = value;
+		},
+		_perfPendingFrameEntry: (value) => {
+			_perfPendingFrameEntry = value;
+		},
+		_perfTraceMeasureCount: (value) => {
+			_perfTraceMeasureCount = value;
+		},
+		cityEditMode: (value) => {
+			cityEditMode = value;
+		},
+		activeTheaterCities: (value) => {
+			activeTheaterCities = value;
+		},
+		disableCountryGradient: (value) => {
+			disableCountryGradient = value;
+		},
+		isPainting: (value) => {
+			isPainting = value;
+		},
+		lastPaintLatLng: (value) => {
+			lastPaintLatLng = value;
+		},
+		paintMaskId: (value) => {
+			paintMaskId = value;
+		},
+		currentScenarioContext: (value) => {
+			currentScenarioContext = value;
+		},
+		lastImportScenarioKey: (value) => {
+			lastImportScenarioKey = value;
+		},
+		importScenarioBuffer: (value) => {
+			importScenarioBuffer = value;
+		},
+		selectedImportCountryId: (value) => {
+			selectedImportCountryId = value;
+		},
+		godBombActive: (value) => {
+			godBombActive = value;
+		},
+		godBombSourceId: (value) => {
+			godBombSourceId = value;
+		},
+		godModeActive: (value) => {
+			godModeActive = value;
+		},
+		preGodModeState: (value) => {
+			preGodModeState = value;
+		},
+		animationFrameId: (value) => {
+			animationFrameId = value;
+		},
+		backgroundTickId: (value) => {
+			backgroundTickId = value;
+		},
+		frameAccumulator: (value) => {
+			frameAccumulator = value;
+		},
+		simFrameCount: (value) => {
+			simFrameCount = value;
+		},
+		activeScenarioId: (value) => {
+			activeScenarioId = value;
+		},
+		currentEditingCommentId: (value) => {
+			currentEditingCommentId = value;
+		},
+		currentReplyParentId: (value) => {
+			currentReplyParentId = value;
+		},
+		commentsUnsubscribe: (value) => {
+			commentsUnsubscribe = value;
+		},
+		editingCountryId: (value) => {
+			editingCountryId = value;
+		},
+		countryMetadata: (value) => {
+			countryMetadata = value;
+		},
+		gameMode: (value) => {
+			gameMode = value;
+		},
+		_attackers: (value) => {
+			_attackers = value;
+		},
+		_defenders: (value) => {
+			_defenders = value;
+		},
+		isCustomTerrain: (value) => {
+			isCustomTerrain = value;
+		},
+		cities: (value) => {
+			cities = value;
+		},
+		customCountryData: (value) => {
+			customCountryData = value;
+		},
+		selectingAllyForId: (value) => {
+			selectingAllyForId = value;
+		},
+		editingCityId: (value) => {
+			editingCityId = value;
+		},
+		referenceImageUrl: (value) => {
+			referenceImageUrl = value;
+		},
+		referenceOverlay: (value) => {
+			referenceOverlay = value;
+		},
+		refScale: (value) => {
+			refScale = value;
+		},
+		refOpacity: (value) => {
+			refOpacity = value;
+		},
+		refAboveTerrain: (value) => {
+			refAboveTerrain = value;
+		},
+		_aiDebugPlans: (value) => {
+			_aiDebugPlans = value;
+		},
+		_frontIntelBySide: (value) => {
+			_frontIntelBySide = value;
+		},
+		_frontlinePolys: (value) => {
+			_frontlinePolys = value;
+		},
+		_frontlinePolyTick: (value) => {
+			_frontlinePolyTick = value;
+		},
+		_lastCapitulationTick: (value) => {
+			_lastCapitulationTick = value;
+		},
+		_sideMomentumHistory: (value) => {
+			_sideMomentumHistory = value;
+		},
+		_sideWarPhase: (value) => {
+			_sideWarPhase = value;
+		},
+		_warOverviewLastUpdate: (value) => {
+			_warOverviewLastUpdate = value;
+		},
+		_warOverviewSides: (value) => {
+			_warOverviewSides = value;
+		},
+		_warPlan: (value) => {
+			_warPlan = value;
+		},
+		adjacencyCache: (value) => {
+			adjacencyCache = value;
+		},
+		bases: (value) => {
+			bases = value;
+		},
+		cinematicMode: (value) => {
+			cinematicMode = value;
+		},
+		explosions: (value) => {
+			explosions = value;
+		},
+		gameTimeAccumulatorMs: (value) => {
+			gameTimeAccumulatorMs = value;
+		},
+		gameTimeEnabled: (value) => {
+			gameTimeEnabled = value;
+		},
+		generals: (value) => {
+			generals = value;
+		},
+		initialBiomeMaskSnapshot: (value) => {
+			initialBiomeMaskSnapshot = value;
+		},
+		initialCitiesSnapshot: (value) => {
+			initialCitiesSnapshot = value;
+		},
+		initialCombatants: (value) => {
+			initialCombatants = value;
+		},
+		initialCountryMetadataSnapshot: (value) => {
+			initialCountryMetadataSnapshot = value;
+		},
+		initialDeJureMapSnapshot: (value) => {
+			initialDeJureMapSnapshot = value;
+		},
+		initialLandMaskSnapshot: (value) => {
+			initialLandMaskSnapshot = value;
+		},
+		initialProvinceMapSnapshot: (value) => {
+			initialProvinceMapSnapshot = value;
+		},
+		initialWorldControlMapSnapshot: (value) => {
+			initialWorldControlMapSnapshot = value;
+		},
+		lastTreatyTime: (value) => {
+			lastTreatyTime = value;
+		},
+		mediaRecorder: (value) => {
+			mediaRecorder = value;
+		},
+		recordedChunks: (value) => {
+			recordedChunks = value;
+		},
+		sideColors: (value) => {
+			sideColors = value;
+		},
+		sides: (value) => {
+			sides = value;
+		},
+		units: (value) => {
+			units = value;
+		},
+		warGraceEndTick: (value) => {
+			warGraceEndTick = value;
+		},
+		gameTimeDate: (value) => {
+			gameTimeDate = value;
+		},
+		room: (value) => {
+			room = value;
+		},
+		currentUsername: (value) => {
+			currentUsername = value;
+		},
+		hubCountryCache: (value) => {
+			hubCountryCache = value;
+		},
+		hubFlagCache: (value) => {
+			hubFlagCache = value;
+		},
+		globalChatUnsubscribe: (value) => {
+			globalChatUnsubscribe = value;
+		},
+		currentCommentItemType: (value) => {
+			currentCommentItemType = value;
+		},
+		currentCommentItemId: (value) => {
+			currentCommentItemId = value;
+		},
+		importScenarioCountriesCache: (value) => {
+			importScenarioCountriesCache = value;
+		},
+		refHandles: (value) => {
+			refHandles = value;
+		},
+		_benchmarkForcePersonnelPerSide: (value) => {
+			_benchmarkForcePersonnelPerSide = value;
+		},
+		_benchmarkSuppressAutomaticPuppets: (value) => {
+			_benchmarkSuppressAutomaticPuppets = value;
+		},
+		_benchmarkRestoreSettings: (value) => {
+			_benchmarkRestoreSettings = value;
+		},
+		_benchmarkTimeoutId: (value) => {
+			_benchmarkTimeoutId = value;
+		},
+		_benchmarkResolve: (value) => {
+			_benchmarkResolve = value;
+		},
+		_benchmarkReject: (value) => {
+			_benchmarkReject = value;
+		},
+		_benchmarkMetadata: (value) => {
+			_benchmarkMetadata = value;
+		},
+		_benchmarkUnitsPerSide: (value) => {
+			_benchmarkUnitsPerSide = value;
+		},
+		_isBenchmarking: (value) => {
+			_isBenchmarking = value;
+		},
+		_isBenchmarkWarmingUp: (value) => {
+			_isBenchmarkWarmingUp = value;
+		},
+		_perfBenchmarkEnd: (value) => {
+			_perfBenchmarkEnd = value;
+		},
+		_perfLongTaskObserver: (value) => {
+			_perfLongTaskObserver = value;
+		},
+		_lastPerfSuiteRuns: (value) => {
+			_lastPerfSuiteRuns = value;
+		},
+		_lastPerfSuite: (value) => {
+			_lastPerfSuite = value;
+		},
+		color: (val) => {
+			document.querySelectorAll(".loading-status-text").forEach((el) => {
+				el.style.color = val;
+			});
+		},
+		width: (val) => {
+			updateLoadingText(undefined, val);
+		},
+		_planBfsGeneration: (value) => {
+			_planBfsGeneration = value;
+		},
+		_planBfsParent: (value) => {
+			_planBfsParent = value;
+		},
+		_planBfsQueue: (value) => {
+			_planBfsQueue = value;
+		},
+		_planBfsSeen: (value) => {
+			_planBfsSeen = value;
+		},
+		_aiLastOperationsTick: (value) => {
+			_aiLastOperationsTick = value;
+		},
+		_aiOperationsDirty: (value) => {
+			_aiOperationsDirty = value;
+		},
+		_aiTaskForcesBySide: (value) => {
+			_aiTaskForcesBySide = value;
+		},
+	},
+);
+
+import { createInfluenceRuntime } from "./influence-runtime.js";
+
+const { queueInfluenceFrontierCell, updatePersistentInfluence } =
+	createInfluenceRuntime(applicationRuntime);
+
+export { updatePersistentInfluence };
+
+import { createTerritoryRuntime } from "./territory-runtime.js";
+
+const {
+	publishTerritoryLedgerSnapshot,
+	createRuntimeTerritoryLedger,
+	stepTerritoryLedger,
+	flushTerritoryLedger,
+} = createTerritoryRuntime(applicationRuntime);
+
+import { createSimulationTick } from "./simulation-tick.js";
+
+const { performSimulationTick } = createSimulationTick(applicationRuntime);
+
+export { performSimulationTick };
+
+// Shared live binding bridge. Systems receive commands/state without importing main.js.
+
+import { updateGroundFormation } from "./ground-unit.js";
+import { createMenuControls } from "./menu-controls.js";
+
+const menu_controls = createMenuControls(applicationRuntime);
+
+import { createDeveloperControls } from "./developer-controls.js";
+
+const developer_controls = createDeveloperControls(applicationRuntime);
+
+import { createMapInput } from "./map-input.js";
+
+const map_input = createMapInput(applicationRuntime);
+
+import { createEditorFileControls } from "./editor-file-controls.js";
+
+const editor_file_controls = createEditorFileControls(applicationRuntime);
+
+import { createSandboxControls } from "./sandbox-controls.js";
+
+const sandbox_controls = createSandboxControls(applicationRuntime);
+
+import { createSimulationControls } from "./simulation-controls.js";
+
+const simulation_controls = createSimulationControls(applicationRuntime);
+
+import { createCommunityControls } from "./community-controls.js";
+
+const community_controls = createCommunityControls(applicationRuntime);
+
+import { createCountryActions } from "./country-actions.js";
+
+const country_actions = createCountryActions(applicationRuntime);
+
+import { createEditorToolControls } from "./editor-tool-controls.js";
+
+const editor_tool_controls = createEditorToolControls(applicationRuntime);
+
+import { createInspectorControls } from "./inspector-controls.js";
+
+const inspector_controls = createInspectorControls(applicationRuntime);
+
+import { createReferenceControls } from "./reference-controls.js";
+
+const reference_controls = createReferenceControls(applicationRuntime);
+
+import { createConflictDiplomacy } from "./conflict-diplomacy.js";
+import { createConflictPersonnel } from "./conflict-personnel.js";
+import { createConflictReset } from "./conflict-reset.js";
+import { createConflictResolution } from "./conflict-resolution.js";
+import { createWarStart } from "./war-start.js";
+
+// Live lifecycle context. Getters avoid stale snapshots when policies replace runtime state.
+const lifecycleRuntime = applicationRuntime;
+const lifecycle = {
+	...createWarStart(lifecycleRuntime),
+	...createConflictResolution(lifecycleRuntime),
+	...createConflictReset(lifecycleRuntime),
+	...createConflictDiplomacy(lifecycleRuntime),
+	...createConflictPersonnel(lifecycleRuntime),
+};
+
+import { createAiPlanExecutor } from "./ai-plan-execution.js";
+import { createAiPlanner } from "./ai-planning.js";
+import { createAiProposalPipeline } from "./ai-proposals.js";
+import { createAiRuntime } from "./ai-runtime.js";
+import { createArmyFormation } from "./army-formation.js";
+import { normalizeLongitudeDelta } from "./geographic-math.js";
+import { createSimulationCalendar } from "./simulation-calendar.js";
+
+const {
+	setGameTimeFromInputs,
+	formatGameDate,
+	daysInMonth,
+	advanceGameDateOneDay,
+	tickGameTime,
+} = createSimulationCalendar(applicationRuntime);
+
+export {
+	advanceGameDateOneDay,
+	daysInMonth,
+	formatGameDate,
+	setGameTimeFromInputs,
+	tickGameTime,
+};
+
+import { createConflictSetup } from "./conflict-setup.js";
+
+const {
+	updateSidesUI,
+	updateFfaSetupUi,
+	updateRandomWarButton,
+	rebuildManpowerInputs,
+	resetConflictSetupState,
+} = createConflictSetup(applicationRuntime);
+
+export { rebuildManpowerInputs, resetConflictSetupState, updateSidesUI };
+
+import { createCommunityLibrary } from "./community-library.js";
+
+const { initMultiplayer, renderCountryLibrary, renderFlagLibrary } =
+	createCommunityLibrary(applicationRuntime);
+
+export { initMultiplayer, renderCountryLibrary, renderFlagLibrary };
+
+import { createCommunityChat } from "./community-chat.js";
+
+const { renderGlobalChatList, _openGlobalChat } =
+	createCommunityChat(applicationRuntime);
+
+export { _openGlobalChat, renderGlobalChatList };
+
+import { createCommunityComments } from "./community-comments.js";
+
+const { renderCommentsList, openItemModal } =
+	createCommunityComments(applicationRuntime);
+
+export { openItemModal, renderCommentsList };
+
+import { createCountryImportMenu } from "./country-import-menu.js";
+
+const {
+	populateImportCountrySelect,
+	openImportCountryModal,
+	loadCountryFromPC,
+} = createCountryImportMenu(applicationRuntime);
+
+export {
+	loadCountryFromPC,
+	openImportCountryModal,
+	populateImportCountrySelect,
+};
+
+import { createReferenceOverlay } from "./reference-overlay.js";
+
+const { clearRefHandles, updateRefHandles } =
+	createReferenceOverlay(applicationRuntime);
+
+export { clearRefHandles, updateRefHandles };
+
+import { createEditorCommands } from "./editor-commands.js";
+
+const {
+	_placeDivisionAt,
+	_placeNewCountry,
+	_fillAt,
+	annexFeatureToCountry,
+	spawnRandomNationsAcrossMap,
+} = createEditorCommands(applicationRuntime);
+
+export {
+	_fillAt,
+	_placeDivisionAt,
+	_placeNewCountry,
+	annexFeatureToCountry,
+	spawnRandomNationsAcrossMap,
+};
+
+import { createInspectors } from "./inspectors.js";
+
+const { openInspector, refreshCityOwnerSelect, openCityInspector } =
+	createInspectors(applicationRuntime);
+
+export { openCityInspector, openInspector, refreshCityOwnerSelect };
+
+import { createCountryDiplomacy } from "./country-diplomacy.js";
+
+const {
+	openReleaseModal,
+	_setAsReleasable,
+	_setVassalage,
+	recruitNewSideMidWar,
+	recruitNeutralMidWar,
+} = createCountryDiplomacy(applicationRuntime);
+
+export {
+	_setAsReleasable,
+	_setVassalage,
+	openReleaseModal,
+	recruitNeutralMidWar,
+	recruitNewSideMidWar,
+};
+
+import { getCookie, setCookie } from "./preferences.js";
+
+export { getCookie, setCookie } from "./preferences.js";
+
+import { applyLanguage, configureLanguageUi, getTranslation } from "./i18n.js";
+
+export { applyLanguage, getTranslation, TRANSLATIONS } from "./i18n.js";
+
 import {
-	advanceAiTaskForce,
-	calculateTaskForceReadiness,
-	cleanupAiTaskForces,
-	reconcileAiTaskForces,
-	selectWithdrawalAnchor,
-} from "./ai-task-forces.js";
+	initAudio,
+	playClickSound,
+	playExplosionSound,
+	playPeaceSound,
+	playWarAmbiance,
+	playWarStartSound,
+	primeAudio,
+	setCustomTrack,
+	setSecretSounds,
+	stopBackgroundMusic,
+	stopWarAmbiance,
+	useSecretSounds,
+	wireAudioControls,
+} from "./audio.js";
+
+export {
+	audioCtx,
+	bgMusicBuffers,
+	bgMusicGain,
+	bgMusicSource,
+	bgMusicUrls,
+	clickBuffer,
+	clickUrl,
+	currentBgTrackIndex,
+	customTrackUrl,
+	explosionBuffer,
+	explosionUrl,
+	initAudio,
+	isAudioLoading,
+	isMuted,
+	loadImmediate,
+	peaceBuffer,
+	peaceUrl,
+	playClickSound,
+	playExplosionSound,
+	playPeaceSound,
+	playWarAmbiance,
+	playWarStartSound,
+	primeAudio,
+	secretPeaceDealBuffer,
+	secretPeaceDealUrl,
+	secretWarDeclaredBuffer,
+	secretWarDeclaredUrl,
+	stopWarAmbiance,
+	useSecretSounds,
+	warAmbianceBuffer,
+	warAmbianceGain,
+	warAmbianceSource,
+	warAmbianceUrl,
+	warStartBuffer,
+	warStartUrl,
+} from "./audio.js";
+
+import { createBenchmarkRuntime } from "./benchmark-runtime.js";
+import {
+	collectCountryCells,
+	createCountryExport,
+	downloadBlob,
+	downloadCountriesZip,
+} from "./country-export.js";
+import { createScenarioHandler } from "./scenario-menu.js";
+import { createSettingsController } from "./settings.js";
+
+const { showBenchmarkResults, startBenchmark } =
+	createBenchmarkRuntime(applicationRuntime);
+
+export { startBenchmark };
+
+import { createPerformanceRuntime } from "./performance-runtime.js";
+
+const {
+	createPerfState,
+	ensurePerfLongTaskObserver,
+	recordPerfMemorySample,
+	recordPerfMeasure,
+} = createPerformanceRuntime(applicationRuntime);
+
+import { createPerformanceReports } from "./performance-reports.js";
+
+const {
+	getPerfReportData,
+	formatPerfReport,
+	formatPerfSuite,
+	formatPerfComparison,
+	runPerfSuite,
+	loadPerfBaseline,
+	finalizePendingPerfFrame,
+	queuePerfFrame,
+} = createPerformanceReports(applicationRuntime);
+
+import L from "leaflet";
 import { CONFIG } from "./config.js";
 import {
 	chooseFormationBudget,
@@ -19,18 +1536,7 @@ import {
 	selectAssignedMopUpCountryId,
 	selectNearestMopUpCell,
 } from "./mop-up.js";
-import {
-	advanceOperationActivePlay,
-	applyCommanderDirective,
-	COMMANDER_STANCES,
-	calculateDirectiveAllocation,
-	createOperationRuntime,
-	EASTERN_FRONT_OPERATION,
-	evaluateOperationDay as evaluateOperationRules,
-	getDirectiveCooldownRemaining,
-	OPERATION_DEFINITIONS,
-	resolveOperationEvent as resolveOperationRulesEvent,
-} from "./operations.js";
+
 import {
 	comparePerfSuites,
 	normalizePerfSuiteCases,
@@ -43,7 +1549,6 @@ import {
 	createDeterministicJobQueue,
 } from "./simulation-jobs.js";
 import {
-	createSimulationPhaseWheel,
 	decideRenderAdmission,
 	isSimulationPhaseDue,
 } from "./simulation-phase-wheel.js";
@@ -86,1088 +1591,10 @@ export function escapeHtml(s) {
 /**
  * TRANSLATION SYSTEM (i18n)
  */
-export const TRANSLATIONS = {
-	en: {
-		MODERN_WARS: "Modern Wars",
-		LANGUAGE: "Language",
-		LANGUAGE_SUB: "System-wide display language.",
-		MAP_RES: "Map Resolution",
-		RES_LOW: "Low (Performance)",
-		RES_STD: "Standard (Medium)",
-		RES_HIGH: "High (Very Heavy)",
-		RES_SUB: "Higher resolution improves borders but slows loading.",
-		GRID_DENSITY: "Grid Density",
-		GRID_FAST: "Low (Fast)",
-		GRID_STD: "Standard",
-		GRID_SMOOTH: "High (Smooth)",
-		GRID_INSANE: "Insane (Ultra)",
-		GRID_SUB: "Density affects the smoothness of frontlines.",
-		MAX_UNITS: "Max Units (Global)",
-		UNIT_MIN: "100 (Minimalist)",
-		UNIT_STD: "250 (Standard)",
-		UNIT_WAR: "500 (Grand War)",
-		UNIT_STRESS: "1000 (Maximum Stress)",
-		UNIT_SUB: "Reduces unit count for cleaner fronts and better performance.",
-		BG_VOLUME: "Background Music Volume",
-		BG_SUB: "Adjusts the volume of the background music.",
-		DISABLE_MT_SUB:
-			"Removes terrain-based movement penalties and visual darkening.",
-		HIDE_UNITS: "Hide Units Visually",
-		HIDE_UNITS_SUB:
-			"Disables rendering of unit icons and flags for a significant FPS boost.",
-		SAVE_SKIP: "Remember & Skip on Startup",
-		APPLY_INIT: "Apply & Initialize",
-		OPERATIONS: "Operations",
-		CONQUEST: "CONQUEST",
-		CONQUEST_SUB: "Global Warfare",
-		EDITOR: "EDITOR",
-		EDITOR_SUB: "World Builder",
-		INTELLIGENCE: "Intelligence",
-		HUB: "EDITOR HUB",
-		HUB_SUB: "Community Content",
-		LOAD_FILE: "LOAD FILE",
-		LOAD_FILE_SUB: "Import Preset",
-		SYSTEM: "System",
-		ENGINE: "ENGINE",
-		ENGINE_SUB: "Fidelity & FPS",
-		TUTORIAL: "TUTORIAL",
-		TUTORIAL_SUB: "Learn the Ropes",
-		SERVER: "SERVER",
-		SERVER_SUB: "Join Discord",
-		CREDITS: "CREDITS",
-		CREDITS_SUB: "Contributors",
-		DONATE: "DONATE",
-		DONATE_SUB: "Support the dev",
-		PC_REQD:
-			"System Requirement: High-performance PC recommended. Mobile and low-end hardware may experience significant simulation lag.",
-		STABLE: "CONNECTION STABLE",
-		LOADING: "Loading...",
-		GOD_MODE: "GOD MODE",
-		GOD_ACTIVE: "GOD ACTIVE",
-		SIM_PAUSED: "SIMULATION PAUSED",
-		SELECT_P1: "Select First Country",
-		SELECT_P2: "Select Enemy Country",
-		CONFLICT_SETUP: "Conflict Setup",
-		CHOOSE_ERA: "CHOOSE ERA",
-		MODERN_DAY: "2022",
-		MODERN_DAY_SUB: "Present Geopolitics (Real Earth)",
-		WW2_SCENARIO: "1936 SCENARIO",
-		WW2_SCENARIO_SUB: "WW2 Strategic Theater",
-		BACK_TO_MENU: "BACK TO MENU",
-		RANDOM_WAR_OFF: "Random War: OFF",
-		RANDOM_WAR_ON: "Random War: ON",
-		ADD_SIDE: "+ Side",
-		FFA: "FFA",
-		SETUP_PROMPT:
-			"Select a side, then click countries on the map to recruit them.",
-		STRATEGY: "Attack Strategy",
-		STRAT_ALL: "All Fronts (Global)",
-		STRAT_FOCUS: "Targeted Strike (Localized)",
-		FIGHT_TO_DEATH: "FIGHT TO THE DEATH",
-		DISABLE_MISSILES: "DISABLE LONG-RANGE MISSILES",
-		DISABLE_MT: "DISABLE MOUNTAINS",
-		DISABLE_PUPPETS: "DISABLE PUPPETS (NO VASSAL CALL)",
-		INAUGURATE: "Inaugurate Conflict",
-		START_WAR: "Start War",
-
-		EXPERIMENT_AI_POSTURE: "AI Posture",
-		EXPERIMENT_ADVANCED_SETUP: "Advanced Setup",
-
-		EXPERIMENT_FORCES_DATE: "Forces & Date",
-
-		EXPERIMENT_RULES_CAPTURE: "Rules & Capture",
-
-		SHOW_AI_OPERATIONS: "Show AI Operations",
-		AI_OPERATIONS: "AI Operations",
-
-		MAIN_MENU: "Main Menu",
-
-		CLOSE: "Close",
-
-		POLITICAL: "POLITICAL",
-		ARROWS: "ARROWS (BUGGY)",
-		BATTLE_VIS: "BATTLE VISUALS",
-		GOD: "GOD",
-		DIPLOMACY: "DIPLOMACY",
-		RESTART: "RESTART",
-		UNITS: "UNITS",
-		VS_MINI: "vs",
-		EDITOR_TOOLS: "EDITOR TOOLS",
-		NEW_NATION: "New Nation",
-		TEST_SCENARIO: "Test Scenario",
-		UPDATE_SCENARIO: "Update Scenario",
-		SAVE_PRESET: "Save Preset",
-		LOAD_PRESET: "Load Preset",
-		SHARE_HUB: "Share to Hub",
-		HUB_TAB: "Editor Hub",
-		COUNTRY_LIB: "Country Library",
-		FLAG_LIB: "Flag Library",
-		SAVE_COUNTRY: "Save Country",
-		LOAD_COUNTRY: "Load Country",
-		PAINT: "Paint",
-		FILL: "Fill",
-		UNCLAIM: "Unclaim",
-		EXIT_EDITOR: "Exit Editor",
-		NATIONS: {
-			Germany: "Germany",
-			"German Reich": "German Reich",
-			Poland: "Poland",
-			Russia: "Russia",
-			"United States": "United States",
-			France: "France",
-			"United Kingdom": "United Kingdom",
-			Italy: "Italy",
-			China: "China",
-			Japan: "Japan",
-			"Soviet Union": "Soviet Union",
-			Turkey: "Turkey",
-			Ukraine: "Ukraine",
-			Belarus: "Belarus",
-			Brazil: "Brazil",
-			Canada: "Canada",
-			Australia: "Australia",
-			India: "India",
-			Spain: "Spain",
-			Mexico: "Mexico",
-			"South Korea": "South Korea",
-			"North Korea": "North Korea",
-			Vietnam: "Vietnam",
-		},
-	},
-	ru: {
-		MODERN_WARS: "Современные Войны",
-		LANGUAGE: "Язык",
-		LANGUAGE_SUB: "Язык отображения системы.",
-		MAP_RES: "Разрешение карты",
-		RES_LOW: "Низкое (Скорость)",
-		RES_STD: "Стандарт (Среднее)",
-		RES_HIGH: "Высокое (Тяжелое)",
-		RES_SUB: "Высокое разрешение улучшает границы, но замедляет загрузку.",
-		GRID_DENSITY: "Плотность сетки",
-		GRID_FAST: "Низкая (Быстро)",
-		GRID_STD: "Стандарт",
-		GRID_SMOOTH: "Высокая (Плавно)",
-		GRID_SUB: "Плотность влияет на плавность линий фронта.",
-		MAX_UNITS: "Макс. юнитов",
-		UNIT_MIN: "100 (Минимум)",
-		UNIT_STD: "250 (Стандарт)",
-		UNIT_WAR: "500 (Большая война)",
-		UNIT_STRESS: "1000 (Стресс-тест)",
-		UNIT_SUB: "Уменьшает количество юнитов для производительности.",
-		BG_VOLUME: "Громкость музыки",
-		BG_SUB: "Регулировка громкости фоновой музыки.",
-		DISABLE_MT_SUB: "Удаляет штрафы за передвижение по пересеченной местности.",
-		HIDE_UNITS: "Скрыть юнитов",
-		HIDE_UNITS_SUB: "Отключает отрисовку иконок юнитов для повышения FPS.",
-		SAVE_SKIP: "Запомнить и пропускать при запуске",
-		APPLY_INIT: "Применить и Запустить",
-		OPERATIONS: "Операции",
-		CONQUEST: "ЗАВОЕВАНИЕ",
-		CONQUEST_SUB: "Глобальная война",
-		EDITOR: "РЕДАКТОР",
-		EDITOR_SUB: "Конструктор мира",
-		INTELLIGENCE: "Разведка",
-		HUB: "ХАБ РЕДАКТОРА",
-		HUB_SUB: "Контент сообщества",
-		LOAD_FILE: "ЗАГРУЗИТЬ",
-		LOAD_FILE_SUB: "Импорт сценария",
-		SYSTEM: "Система",
-		ENGINE: "ДВИЖОК",
-		ENGINE_SUB: "Качество и FPS",
-		TUTORIAL: "ОБУЧЕНИЕ",
-		TUTORIAL_SUB: "Изучить основы",
-		SERVER: "СЕРВЕР",
-		SERVER_SUB: "Discord",
-		CREDITS: "АВТОРЫ",
-		CREDITS_SUB: "Контрибьюторы",
-		DONATE: "ПОДДЕРЖКА",
-		DONATE_SUB: "Поддержать разработку",
-		PC_REQD:
-			"Требования: Рекомендуется мощный ПК. На мобильных устройствах возможны лаги.",
-		STABLE: "СОЕДИНЕНИЕ СТАБИЛЬНО",
-		LOADING: "Загрузка...",
-		GOD_MODE: "РЕЖИМ БОГА",
-		GOD_ACTIVE: "БОГ АКТИВЕН",
-		SIM_PAUSED: "СИМУЛЯЦИЯ ПРИОСТАНОВЛЕНА",
-		SELECT_P1: "Выберите первую страну",
-		SELECT_P2: "Выберите противника",
-		CONFLICT_SETUP: "Настройка конфликта",
-		CHOOSE_ERA: "ВЫБЕРИТЕ ЭПОХУ",
-		MODERN_DAY: "НАШИ ДНИ",
-		MODERN_DAY_SUB: "Современная геополитика",
-		WW2_SCENARIO: "СЦЕНАРИЙ 1936",
-		WW2_SCENARIO_SUB: "Театр Второй мировой войны",
-		BACK_TO_MENU: "В МЕНЮ",
-		RANDOM_WAR_OFF: "Случ. война: ВЫКЛ",
-		RANDOM_WAR_ON: "Случ. война: ВКЛ",
-		ADD_SIDE: "+ Сторона",
-		FFA: "Каждый сам за себя",
-		SETUP_PROMPT: "Выберите сторону, затем нажимайте на страны на карте.",
-		STRATEGY: "Стратегия атаки",
-		STRAT_ALL: "Все фронты (Глобально)",
-		STRAT_FOCUS: "Точечный удар (Локально)",
-		FIGHT_TO_DEATH: "ВОЙНА ДО КОНЦА (БЕЗ МИРА)",
-		DISABLE_MISSILES: "ОТКЛЮЧИТЬ РАКЕТЫ",
-		DISABLE_MT: "БЕЗ ГОР",
-		DISABLE_PUPPETS: "БЕЗ ВАССАЛОВ",
-		INAUGURATE: "Начать конфликт",
-		START_WAR: "Начать войну",
-
-		POLITICAL: "ПОЛИТИЧЕСКАЯ",
-		ARROWS: "СТРЕЛКИ",
-		BATTLE_VIS: "БОИ",
-		GOD: "БОГ",
-		DIPLOMACY: "ДИПЛОМАТИЯ",
-		RESTART: "ПЕРЕЗАПУСК",
-		UNITS: "ЮНИТЫ",
-		VS_MINI: "против",
-		EDITOR_TOOLS: "ИНСТРУМЕНТЫ",
-		NEW_NATION: "Новая нация",
-		TEST_SCENARIO: "Тест",
-		UPDATE_SCENARIO: "Обновить",
-		SAVE_PRESET: "Сохранить",
-		LOAD_PRESET: "Загрузить",
-		SHARE_HUB: "В Хаб",
-		HUB_TAB: "Хаб",
-		COUNTRY_LIB: "Библиотека стран",
-		FLAG_LIB: "Флаги",
-		SAVE_COUNTRY: "Сохр. страну",
-		LOAD_COUNTRY: "Загр. страну",
-		PAINT: "Кисть",
-		FILL: "Заливка",
-		UNCLAIM: "Стереть",
-		EXIT_EDITOR: "Выход",
-		NATIONS: {
-			Germany: "Германия",
-			"German Reich": "Германский Рейх",
-			Poland: "Польша",
-			Russia: "Россия",
-			"United States": "США",
-			France: "Франция",
-			"United Kingdom": "Великобритания",
-			Italy: "Италия",
-			China: "Китай",
-			Japan: "Япония",
-			"United States of America": "США",
-			"Soviet Union": "СССР",
-			Turkey: "Турция",
-			Ukraine: "Украина",
-			Belarus: "Беларусь",
-			Kazakhstan: "Казахстан",
-			Brazil: "Бразилия",
-			Canada: "Канада",
-			Australia: "Австралия",
-			India: "Индия",
-			Spain: "Испания",
-			Mexico: "Мексика",
-			"South Korea": "Южная Корея",
-			"North Korea": "Северная Корея",
-			Vietnam: "Вьетнам",
-		},
-	},
-	ja: {
-		MODERN_WARS: "モダン・ウォーズ",
-		LANGUAGE: "言語",
-		LANGUAGE_SUB: "システム表示言語。",
-		MAP_RES: "マップ解像度",
-		RES_LOW: "低 (パフォーマンス)",
-		RES_STD: "標準 (中)",
-		RES_HIGH: "高 (非常に重い)",
-		RES_SUB: "解像度が高いと境界線は綺麗になりますが、読み込みが遅くなります。",
-		GRID_DENSITY: "グリッド密度",
-		GRID_FAST: "低 (高速)",
-		GRID_STD: "標準",
-		GRID_SMOOTH: "高 (滑らか)",
-		GRID_SUB: "密度は前線の滑らかさに影響します。",
-		MAX_UNITS: "最大ユニット数",
-		UNIT_MIN: "100 (最小限)",
-		UNIT_STD: "250 (標準)",
-		UNIT_WAR: "500 (大戦争)",
-		UNIT_STRESS: "1000 (最大負荷)",
-		UNIT_SUB: "ユニット数を減らすことで、パフォーマンスが向上します。",
-		BG_VOLUME: "BGM 音量",
-		BG_SUB: "背景音楽の音量を調整します。",
-		DISABLE_MT_SUB: "地形による移動ペナルティと視覚的な暗転を除去します。",
-		HIDE_UNITS: "ユニットを非表示にする",
-		HIDE_UNITS_SUB: "アイコンと旗の描画を停止し、FPSを大幅に向上させます。",
-		SAVE_SKIP: "設定を保存して次回からスキップ",
-		APPLY_INIT: "適用して初期化",
-		OPERATIONS: "軍事作戦",
-		CONQUEST: "征服モード",
-		CONQUEST_SUB: "世界大戦シミュレーション",
-		EDITOR: "エディター",
-		EDITOR_SUB: "ワールドビルダー",
-		INTELLIGENCE: "インテリジェンス",
-		HUB: "エディターハブ",
-		HUB_SUB: "コミュニティコンテンツ",
-		LOAD_FILE: "ファイルを読み込む",
-		LOAD_FILE_SUB: "プリセットをインポート",
-		SYSTEM: "システム",
-		ENGINE: "エンジン設定",
-		ENGINE_SUB: "画質とFPS",
-		TUTORIAL: "チュートリアル",
-		TUTORIAL_SUB: "基本操作を学ぶ",
-		SERVER: "サーバー",
-		SERVER_SUB: "Discordに参加",
-		CREDITS: "クレジット",
-		CREDITS_SUB: "貢献者",
-		DONATE: "寄付",
-		DONATE_SUB: "開発者を支援",
-		PC_REQD:
-			"動作環境: 高性能なPCを推奨します。モバイルや低スペック端末では遅延が発生する場合があります。",
-		STABLE: "接続安定",
-		LOADING: "読み込み中...",
-		GOD_MODE: "ゴッドモード",
-		GOD_ACTIVE: "ゴッドモード有効",
-		SIM_PAUSED: "シミュレーション停止中",
-		SELECT_P1: "最初の国を選択",
-		SELECT_P2: "敵対国を選択",
-		CONFLICT_SETUP: "紛争セットアップ",
-		CHOOSE_ERA: "時代を選択",
-		MODERN_DAY: "2022",
-		MODERN_DAY_SUB: "現在の地政学 (リアルアース)",
-		WW2_SCENARIO: "1936年シナリオ",
-		WW2_SCENARIO_SUB: "第二次世界大戦の戦略戦域",
-		BACK_TO_MENU: "メニューに戻る",
-		RANDOM_WAR_OFF: "ランダム戦争: オフ",
-		RANDOM_WAR_ON: "ランダム戦争: オン",
-		ADD_SIDE: "+ 陣営追加",
-		FFA: "無差別戦 (FFA)",
-		SETUP_PROMPT:
-			"陣営を選択し、マップ上の国をクリックして参加させてください。",
-		STRATEGY: "攻撃戦略",
-		STRAT_ALL: "全前線 (グローバル)",
-		STRAT_FOCUS: "重点攻撃 (局地戦)",
-		FIGHT_TO_DEATH: "死闘モード (講和なし)",
-		DISABLE_MISSILES: "長距離ミサイル無効",
-		DISABLE_MT: "山岳無効",
-		DISABLE_PUPPETS: "傀儡国無効",
-		INAUGURATE: "紛争開始",
-		START_WAR: "戦争を開始",
-
-		POLITICAL: "政治地図",
-		ARROWS: "進撃矢印",
-		BATTLE_VIS: "戦闘エフェクト",
-		GOD: "神",
-		DIPLOMACY: "外交",
-		RESTART: "再起動",
-		UNITS: "部隊",
-		VS_MINI: "対",
-		EDITOR_TOOLS: "エディターツール",
-		NEW_NATION: "新国家作成",
-		TEST_SCENARIO: "シナリオテスト",
-		UPDATE_SCENARIO: "シナリオ更新",
-		SAVE_PRESET: "プリセット保存",
-		LOAD_PRESET: "プリセット読込",
-		SHARE_HUB: "ハブに共有",
-		HUB_TAB: "ハブ",
-		COUNTRY_LIB: "国家ライブラリ",
-		FLAG_LIB: "国旗ライブラリ",
-		SAVE_COUNTRY: "国家保存",
-		LOAD_COUNTRY: "国家読込",
-		PAINT: "ペイント",
-		FILL: "塗りつぶし",
-		UNCLAIM: "領土解除",
-		EXIT_EDITOR: "終了",
-		NATIONS: {
-			Germany: "ドイツ",
-			"German Reich": "ドイツ国",
-			Poland: "ポーランド",
-			Russia: "ロシア",
-			"United States": "アメリカ",
-			France: "フランス",
-			"United Kingdom": "イギリス",
-			Italy: "イタリア",
-			China: "中国",
-			Japan: "日本",
-			"Soviet Union": "ソ連",
-			Turkey: "トルコ",
-			Ukraine: "ウクライナ",
-			"South Korea": "韓国",
-			"North Korea": "北朝鮮",
-			Brazil: "ブラジル",
-			Canada: "カナダ",
-			Australia: "オーストラリア",
-			India: "インド",
-			Spain: "スペイン",
-			Mexico: "メキシコ",
-			Vietnam: "ベトナム",
-		},
-	},
-	es: {
-		MODERN_WARS: "Guerras Modernas",
-		LANGUAGE: "Idioma",
-		LANGUAGE_SUB: "Idioma de visualización del sistema.",
-		MAP_RES: "Resolución del Mapa",
-		RES_LOW: "Baja (Rendimiento)",
-		RES_STD: "Estándar (Media)",
-		RES_HIGH: "Alta (Pesada)",
-		RES_SUB: "Mayor resolución mejora bordes pero ralentiza carga.",
-		GRID_DENSITY: "Densidad de Cuadrícula",
-		GRID_FAST: "Baja (Rápida)",
-		GRID_STD: "Estándar",
-		GRID_SMOOTH: "Alta (Suave)",
-		GRID_SUB: "La densidad afecta la suavidad de los frentes.",
-		MAX_UNITS: "Unidades Máximas",
-		UNIT_MIN: "100 (Mínimo)",
-		UNIT_STD: "250 (Estándar)",
-		UNIT_WAR: "500 (Guerra)",
-		UNIT_STRESS: "1000 (Estrés Máximo)",
-		UNIT_SUB: "Mejora el rendimiento con menos unidades.",
-		BG_VOLUME: "Volumen Música",
-		BG_SUB: "Ajusta el volumen de la música de fondo.",
-		DISABLE_MT_SUB:
-			"Elimina penalizaciones de terreno y oscurecimiento visual.",
-		HIDE_UNITS: "Ocultar Unidades",
-		HIDE_UNITS_SUB: "Desactiva iconos de unidades para ganar FPS.",
-		SAVE_SKIP: "Recordar y Omitir al Inicio",
-		APPLY_INIT: "Aplicar e Inicializar",
-		OPERATIONS: "Operaciones",
-		CONQUEST: "CONQUISTA",
-		CONQUEST_SUB: "Guerra Global",
-		EDITOR: "EDITOR",
-		EDITOR_SUB: "Constructor",
-		INTELLIGENCE: "Inteligencia",
-		HUB: "CENTRO EDITOR",
-		HUB_SUB: "Contenido Comunitario",
-		LOAD_FILE: "CARGAR ARCHIVO",
-		LOAD_FILE_SUB: "Importar Escenario",
-		SYSTEM: "Sistema",
-		ENGINE: "MOTOR",
-		ENGINE_SUB: "Fidelidad y FPS",
-		TUTORIAL: "TUTORIAL",
-		TUTORIAL_SUB: "Aprende las Reglas",
-		SERVER: "SERVIDOR",
-		SERVER_SUB: "Unirse a Discord",
-		CREDITS: "CRÉDITOS",
-		CREDITS_SUB: "Colaboradores",
-		DONATE: "DONAR",
-		DONATE_SUB: "Apoya al dev",
-		PC_REQD:
-			"Requisito: Se recomienda PC de alto rendimiento. Hardware de gama baja puede sufrir lag.",
-		STABLE: "CONEXIÓN ESTABLE",
-		LOADING: "Cargando...",
-		GOD_MODE: "MODO DIOS",
-		GOD_ACTIVE: "DIOS ACTIVO",
-		SELECT_P1: "Seleccionar primer país",
-		SELECT_P2: "Seleccionar enemigo",
-		CONFLICT_SETUP: "Configuración del conflicto",
-		RANDOM_WAR_OFF: "Guerra aleat: OFF",
-		RANDOM_WAR_ON: "Guerra aleat: ON",
-		ADD_SIDE: "+ Lado",
-		FFA: "FFA",
-		SETUP_PROMPT: "Selecciona un bando, luego haz clic en los países del mapa.",
-		STRATEGY: "Estrategia de ataque",
-		STRAT_ALL: "Todos los frentes",
-		STRAT_FOCUS: "Ataque focalizado",
-		FIGHT_TO_DEATH: "LUCHA HASTA LA MUERTE (SIN PAZ)",
-		DISABLE_MISSILES: "DESACTIVAR MISILES",
-		DISABLE_MT: "DESACTIVAR MONTAÑAS",
-		DISABLE_PUPPETS: "DESACTIVAR PUPPETS",
-		INAUGURATE: "Inaugurar Conflicto",
-		START_WAR: "Iniciar guerra",
-
-		POLITICAL: "POLÍTICO",
-		ARROWS: "FLECHAS",
-		BATTLE_VIS: "VISUALES DE BATALLA",
-		GOD: "DIOS",
-		DIPLOMACY: "DIPLOMACIA",
-		RESTART: "REINICIAR",
-		UNITS: "UNIDADES",
-		VS_MINI: "vs",
-		EDITOR_TOOLS: "HERRAMIENTAS",
-		NEW_NATION: "Nueva Nación",
-		TEST_SCENARIO: "Probar Escenario",
-		UPDATE_SCENARIO: "Actualizar",
-		SAVE_PRESET: "Guardar Preset",
-		LOAD_PRESET: "Cargar Preset",
-		SHARE_HUB: "Compartir",
-		HUB_TAB: "Hub",
-		COUNTRY_LIB: "Biblioteca de Países",
-		FLAG_LIB: "Biblioteca de Banderas",
-		SAVE_COUNTRY: "Guardar País",
-		LOAD_COUNTRY: "Cargar País",
-		PAINT: "Pintar",
-		FILL: "Llenar",
-		UNCLAIM: "Desreclamar",
-		EXIT_EDITOR: "Salir",
-		NATIONS: {
-			Germany: "Alemania",
-			"German Reich": "Reich Alemán",
-			Poland: "Polonia",
-			Russia: "Rusia",
-			"United States": "Estados Unidos",
-			France: "Francia",
-			"United Kingdom": "Reino Unido",
-			Italy: "Italia",
-			China: "China",
-			Japan: "Japón",
-			"Soviet Union": "Unión Soviética",
-			Turkey: "Turquía",
-			Ukraine: "Ucrania",
-			Brazil: "Brasil",
-			Canada: "Canadá",
-			Australia: "Australia",
-			India: "India",
-			Spain: "España",
-			Mexico: "México",
-			"South Korea": "Corea del Sur",
-			"North Korea": "Corea del Norte",
-			Vietnam: "Vietnam",
-		},
-	},
-	fr: {
-		MODERN_WARS: "Guerres Modernes",
-		LANGUAGE: "Langue",
-		LANGUAGE_SUB: "Langue d'affichage du système.",
-		MAP_RES: "Résolution Carte",
-		RES_LOW: "Basse (Performance)",
-		RES_STD: "Standard (Moyenne)",
-		RES_HIGH: "Haute (Lourde)",
-		RES_SUB: "Améliore les bordures mais ralentit le chargement.",
-		GRID_DENSITY: "Densité Grille",
-		GRID_FAST: "Basse (Rapide)",
-		GRID_STD: "Standard",
-		GRID_SMOOTH: "Haute (Lisse)",
-		GRID_SUB: "La densité affecte la fluidité du front.",
-		MAX_UNITS: "Unités Max",
-		UNIT_MIN: "100 (Mini)",
-		UNIT_STD: "250 (Standard)",
-		UNIT_WAR: "500 (Guerre)",
-		UNIT_STRESS: "1000 (Stress Max)",
-		UNIT_SUB: "Réduit les unités pour booster les FPS.",
-		BG_VOLUME: "Volume Musique",
-		BG_SUB: "Ajuste le volume de fond.",
-		DISABLE_MT: "Désactiver Montagnes",
-		DISABLE_MT_SUB: "Supprime les malus de mouvement.",
-		HIDE_UNITS: "Cacher Unités",
-		HIDE_UNITS_SUB: "Désactive les icônes pour plus de FPS.",
-		SAVE_SKIP: "Retenir et ignorer au démarrage",
-		APPLY_INIT: "Appliquer et Lancer",
-		OPERATIONS: "Opérations",
-		CONQUEST: "CONQUÊTE",
-		CONQUEST_SUB: "Guerre Globale",
-		EDITOR: "ÉDITEUR",
-		EDITOR_SUB: "Créateur de Monde",
-		INTELLIGENCE: "Renseignement",
-		HUB: "HUB ÉDITEUR",
-		HUB_SUB: "Contenu Communautaire",
-		LOAD_FILE: "CHARGER FICHIER",
-		LOAD_FILE_SUB: "Importer Scénario",
-		SYSTEM: "Système",
-		ENGINE: "MOTEUR",
-		ENGINE_SUB: "Fidélité & FPS",
-		TUTORIAL: "TUTORIEL",
-		TUTORIAL_SUB: "Apprendre les bases",
-		SERVER: "SERVEUR",
-		SERVER_SUB: "Rejoindre Discord",
-		CREDITS: "CRÉDITS",
-		CREDITS_SUB: "Contributeurs",
-		DONATE: "DON",
-		DONATE_SUB: "Soutenir le dev",
-		PC_REQD: "Requis : PC puissant recommandé. Lag possible sur mobile.",
-		STABLE: "CONNEXION STABLE",
-		LOADING: "Chargement...",
-		GOD_MODE: "MODE DIEU",
-		GOD_ACTIVE: "DIEU ACTIF",
-		SELECT_P1: "Choisir le premier pays",
-		SELECT_P2: "Choisir l'ennemi",
-		CONFLICT_SETUP: "Configuration du conflit",
-		RANDOM_WAR_OFF: "Guerre aléat: OFF",
-		RANDOM_WAR_ON: "Guerre aléat: ON",
-		ADD_SIDE: "+ Camp",
-		FFA: "FFA",
-		SETUP_PROMPT: "Choisissez un camp, puis cliquez sur les pays.",
-		STRATEGY: "Stratégie d'attaque",
-		STRAT_ALL: "Tous les fronts",
-		STRAT_FOCUS: "Frappe ciblée",
-		FIGHT_TO_DEATH: "GUERRE À MORT (PAS DE PAIX)",
-		DISABLE_MISSILES: "DÉSACTIVER MISSILES",
-		INAUGURATE: "Inaugurer le Conflit",
-		START_WAR: "Lancer la guerre",
-
-		POLITICAL: "POLITIQUE",
-		ARROWS: "FLÈCHES",
-		BATTLE_VIS: "VISUELS COMBAT",
-		GOD: "DIEU",
-		DIPLOMACY: "DIPLOMATIE",
-		RESTART: "REDÉMARRER",
-		UNITS: "UNITÉS",
-		VS_MINI: "vs",
-		EDITOR_TOOLS: "OUTILS",
-		NEW_NATION: "Nouvelle Nation",
-		TEST_SCENARIO: "Tester",
-		UPDATE_SCENARIO: "Mettre à jour",
-		SAVE_PRESET: "Sauvegarder",
-		LOAD_PRESET: "Charger",
-		SHARE_HUB: "Partager",
-		HUB_TAB: "Hub",
-		COUNTRY_LIB: "Bibliothèque Pays",
-		FLAG_LIB: "Drapeaux",
-		SAVE_COUNTRY: "Sauver Pays",
-		LOAD_COUNTRY: "Charger Pays",
-		PAINT: "Peindre",
-		FILL: "Remplir",
-		UNCLAIM: "Libérer",
-		EXIT_EDITOR: "Quitter",
-		NATIONS: {
-			Germany: "Allemagne",
-			"German Reich": "Reich Allemand",
-			Poland: "Pologne",
-			Russia: "Russie",
-			"United States": "États-Unis",
-			France: "France",
-			"United Kingdom": "Royaume-Uni",
-			Italy: "Italie",
-			China: "Chine",
-			Japan: "Japon",
-			"Soviet Union": "Union Soviétique",
-			Turkey: "Turquie",
-			Ukraine: "Ukraine",
-			Brazil: "Brésil",
-			Canada: "Canada",
-			Australia: "Australie",
-			India: "Inde",
-			Spain: "Espagne",
-			Mexico: "Mexique",
-			"South Korea": "Corée du Sud",
-			"North Korea": "Corée du Nord",
-			Vietnam: "Vietnam",
-		},
-	},
-	de: {
-		MODERN_WARS: "Moderne Kriege",
-		LANGUAGE: "Sprache",
-		LANGUAGE_SUB: "System-Sprache.",
-		MAP_RES: "Kartenauflösung",
-		RES_LOW: "Niedrig (Leistung)",
-		RES_STD: "Standard (Mittel)",
-		RES_HIGH: "Hoch (Schwer)",
-		RES_SUB: "Verbessert Grenzen, verzögert Laden.",
-		GRID_DENSITY: "Gitterdichte",
-		GRID_FAST: "Niedrig (Schnell)",
-		GRID_STD: "Standard",
-		GRID_SMOOTH: "Hoch (Glatt)",
-		GRID_SUB: "Beeinflusst Frontverlauf.",
-		MAX_UNITS: "Einheitenlimit",
-		UNIT_MIN: "100 (Min)",
-		UNIT_STD: "250 (Standard)",
-		UNIT_WAR: "500 (Krieg)",
-		UNIT_STRESS: "1000 (Stress)",
-		UNIT_SUB: "Wenig Einheiten für hohe FPS.",
-		BG_VOLUME: "Musiklautstärke",
-		BG_SUB: "Hintergrundmusik anpassen.",
-		DISABLE_MT: "Berge deaktivieren",
-		DISABLE_MT_SUB: "Entfernt Geländestrafen.",
-		HIDE_UNITS: "Einheiten verbergen",
-		HIDE_UNITS_SUB: "Deaktiviert Icons für FPS-Boost.",
-		SAVE_SKIP: "Einstellungen speichern & überspringen",
-		APPLY_INIT: "Anwenden & Starten",
-		OPERATIONS: "Operationen",
-		CONQUEST: "EROBERUNG",
-		CONQUEST_SUB: "Globaler Krieg",
-		EDITOR: "EDITOR",
-		EDITOR_SUB: "Weltenbauer",
-		INTELLIGENCE: "Geheimdienst",
-		HUB: "EDITOR HUB",
-		HUB_SUB: "Community-Inhalte",
-		LOAD_FILE: "DATEI LADEN",
-		LOAD_FILE_SUB: "Preset importieren",
-		SYSTEM: "System",
-		ENGINE: "ENGINE",
-		ENGINE_SUB: "Fidelität & FPS",
-		TUTORIAL: "TUTORIAL",
-		TUTORIAL_SUB: "Grundlagen lernen",
-		SERVER: "SERVER",
-		SERVER_SUB: "Discord beitreten",
-		CREDITS: "CREDITS",
-		CREDITS_SUB: "Mitwirkende",
-		DONATE: "SPENDEN",
-		DONATE_SUB: "Unterstütze den Dev",
-		PC_REQD:
-			"Anforderung: Leistungsstarker PC empfohlen. Lag auf Mobilgeräten möglich.",
-		STABLE: "VERBINDUNG STABIL",
-		LOADING: "Laden...",
-		GOD_MODE: "GOTT-MODUS",
-		GOD_ACTIVE: "GOTT AKTIV",
-		SELECT_P1: "Erstes Land wählen",
-		SELECT_P2: "Feind wählen",
-		CONFLICT_SETUP: "Konflikt-Setup",
-		RANDOM_WAR_OFF: "Zufallskrieg: AUS",
-		RANDOM_WAR_ON: "Zufallskrieg: AN",
-		ADD_SIDE: "+ Seite",
-		FFA: "FFA",
-		SETUP_PROMPT: "Seite wählen, dann Länder auf Karte anklicken.",
-		STRATEGY: "Strategie",
-		STRAT_ALL: "Alle Fronten",
-		STRAT_FOCUS: "Gezielter Schlag",
-		FIGHT_TO_DEATH: "KAMPF BIS ZUM TOD (KEIN FRIEDEN)",
-		DISABLE_MISSILES: "RAKETEN DEAKTIVIEREN",
-		INAUGURATE: "Konflikt eröffnen",
-		START_WAR: "Krieg starten",
-
-		POLITICAL: "POLITISCH",
-		ARROWS: "PFEILE",
-		BATTLE_VIS: "KAMPFEFFEKTE",
-		GOD: "GOTT",
-		DIPLOMACY: "DIPLOMATIE",
-		RESTART: "NEUSTART",
-		UNITS: "EINHEITEN",
-		VS_MINI: "vs",
-		EDITOR_TOOLS: "TOOLS",
-		NEW_NATION: "Neue Nation",
-		TEST_SCENARIO: "Testen",
-		UPDATE_SCENARIO: "Update",
-		SAVE_PRESET: "Speichern",
-		LOAD_PRESET: "Laden",
-		SHARE_HUB: "Teilen",
-		HUB_TAB: "Hub",
-		COUNTRY_LIB: "Länderbibliothek",
-		FLAG_LIB: "Flaggen",
-		SAVE_COUNTRY: "Land speichern",
-		LOAD_COUNTRY: "Land laden",
-		PAINT: "Malen",
-		FILL: "Füllen",
-		UNCLAIM: "Freigeben",
-		EXIT_EDITOR: "Beenden",
-		NATIONS: {
-			Germany: "Deutschland",
-			"German Reich": "Deutsches Reich",
-			Poland: "Polen",
-			Russia: "Russland",
-			"United States": "USA",
-			France: "Frankreich",
-			"United Kingdom": "Großbritannien",
-			Italy: "Italien",
-			China: "China",
-			Japan: "Japan",
-			"Soviet Union": "Sowjetunion",
-			Turkey: "Türkei",
-			Ukraine: "Ukraine",
-			Brazil: "Brasilien",
-			Canada: "Kanada",
-			Australia: "Australien",
-			India: "Indien",
-			Spain: "Spanien",
-			Mexico: "Mexiko",
-			"South Korea": "Südkorea",
-			"North Korea": "Nordkorea",
-			Vietnam: "Vietnam",
-		},
-	},
-	pt: {
-		MODERN_WARS: "Guerras Modernas",
-		LANGUAGE: "Idioma",
-		LANGUAGE_SUB: "Idioma de exibição do sistema.",
-		MAP_RES: "Resolução do Mapa",
-		RES_LOW: "Baixa (Performance)",
-		RES_STD: "Padrão (Média)",
-		RES_HIGH: "Alta (Pesada)",
-		RES_SUB: "Melhora bordas, mas retarda o carregamento.",
-		GRID_DENSITY: "Densidade da Grade",
-		GRID_FAST: "Baixa (Rápida)",
-		GRID_STD: "Padrão",
-		GRID_SMOOTH: "Alta (Suave)",
-		GRID_SUB: "Afeta a suavidade das linhas de frente.",
-		MAX_UNITS: "Limite de Unidades",
-		UNIT_MIN: "100 (Mínimo)",
-		UNIT_STD: "250 (Padrão)",
-		UNIT_WAR: "500 (Guerra)",
-		UNIT_STRESS: "1000 (Stress)",
-		UNIT_SUB: "Reduz unidades para melhor FPS.",
-		BG_VOLUME: "Volume da Música",
-		BG_SUB: "Ajusta o volume da música.",
-		DISABLE_MT: "Desativar Montanhas",
-		DISABLE_MT_SUB: "Remove penalidades de movimento.",
-		HIDE_UNITS: "Ocultar Unidades",
-		HIDE_UNITS_SUB: "Desativa ícones para ganho de FPS.",
-		SAVE_SKIP: "Salvar e Ignorar no Início",
-		APPLY_INIT: "Aplicar e Iniciar",
-		OPERATIONS: "Operações",
-		CONQUEST: "CONQUISTA",
-		CONQUEST_SUB: "Guerra Global",
-		EDITOR: "EDITOR",
-		EDITOR_SUB: "Construtor de Mundo",
-		INTELLIGENCE: "Inteligência",
-		HUB: "HUB DO EDITOR",
-		HUB_SUB: "Conteúdo da Comunidade",
-		LOAD_FILE: "CARREGAR ARQUIVO",
-		LOAD_FILE_SUB: "Importar Preset",
-		SYSTEM: "Sistema",
-		ENGINE: "MOTOR",
-		ENGINE_SUB: "Fidelidade e FPS",
-		TUTORIAL: "TUTORIAL",
-		TUTORIAL_SUB: "Aprenda o básico",
-		SERVER: "SERVIDOR",
-		SERVER_SUB: "Entrar no Discord",
-		CREDITS: "CRÉDITOS",
-		CREDITS_SUB: "Contribuidores",
-		DONATE: "DOAR",
-		DONATE_SUB: "Apoie o dev",
-		PC_REQD: "Requisito: Recomenda-se PC potente. Possível lag em mobile.",
-		STABLE: "CONEXÃO ESTÁVEL",
-		LOADING: "Carregando...",
-		GOD_MODE: "MODO DEUS",
-		GOD_ACTIVE: "DEUS ATIVO",
-		SELECT_P1: "Escolha o primeiro país",
-		SELECT_P2: "Escolha o inimigo",
-		CONFLICT_SETUP: "Configuração do Conflito",
-		RANDOM_WAR_OFF: "Guerra Aleat: OFF",
-		RANDOM_WAR_ON: "Guerra Aleat: ON",
-		ADD_SIDE: "+ Lado",
-		FFA: "FFA",
-		SETUP_PROMPT: "Escolha um lado e clique nos países do mapa.",
-		STRATEGY: "Estratégia de Ataque",
-		STRAT_ALL: "Todas as frentes",
-		STRAT_FOCUS: "Ataque focado",
-		FIGHT_TO_DEATH: "LUTA ATÉ A MORTE (SEM PAZ)",
-		DISABLE_MISSILES: "DESATIVAR MÍSSEIS",
-		INAUGURATE: "Inaugurar Conflito",
-		START_WAR: "Iniciar guerra",
-
-		POLITICAL: "POLÍTICO",
-		ARROWS: "SETAS",
-		BATTLE_VIS: "VISUAIS DE BATALHA",
-		GOD: "DEUS",
-		DIPLOMACY: "DIPLOMACIA",
-		RESTART: "REINICIAR",
-		UNITS: "UNIDADES",
-		VS_MINI: "vs",
-		EDITOR_TOOLS: "FERRAMENTAS",
-		NEW_NATION: "Nova Nação",
-		TEST_SCENARIO: "Testar",
-		UPDATE_SCENARIO: "Atualizar",
-		SAVE_PRESET: "Salvar Preset",
-		LOAD_PRESET: "Carregar Preset",
-		SHARE_HUB: "Compartilhar",
-		HUB_TAB: "Hub",
-		COUNTRY_LIB: "Biblioteca",
-		FLAG_LIB: "Bandeiras",
-		SAVE_COUNTRY: "Salvar País",
-		LOAD_COUNTRY: "Carregar País",
-		PAINT: "Pintar",
-		FILL: "Preencher",
-		UNCLAIM: "Desreclamar",
-		EXIT_EDITOR: "Sair",
-		NATIONS: {
-			Germany: "Alemanha",
-			"German Reich": "Reich Alemão",
-			Poland: "Polônia",
-			Russia: "Rússia",
-			"United States": "EUA",
-			France: "França",
-			"United Kingdom": "Reino Unido",
-			Italy: "Itália",
-			China: "China",
-			Japan: "Japão",
-			"Soviet Union": "União Soviética",
-			Turkey: "Turquia",
-			Ukraine: "Ucrânia",
-			Brazil: "Brasil",
-			Canada: "Canadá",
-			Australia: "Austrália",
-			India: "Índia",
-			Spain: "Espanha",
-			Mexico: "México",
-			"South Korea": "Coreia do Sul",
-			"North Korea": "Coreia do Norte",
-			Vietnam: "Vietnã",
-		},
-	},
-	it: {
-		MODERN_WARS: "Guerre Moderne",
-		LANGUAGE: "Lingua",
-		LANGUAGE_SUB: "Lingua di sistema.",
-		MAP_RES: "Risoluzione Mappa",
-		RES_LOW: "Bassa",
-		RES_STD: "Standard",
-		RES_HIGH: "Alta",
-		OPERATIONS: "Operazioni",
-		CONQUEST: "CONQUISTA",
-		EDITOR: "EDITOR",
-		NATIONS: {
-			Germany: "Germania",
-			Poland: "Polonia",
-			Russia: "Russia",
-			"United States": "Stati Uniti",
-			France: "Francia",
-			Italy: "Italia",
-		},
-	},
-	pl: {
-		MODERN_WARS: "Wojny Współczesne",
-		LANGUAGE: "Język",
-		LANGUAGE_SUB: "Język systemu.",
-		OPERATIONS: "Operacje",
-		CONQUEST: "PODBÓJ",
-		EDITOR: "EDYTOR",
-		NATIONS: {
-			Germany: "Niemcy",
-			"German Reich": "III Rzesza",
-			Poland: "Polska",
-			Russia: "Rosja",
-			"United States": "USA",
-			France: "Francja",
-		},
-	},
-	zh: {
-		MODERN_WARS: "现代战争",
-		LANGUAGE: "语言",
-		LANGUAGE_SUB: "系统显示语言。",
-		OPERATIONS: "军事行动",
-		CONQUEST: "征服模式",
-		EDITOR: "编辑器",
-		NATIONS: {
-			Germany: "德国",
-			Poland: "波兰",
-			Russia: "俄罗斯",
-			"United States": "美国",
-			France: "法国",
-			China: "中国",
-			Japan: "日本",
-		},
-	},
-	uk: {
-		MODERN_WARS: "Сучасні Війни",
-		LANGUAGE: "Мова",
-		LANGUAGE_SUB: "Мова системи.",
-		OPERATIONS: "Операції",
-		CONQUEST: "ЗАВОЮВАННЯ",
-		EDITOR: "РЕДАКТОР",
-		NATIONS: {
-			Germany: "Німеччина",
-			Poland: "Польща",
-			Russia: "Росія",
-			Ukraine: "Україна",
-			"United States": "США",
-		},
-	},
-	hi: {
-		MODERN_WARS: "आधुनिक युद्ध",
-		LANGUAGE: "भाषा",
-		LANGUAGE_SUB: "सिस्टम की भाषा।",
-		OPERATIONS: "संचालन",
-		CONQUEST: "विजय",
-		EDITOR: "संपादक",
-		NATIONS: {
-			Germany: "जर्मनी",
-			Poland: "पोलैंड",
-			Russia: "रूस",
-			"United States": "अमेरिका",
-			India: "भारत",
-		},
-	},
-	ar: {
-		MODERN_WARS: "الحروب الحديثة",
-		LANGUAGE: "اللغة",
-		LANGUAGE_SUB: "لغة عرض النظام.",
-		OPERATIONS: "العمليات",
-		CONQUEST: "غزو",
-		EDITOR: "المحرر",
-		NATIONS: {
-			Germany: "ألمانيا",
-			Poland: "بولندا",
-			Russia: "روسيا",
-			"United States": "الولايات المتحدة",
-			Egypt: "مصر",
-			"Saudi Arabia": "السعودية",
-		},
-	},
-};
-
-export function applyLanguage(lang) {
-	if (!lang) lang = getCookie("mw_lang") || "en";
-	const dict = TRANSLATIONS[lang] || TRANSLATIONS.en;
-	document.querySelectorAll("[data-i18n]").forEach((el) => {
-		const key = el.getAttribute("data-i18n");
-		const value = dict[key] || TRANSLATIONS.en[key];
-		if (value) {
-			el.innerText = value;
-		}
-	});
-
-	// Update dynamic status messages if they are currently set to default strings
-	if (statusText) {
-		const currentText = statusText.innerText;
-
-		// Handle complex status strings like "REMIXING: World"
-		if (currentText.includes(": ")) {
-			const parts = currentText.split(": ");
-			const prefixKey =
-				parts[0] === "REMIXING"
-					? "REMIXING"
-					: parts[0] === "PLAYING"
-						? "PLAYING"
-						: null;
-			if (prefixKey && dict[prefixKey]) {
-				statusText.innerText = `${dict[prefixKey]}: ${parts[1]}`;
-			}
-		} else {
-			for (const [key, val] of Object.entries(TRANSLATIONS.en)) {
-				if (currentText === val && dict[key]) {
-					statusText.innerText = dict[key];
-					break;
-				}
-			}
-		}
-	}
-
-	const select = document.getElementById("language-select");
-	if (select) select.value = lang;
-	setCookie("mw_lang", lang);
-
-	// Re-translate country metadata
-	if (countryMetadata) {
-		countryMetadata.forEach((m) => {
-			if (m?.name) {
-				const trans = getTranslation(m.name, lang, "NATIONS");
-				if (trans !== m.name) m.displayName = trans;
-				else m.displayName = m.name;
-			}
-		});
-	}
-
-	// Re-translate current simulation side UI
-	updateSidesUI();
-}
-
-export function getTranslation(
-	key,
-	lang = getCookie("mw_lang") || "en",
-	subDict = null,
-) {
-	const dict = TRANSLATIONS[lang] || TRANSLATIONS.en;
-	if (subDict && dict[subDict]) {
-		return dict[subDict][key] || TRANSLATIONS.en[subDict]?.[key] || key;
-	}
-	return dict[key] || TRANSLATIONS.en[key] || key;
-}
-
-document.getElementById("language-select")?.addEventListener("change", (e) => {
-	applyLanguage(e.target.value);
-});
 
 /**
  * HELPERS
  */
-export function setCookie(name, value, days = 365) {
-	const expires = new Date(Date.now() + days * 864e5).toUTCString();
-	// biome-ignore lint/suspicious/noDocumentCookie: cookie helper function
-	document.cookie =
-		name +
-		"=" +
-		encodeURIComponent(value) +
-		"; expires=" +
-		expires +
-		"; path=/";
-}
-
-export function getCookie(name) {
-	return document.cookie.split("; ").reduce((r, v) => {
-		const parts = v.split("=");
-		return parts[0] === name ? decodeURIComponent(parts[1]) : r;
-	}, "");
-}
 
 const _colorCanvas = document.createElement("canvas");
 _colorCanvas.width = 1;
@@ -1317,374 +1744,6 @@ export async function generatePuppetFlag(puppetId, overlordId) {
 	if (influenceLayer) influenceLayer.render();
 }
 
-export const explosionUrl = "assets/audio/explosion-pas-61639.mp3";
-export const clickUrl = "assets/audio/low-button-click-331780.mp3";
-
-// Background music playlist: Replaced with MW ST folder assets
-export const bgMusicUrls = [
-	"/mw st/mw new ost/Stormfront.m4a",
-	"/mw st/mw new ost/All This.m4a",
-	"/mw st/mw new ost/Movement Proposition - Kevin MacLeod (Audio).m4a",
-	"/mw st/mw new ost/Hitman.m4a",
-	"/mw st/mw new ost/Satiate.m4a",
-	"/mw st/mw new ost/Industrial Revolution - Kevin MacLeod.m4a",
-	"/mw st/mw new ost/Red Alert 3 Theme - Soviet March.m4a",
-	"/mw st/mw new ost/Марк Бернес ＂Темная ночь＂ (1943).m4a",
-	"/mw st/mw new ost/Failing Defense.m4a",
-	"/mw st/mw new ost/Kevin MacLeod [Official] - Killers - incompetech.com.m4a",
-];
-
-export const warStartUrl = "assets/audio/war.wav";
-export const peaceUrl = "assets/audio/peace.wav";
-export const warAmbianceUrl = "assets/audio/modern-war-129016.mp3";
-export const secretWarDeclaredUrl =
-	"super-secret-settings/hoi4-war-declared.mp3";
-export const secretPeaceDealUrl = "super-secret-settings/hoi4-peace-deal.mp3";
-
-// Initialize Audio Context immediately so it's ready for early decoding
-export const audioCtx = new (
-	window.AudioContext || window.webkitAudioContext
-)();
-export let explosionBuffer = null;
-export let clickBuffer = null;
-// Background music buffers keyed by URL
-export const bgMusicBuffers = {};
-export let isAudioLoading = false;
-export let warStartBuffer = null;
-export let peaceBuffer = null;
-export let warAmbianceBuffer = null;
-export let secretWarDeclaredBuffer = null;
-export let secretPeaceDealBuffer = null;
-export let useSecretSounds = true;
-export let bgMusicSource = null;
-export let bgMusicGain = null;
-// Track index currently playing from bgMusicUrls
-export let currentBgTrackIndex = null;
-export let customTrackUrl = getCookie("mw_custom_track") || null;
-export let warAmbianceSource = null;
-export let warAmbianceGain = null;
-
-/**
- * High-priority loader for small UI elements.
- * This runs as soon as the script executes to minimize interaction latency.
- */
-export const loadImmediate = async (url) => {
-	try {
-		const response = await fetch(url);
-		const arrayBuffer = await response.arrayBuffer();
-		return await audioCtx.decodeAudioData(arrayBuffer);
-	} catch (e) {
-		console.warn(`Audio Error (Immediate): Failed to load ${url}`, e);
-		return null;
-	}
-};
-
-let _clickLoadPromise = null;
-
-/** Unlock audio from a user gesture without starting the full soundtrack download. */
-export async function primeAudio() {
-	if (audioCtx.state === "suspended") {
-		try {
-			await audioCtx.resume();
-		} catch (error) {
-			console.warn("AudioContext resume failed", error);
-		}
-	}
-	if (!clickBuffer) {
-		_clickLoadPromise ||= loadImmediate(clickUrl).then((buffer) => {
-			if (buffer) clickBuffer = buffer;
-			return buffer;
-		});
-	}
-	return _clickLoadPromise;
-}
-
-export async function initAudio() {
-	await primeAudio();
-
-	if (isAudioLoading) return;
-
-	const needsMusic = !bgMusicSource;
-	const needsBuffers =
-		!explosionBuffer ||
-		!clickBuffer ||
-		!warStartBuffer ||
-		!peaceBuffer ||
-		!warAmbianceBuffer;
-
-	if (!needsMusic && !needsBuffers) return;
-
-	isAudioLoading = true;
-
-	const load = async (url) => {
-		try {
-			// Encode URI to handle spaces and non-ASCII characters in asset paths
-			const response = await fetch(encodeURI(url));
-			if (!response.ok) throw new Error(`HTTP ${response.status}`);
-			const arrayBuffer = await response.arrayBuffer();
-			return await new Promise((resolve, reject) => {
-				audioCtx.decodeAudioData(arrayBuffer, resolve, (err) => {
-					console.warn(`Decoding failure for ${url}:`, err);
-					reject(err);
-				});
-			});
-		} catch (e) {
-			console.warn(`Audio Force-Load Error: Failed for ${url}`, e);
-			return null;
-		}
-	};
-
-	// Helper to start playing a specific background track index
-	const playBackgroundTrack = async (index) => {
-		// Force resume on every track change attempt to stay ahead of browser suspension
-		if (audioCtx.state === "suspended") {
-			try {
-				await audioCtx.resume();
-			} catch (_e) {}
-		}
-
-		let url;
-		if (customTrackUrl) {
-			url = customTrackUrl;
-		} else {
-			if (index == null || index < 0 || index >= bgMusicUrls.length) {
-				index = Math.floor(Math.random() * bgMusicUrls.length);
-			}
-			url = bgMusicUrls[index];
-		}
-
-		while (!bgMusicBuffers[url]) {
-			const buf = await load(url);
-			if (!buf) {
-				console.warn(`Force-skipping broken track: ${url}`);
-				index = (index + 1) % bgMusicUrls.length;
-				url = customTrackUrl || bgMusicUrls[index];
-				continue;
-			}
-			bgMusicBuffers[url] = buf;
-		}
-
-		// Stop any existing source to ensure only one plays
-		if (bgMusicSource) {
-			try {
-				bgMusicSource.onended = null;
-				bgMusicSource.stop();
-				bgMusicSource.disconnect();
-			} catch (_e) {}
-			bgMusicSource = null;
-		}
-
-		bgMusicSource = audioCtx.createBufferSource();
-		bgMusicSource.buffer = bgMusicBuffers[url];
-		bgMusicSource.loop = false;
-
-		if (!bgMusicGain) {
-			bgMusicGain = audioCtx.createGain();
-			const savedVol = getCookie("mw_music_vol");
-			const initialVol = savedVol !== "" ? parseFloat(savedVol) : 0.45; // Increased default volume
-			bgMusicGain.gain.setValueAtTime(initialVol, audioCtx.currentTime);
-
-			const slider = document.getElementById("music-volume-slider");
-			const valLabel = document.getElementById("music-vol-val");
-			if (slider && valLabel) {
-				slider.value = initialVol;
-				valLabel.innerText = `${Math.round(initialVol * 100)}%`;
-			}
-
-			bgMusicGain.connect(audioCtx.destination);
-		}
-
-		bgMusicSource.connect(bgMusicGain);
-
-		try {
-			bgMusicSource.start(0);
-		} catch (e) {
-			console.warn("Force play failed at start phase:", e);
-		}
-
-		currentBgTrackIndex = index;
-
-		// When track ends, pick a different random one
-		bgMusicSource.onended = () => {
-			bgMusicSource = null;
-			if (customTrackUrl) {
-				playBackgroundTrack(0); // Loop custom track
-				return;
-			}
-			if (!bgMusicUrls.length) return;
-			let next = Math.floor(Math.random() * bgMusicUrls.length);
-			if (bgMusicUrls.length > 1 && next === currentBgTrackIndex) {
-				next = (next + 1) % bgMusicUrls.length;
-			}
-			playBackgroundTrack(next);
-		};
-	};
-
-	// Prioritize loading and playing background music immediately
-	const startMusic = async () => {
-		if (bgMusicSource || isAudioLoading) return;
-		// Pick a random starting track
-		const startIndex = Math.floor(Math.random() * bgMusicUrls.length);
-		await playBackgroundTrack(startIndex);
-	};
-
-	// Fire off music load/play and other sounds in parallel
-	const effectTasks = [
-		load(explosionUrl).then((b) => (explosionBuffer = b || explosionBuffer)),
-		!clickBuffer
-			? load(clickUrl).then((b) => (clickBuffer = b || clickBuffer))
-			: Promise.resolve(),
-		load(warStartUrl).then((b) => (warStartBuffer = b || warStartBuffer)),
-		load(peaceUrl).then((b) => (peaceBuffer = b || peaceBuffer)),
-		load(secretWarDeclaredUrl).then(
-			(b) => (secretWarDeclaredBuffer = b || secretWarDeclaredBuffer),
-		),
-		load(secretPeaceDealUrl).then(
-			(b) => (secretPeaceDealBuffer = b || secretPeaceDealBuffer),
-		),
-		load(warAmbianceUrl).then(
-			(b) => (warAmbianceBuffer = b || warAmbianceBuffer),
-		),
-	];
-
-	try {
-		await Promise.all([startMusic(), ...effectTasks]);
-	} catch (e) {
-		console.error("Audio initialization error:", e);
-	} finally {
-		isAudioLoading = false;
-	}
-}
-
-export function playWarAmbiance() {
-	if (!audioCtx || !warAmbianceBuffer || warAmbianceSource) return;
-
-	warAmbianceSource = audioCtx.createBufferSource();
-	warAmbianceSource.buffer = warAmbianceBuffer;
-	warAmbianceSource.loop = true;
-
-	warAmbianceGain = audioCtx.createGain();
-	// Play "really quietly" as requested
-	warAmbianceGain.gain.setValueAtTime(0, audioCtx.currentTime);
-	warAmbianceGain.gain.linearRampToValueAtTime(0.05, audioCtx.currentTime + 2);
-
-	warAmbianceSource.connect(warAmbianceGain);
-	warAmbianceGain.connect(audioCtx.destination);
-	warAmbianceSource.start(0);
-}
-
-export function stopWarAmbiance() {
-	if (warAmbianceSource) {
-		const sourceToStop = warAmbianceSource;
-		const gainToStop = warAmbianceGain;
-
-		if (gainToStop) {
-			gainToStop.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 1.5);
-		}
-
-		setTimeout(() => {
-			try {
-				sourceToStop.stop();
-			} catch (_e) {}
-		}, 1600);
-
-		warAmbianceSource = null;
-		warAmbianceGain = null;
-	}
-}
-
-export function playExplosionSound() {
-	if (isMuted || !audioCtx || !explosionBuffer) return;
-	const source = audioCtx.createBufferSource();
-	source.buffer = explosionBuffer;
-
-	// Create a filter but make it less aggressive (higher cutoff)
-	const filterNode = audioCtx.createBiquadFilter();
-	filterNode.type = "lowpass";
-	filterNode.frequency.setValueAtTime(1800, audioCtx.currentTime);
-	filterNode.Q.setValueAtTime(1, audioCtx.currentTime);
-
-	const gainNode = audioCtx.createGain();
-	const startVol = 0.45; // Significantly increased volume for clarity
-	gainNode.gain.setValueAtTime(startVol, audioCtx.currentTime);
-	// Linear ramp is often more predictable for short samples
-	gainNode.gain.linearRampToValueAtTime(
-		0,
-		audioCtx.currentTime + explosionBuffer.duration,
-	);
-
-	source.connect(filterNode);
-	filterNode.connect(gainNode);
-	gainNode.connect(audioCtx.destination);
-	source.start(0);
-}
-
-export function playClickSound() {
-	if (isMuted || !audioCtx || !clickBuffer) return;
-	const source = audioCtx.createBufferSource();
-	source.buffer = clickBuffer;
-	const gainNode = audioCtx.createGain();
-	// Reduced gain to 0.1 to address the "too loud" feedback while maintaining auditability
-	gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-	source.connect(gainNode);
-	gainNode.connect(audioCtx.destination);
-	source.start(0);
-}
-
-export function playWarStartSound() {
-	if (isMuted || !audioCtx) return;
-	const buffer =
-		useSecretSounds && secretWarDeclaredBuffer
-			? secretWarDeclaredBuffer
-			: warStartBuffer;
-	if (!buffer) return;
-	const source = audioCtx.createBufferSource();
-	source.buffer = buffer;
-	const gainNode = audioCtx.createGain();
-	gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime); // Quiet start
-	source.connect(gainNode);
-	gainNode.connect(audioCtx.destination);
-	source.start(0);
-}
-
-export function playPeaceSound() {
-	if (isMuted || !audioCtx) return;
-	const buffer =
-		useSecretSounds && secretPeaceDealBuffer
-			? secretPeaceDealBuffer
-			: peaceBuffer;
-	if (!buffer) return;
-	const source = audioCtx.createBufferSource();
-	source.buffer = buffer;
-	const gainNode = audioCtx.createGain();
-	gainNode.gain.setValueAtTime(0.15, audioCtx.currentTime);
-	source.connect(gainNode);
-	gainNode.connect(audioCtx.destination);
-	source.start(0);
-}
-
-// Global click listener using capture phase to ensure sounds play even when stopPropagation is used
-document.addEventListener(
-	"click",
-	(e) => {
-		// Resume context if suspended (common browser policy on first click)
-		if (audioCtx && audioCtx.state === "suspended") {
-			audioCtx.resume().catch(() => {});
-		}
-
-		// Unlock only the tiny click sound here. Full soundtrack/effect downloads
-		// begin after the selected world has finished loading.
-		primeAudio();
-
-		const interactiveSelector =
-			'button, .menu-card, input, select, [role="button"], .side-header';
-		if (e.target.closest(interactiveSelector)) {
-			playClickSound();
-		}
-	},
-	true,
-);
-
 /**
  * CONFIGURATION & STATE
  */
@@ -1769,7 +1828,7 @@ export function getOptimizationFactor() {
 }
 
 export let gameState = "MAIN_MENU";
-export let gameMode = "CONQUEST"; // 'CONQUEST', 'OPERATION', or 'EDITOR'
+export let gameMode = "CONQUEST"; // 'CONQUEST', 'EDITOR', or 'EDITOR_TEST'
 export let mapName = "Untitled Map";
 export let worldWidthDeg = 360;
 export let worldHeightDeg = 180;
@@ -1777,11 +1836,8 @@ export let missilesEnabled = true;
 export let gameTimeEnabled = false;
 export let gameTimeDate = null; // {year, month, day}
 export let gameTimeAccumulatorMs = 0;
-export let gameTimeDayDurationMs = 500;
-export let activeOperationDefinition = null;
-export let activeOperationRuntime = null;
-let _operationLastHudRenderMs = -Infinity;
-let _operationPreviousBuffState = null;
+export const gameTimeDayDurationMs = 500;
+
 export let viewMode = "POLITICAL"; // 'POLITICAL' or 'FLAG'
 export let allianceViewEnabled = false; // when true, alliances override colors/flags in political/flag views
 export let showCountryLabels = true;
@@ -1790,7 +1846,7 @@ export let showNonCapitalCities = true;
 export const countryLabelAnchors = new Map(); // key: `${countryId}:${regionIndex}` -> { name, points, fontSize }
 export let showBattleIndicators = true;
 export let showWarPlans = true;
-// High‑level commanders ("generals") for each side, used to model strong plans.
+// Side leaders used to coordinate strong plans.
 export let generals = [];
 export const DEFAULT_SIDE_COLORS = [
 	"rgba(255, 50, 50, 0.5)",
@@ -1917,11 +1973,7 @@ const _simulationJobs = createDeterministicJobQueue({
 	itemBudget: 160_000,
 	maxItemsPerJobTurn: 80_000,
 });
-const _simulationPhaseWheel = createSimulationPhaseWheel({
-	generation: 0,
-	itemBudget: 80_000,
-	maxItemsPerJobTurn: 40_000,
-});
+
 let _simulationWorldGeneration = 0;
 let _territoryLedger = null;
 let _territoryLedgerSnapshot = null;
@@ -1934,7 +1986,7 @@ let _coastalTopologyReady = false;
 let _coastalLandIndices = [];
 const _frameSimulationCommitFlags = new Set();
 let _renderAdmissionDeferredFrames = 0;
-let _simulationPhaseJobsRegistered = false;
+
 const _pendingProposalSides = [];
 const _pendingProposalSideSet = new Set();
 
@@ -1948,7 +2000,6 @@ export let _cachedUnitCountSpans = [];
 export let _cachedTerritoryCtrlEls = [];
 export let _cachedMomentumEls = [];
 export let _cachedTerritorySegEls = [];
-export const _cachedManpowerSpans = [];
 
 const PHASE_CONFIG = {
 	ADVANCING: { color: "#2ecc71", symbol: "▲" },
@@ -2117,14 +2168,6 @@ function returnUnitPersonnelToReserve(unit) {
 	return personnel;
 }
 
-function _getFormationCapacityStrength(unit) {
-	if (!unit) return 1;
-	if (Number.isFinite(unit.personnelCapacity)) {
-		return Math.max(0, unit.personnelCapacity / CONFIG.UNIT_TO_SOLDIER_RATIO);
-	}
-	return Math.max(0, getLiveFormationStrength(unit));
-}
-
 function setUnitFormationPersonnel(unit, personnel) {
 	if (!unit) return unit;
 	const wholePersonnel = Math.max(1, Math.round(Number(personnel) || 0));
@@ -2271,7 +2314,7 @@ function stableUnitCohort(unit, interval) {
 function resetSimulationOptimizationRuntime() {
 	_simulationWorldGeneration++;
 	_simulationJobs.clear("world-reset");
-	_simulationPhaseWheel.setGeneration(_simulationWorldGeneration);
+
 	soldiersPerUnit.fill(CONFIG.UNIT_TO_SOLDIER_RATIO);
 	_territoryLedgerSnapshot = null;
 	_territoryLedgerDecisionTick = Number.NEGATIVE_INFINITY;
@@ -2342,197 +2385,6 @@ function scheduleCoastalTopologyJob() {
 	);
 }
 
-function territoryLedgerMaps() {
-	return {
-		landMask,
-		worldControlMap,
-		dominantSideMap,
-		deJureMap,
-		primaryOccupierMap,
-		occupationMap,
-	};
-}
-
-function runtimeCountryToSideMap() {
-	const mapping = new Map();
-	for (let sideIndex = 0; sideIndex < sides.length; sideIndex++) {
-		for (const country of sides[sideIndex] || []) {
-			if (country?.id > 0) mapping.set(country.id, sideIndex);
-		}
-	}
-	return mapping;
-}
-
-function publishTerritoryLedgerSnapshot(snapshot, decisionBoundary = false) {
-	if (!snapshot) return false;
-	_territoryLedgerSnapshot = snapshot;
-	_cachedP1T = snapshot.positiveOccupationCells || 0;
-	_cachedP2T = snapshot.negativeOccupationCells || 0;
-
-	const counts = new Array(sides.length).fill(0);
-	for (let sideIndex = 0; sideIndex < sides.length; sideIndex++) {
-		counts[sideIndex] = getSideLedger(snapshot, sideIndex)?.territory || 0;
-	}
-	_cachedSideTerritoryCounts = counts;
-	const total = counts.reduce((sum, count) => sum + count, 0);
-	_cachedSideTerritoryPcts = counts.map((count) =>
-		total > 0 ? Math.round((count / total) * 100) : 50,
-	);
-
-	if (decisionBoundary) {
-		for (const country of sides.flat()) {
-			if (!country) continue;
-			const ledger = getCountryLedger(snapshot, country.id);
-			country.lastOwnedCount = ledger?.owned || 0;
-			country.lastControlledCount = ledger?.controlled || 0;
-			country.lastFrontlineCount = ledger?.frontline || 0;
-		}
-		_territoryLedgerDecisionTick = _simTickCount;
-	}
-	return true;
-}
-
-function createRuntimeTerritoryLedger(
-	countryToSide = runtimeCountryToSideMap(),
-) {
-	if (
-		gridWidth <= 0 ||
-		gridHeight <= 0 ||
-		!landMask?.length ||
-		landMask.length !== gridWidth * gridHeight
-	) {
-		return null;
-	}
-	const citySource = activeTheaterCities || [];
-	_territoryLedgerCitiesSource = citySource;
-	_territoryLedgerCitiesLength = citySource.length;
-	_territoryLedgerAppliedCitiesRevision = _territoryLedgerCitiesRevision;
-	return createTerritoryLedger({
-		gridWidth,
-		gridHeight,
-		tileSize: 32,
-		maps: territoryLedgerMaps(),
-		countryToSide,
-		sideUids,
-		hostilityMatrix,
-		maxSides: MAX_SIDES,
-		topologyRevision: _simulationWorldGeneration,
-		worldRevision: _simulationWorldGeneration,
-		cityRevision: _territoryLedgerCitiesRevision,
-		cities: citySource,
-		getCityCellIndex: (city) => getGridIndex(city.lat, city.lng),
-		countedLandValue: 2,
-		defaultItemBudget: 160_000,
-		onCommit: (snapshot) => publishTerritoryLedgerSnapshot(snapshot, false),
-	});
-}
-
-function ensureRuntimeTerritoryLedger(countryToSide) {
-	if (!_territoryLedger) {
-		_territoryLedger = createRuntimeTerritoryLedger(countryToSide);
-	}
-	if (!_territoryLedger) return null;
-	const topologyChanged = _territoryLedger.setSideTopology({
-		countryToSide,
-		sideUids,
-		hostilityMatrix,
-		maxSides: MAX_SIDES,
-		revision: _simulationWorldGeneration,
-	});
-	if (topologyChanged) {
-		_territoryLedgerSnapshot = null;
-		_cachedSideTerritoryCounts = [];
-		_cachedSideTerritoryPcts = [];
-	}
-	const citySource = activeTheaterCities || [];
-	const citySourceChanged =
-		_territoryLedgerCitiesSource !== citySource ||
-		_territoryLedgerCitiesLength !== citySource.length;
-	if (
-		citySourceChanged ||
-		_territoryLedgerAppliedCitiesRevision !== _territoryLedgerCitiesRevision
-	) {
-		if (
-			citySourceChanged &&
-			_territoryLedgerAppliedCitiesRevision === _territoryLedgerCitiesRevision
-		) {
-			_territoryLedgerCitiesRevision++;
-		}
-		_territoryLedger.setCities(citySource, {
-			getCityCellIndex: (city) => getGridIndex(city.lat, city.lng),
-			revision: _territoryLedgerCitiesRevision,
-		});
-		_territoryLedgerCitiesSource = citySource;
-		_territoryLedgerCitiesLength = citySource.length;
-		_territoryLedgerAppliedCitiesRevision = _territoryLedgerCitiesRevision;
-		_territoryLedgerSnapshot = null;
-	}
-	return _territoryLedger;
-}
-
-function stepTerritoryLedger(countryToSide, itemBudget = 160_000) {
-	const ledger = ensureRuntimeTerritoryLedger(countryToSide);
-	if (!ledger) return null;
-	const result = ledger.step(itemBudget);
-	if (result.committed) _frameSimulationCommitFlags.add("territory-ledger");
-	return result;
-}
-
-function flushTerritoryLedger(countryToSide = runtimeCountryToSideMap()) {
-	const ledger = ensureRuntimeTerritoryLedger(countryToSide);
-	if (!ledger) return null;
-	const result = ledger.flush(160_000);
-	if (result.committedGenerations > 0) {
-		_frameSimulationCommitFlags.add("territory-ledger");
-	}
-	if (result.snapshot) publishTerritoryLedgerSnapshot(result.snapshot, false);
-	return result.snapshot || _territoryLedgerSnapshot;
-}
-
-function registerSimulationPhaseJobs() {
-	if (_simulationPhaseJobsRegistered) return;
-	_simulationPhaseJobsRegistered = true;
-	_simulationPhaseWheel.register({
-		id: "unit-consolidation",
-		intervalTicks: 30,
-		phaseOffset: 11,
-		priority: 30,
-		oncePerFrame: false,
-		run: () => {
-			const started = performance.now();
-			const removed = consolidateOverlappingUnits();
-			if (window.__perf) {
-				window.__perf.consolidate =
-					(window.__perf.consolidate || 0) + performance.now() - started;
-			}
-			return removed;
-		},
-	});
-}
-
-function advanceSimulationPhaseWheel() {
-	registerSimulationPhaseJobs();
-	const advanced = _simulationPhaseWheel.advance({
-		tick: _simTickCount,
-		frameToken: simFrameCount,
-		context: { worldGeneration: _simulationWorldGeneration },
-		itemBudget: 80_000,
-	});
-	const committed = _simulationPhaseWheel.flushReadyCommits({
-		expectedGeneration: _simulationWorldGeneration,
-		maxCommits: 2,
-	});
-	for (const ticket of committed.committed) {
-		_frameSimulationCommitFlags.add(ticket.id);
-	}
-	if (advanced.errors.length || committed.errors.length) {
-		console.error("[MW] Simulation phase job failed", {
-			advance: advanced.errors,
-			commit: committed.errors,
-		});
-	}
-}
-
 function consolidateOverlappingUnits() {
 	if (units.length <= 40) return 0;
 	const mergeDistSq = 0.14 * 0.14;
@@ -2556,9 +2408,7 @@ function consolidateOverlappingUnits() {
 		const hashKey = hashX * 100 + hashY;
 		const sideIndex = unit.sideIndex;
 		const cellUnits =
-			CONFIG.ENABLE_SIDE_HASH_COMBAT &&
-			sideIndex >= 0 &&
-			sideIndex < sides.length
+			sideIndex >= 0 && sideIndex < sides.length
 				? unitHashBySide[sideIndex].get(hashKey)
 				: unitSpatialHash.get(hashKey);
 		if (!cellUnits) continue;
@@ -2570,18 +2420,13 @@ function consolidateOverlappingUnits() {
 				unitsToRemove.has(other) ||
 				other.personnel !== undefined ||
 				(other.personnelCapacity || 0) > CONFIG.UNIT_TO_SOLDIER_RATIO ||
-				(CONFIG.ENABLE_SIDE_HASH_COMBAT
-					? false
-					: other.sideIndex === unit.sideIndex) ||
 				other.sovereignId !== unit.sovereignId ||
 				other.deployTicks > 0
 			) {
 				continue;
 			}
 
-			let deltaLng = other.lng - unit.lng;
-			if (deltaLng > 180) deltaLng -= 360;
-			else if (deltaLng < -180) deltaLng += 360;
+			const deltaLng = normalizeLongitudeDelta(other.lng - unit.lng);
 			const distanceSq = (unit.lat - other.lat) ** 2 + deltaLng ** 2;
 			if (distanceSq >= mergeDistSq) continue;
 
@@ -2615,7 +2460,6 @@ function resetOperationalAiRuntime() {
 }
 
 function requestOperationalAiReassessment(sideIndex = null) {
-	if (gameMode !== "CONQUEST") return;
 	_aiOperationsDirty = true;
 	if (Number.isInteger(sideIndex) && sideIndex >= 0) {
 		_planReassessNeeded[sideIndex] = true;
@@ -2639,7 +2483,7 @@ export let initialCombatants = []; // Tracks nations that started the war for st
 export let room = null;
 export let currentUsername = null;
 export let flagCodes = null;
-export let isMuted = false;
+
 export let currentScenarioContext = null; // { id, name, ownerUsername }
 
 export let hubReturnState = null;
@@ -2655,16 +2499,33 @@ export let disableFullscreen = true;
 let _warOverviewSides = [];
 let _warOverviewLastUpdate = -Infinity;
 const _liveSideCombatPower = new Float64Array(MAX_SIDES);
-function refreshLiveCombatPower() {
+function refreshLiveCombatPower(collectPosture = false) {
 	_liveSideCombatPower.fill(0);
-	for (const unit of units)
-		if (
+	const sideStrength = collectPosture ? new Array(sides.length).fill(0) : null;
+	const sideUnitCounts = collectPosture
+		? new Array(sides.length).fill(0)
+		: null;
+	for (const unit of units) {
+		const sideIndex = unit.sideIndex;
+		const countsForLivePower =
 			unit.health > 0 &&
 			unit.deployTicks <= 0 &&
-			unit.sideIndex >= 0 &&
-			unit.sideIndex < MAX_SIDES
-		)
-			_liveSideCombatPower[unit.sideIndex] += operationalUnitPower(unit);
+			sideIndex >= 0 &&
+			sideIndex < MAX_SIDES;
+		// Preserve the original posture scan: missing deployTicks is accepted and dead units still count.
+		const countsForPosture =
+			collectPosture &&
+			!(unit.deployTicks > 0) &&
+			!(sideIndex < 0 || sideIndex >= sides.length);
+		if (!countsForLivePower && !countsForPosture) continue;
+		const power = operationalUnitPower(unit);
+		if (countsForLivePower) _liveSideCombatPower[sideIndex] += power;
+		if (countsForPosture) {
+			sideStrength[sideIndex] += power;
+			sideUnitCounts[sideIndex]++;
+		}
+	}
+	return collectPosture ? { sideStrength, sideUnitCounts } : undefined;
 }
 function getKnownEnemyPowerForSide(sideIndex) {
 	let power = 0;
@@ -2810,35 +2671,6 @@ const PERF_COUNTER_DEFAULTS = {
 	frontlineWorkerLayoutMaxDurationMs: 0,
 };
 
-function createPerfState(mode = "off") {
-	return {
-		...PERF_COUNTER_DEFAULTS,
-		_mode: mode,
-		_enabled: mode !== "off",
-		_trackingPaused: false,
-		_measurementStart: mode === "off" ? null : performance.now(),
-		_traceMarksEnabled: false,
-		_history: [],
-		_frameHistory: [],
-		_frameSpikes: [],
-		_longTasks: [],
-		_memorySamples: [],
-		_frozenReport: null,
-		_scheduler: {
-			frames: 0,
-			renderedFrames: 0,
-			skippedRenderFrames: 0,
-			requestedSubTicks: 0,
-			executedSubTicks: 0,
-			cappedSubTickFrames: 0,
-			cappedSubTicks: 0,
-			accumulatorSum: 0,
-			maxAccumulator: 0,
-		},
-		_lastBenchmark: null,
-	};
-}
-
 const PERF_TICK_HISTORY_LIMIT = 4096;
 const PERF_FRAME_HISTORY_LIMIT = 4096;
 const PERF_SPIKE_HISTORY_LIMIT = 200;
@@ -2852,91 +2684,6 @@ const PERF_EXCLUSIVE_PHASES = [
 	"unitLoop",
 	"post",
 ];
-
-function ensurePerfLongTaskObserver() {
-	if (_perfLongTaskObserver || typeof PerformanceObserver === "undefined")
-		return;
-	try {
-		const supported = PerformanceObserver.supportedEntryTypes || [];
-		if (!supported.includes("longtask")) return;
-		_perfLongTaskObserver = new PerformanceObserver((list) => {
-			if (
-				!window.__perf ||
-				window.__perf._trackingPaused ||
-				(window.__perf._mode === "off" &&
-					!_isBenchmarking &&
-					!_isBenchmarkWarmingUp)
-			) {
-				return;
-			}
-			for (const entry of list.getEntries()) {
-				if (
-					window.__perf._measurementStart !== null &&
-					entry.startTime < window.__perf._measurementStart
-				) {
-					continue;
-				}
-				window.__perf._longTasks.push({
-					name: entry.name || "longtask",
-					startTime: entry.startTime,
-					duration: entry.duration,
-					frame: simFrameCount,
-					tick: _simTickCount,
-				});
-			}
-			if (window.__perf._longTasks.length > PERF_LONG_TASK_HISTORY_LIMIT) {
-				window.__perf._longTasks.splice(
-					0,
-					window.__perf._longTasks.length - PERF_LONG_TASK_HISTORY_LIMIT,
-				);
-			}
-		});
-		_perfLongTaskObserver.observe({ type: "longtask" });
-	} catch (_error) {
-		_perfLongTaskObserver = null;
-	}
-}
-
-function recordPerfMemorySample() {
-	if (!window.__perf || simFrameCount % 60 !== 0) return;
-	const memory = performance.memory;
-	if (!memory || !Number.isFinite(memory.usedJSHeapSize)) return;
-	window.__perf._memorySamples.push({
-		frame: simFrameCount,
-		tick: _simTickCount,
-		usedBytes: memory.usedJSHeapSize,
-		totalBytes: memory.totalJSHeapSize,
-		limitBytes: memory.jsHeapSizeLimit,
-	});
-	if (window.__perf._memorySamples.length > PERF_MEMORY_HISTORY_LIMIT) {
-		window.__perf._memorySamples.shift();
-	}
-}
-
-function recordPerfMeasure(name, startTime, duration, detail = undefined) {
-	if (
-		!window.__perf?._traceMarksEnabled ||
-		!Number.isFinite(startTime) ||
-		!Number.isFinite(duration) ||
-		duration < 0
-	) {
-		return;
-	}
-	try {
-		performance.measure(`MW · ${name}`, {
-			start: startTime,
-			duration,
-			detail,
-		});
-		_perfTraceMeasureCount++;
-		if (_perfTraceMeasureCount >= 2000) {
-			performance.clearMeasures();
-			_perfTraceMeasureCount = 0;
-		}
-	} catch (_error) {
-		window.__perf._traceMarksEnabled = false;
-	}
-}
 
 // ── Global perf profiler init (once at module load, before any tick code runs) ──
 window.__perf = createPerfState();
@@ -3081,9 +2828,9 @@ let _aiLastOperationsTick = Number.NEGATIVE_INFINITY;
 let _aiOperationsDirty = true;
 
 const _proposalReassessTick = []; // per-side last reassessment tick
-const _proposalsCache = []; // per-side cached scored proposals
+// per-side cached scored proposals
 const _planReassessNeeded = []; // per-side flag: force immediate reassessment
-const _commanderPlanReplacePending = []; // per-side flag: directive replacement is not an AI failure
+// per-side flag: directive replacement is not an AI failure
 const _sidePrevControlled = []; // per-side total controlled cells on last territory check
 const _sidePrevStrengthRatio = []; // per-side force ratio vs enemies
 const _sidePrevPosture = []; // per-side posture string from previous tick
@@ -3092,14 +2839,13 @@ function rebaseSecondaryWarPlanSlotsForSideAppend(previousSideCount) {
 	for (let sideIndex = previousSideCount - 1; sideIndex >= 0; sideIndex--) {
 		const previousSlot = sideIndex + previousSideCount;
 		const nextSlot = sideIndex + previousSideCount + 1;
-		_warPlan[nextSlot] = _warPlan[previousSlot] || null;
+		_warPlan[nextSlot] = _warPlan[previousSlot];
 		_warPlan[previousSlot] = null;
 	}
 }
 
 export const WAR_PLAN_TYPES = [
 	"DEFEND",
-	"DEFEND_CITY",
 	"PUSH_FRONT",
 	"CAPTURE_CITY",
 	"ENCIRCLE",
@@ -3107,7 +2853,6 @@ export const WAR_PLAN_TYPES = [
 	"NAVAL_SUPPLY",
 	"COASTAL_DEFENSE",
 	"NEUTRAL_GARRISON",
-
 	"TRANSPORT",
 ];
 export const WAR_PLAN_PHASES = [
@@ -3641,11 +3386,7 @@ export function renderImportCountryCards(filterText = "") {
 }
 
 // Hook search box once
-if (importCountrySearch) {
-	importCountrySearch.addEventListener("input", () => {
-		renderImportCountryCards(importCountrySearch.value);
-	});
-}
+menu_controls.bindImportCountrySearchInput();
 export const cityNameInput = document.getElementById("city-name-input");
 export const cityOwnerSelect = document.getElementById("city-owner-select");
 export const cityCapitalCheckbox = document.getElementById(
@@ -3695,59 +3436,35 @@ export const benchmarkDismissBtn = document.getElementById(
 	"benchmark-dismiss-btn",
 );
 
-// Persist core engine settings the moment they change
-if (mapResSelect) {
-	mapResSelect.addEventListener("change", (e) => {
-		setCookie("mw_map_res", e.target.value);
-	});
-}
-if (gridResSelect) {
-	gridResSelect.addEventListener("change", (e) => {
-		setCookie("mw_grid_res", e.target.value);
-	});
-}
-if (unitLimitSelect) {
-	unitLimitSelect.addEventListener("change", (e) => {
-		setCookie("mw_unit_limit", e.target.value);
-	});
-}
-if (disableUnitsVisuallyCheckbox) {
-	disableUnitsVisuallyCheckbox.addEventListener("change", (e) => {
-		setCookie("mw_disable_units_visually", e.target.checked ? "true" : "false");
-	});
-}
-if (disableCountryGradientCheckbox) {
-	disableCountryGradientCheckbox.addEventListener("change", (e) => {
-		setCookie(
-			"mw_disable_country_gradient",
-			e.target.checked ? "true" : "false",
-		);
-	});
-}
-
-if (saveSkipCheckbox) {
-	saveSkipCheckbox.addEventListener("change", (e) => {
-		setCookie("mw_skip_settings", e.target.checked ? "true" : "false");
-	});
-}
-
-if (disableAutoFullscreenCheckbox) {
-	disableAutoFullscreenCheckbox.addEventListener("change", (e) => {
-		disableFullscreen = e.target.checked;
-		setCookie("mw_disable_fullscreen", disableFullscreen ? "true" : "false");
-	});
-}
-
-if (useSystemFontCheckbox) {
-	useSystemFontCheckbox.addEventListener("change", (e) => {
-		if (e.target.checked) {
-			document.body.classList.add("use-system-font");
-		} else {
-			document.body.classList.remove("use-system-font");
-		}
-		setCookie("mw_use_system_font", e.target.checked ? "true" : "false");
-	});
-}
+const settingsController = createSettingsController((id, value) => {
+	switch (id) {
+		case "disable-mountains-checkbox":
+			mountainsEnabled = !value;
+			if (setupDisableMountainsCheckbox)
+				setupDisableMountainsCheckbox.checked = value;
+			break;
+		case "disable-units-visually-checkbox":
+			showUnitsVisually = !value;
+			break;
+		case "hide-curved-labels-checkbox":
+			hideCurvedLabels = value;
+			break;
+		case "disable-country-gradient-checkbox":
+			disableCountryGradient = value;
+			break;
+		case "disable-invisible-buffs-checkbox":
+			invisibleBuffsEnabled = !value;
+			influenceLayer?.render();
+			break;
+		case "disable-auto-fullscreen-checkbox":
+			disableFullscreen = value;
+			break;
+		case "use-system-font-checkbox":
+			document.body.classList.toggle("use-system-font", value);
+			break;
+	}
+});
+settingsController.wire();
 
 export const settingsOverlay = document.getElementById("settings-overlay");
 export const mainMenu = document.getElementById("main-menu");
@@ -3784,29 +3501,12 @@ export const loadingStatus = {
 	get innerText() {
 		return document.querySelector(".loading-status-text")?.innerText;
 	},
-	style: {
-		set color(val) {
-			document.querySelectorAll(".loading-status-text").forEach((el) => {
-				el.style.color = val;
-			});
-		},
-	},
+	style: applicationRuntime,
 };
 export const loadingBar = {
-	style: {
-		set width(val) {
-			updateLoadingText(undefined, val);
-		},
-	},
+	style: applicationRuntime,
 };
-export const loadingTip = {
-	set innerText(val) {
-		updateLoadingText(undefined, null, val);
-	},
-	get innerText() {
-		return document.querySelector(".loading-tip-text")?.innerText;
-	},
-};
+export const loadingTip = applicationRuntime;
 
 export function setLoadingThematic(enabled) {
 	if (enabled) {
@@ -3816,76 +3516,7 @@ export function setLoadingThematic(enabled) {
 	}
 }
 export const playModeBtn = document.getElementById("play-mode-btn");
-export const commanderModeBtn = document.getElementById("commander-mode-btn");
-export const commanderBriefingOverlay = document.getElementById(
-	"commander-briefing-overlay",
-);
-export const commanderBriefingBackBtn = document.getElementById(
-	"commander-briefing-back-btn",
-);
-export const commanderDeployBtn = document.getElementById(
-	"commander-deploy-btn",
-);
-export const commanderHud = document.getElementById("commander-hud");
-export const commanderDayLabel = document.getElementById("commander-day-label");
-export const commanderObjectiveLabel = document.getElementById(
-	"commander-objective-label",
-);
-export const commanderCityStatus = document.getElementById(
-	"commander-city-status",
-);
-export const commanderStanceSelect = document.getElementById(
-	"commander-stance-select",
-);
-export const commanderCitySelect = document.getElementById(
-	"commander-city-select",
-);
-export const commanderReserveSelect = document.getElementById(
-	"commander-reserve-select",
-);
-export const commanderApplyOrdersBtn = document.getElementById(
-	"commander-apply-orders-btn",
-);
-export const commanderCooldownLabel = document.getElementById(
-	"commander-cooldown-label",
-);
-export const commanderActiveOrders = document.getElementById(
-	"commander-active-orders",
-);
-export const commanderEventStatus = document.getElementById(
-	"commander-event-status",
-);
-export const commanderMedalPreview = document.getElementById(
-	"commander-medal-preview",
-);
-export const commanderEventOverlay = document.getElementById(
-	"commander-event-overlay",
-);
-export const commanderEventTitle = document.getElementById(
-	"commander-event-title",
-);
-export const commanderEventBody = document.getElementById(
-	"commander-event-body",
-);
-export const commanderEventChoices = document.getElementById(
-	"commander-event-choices",
-);
-export const commanderDebriefOverlay = document.getElementById(
-	"commander-debrief-overlay",
-);
-export const commanderDebriefTitle = document.getElementById(
-	"commander-debrief-title",
-);
-export const commanderDebriefSummary = document.getElementById(
-	"commander-debrief-summary",
-);
-export const commanderDebriefMedals = document.getElementById(
-	"commander-debrief-medals",
-);
-export const commanderReplayBtn = document.getElementById(
-	"commander-replay-btn",
-);
-export const commanderMenuBtn = document.getElementById("commander-menu-btn");
+
 export const editorChoiceModal = document.getElementById("editor-choice-modal");
 export const choiceIngameEditor = document.getElementById(
 	"choice-ingame-editor",
@@ -4136,16 +3767,9 @@ export function startTutorial(set, key) {
 	tutorialOverlay.style.display = "flex";
 }
 
-document.getElementById("tutorial-skip-btn").onclick = () => {
-	endTutorial();
-};
+menu_controls.bindTutorialSkipBtnClick();
 
-tutorialPrevBtn.onclick = () => {
-	if (currentTutorialStep > 0) {
-		currentTutorialStep--;
-		updateTutorialUI();
-	}
-};
+menu_controls.bindTutorialPrevBtnClick();
 
 export const mapUi = document.getElementById("main-ui");
 export const statusText = document.getElementById("status-text");
@@ -4341,20 +3965,6 @@ export function rebuildStatsPanel() {
 }
 export const treatyAlert = document.getElementById("treaty-alert");
 
-export function rebuildManpowerInputs() {
-	const container = document.getElementById("manpower-inputs-container");
-	if (!container) return;
-	let html = "";
-	for (let i = 0; i < sides.length; i++) {
-		const color = sideColors[i].replace(rgbaRe, "1)");
-		const label = `Side ${String.fromCharCode(65 + i)}`;
-		html += `<div style="display:flex; flex-direction:column; gap:2px;">
-            <span style="font-size: 12px; color:${color}; text-transform:uppercase; letter-spacing:0.5px;">${label}</span>
-            <input id="manpower-side-${i}" type="number" min="0" placeholder="auto" style="width:110px; padding:4px 6px; background:#2a2a30; border:1px solid #444; border-radius:4px; color:#fff; font-size: 12px;" title="Total soldiers for ${label}.">
-        </div>`;
-	}
-	container.innerHTML = html;
-}
 rebuildManpowerInputs();
 export const treatyMsg = document.getElementById("treaty-msg");
 export const timeSystemCheckbox = document.getElementById(
@@ -4585,7 +4195,7 @@ function dispatchFrontlineWork(includeField = false, includeLayout = false) {
 					lng: unit.lng,
 					deployTicks: unit.deployTicks || 0,
 
-					previousPairKey: unit.frontSlot?.pairKey || null,
+					previousPairKey: unit.frontSlot?.pairKey,
 					previousSegmentIdx: unit.frontSlot?.segmentIdx || 0,
 				}))
 			: null;
@@ -4711,11 +4321,7 @@ export function activateImageryProvider() {
  */
 setImageryProvider(getCookie("mw_imagery") || "arcgis");
 
-if (imagerySelect) {
-	imagerySelect.addEventListener("change", (e) => {
-		setImageryProvider(e.target.value);
-	});
-}
+menu_controls.bindImagerySelectChange();
 
 import {
 	applyPaintAt,
@@ -5122,935 +4728,13 @@ export function estimateUnitsForCountry(countryId) {
 	return count * CONFIG.UNIT_TO_SOLDIER_RATIO;
 }
 
-export function updateSidesUI() {
-	const expandedCountries = new Set(
-		[...sidesContainer.querySelectorAll(".country-configuration[open]")].map(
-			(details) => details.closest(".setup-slot").dataset.countryId,
-		),
-	);
-	updateFfaSetupUi();
-	sidesContainer.innerHTML = "";
-	let ffaParticipants = null;
-	if (ffaMode) {
-		const heading = document.createElement("div");
-		heading.className = "ffa-participants-heading";
-		const count = sides.filter((side) => side.length > 0).length;
-		heading.textContent = `Free for all · ${count} independent sides`;
-		ffaParticipants = document.createElement("div");
-		ffaParticipants.className = "ffa-participants-grid";
-		sidesContainer.append(heading, ffaParticipants);
-		if (!count) {
-			const empty = document.createElement("p");
-			empty.className = "ffa-participants-empty";
-			empty.textContent = "Select countries on the map to add participants.";
-			ffaParticipants.appendChild(empty);
-		}
-	}
+menu_controls.bindAddSideBtnClick();
 
-	sides.forEach((sideList, sideIdx) => {
-		const sideCol = document.createElement("div");
-		sideCol.className = "side-col";
-
-		// Compute total estimated troops for this side/front
-		const sideTotalTroops = sideList.reduce((sum, country) => {
-			const est = estimateUnitsForCountry(country.id);
-			return sum + (est || 0);
-		}, 0);
-
-		const sideHeader = document.createElement("div");
-		sideHeader.className = `side-header ${activeSideIndex === sideIdx ? "active" : ""}`;
-		sideHeader.dataset.side = sideIdx;
-
-		// Use A, B, C, D labels
-		const sideLabel = String.fromCharCode(65 + sideIdx);
-		if (sideList.length > 0 && sideTotalTroops > 0) {
-			sideHeader.innerHTML = `
-                <div style="font-size: 12px; font-weight:900;">SIDE ${sideLabel}</div>
-                <div style="font-size: 12px; color:#777; margin-top:2px; text-transform:uppercase; letter-spacing:0.5px;">
-                    ~ ${influenceLayer.formatSoldiers(sideTotalTroops)} troops
-                </div>
-            `;
-		} else {
-			sideHeader.innerText = `SIDE ${sideLabel}`;
-		}
-		const sideColor =
-			sideColors[sideIdx] || DEFAULT_SIDE_COLORS[sideIdx % MAX_SIDES];
-		sideHeader.style.color = sideColor.replace(rgbaRe, "1)");
-		sideHeader.style.backgroundColor = sideColor.replace(
-			rgbaRe,
-			activeSideIndex === sideIdx ? "0.2)" : "0.1)",
-		);
-		sideHeader.style.borderColor = sideColor.replace(
-			rgbaRe,
-			activeSideIndex === sideIdx ? "1)" : "0.5)",
-		);
-
-		sideHeader.onclick = () => {
-			activeSideIndex = sideIdx;
-			rebuildManpowerInputs();
-			updateSidesUI();
-		};
-
-		const listContainer = document.createElement("div");
-		listContainer.className = "side-country-list";
-
-		sideList.forEach((country, _i) => {
-			const meta = countryMetadata[country.id - 1];
-			const slot = document.createElement("div");
-			slot.className = "setup-slot";
-			slot.dataset.countryId = String(country.id);
-			slot.style.borderColor = ffaMode
-				? country.color.replace(rgbaRe, "1)")
-				: sideColor.replace(rgbaRe, "0.7)");
-
-			const buffState = country.buffState || meta?.buffState || "none";
-			const bMeta = BUFF_METADATA[buffState] || BUFF_METADATA.none;
-			const hiddenBuffState =
-				(country.hiddenBuffState !== undefined
-					? country.hiddenBuffState
-					: (meta?.hiddenBuffState ?? "none")) || "none";
-			const _hiddenMeta = BUFF_METADATA[hiddenBuffState] || BUFF_METADATA.none;
-
-			// Find flag for setup UI from live object or metadata
-			const flagUrl = country.flag?.src || meta?.flagUrl || "";
-
-			// Estimated troop size based on current density slider and map ownership
-			const estTroops = estimateUnitsForCountry(country.id);
-			const estLabel = estTroops
-				? influenceLayer.formatSoldiers(estTroops)
-				: "UNKNOWN";
-
-			const releasables = countryMetadata.filter(
-				(m) => m && m.releasableBy === country.id,
-			);
-
-			const displayName = getTranslation(
-				country.name,
-				getCookie("mw_lang") || "en",
-				"NATIONS",
-			);
-			slot.innerHTML = `
-                <button class="clear-slot-btn" type="button" aria-label="Remove country" title="Remove this country from the selected side.">×</button>
-                <div class="slot-name" title="${country.name}" style="display: flex; flex-direction: column; gap: 2px; align-items: center; justify-content: center; margin-bottom: 5px;">
-                    <div style="display: flex; align-items: center; gap: 8px; justify-content: center;">
-                        ${flagUrl ? `<img src="${flagUrl}" style="width: 22px; height: 13px; object-fit: cover; border: 1px solid rgba(255,255,255,0.2); flex-shrink: 0; border-radius: 1px;">` : ""}
-                        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${displayName}</span>
-                    </div>
-                    <div style="font-size: 12px; color: #777; text-transform: uppercase; letter-spacing: 0.5px;">~ ${estLabel} troops</div>
-                </div>
-                <details class="country-configuration">
-                    <summary>Configure</summary>
-                    <div class="country-configuration-actions">
-                    <button class="mini-btn buff-toggle-btn" style="margin-top: 4px; background:${bMeta.color}; color:${bMeta.textColor}; font-size: 12px; padding:2px 6px; display:flex; align-items:center; gap:4px; justify-content:center;" title="Adjust combat buffs: use ◀ / ▶ to move between CRIPPLED, WEAKENED, NONE, GOLIATH, DEITY, GODLY. Hold ALT while clicking to change an invisible buff that only affects combat.">
-                        <span class="buff-arrow" data-dir="-1" style="font-size: 12px;">◀</span>
-                        <span class="buff-label">BUFF: ${bMeta.label}</span>
-                        <span class="buff-arrow" data-dir="1" style="font-size: 12px;">▶</span>
-                    </button>
-                    <button class="mini-btn add-allies-btn" style="margin-top: 4px; background:#16a085; font-size: 12px; padding: 2px 6px;" title="Recruit all formal allies (overlord and vassals) of this nation into this side.">ADD ALLIES</button>
-
-                    ${releasables.length > 0 ? `<button class="mini-btn release-btn" style="background: #27ae60; font-size: 12px; padding: 2px 6px; margin-top: 4px;" title="Release a releasable core from this country into the war.">RELEASE...</button>` : ""}
-                </div>
-                <div class="slot-controls">
-                    <select class="mini-select role-select" aria-label="Country role" title="OFF: Leads attacks and creates new fronts. SUP: Sends expeditionary support to allied offensives instead of opening its own invasions.">
-                        <option value="OFFENSE" ${country.role === "OFFENSE" ? "selected" : ""} title="OFF: Offensive main participant, pushes its own fronts.">Offensive</option>
-                        <option value="SUPPORT" ${country.role === "SUPPORT" ? "selected" : ""} title="SUP: Support nation; mostly sends troops to help allies instead of starting new invasions.">Support</option>
-                    </select>
-                    <select class="mini-select strategy-select" aria-label="Country doctrine" title="Per-country behavior: TUR = pure defense; DEF = hold cores; BAL = mixed; AGG = push hard; BLZ = fast breakthroughs.">
-                        <option value="TURTLE" ${country.strategy === "TURTLE" ? "selected" : ""} title="TUR: Zero offensive plans until force advantage. Pure defense.">Hold position</option>
-                        <option value="DEFENSIVE" ${country.strategy === "DEFENSIVE" ? "selected" : ""} title="DEF: Focuses on defending own cores and reclaiming lost land.">Defensive</option>
-                        <option value="BALANCED" ${country.strategy === "BALANCED" ? "selected" : ""} title="BAL: Balanced offense and defense along the whole front.">Balanced</option>
-                        <option value="AGGRESSIVE" ${country.strategy === "AGGRESSIVE" ? "selected" : ""} title="AGG: Very aggressive, tries to push hard even when risky.">Aggressive</option>
-                        <option value="BLITZ" ${country.strategy === "BLITZ" ? "selected" : ""} title="BLZ: Blitz-style spearheads that seek breakthroughs and deep pushes.">Blitz</option>
-                    </select>
-
-                </div>
-                </details>
-            `;
-
-			slot.querySelector(".country-configuration").open = expandedCountries.has(
-				String(country.id),
-			);
-			const buffBtn = slot.querySelector(".buff-toggle-btn");
-			if (buffBtn) {
-				const buffLabelEl = buffBtn.querySelector(".buff-label");
-				const buffArrows = buffBtn.querySelectorAll(".buff-arrow");
-
-				const applyBuffState = (newState) => {
-					country.buffState = newState;
-					if (meta) meta.buffState = newState;
-					const metaBuff = BUFF_METADATA[newState] || BUFF_METADATA.none;
-					if (buffLabelEl) buffLabelEl.textContent = `BUFF: ${metaBuff.label}`;
-					buffBtn.style.background = metaBuff.color;
-					buffBtn.style.color = metaBuff.textColor;
-				};
-
-				buffArrows.forEach((span) => {
-					span.addEventListener("click", (e) => {
-						e.stopPropagation();
-						const dir = parseInt(span.getAttribute("data-dir"), 10) || 1;
-						const current = country.buffState || "none";
-						const nextState = cycleBuffState(current, dir);
-						applyBuffState(nextState);
-					});
-				});
-
-				// Clicking the center label still cycles forward for convenience
-				if (buffLabelEl) {
-					buffLabelEl.addEventListener("click", (e) => {
-						e.stopPropagation();
-						const current = country.buffState || "none";
-						const nextState = cycleBuffState(current, 1);
-						applyBuffState(nextState);
-					});
-				}
-			}
-
-			// "Add Allies" button: pull overlord + vassals into this side when available
-			const addAlliesBtn = slot.querySelector(".add-allies-btn");
-			if (addAlliesBtn) {
-				addAlliesBtn.addEventListener("click", (e) => {
-					e.stopPropagation();
-					const thisMeta = countryMetadata[country.id - 1];
-					if (!thisMeta) return;
-
-					const alliesSet = new Set();
-					// 1) This country itself
-					alliesSet.add(country.id);
-
-					// 2) Its overlord chain root
-					let rootId = country.id;
-					let guard = 0;
-					while (guard < 16) {
-						const rootMeta = countryMetadata[rootId - 1];
-						if (!rootMeta?.overlordId || rootMeta.overlordId === rootId) break;
-						rootId = rootMeta.overlordId;
-						guard++;
-					}
-					alliesSet.add(rootId);
-
-					// 3) Direct vassals of this country
-					countryMetadata.forEach((m) => {
-						if (m && m.overlordId === country.id) {
-							alliesSet.add(m.id);
-						}
-					});
-
-					// 4) Direct vassals of the root (same wider alliance)
-					countryMetadata.forEach((m) => {
-						if (m && m.overlordId === rootId) {
-							alliesSet.add(m.id);
-						}
-					});
-
-					// 5) Explicit allies defined in the editor (mutual alliance graph)
-					const explicitAllies = Array.isArray(thisMeta.allies)
-						? thisMeta.allies
-						: [];
-					explicitAllies.forEach((aid) => {
-						if (aid > 0) alliesSet.add(aid);
-					});
-
-					// Remove ids that don't exist in metadata
-					const validAllies = Array.from(alliesSet).filter(
-						(id) => countryMetadata[id - 1],
-					);
-
-					if (validAllies.length <= 1) {
-						statusText.innerText =
-							"No allies linked via overlord/vassal or editor alliances for this nation.";
-						return;
-					}
-
-					// Add all valid allies to this side if not already present anywhere
-					const alreadyInAnySide = new Set(
-						sides
-							.flat()
-							.filter(Boolean)
-							.map((c) => c.id),
-					);
-					let addedCount = 0;
-					validAllies.forEach((id) => {
-						if (alreadyInAnySide.has(id)) return;
-						const m = countryMetadata[id - 1];
-						if (!m) return;
-						sides[sideIdx].push({
-							id: m.id,
-							name: m.name,
-							color: m.color,
-							role: "OFFENSE",
-							strategy: "BALANCED",
-							buffState: m.buffState || "none",
-							overlordId: m.overlordId || null,
-							flag: m.tempFlag || null,
-						});
-						alreadyInAnySide.add(id);
-						addedCount++;
-					});
-
-					if (addedCount > 0) {
-						statusText.innerText = `Alliance Mobilized: Added ${addedCount} allied member${addedCount === 1 ? "" : "s"} to Side ${String.fromCharCode(65 + sideIdx)}.`;
-						updateSidesUI();
-						influenceLayer.render();
-					} else {
-						statusText.innerText =
-							"All linked allies are already committed to a side.";
-					}
-				});
-			}
-
-			slot.querySelector(".role-select").onchange = (e) => {
-				country.role = e.target.value;
-			};
-
-			slot.querySelector(".strategy-select").onchange = (e) => {
-				country.strategy = e.target.value;
-			};
-
-			slot.querySelector(".clear-slot-btn").onclick = (e) => {
-				e.stopPropagation();
-				const idx = sideList.findIndex((c) => c.id === country.id);
-				if (idx !== -1) sideList.splice(idx, 1);
-				updateSidesUI();
-				influenceLayer.render();
-			};
-
-			const releaseBtn = slot.querySelector(".release-btn");
-			if (releaseBtn) {
-				releaseBtn.onclick = (e) => {
-					e.stopPropagation();
-					openReleaseModal(country.id, sideIdx);
-				};
-			}
-
-			listContainer.appendChild(slot);
-			if (ffaParticipants) ffaParticipants.appendChild(slot);
-		});
-		if (ffaMode) return;
-
-		sideCol.appendChild(sideHeader);
-
-		// Add "Delete Side" button for sides beyond the first two
-		if (sides.length > 2) {
-			const delBtn = document.createElement("button");
-			delBtn.className = "mini-btn";
-			delBtn.innerText = "Remove Side";
-			delBtn.style.fontSize = "8px";
-			delBtn.style.padding = "2px";
-			delBtn.onclick = (e) => {
-				e.stopPropagation();
-				sides.splice(sideIdx, 1);
-				if (activeSideIndex >= sides.length)
-					activeSideIndex = Math.max(0, sides.length - 1);
-				rebuildManpowerInputs();
-				updateSidesUI();
-			};
-			sideCol.appendChild(delBtn);
-		}
-
-		sideCol.appendChild(listContainer);
-		sidesContainer.appendChild(sideCol);
-
-		if (sideIdx < sides.length - 1) {
-			const divider = document.createElement("div");
-			divider.className = "vs-divider";
-			divider.innerText = "VS";
-			divider.style.alignSelf = "center";
-			sidesContainer.appendChild(divider);
-		}
-	});
-
-	const activeSidesCount = sides.filter((s) => s && s.length > 0).length;
-	const _allSelectedCountries = sides.flat().filter((c) => !!c);
-
-	// Rebellions are disabled: ensure button (if present) stays hidden and inert.
-
-	setupOptions.style.display = activeSidesCount >= 1 ? "block" : "none";
-	const canStart = activeSidesCount >= 2;
-	startBtn.disabled = !canStart;
-	startBtn.style.opacity = canStart ? "1" : "0.5";
-	startBtn.style.cursor = canStart ? "pointer" : "not-allowed";
-
-	const _attackers = sides[0] || [];
-	const _defenders = sides[1] || [];
-
-	rebuildManpowerInputs();
-	rebuildStatsPanel();
-}
-
-addSideBtn.onclick = () => {
-	if (sides.length >= MAX_SIDES) {
-		alert(`Maximum ${MAX_SIDES} sides supported.`);
-		return;
-	}
-	sides.push([]);
-	activeSideIndex = sides.length - 1;
-	rebuildManpowerInputs();
-	updateSidesUI();
-};
-
-function updateFfaSetupUi() {
-	ffaToggleBtn.setAttribute("aria-pressed", String(ffaMode));
-	ffaToggleBtn.textContent = `${getTranslation("FFA")}: ${ffaMode ? "ON" : "OFF"}`;
-	setupPanel.classList.toggle("ffa-setup-active", ffaMode);
-	addSideBtn.hidden = ffaMode;
-	const prompt = document.getElementById("setup-prompt");
-	if (prompt) {
-		prompt.textContent = ffaMode
-			? "Click countries on the map to add independent participants."
-			: getTranslation("SETUP_PROMPT");
-	}
-	const note = document.getElementById("ffa-setup-note");
-	if (note) note.hidden = !ffaMode;
-}
-
-ffaToggleBtn.onclick = () => {
-	ffaMode = !ffaMode;
-	updateSidesUI();
-};
+menu_controls.bindFfaToggleBtnClick();
 
 export const randomWarBtn = document.getElementById("random-war-btn");
-function updateRandomWarButton() {
-	const translationKey = randomWarMode ? "RANDOM_WAR_ON" : "RANDOM_WAR_OFF";
-	randomWarBtn.dataset.i18n = translationKey;
-	randomWarBtn.textContent = getTranslation(translationKey);
-	randomWarBtn.setAttribute("aria-pressed", String(randomWarMode));
-}
 
-randomWarBtn.onclick = () => {
-	randomWarMode = !randomWarMode;
-	updateRandomWarButton();
-
-	if (
-		randomWarMode &&
-		(gameState === "SELECTING_P1" || gameState === "SELECTING_P2")
-	) {
-		triggerRandomWar();
-	}
-};
-
-function refreshInfluenceLookupCaches() {
-	const citySource = activeTheaterCities;
-	if (
-		_influenceCityGridSource !== citySource ||
-		_influenceCityGridSourceLength !== citySource.length ||
-		_influenceCityGridWorldGeneration !== _simulationWorldGeneration
-	) {
-		_tickCityGridIndexSet.clear();
-		for (let cityIndex = 0; cityIndex < citySource.length; cityIndex++) {
-			const gridIndex = getGridIndex(
-				citySource[cityIndex].lat,
-				citySource[cityIndex].lng,
-			);
-			if (gridIndex !== -1) _tickCityGridIndexSet.add(gridIndex);
-		}
-		_influenceCityGridSource = citySource;
-		_influenceCityGridSourceLength = citySource.length;
-		_influenceCityGridWorldGeneration = _simulationWorldGeneration;
-	}
-
-	let signature = `${sides.length}|`;
-	for (let sideIndex = 0; sideIndex < sides.length; sideIndex++) {
-		const side = sides[sideIndex] || [];
-		signature += `${sideIndex}:`;
-		for (let countryIndex = 0; countryIndex < side.length; countryIndex++) {
-			const country = side[countryIndex];
-			signature += `${country.id},${country.role || "OFFENSE"};`;
-		}
-		for (let otherIndex = 0; otherIndex < sides.length; otherIndex++) {
-			if (areSidesHostile(sideIndex, otherIndex))
-				signature += `h${otherIndex},`;
-		}
-		signature += "|";
-	}
-	if (signature === _influenceCoalitionSignature) return;
-	_influenceCoalitionSignature = signature;
-	_influenceActiveSideIndices.length = 0;
-	while (_tickSideAllyIdSets.length < sides.length) {
-		_tickSideAllyIdSets.push(new Set());
-		_tickSideSupportIdSets.push(new Set());
-	}
-	for (let sideIndex = 0; sideIndex < MAX_SIDES; sideIndex++) {
-		_influenceHostileSideIndices[sideIndex].length = 0;
-		const allies = _tickSideAllyIdSets[sideIndex];
-		const support = _tickSideSupportIdSets[sideIndex];
-		allies?.clear();
-		support?.clear();
-		const side = sides[sideIndex] || [];
-		if (side.length === 0) continue;
-		_influenceActiveSideIndices.push(sideIndex);
-		for (const country of side) {
-			allies.add(country.id);
-			if (country.role === "SUPPORT") support.add(country.id);
-		}
-		for (let otherIndex = 0; otherIndex < sides.length; otherIndex++) {
-			if (areSidesHostile(sideIndex, otherIndex)) {
-				_influenceHostileSideIndices[sideIndex].push(otherIndex);
-			}
-		}
-	}
-}
-
-function ensureInfluenceFrontierQueue() {
-	const gridSize = gridWidth * gridHeight;
-	if (
-		_influenceFrontierQueued.length === gridSize &&
-		_influenceFrontierWorldGeneration === _simulationWorldGeneration
-	) {
-		return;
-	}
-	_influenceFrontierQueued = new Uint8Array(gridSize);
-	_influenceFrontierQueue = [];
-	_influenceFrontierCursor = 0;
-	_influenceFrontierPriorityQueue = [];
-	_influenceFrontierPriorityCursor = 0;
-	_influenceFrontierWorldGeneration = _simulationWorldGeneration;
-}
-
-function enqueueInfluenceFrontierIndex(index, priority = false) {
-	if (index < 0 || index >= _influenceFrontierQueued.length) return false;
-	const queuedState = _influenceFrontierQueued[index];
-	if (priority) {
-		if (queuedState === 2) return false;
-		if (
-			_influenceFrontierPriorityQueue.length -
-				_influenceFrontierPriorityCursor >=
-			INFLUENCE_FRONTIER_PRIORITY_LIMIT
-		) {
-			return false;
-		}
-		// Controller changes jump ahead of smoothing work. If this upgrades an
-		// existing regular entry, that stale FIFO entry is ignored when reached.
-		_influenceFrontierQueued[index] = 2;
-		_influenceFrontierPriorityQueue.push(index);
-		return true;
-	}
-	if (queuedState !== 0) return false;
-	if (
-		_influenceFrontierQueue.length - _influenceFrontierCursor >=
-		INFLUENCE_FRONTIER_BACKLOG_LIMIT
-	) {
-		return false;
-	}
-	_influenceFrontierQueued[index] = 1;
-	_influenceFrontierQueue.push(index);
-	return true;
-}
-
-function queueInfluenceFrontierCell(index, priority = false) {
-	ensureInfluenceFrontierQueue();
-	if (index < 0 || index >= _influenceFrontierQueued.length) return;
-	const x = index % gridWidth;
-	enqueueInfluenceFrontierIndex(index, priority);
-	if (x > 0) enqueueInfluenceFrontierIndex(index - 1, priority);
-	if (x + 1 < gridWidth) enqueueInfluenceFrontierIndex(index + 1, priority);
-	if (index >= gridWidth) {
-		enqueueInfluenceFrontierIndex(index - gridWidth, priority);
-	}
-	if (index + gridWidth < _influenceFrontierQueued.length) {
-		enqueueInfluenceFrontierIndex(index + gridWidth, priority);
-	}
-}
-
-function isInfluenceFrontierIndex(index) {
-	if (index < 0 || index >= dominantSideMap.length || landMask[index] !== 2) {
-		return false;
-	}
-	const x = index % gridWidth;
-	const y = Math.floor(index / gridWidth);
-	if (x <= 0 || x >= gridWidth - 1 || y <= 0 || y >= gridHeight - 1) {
-		return false;
-	}
-	const controller = dominantSideMap[index];
-	return (
-		dominantSideMap[index - 1] !== controller ||
-		dominantSideMap[index + 1] !== controller ||
-		dominantSideMap[index - gridWidth] !== controller ||
-		dominantSideMap[index + gridWidth] !== controller
-	);
-}
-
-function processInfluenceFrontierDiffusion(itemBudget) {
-	ensureInfluenceFrontierQueue();
-	const priorityEnd = _influenceFrontierPriorityQueue.length;
-	const regularEnd = _influenceFrontierQueue.length;
-	let processed = 0;
-	while (processed < itemBudget) {
-		let index = -1;
-		let expectedState = 0;
-		if (_influenceFrontierPriorityCursor < priorityEnd) {
-			index =
-				_influenceFrontierPriorityQueue[_influenceFrontierPriorityCursor++];
-			expectedState = 2;
-		} else if (_influenceFrontierCursor < regularEnd) {
-			index = _influenceFrontierQueue[_influenceFrontierCursor++];
-			expectedState = 1;
-		} else {
-			break;
-		}
-		if (_influenceFrontierQueued[index] !== expectedState) continue;
-		_influenceFrontierQueued[index] = 0;
-		processed++;
-		if (landMask[index] !== 2) continue;
-		const y = Math.floor(index / gridWidth);
-		const x = index % gridWidth;
-		if (x <= 0 || x >= gridWidth - 1 || y <= 0 || y >= gridHeight - 1) {
-			continue;
-		}
-		const blur = 0.25;
-		for (
-			let activeIndex = 0;
-			activeIndex < _influenceActiveSideIndices.length;
-			activeIndex++
-		) {
-			const sideIndex = _influenceActiveSideIndices[activeIndex];
-			const influenceMap = sideInfluenceMaps[sideIndex];
-			let sum = 0;
-			for (let deltaY = -1; deltaY <= 1; deltaY++) {
-				const rowOffset = index + deltaY * gridWidth;
-				for (let deltaX = -1; deltaX <= 1; deltaX++) {
-					sum += influenceMap[rowOffset + deltaX];
-				}
-			}
-			influenceMap[index] = influenceMap[index] * (1 - blur) + (sum / 9) * blur;
-		}
-		syncOccupationFromSideInfluence(index);
-		if (isInfluenceFrontierIndex(index)) {
-			enqueueInfluenceFrontierIndex(index);
-		}
-	}
-	if (_influenceFrontierPriorityCursor > 4096) {
-		_influenceFrontierPriorityQueue = _influenceFrontierPriorityQueue.slice(
-			_influenceFrontierPriorityCursor,
-		);
-		_influenceFrontierPriorityCursor = 0;
-	}
-	if (_influenceFrontierCursor > 4096) {
-		_influenceFrontierQueue = _influenceFrontierQueue.slice(
-			_influenceFrontierCursor,
-		);
-		_influenceFrontierCursor = 0;
-	}
-}
-
-function selectInfluenceNeighborCredit(x, y, sideIndex, countryToSideMap) {
-	let uniqueCountries = 0;
-	for (let direction = 0; direction < 8; direction++) {
-		const neighborX = x + _influenceNeighborDx[direction];
-		const neighborY = y + _influenceNeighborDy[direction];
-		if (
-			neighborX < 0 ||
-			neighborX >= gridWidth ||
-			neighborY < 0 ||
-			neighborY >= gridHeight
-		) {
-			continue;
-		}
-		const countryId = primaryOccupierMap[neighborY * gridWidth + neighborX];
-		if (countryId <= 0 || countryToSideMap.get(countryId) !== sideIndex) {
-			continue;
-		}
-		let slot = 0;
-		while (
-			slot < uniqueCountries &&
-			_influenceNeighborCountryIds[slot] !== countryId
-		) {
-			slot++;
-		}
-		if (slot === uniqueCountries) {
-			_influenceNeighborCountryIds[slot] = countryId;
-			_influenceNeighborCountryCounts[slot] = 1;
-			uniqueCountries++;
-		} else {
-			_influenceNeighborCountryCounts[slot]++;
-		}
-	}
-	let bestCountryId = 0;
-	let bestCount = 0;
-	for (let slot = 0; slot < uniqueCountries; slot++) {
-		const count = _influenceNeighborCountryCounts[slot];
-		if (count > bestCount && count >= 3) {
-			bestCount = count;
-			bestCountryId = _influenceNeighborCountryIds[slot];
-		}
-		_influenceNeighborCountryCounts[slot] = 0;
-	}
-	return bestCountryId;
-}
-
-export function updatePersistentInfluence(
-	p1Count,
-	p2Count,
-	countryToSideMap,
-	countryById = _tickCountryById,
-) {
-	let baseInfluence = CONFIG.INFLUENCE_RATE;
-	refreshInfluenceLookupCaches();
-
-	// Dynamic optimization: More sides => fewer expensive samples / unit updates
-	const optimizationFactor = getOptimizationFactor();
-
-	// Mobilization Ramp: Influence starts at 5% and climbs to 100% over 600
-	// simulation ticks, independent of render cadence.
-	const rampDuration = 600;
-	const rampScale = Math.min(1.0, 0.05 + (_simTickCount / rampDuration) * 0.95);
-	baseInfluence *= rampScale;
-
-	// Boost expansion when unopposed
-	if (p1Count > 0 && p2Count === 0) baseInfluence *= 6;
-	if (p2Count > 0 && p1Count === 0) baseInfluence *= 6;
-
-	// Every simulation tick owns one stable formation cohort. Unlike the visual
-	// frame counter, `_simTickCount` advances between high-speed subticks, so the
-	// same cohort cannot be charged twice inside one animation frame.
-	const influenceStride = 3;
-	const influenceCohort = _simTickCount % influenceStride;
-
-	// Smooth only cells near active influence or controller changes. The previous
-	// global random sampler rejected most water/stable cells and produced a large
-	processInfluenceFrontierDiffusion(
-		Math.max(400, Math.floor(1600 / optimizationFactor)),
-	);
-
-	// Strategic Batching: Process a fixed max number of units per frame for influence
-	// This prevents framerate drops when unit counts explode (e.g. 1000+ units)
-	const maxUnitsBase = 300;
-	const maxInfluenceApplications = Math.max(
-		50,
-		Math.floor(maxUnitsBase / optimizationFactor),
-	);
-	// Each processed cohort member represents `influenceStride` elapsed ticks.
-	// Divide the old per-tick application cap by that stride so large armies keep
-	// the same total pressure instead of receiving a 2-3x capture-rate boost.
-	const influenceApplicationShare = Math.floor(
-		maxInfluenceApplications / influenceStride,
-	);
-	const influenceApplicationRemainder =
-		maxInfluenceApplications % influenceStride;
-	const maxUnitsToProcess = Math.max(
-		1,
-		influenceApplicationShare +
-			(influenceCohort < influenceApplicationRemainder ? 1 : 0),
-	);
-	let unitsProcessed = 0;
-
-	// Start index rotates through the unit list using simulation time rather than
-	// visual time, and cached lookups rebuild only when their source revisions move.
-	const startIndex = (_simTickCount * 30) % Math.max(1, units.length);
-	const cityGridIndexSet = _tickCityGridIndexSet;
-	const sideAllyIdSets = _tickSideAllyIdSets;
-	const sideSupportIdSets = _tickSideSupportIdSets;
-
-	for (let i = 0; i < units.length; i++) {
-		const idx = (startIndex + i) % units.length;
-		const u = units[idx];
-		const cohortId = stableUnitCohort(u, influenceStride);
-		if (cohortId !== influenceCohort) continue;
-		if (u.deployTicks > 0) continue;
-
-		// If this unit is currently in active combat, it should not exert territorial influence
-		if (
-			typeof u.lastCombatTick === "number" &&
-			simFrameCount - u.lastCombatTick <= 5
-		) {
-			continue;
-		}
-
-		// The batch limits map-marker/cell work. A compressed formation still
-		// touches the same cells as one ordinary marker, so charging its represented
-		// personnel here can permanently starve large formations from influence.
-		unitsProcessed++;
-		if (unitsProcessed > maxUnitsToProcess) break;
-
-		if (u.deployTicks > 0) continue;
-		let r = CONFIG.INFLUENCE_RADIUS;
-		let teamMult = 1.0;
-
-		const gridIdx = getGridIndex(u.lat, u.lng);
-		const isAtSea = gridIdx === -1 || landMask[gridIdx] === 0;
-		const mountainIntensity =
-			mountainsEnabled && gridIdx !== -1 ? terrainMask[gridIdx] : 0;
-
-		if (mountainIntensity > 0) {
-			// Nerf advancement size (radius) and expansion rate (influence power) in mountains
-			// Higher intensity mountains require units to be significantly closer to the border to flip it
-			r *= 1.0 - mountainIntensity * 0.65;
-			teamMult *= 1.0 - mountainIntensity * 0.5;
-		}
-
-		const countryObj = countryById.get(u.sovereignId);
-
-		const role = countryObj?.role || "OFFENSE";
-
-		if (countryObj) {
-			if (countryObj.buffState === "buff") teamMult = 2.5;
-			else if (countryObj.buffState === "super") teamMult = 8.0;
-			else if (countryObj.buffState === "godly") {
-				teamMult = 45.0;
-				r *= 0.5;
-			} else if (countryObj.buffState === "weakened") teamMult = 0.7;
-			else if (countryObj.buffState === "crippled") teamMult = 0.4;
-
-			// Apply continuous attack modifier to influence strength as well
-			const atkPct =
-				typeof countryObj.attackBuffPercent === "number"
-					? countryObj.attackBuffPercent
-					: 0;
-			const atkFactor = 1 + atkPct / 100;
-			if (atkFactor > 0) teamMult *= atkFactor;
-		}
-
-		if (u.victoryBoostTicks > 0) {
-			teamMult *= 3.0; // Buffed influence capture power
-			r *= 1.4; // Increased capture radius
-		}
-		// Naval units exert less influence on territory capture than land units.
-		if (isAtSea) teamMult *= 0.4;
-		teamMult *= getLiveFormationStrength(u);
-
-		// Organic Push: Randomize push intensity per unit to create ragged, non-linear salients
-		const organicNoise =
-			0.8 + Math.sin(u.id * 1000 + _simTickCount * 0.05) * 0.4;
-		const delta = baseInfluence * teamMult * organicNoise * influenceStride;
-		const mySideIdx = u.sideIndex;
-
-		// Ragged Frontiers: Perturb the influence radius slightly to create "fingers" and "bubbles"
-		const rVar = r * (0.9 + Math.sin(u.id * 500 + _simTickCount * 0.1) * 0.2);
-		const radiusSq = rVar * rVar;
-		const concentrationBonus = Math.min(2.5, (u.lastAllyCount || 1) / 5);
-
-		const hostileSideIndices = _influenceHostileSideIndices[mySideIdx];
-		const myInfluenceMap = sideInfluenceMaps[mySideIdx];
-
-		const startLat = Math.max(
-			0,
-			Math.floor((u.lat - rVar + 90) / CONFIG.GRID_RES),
-		);
-		const endLat = Math.min(
-			gridHeight - 1,
-			Math.floor((u.lat + rVar + 90) / CONFIG.GRID_RES),
-		);
-		const startLng = Math.max(
-			0,
-			Math.floor((u.lng - rVar + 180) / CONFIG.GRID_RES),
-		);
-		const endLng = Math.min(
-			gridWidth - 1,
-			Math.floor((u.lng + rVar + 180) / CONFIG.GRID_RES),
-		);
-
-		for (let y = startLat; y <= endLat; y++) {
-			const deltaLat = u.lat - (y * CONFIG.GRID_RES - 90);
-			const deltaLatSq = deltaLat * deltaLat;
-			const rowOffset = y * gridWidth;
-			for (let x = startLng; x <= endLng; x++) {
-				const idx = rowOffset + x;
-				if (landMask[idx] !== 2) continue;
-				const previousControllerSide = dominantSideMap[idx];
-				const deltaLng = u.lng - (x * CONFIG.GRID_RES - 180);
-				const dSq = deltaLatSq + deltaLng * deltaLng;
-				if (dSq >= radiusSq) continue;
-
-				// City Resistance: Cells containing cities are much harder for frontlines to pass through
-				let cellDelta = delta;
-				if (cityGridIndexSet.has(idx)) cellDelta *= 0.35;
-
-				{
-					const dist = Math.sqrt(dSq);
-					// Strategic Concentration: Units push harder when clustered or in spearheads
-					const weight = (1 - dist / rVar) ** 2.0 * concentrationBonus;
-
-					const curInfluence = myInfluenceMap[idx];
-					let newInfluence = curInfluence + Math.abs(cellDelta) * weight;
-					if (newInfluence > 1) newInfluence = 1;
-
-					const ownerId = worldControlMap[idx];
-					const ownerSideIdx = countryToSideMap.get(ownerId);
-					if (
-						ownerSideIdx !== undefined &&
-						ownerSideIdx !== mySideIdx &&
-						!areSidesHostile(mySideIdx, ownerSideIdx)
-					) {
-						continue;
-					}
-					const isOwnerAlly =
-						sideAllyIdSets[u.sideIndex] &&
-						sideAllyIdSets[u.sideIndex].has(ownerId);
-
-					// If owner is a SUPPORT nation on the other side and we are OFFENSE, don't invade (skip influence)
-					// unless we already have established some occupation in that cell.
-					if (!isOwnerAlly && ownerId > 0 && role === "OFFENSE") {
-						if (ownerSideIdx !== undefined && ownerSideIdx !== u.sideIndex) {
-							if (sideSupportIdSets[ownerSideIdx]?.has(ownerId)) {
-								const curOcc = occupationMap[idx];
-								const isAlreadyInvaded = Math.abs(curOcc) > 0.1;
-								if (!isAlreadyInvaded) continue;
-							}
-						}
-					}
-
-					const currentOccupierId = primaryOccupierMap[idx];
-
-					if (!isOwnerAlly) {
-						const creditToId = u.beneficiaryId || u.sovereignId;
-						const currentOccSideIdx = countryToSideMap.get(currentOccupierId);
-						const isCurrentOccAlly =
-							currentOccSideIdx !== undefined &&
-							currentOccSideIdx === u.sideIndex;
-
-						if (!isCurrentOccAlly) {
-							const bestAllyId = selectInfluenceNeighborCredit(
-								x,
-								y,
-								u.sideIndex,
-								countryToSideMap,
-							);
-
-							const finalCreditId = bestAllyId || creditToId;
-							if (newInfluence > 0.05 || currentOccupierId === 0) {
-								primaryOccupierMap[idx] = finalCreditId;
-							}
-						}
-					}
-
-					myInfluenceMap[idx] = newInfluence;
-					// Decay opposing sides' influence when we enter a cell
-					let touchedHostileInfluence = false;
-					for (
-						let hostileIndex = 0;
-						hostileIndex < hostileSideIndices.length;
-						hostileIndex++
-					) {
-						const sideIndex = hostileSideIndices[hostileIndex];
-						const hostileInfluenceMap = sideInfluenceMaps[sideIndex];
-						if (hostileInfluenceMap[idx] > 0) {
-							touchedHostileInfluence = true;
-							hostileInfluenceMap[idx] = Math.max(
-								0,
-								hostileInfluenceMap[idx] - cellDelta * 0.5,
-							);
-						}
-					}
-					// De-jure owner reclaim bonus: 1.5x influence when retaking own territory
-					if (worldControlMap[idx] === u.sovereignId) {
-						myInfluenceMap[idx] *= 1.5;
-					}
-					syncOccupationFromSideInfluence(idx);
-					if (primaryOccupierMap[idx] !== currentOccupierId) {
-						_territoryLedger?.markControllerChange(idx);
-						influenceLayer?.notifyControlCellsChanged(idx);
-						queueInfluenceFrontierCell(idx, true);
-					} else if (
-						touchedHostileInfluence ||
-						previousControllerSide !== mySideIdx ||
-						isInfluenceFrontierIndex(idx)
-					) {
-						queueInfluenceFrontierCell(idx);
-					}
-				}
-			}
-		}
-	}
-}
+menu_controls.bindRandomWarBtnClick();
 
 /**
  * Simple Point-In-Polygon check for GeoJSON features
@@ -6500,7 +5184,7 @@ export function findCodeByName(name) {
 		eswatini: "sz",
 		swaziland: "sz",
 	};
-	return aliases[search] || null;
+	return aliases[search];
 }
 
 export async function loadCities(
@@ -6934,7 +5618,7 @@ export function handleCountryClick(
 				color: m.color,
 				name: m.name,
 				buffState: m.buffState || "none",
-				flag: m.tempFlag || null,
+				flag: m.tempFlag,
 				strategy: "BALANCED",
 				role: "OFFENSE",
 			});
@@ -7005,7 +5689,6 @@ export function spawnSingleUnit(
 	});
 
 	let lat, lng;
-	const _isFromFront = false;
 
 	if (friendlyCities.length > 0) {
 		// Pick a random friendly city, bias toward frontline-adjacent ones
@@ -7082,24 +5765,18 @@ export function spawnSingleUnit(
 
 	const unitId = Math.random();
 
-	const unit = {
+	const unit = createArmyFormation({
 		id: unitId,
-		kind: "army",
 		lat,
 		lng,
 		sideIndex: sideIdx,
 		sovereignId: sovereignId,
-		beneficiaryId: sovereignId,
 		isAlpenjager: !!isAlpen,
-		health: CONFIG.UNIT_HEALTH,
-		lastAttack: 0,
-		deployTicks: 30,
-		// Phase 3 stale-target cache
 		_cachedTarget: null,
 		_cachedScanKx: -999,
 		_cachedScanKy: -999,
 		_lastFullScanTick: 0,
-	};
+	});
 	setUnitFormationPersonnel(unit, nominalPersonnel);
 	if (supplyFailed) {
 		unit.health *= 0.4;
@@ -7118,101 +5795,20 @@ export function spawnSingleUnit(
 	return true;
 }
 
-function _estimateTerritoryArmyUnits(cellCount) {
-	const cells = Math.max(1, cellCount || 0);
-	const sizeFactor = Math.max(1, cells / 1500);
-	const densityScale = 1 / sizeFactor ** 0.45;
-	return Math.max(
-		3,
-		Math.min(
-			CONFIG.MAX_UNITS_PER_SIDE,
-			Math.floor(cells * CONFIG.UNIT_DENSITY_FACTOR * densityScale),
-		),
-	);
-}
-
 function findCountrySideIndex(countryId) {
 	return sides.findIndex((side) => side?.some((c) => c.id === countryId));
 }
 
-function getCountryLivePersonnel(countryId) {
-	let personnel = 0;
-	for (const unit of units) {
-		if (unit.sovereignId !== countryId || unit.health <= 0) continue;
-		personnel += getLiveFormationPersonnel(unit);
-	}
-	return personnel;
+function getCountryLivePersonnel(...args) {
+	return lifecycle.getCountryLivePersonnel(...args);
 }
 
-function getSideLivePersonnel(sideIdx) {
-	return (sides[sideIdx] || []).reduce(
-		(total, country) => total + getCountryLivePersonnel(country.id),
-		0,
-	);
+function clearSidePersonnelAccounting(...args) {
+	return lifecycle.clearSidePersonnelAccounting(...args);
 }
 
-function clearSidePersonnelAccounting(sideIdx) {
-	if (sideIdx < 0 || sideIdx >= MAX_SIDES) return;
-	sideSoldiers[sideIdx] = 0;
-	initialSideSoldiers[sideIdx] = 0;
-	sideRecruitableManpower[sideIdx] = 0;
-	sideCasualties[sideIdx] = 0;
-	soldiersPerUnit[sideIdx] = CONFIG.UNIT_TO_SOLDIER_RATIO;
-}
-
-function releaseCountryPersonnelFromSide(
-	countryId,
-	sideIdx,
-	{ transferHistory = false } = {},
-) {
-	const side = sides[sideIdx] || [];
-	if (!side.some((country) => country.id === countryId)) return null;
-	const countryLivePersonnel = getCountryLivePersonnel(countryId);
-	const sideLivePersonnel = getSideLivePersonnel(sideIdx);
-	const countryCount = Math.max(1, side.length);
-	const liveShare = Math.min(
-		1,
-		sideLivePersonnel > 0
-			? countryLivePersonnel / sideLivePersonnel
-			: 1 / countryCount,
-	);
-	const casualties = Math.min(
-		Math.max(0, sideCasualties[sideIdx] || 0),
-		Math.max(0, countryCasualties.get(countryId) || 0),
-	);
-	const isOnlyCountry = side.length === 1;
-	const recruitable = Math.round(
-		Math.max(0, sideRecruitableManpower[sideIdx] || 0) * liveShare,
-	);
-	const surviving = Math.min(
-		Math.max(0, sideSoldiers[sideIdx] || 0),
-		countryLivePersonnel + recruitable,
-	);
-	const initial = isOnlyCountry
-		? Math.max(0, initialSideSoldiers[sideIdx] || 0)
-		: Math.min(
-				Math.max(0, initialSideSoldiers[sideIdx] || 0),
-				surviving + casualties,
-			);
-	sideSoldiers[sideIdx] = Math.max(0, sideSoldiers[sideIdx] - surviving);
-	sideRecruitableManpower[sideIdx] = Math.max(
-		0,
-		sideRecruitableManpower[sideIdx] - recruitable,
-	);
-	if (transferHistory) {
-		initialSideSoldiers[sideIdx] = Math.max(
-			0,
-			initialSideSoldiers[sideIdx] - initial,
-		);
-		sideCasualties[sideIdx] = Math.max(0, sideCasualties[sideIdx] - casualties);
-	}
-	return {
-		countryLivePersonnel,
-		surviving,
-		initial,
-		recruitable,
-		casualties,
-	};
+function releaseCountryPersonnelFromSide(...args) {
+	return lifecycle.releaseCountryPersonnelFromSide(...args);
 }
 
 function clearSideLandPlanSlots(sideIdx) {
@@ -7233,26 +5829,6 @@ function clearSideHostilities(sideIdx) {
 		}
 	}
 	rebuildHostilityMatrix();
-}
-
-function _allocateIndependentSide(country, hostileSideIdx = -1) {
-	let sideIdx = sides.findIndex((side) => !side || side.length === 0);
-	if (sideIdx === -1) {
-		if (sides.length >= MAX_SIDES) return -1;
-		sideIdx = sides.length;
-		rebaseSecondaryWarPlanSlotsForSideAppend(sides.length);
-		sides.push([]);
-	}
-	clearSideHostilities(sideIdx);
-	clearSidePersonnelAccounting(sideIdx);
-	// An empty slot may belong to a side that was eliminated earlier in the run.
-	// A restored neutral country is a new side and needs a distinct stable UID
-	sideUids[sideIdx] = allocateSideUid();
-	ensureSideIdentities();
-	sides[sideIdx] = [country];
-	if (hostileSideIdx >= 0) setSidesHostile(sideIdx, hostileSideIdx, true);
-	else rebuildHostilityMatrix();
-	return sideIdx;
 }
 
 function prepareEmptySideForNewMembership(sideIdx) {
@@ -7278,645 +5854,6 @@ function prepareEmptySideForNewMembership(sideIdx) {
 	}
 	rebuildHostilityMatrix();
 	return true;
-}
-
-export function setGameTimeFromInputs() {
-	if (!timeSystemCheckbox?.checked) {
-		gameTimeEnabled = false;
-		gameTimeDate = null;
-		gameTimeAccumulatorMs = 0;
-		if (gameDateDisplay) gameDateDisplay.style.display = "none";
-		return;
-	}
-	const y = parseInt(timeYearInput.value || "0", 10);
-	const m = parseInt(timeMonthInput.value || "0", 10);
-	const d = parseInt(timeDayInput.value || "0", 10);
-	if (!y || !m || !d) {
-		// fallback default if user left blanks
-		gameTimeDate = { year: 1936, month: 1, day: 1 };
-	} else {
-		gameTimeDate = { year: y, month: m, day: d };
-	}
-	gameTimeEnabled = true;
-	gameTimeAccumulatorMs = 0;
-	if (gameDateDisplay) {
-		gameDateDisplay.style.display = "block";
-		gameDateDisplay.textContent = formatGameDate();
-	}
-}
-
-export function formatGameDate() {
-	if (!gameTimeDate) return "0000/00/00";
-	const y = gameTimeDate.year.toString().padStart(4, "0");
-	const m = gameTimeDate.month.toString().padStart(2, "0");
-	const d = gameTimeDate.day.toString().padStart(2, "0");
-	return `${y}/${m}/${d}`;
-}
-
-export function daysInMonth(year, month) {
-	if (
-		month === 1 ||
-		month === 3 ||
-		month === 5 ||
-		month === 7 ||
-		month === 8 ||
-		month === 10 ||
-		month === 12
-	)
-		return 31;
-	if (month === 4 || month === 6 || month === 9 || month === 11) return 30;
-	// February
-	const isLeap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
-	return isLeap ? 29 : 28;
-}
-
-export function advanceGameDateOneDay() {
-	if (!gameTimeEnabled || !gameTimeDate) return;
-	gameTimeDate.day += 1;
-	const dim = daysInMonth(gameTimeDate.year, gameTimeDate.month);
-	if (gameTimeDate.day > dim) {
-		gameTimeDate.day = 1;
-		gameTimeDate.month += 1;
-		if (gameTimeDate.month > 12) {
-			gameTimeDate.month = 1;
-			gameTimeDate.year += 1;
-		}
-	}
-	if (gameDateDisplay) {
-		gameDateDisplay.textContent = formatGameDate();
-	}
-	if (gameMode === "OPERATION" && activeOperationRuntime) {
-		evaluateOperationDay();
-	}
-}
-
-export function tickGameTime(elapsedMs) {
-	if (
-		!gameTimeEnabled ||
-		gameState !== "SIMULATING" ||
-		isPaused ||
-		!gameTimeDate
-	)
-		return;
-	if (gameMode === "OPERATION" && activeOperationRuntime) {
-		activeOperationRuntime = advanceOperationActivePlay(
-			activeOperationRuntime,
-			elapsedMs,
-			false,
-		);
-		updateCommanderHud();
-	}
-	// Scale in-game time progression with the current simulation speed
-	gameTimeAccumulatorMs += elapsedMs * simSpeed;
-	const step = gameTimeDayDurationMs;
-	while (gameTimeAccumulatorMs >= step && gameState === "SIMULATING") {
-		advanceGameDateOneDay();
-		gameTimeAccumulatorMs -= step;
-	}
-}
-
-function getOperationCity(cityKey) {
-	const definition = activeOperationDefinition;
-	const cityDefinition = definition?.targetCities?.[cityKey];
-	if (!cityDefinition) return null;
-	const expected = cityDefinition.dataName.toLowerCase();
-	return (
-		activeTheaterCities.find((city) => city.name?.toLowerCase() === expected) ||
-		cities.find((city) => city.name?.toLowerCase() === expected) ||
-		null
-	);
-}
-
-function isOperationCityFriendly(cityKey) {
-	const city = getOperationCity(cityKey);
-	if (!city || !activeOperationDefinition) return false;
-	const idx = getGridIndex(city.lat, city.lng);
-	return (
-		idx !== -1 &&
-		dominantSideMap[idx] === activeOperationDefinition.playerSideIdx
-	);
-}
-
-function getOperationCoreControlRatio() {
-	if (!activeOperationDefinition || !deJureMap) return 0;
-	let total = 0;
-	let controlled = 0;
-	for (let i = 0; i < deJureMap.length; i++) {
-		if (deJureMap[i] !== activeOperationDefinition.playerCountryId) continue;
-		total++;
-		if (dominantSideMap[i] === activeOperationDefinition.playerSideIdx) {
-			controlled++;
-		}
-	}
-	return total > 0 ? controlled / total : 0;
-}
-
-function getOperationSnapshot(
-	currentDay = activeOperationRuntime?.currentDay || 0,
-) {
-	const definition = activeOperationDefinition;
-	const cityFriendly = {};
-	for (const cityKey of Object.keys(definition?.targetCities || {})) {
-		cityFriendly[cityKey] = isOperationCityFriendly(cityKey);
-	}
-	return {
-		currentDay,
-		playerActive: !!sides[definition?.playerSideIdx]?.some(
-			(country) => country.id === definition.playerCountryId,
-		),
-		enemyActive: !!sides[0]?.some(
-			(country) => country.id === definition?.enemyCountryId,
-		),
-		cityFriendly,
-		coreControlRatio: getOperationCoreControlRatio(),
-	};
-}
-
-function getActiveCommanderModifiers(type = null) {
-	const modifiers = activeOperationRuntime?.modifiers || [];
-	return type
-		? modifiers.filter((modifier) => modifier.type === type)
-		: modifiers;
-}
-
-function syncOperationCombatBuff() {
-	if (!activeOperationDefinition) return;
-	const countryId = activeOperationDefinition.playerCountryId;
-	const sideCountry = sides[activeOperationDefinition.playerSideIdx]?.find(
-		(country) => country.id === countryId,
-	);
-	const meta = countryMetadata[countryId - 1];
-	const active = getActiveCommanderModifiers("COMBAT_BUFF").length > 0;
-	if (active && !_operationPreviousBuffState) {
-		_operationPreviousBuffState = {
-			side: sideCountry?.hiddenBuffState || "none",
-			meta: meta?.hiddenBuffState || "none",
-		};
-		if (sideCountry) sideCountry.hiddenBuffState = "buff";
-		if (meta) meta.hiddenBuffState = "buff";
-	} else if (!active && _operationPreviousBuffState) {
-		if (sideCountry)
-			sideCountry.hiddenBuffState = _operationPreviousBuffState.side;
-		if (meta) meta.hiddenBuffState = _operationPreviousBuffState.meta;
-		_operationPreviousBuffState = null;
-	}
-}
-
-function persistOperationResult() {
-	if (!activeOperationDefinition || !activeOperationRuntime?.result) return;
-	try {
-		const key = "mw_operation_progress_v1";
-		const saved = JSON.parse(localStorage.getItem(key) || "{}");
-		const previous = saved[activeOperationDefinition.id] || {
-			completions: 0,
-			bestMedals: [],
-		};
-		const bestMedals = Array.from(
-			new Set([
-				...(previous.bestMedals || []),
-				...activeOperationRuntime.medals,
-			]),
-		);
-		saved[activeOperationDefinition.id] = {
-			completions: previous.completions + 1,
-			bestMedals,
-			lastResult: activeOperationRuntime.result,
-			lastCompletedAt: new Date().toISOString(),
-		};
-		localStorage.setItem(key, JSON.stringify(saved));
-	} catch (error) {
-		console.warn("Failed to persist operation result", error);
-	}
-}
-
-function renderOperationEvent() {
-	if (!activeOperationDefinition || !activeOperationRuntime) return;
-	const eventId = activeOperationRuntime.queuedEventIds[0];
-	if (!eventId) {
-		commanderEventOverlay.style.display = "none";
-		return;
-	}
-	const event = activeOperationDefinition.events.find(
-		(candidate) => candidate.id === eventId,
-	);
-	if (!event) return;
-	isPaused = true;
-	pauseBtn.innerText = "Resume";
-	pauseBtn.style.background = "#27ae60";
-	commanderEventTitle.textContent = event.title;
-	commanderEventBody.textContent = event.body;
-	commanderEventChoices.innerHTML = "";
-	for (const choice of event.choices) {
-		const button = document.createElement("button");
-		button.className = "commander-event-choice";
-		button.innerHTML = `<strong>${escapeHtml(choice.label)}</strong><span>${escapeHtml(choice.description)}</span>`;
-		button.addEventListener("click", () => resolveOperationEvent(choice.id));
-		commanderEventChoices.appendChild(button);
-	}
-	commanderEventOverlay.style.display = "flex";
-}
-
-function getOperationSpawnPoint(cityKey, ordinal = 0) {
-	const city = getOperationCity(cityKey) || getOperationCity("kyiv");
-	if (!city || !activeOperationDefinition) return null;
-	const centerIdx = getGridIndex(city.lat, city.lng);
-	const centerRow = centerIdx >= 0 ? Math.floor(centerIdx / gridWidth) : 0;
-	const centerCol = centerIdx >= 0 ? centerIdx % gridWidth : 0;
-	const candidates = [];
-	for (let radius = 0; radius <= 24 && candidates.length < 80; radius++) {
-		for (let dr = -radius; dr <= radius; dr++) {
-			for (let dc = -radius; dc <= radius; dc++) {
-				if (Math.max(Math.abs(dr), Math.abs(dc)) !== radius) continue;
-				const row = centerRow + dr;
-				const col = centerCol + dc;
-				if (row < 0 || row >= gridHeight || col < 0 || col >= gridWidth)
-					continue;
-				const idx = row * gridWidth + col;
-				if (
-					deJureMap[idx] === activeOperationDefinition.playerCountryId &&
-					dominantSideMap[idx] === activeOperationDefinition.playerSideIdx
-				) {
-					candidates.push(idx);
-				}
-			}
-		}
-	}
-	if (!candidates.length) return null;
-	const idx = candidates[ordinal % candidates.length];
-	const row = Math.floor(idx / gridWidth);
-	const col = idx % gridWidth;
-	return {
-		lat: row * CONFIG.GRID_RES - 90 + CONFIG.GRID_RES / 2,
-		lng: col * CONFIG.GRID_RES - 180 + CONFIG.GRID_RES / 2,
-	};
-}
-
-function applyOperationSpawnGroups(groups = []) {
-	if (!activeOperationDefinition) return;
-	for (const group of groups) {
-		for (let index = 0; index < group.count; index++) {
-			const point = getOperationSpawnPoint(group.city, index);
-			if (!point) continue;
-			_placeDivisionAt(point, activeOperationDefinition.playerCountryId);
-			const unit = units[units.length - 1];
-			if (unit?.sovereignId === activeOperationDefinition.playerCountryId) {
-				const strengthFactor = Math.max(0, group.health ?? 1);
-				unit.health *= strengthFactor;
-				if (unit.personnel !== undefined) {
-					unit.personnel = Math.round(
-						(unit.personnelCapacity || unit.personnel) * strengthFactor,
-					);
-					unit.strengthMultiplier =
-						unit.personnel / CONFIG.UNIT_TO_SOLDIER_RATIO;
-				}
-			}
-		}
-	}
-}
-
-export function resolveOperationEvent(choiceId) {
-	if (!activeOperationDefinition || !activeOperationRuntime) return false;
-	const eventId = activeOperationRuntime.queuedEventIds[0];
-	const resolution = resolveOperationRulesEvent(
-		activeOperationDefinition,
-		activeOperationRuntime,
-		eventId,
-		choiceId,
-	);
-	if (!resolution) return false;
-	activeOperationRuntime = resolution.runtime;
-	if (resolution.effect.groups) {
-		applyOperationSpawnGroups(resolution.effect.groups);
-	}
-	if (resolution.effect.type === "PLAN_MODIFIER") {
-		_commanderPlanReplacePending[activeOperationDefinition.playerSideIdx] =
-			true;
-		_planReassessNeeded[activeOperationDefinition.playerSideIdx] = true;
-	}
-	syncOperationCombatBuff();
-	commanderEventOverlay.style.display = "none";
-	if (activeOperationRuntime.queuedEventIds.length) {
-		renderOperationEvent();
-	} else {
-		isPaused = false;
-		pauseBtn.innerText = "Pause";
-		pauseBtn.style.background = "#f39c12";
-	}
-	updateCommanderHud(true);
-	return true;
-}
-
-export function evaluateOperationDay() {
-	if (!activeOperationDefinition || !activeOperationRuntime) return null;
-	const nextDay = activeOperationRuntime.currentDay + 1;
-	activeOperationRuntime = evaluateOperationRules(
-		activeOperationDefinition,
-		activeOperationRuntime,
-		getOperationSnapshot(nextDay),
-	);
-	syncOperationCombatBuff();
-	updateCommanderHud(true);
-	if (activeOperationRuntime.result) {
-		finishOperation(activeOperationRuntime.result);
-		return activeOperationRuntime.result;
-	}
-	if (activeOperationRuntime.queuedEventIds.length) renderOperationEvent();
-	return null;
-}
-
-function operationMedalLabel(id) {
-	return (
-		{
-			capital_unbroken: "Capital Unbroken",
-			cities_held: "Cities Held",
-			sovereign_majority: "Sovereign Majority",
-		}[id] || id
-	);
-}
-
-export function updateCommanderHud(force = false) {
-	if (!activeOperationDefinition || !activeOperationRuntime || !commanderHud) {
-		return;
-	}
-	if (
-		!force &&
-		activeOperationRuntime.activePlayMs - _operationLastHudRenderMs < 250
-	) {
-		return;
-	}
-	_operationLastHudRenderMs = activeOperationRuntime.activePlayMs;
-	const snapshot = getOperationSnapshot();
-	const cooldownMs = getDirectiveCooldownRemaining(
-		activeOperationDefinition,
-		activeOperationRuntime,
-	);
-	commanderDayLabel.textContent = `DAY ${activeOperationRuntime.currentDay} / ${activeOperationDefinition.durationDays}`;
-	commanderObjectiveLabel.textContent =
-		activeOperationRuntime.kyivEnemyDays > 0
-			? `Kyiv under enemy control: ${activeOperationRuntime.kyivEnemyDays} / 30 days`
-			: "Hold Kyiv through 2023/02/24";
-	commanderObjectiveLabel.style.color =
-		activeOperationRuntime.kyivEnemyDays > 0 ? "#ff8b9c" : "";
-	commanderCityStatus.innerHTML = Object.entries(
-		activeOperationDefinition.targetCities,
-	)
-		.map(
-			([key, city]) =>
-				`<span class="commander-city-chip ${snapshot.cityFriendly[key] ? "friendly" : "hostile"}">${escapeHtml(city.displayName)}</span>`,
-		)
-		.join("");
-	commanderApplyOrdersBtn.disabled = cooldownMs > 0;
-	commanderCooldownLabel.textContent =
-		cooldownMs > 0
-			? `STAFF REORGANIZING · ${Math.ceil(cooldownMs / 1000)}s`
-			: "ORDERS READY";
-	commanderCooldownLabel.style.color = cooldownMs > 0 ? "#ffd166" : "#8ee3a5";
-	const directive = activeOperationRuntime.directive;
-	commanderActiveOrders.textContent = `${COMMANDER_STANCES[directive.stance].label.toUpperCase()} · PRIORITY ${activeOperationDefinition.targetCities[directive.targetCity].displayName.toUpperCase()} · ${Math.round(directive.reserve * 100)}% RESERVE`;
-	const nextEvent = activeOperationDefinition.events.find(
-		(event) => !activeOperationRuntime.resolvedEventIds.includes(event.id),
-	);
-	commanderEventStatus.textContent = activeOperationRuntime.queuedEventIds
-		.length
-		? `DECISION REQUIRED · ${nextEvent?.title.toUpperCase() || "COMMAND EVENT"}`
-		: nextEvent
-			? `NEXT EVENT · DAY ${nextEvent.day} · ${nextEvent.title.toUpperCase()}`
-			: "ALL AUTHORED EVENTS RESOLVED";
-	commanderMedalPreview.innerHTML = [
-		{
-			id: "capital_unbroken",
-			active: !activeOperationRuntime.capitalEverLost,
-		},
-		{
-			id: "cities_held",
-			active: ["kyiv", "kharkiv", "odesa"].every(
-				(city) => snapshot.cityFriendly[city],
-			),
-		},
-		{
-			id: "sovereign_majority",
-			active: snapshot.coreControlRatio >= 0.6,
-		},
-	]
-		.map(
-			(medal) =>
-				`<span class="${medal.active ? "active" : ""}">◆ ${escapeHtml(operationMedalLabel(medal.id))}</span>`,
-		)
-		.join("");
-}
-
-export function setCommanderDirective(directive) {
-	if (!activeOperationDefinition || !activeOperationRuntime) return false;
-	const next = applyCommanderDirective(
-		activeOperationDefinition,
-		activeOperationRuntime,
-		directive,
-	);
-	if (!next) return false;
-	activeOperationRuntime = next;
-	const playerSideIdx = activeOperationDefinition.playerSideIdx;
-	const strategy = COMMANDER_STANCES[directive.stance]?.strategy || "BALANCED";
-	for (const country of sides[playerSideIdx] || []) country.strategy = strategy;
-	_commanderPlanReplacePending[playerSideIdx] = true;
-	_planReassessNeeded[playerSideIdx] = true;
-	statusText.innerText = `${COMMANDER_STANCES[directive.stance].label.toUpperCase()} · PRIORITY ${activeOperationDefinition.targetCities[directive.targetCity].displayName.toUpperCase()} · ${Math.round(directive.reserve * 100)}% RESERVE`;
-	updateCommanderHud(true);
-	return true;
-}
-
-function restoreOperationBuff() {
-	if (!_operationPreviousBuffState || !activeOperationDefinition) return;
-	const countryId = activeOperationDefinition.playerCountryId;
-	const sideCountry = sides[activeOperationDefinition.playerSideIdx]?.find(
-		(country) => country.id === countryId,
-	);
-	const meta = countryMetadata[countryId - 1];
-	if (sideCountry)
-		sideCountry.hiddenBuffState = _operationPreviousBuffState.side;
-	if (meta) meta.hiddenBuffState = _operationPreviousBuffState.meta;
-	_operationPreviousBuffState = null;
-}
-
-function clearOperationUi() {
-	restoreOperationBuff();
-	document.body.classList.remove("commander-active");
-	if (commanderHud) commanderHud.style.display = "none";
-	if (commanderEventOverlay) commanderEventOverlay.style.display = "none";
-	if (commanderDebriefOverlay) commanderDebriefOverlay.style.display = "none";
-	if (commanderBriefingOverlay) commanderBriefingOverlay.style.display = "none";
-	activeOperationDefinition = null;
-	activeOperationRuntime = null;
-	gameTimeDayDurationMs = 500;
-	_operationLastHudRenderMs = -Infinity;
-}
-
-export function finishOperation(result) {
-	if (!activeOperationDefinition || !activeOperationRuntime) return;
-	if (activeOperationRuntime.result !== result) {
-		activeOperationRuntime = evaluateOperationRules(
-			activeOperationDefinition,
-			{ ...activeOperationRuntime, result },
-			getOperationSnapshot(),
-		);
-		activeOperationRuntime.result = result;
-	}
-	gameState = "WAR_OVER";
-	isPaused = true;
-	commanderEventOverlay.style.display = "none";
-	commanderHud.style.display = "none";
-	persistOperationResult();
-	const victory = result === "VICTORY" || result === "EARLY_VICTORY";
-	commanderDebriefTitle.textContent = victory
-		? result === "EARLY_VICTORY"
-			? "DECISIVE VICTORY"
-			: "VICTORY"
-		: "OPERATION LOST";
-	commanderDebriefSummary.textContent = victory
-		? `Ukraine remains in the fight after ${activeOperationRuntime.currentDay} operation days. Your directives shaped an alternate outcome generated by the simulation.`
-		: `The command objective failed after ${activeOperationRuntime.currentDay} operation days. Adjust priorities, stance, and reserve use before trying again.`;
-	commanderDebriefMedals.innerHTML = [
-		"capital_unbroken",
-		"cities_held",
-		"sovereign_majority",
-	]
-		.map((id) => {
-			const earned = activeOperationRuntime.medals.includes(id);
-			return `<div class="commander-debrief-medal ${earned ? "earned" : ""}"><strong>${earned ? "◆" : "◇"}</strong><span>${escapeHtml(operationMedalLabel(id))}</span></div>`;
-		})
-		.join("");
-	commanderDebriefOverlay.style.display = "flex";
-}
-
-function makeOperationCountry(meta, strategy) {
-	return {
-		id: meta.id,
-		name: meta.name,
-		color: meta.color,
-		role: "OFFENSE",
-		strategy,
-		buffState: "none",
-		hiddenBuffState: "none",
-		overlordId: null,
-		flag: meta.tempFlag || null,
-	};
-}
-
-export async function startOperation(operationId) {
-	const definition = OPERATION_DEFINITIONS[operationId];
-	if (!definition) throw new Error(`Unknown operation: ${operationId}`);
-	if (animationFrameId !== null) {
-		cancelAnimationFrame(animationFrameId);
-		animationFrameId = null;
-	}
-	if (backgroundTickId) {
-		clearInterval(backgroundTickId);
-		backgroundTickId = null;
-	}
-	stopWarAmbiance();
-	restoreOperationBuff();
-	activeOperationDefinition = definition;
-	activeOperationRuntime = createOperationRuntime(definition);
-	gameTimeDayDurationMs = definition.dayDurationMs;
-	commanderBriefingOverlay.style.display = "none";
-	commanderDebriefOverlay.style.display = "none";
-	commanderDeployBtn.disabled = true;
-	commanderDeployBtn.textContent = "DEPLOYING...";
-	setLoadingThematic(true);
-	loadingStatus.innerText = "Preparing Eastern Front Command...";
-	loadingOverlay.style.display = "flex";
-	try {
-		const response = await fetch(definition.scenarioUrl);
-		if (!response.ok) throw new Error("Failed to load operation map");
-		const blob = await response.blob();
-		currentScenarioContext = {
-			id: definition.id,
-			name: definition.title,
-			ownerUsername: "System",
-			blobUrl: definition.scenarioUrl,
-		};
-		activeScenarioId = null;
-		await performPresetLoad(blob, "OPERATION");
-		await new Promise((resolve) => setTimeout(resolve, 550));
-		const enemyMeta = countryMetadata[definition.enemyCountryId - 1];
-		const playerMeta = countryMetadata[definition.playerCountryId - 1];
-		if (!enemyMeta || !playerMeta) {
-			throw new Error("Operation countries are missing from the scenario");
-		}
-		sides = [
-			[makeOperationCountry(enemyMeta, "BLITZ")],
-			[makeOperationCountry(playerMeta, "DEFENSIVE")],
-		];
-		_attackers = sides[0];
-		_defenders = sides[1];
-		activeSideIndex = definition.playerSideIdx;
-		updateSidesUI();
-		const enemyManpower = document.getElementById("manpower-side-0");
-		const playerManpower = document.getElementById("manpower-side-1");
-		if (enemyManpower) enemyManpower.value = String(definition.enemyManpower);
-		if (playerManpower)
-			playerManpower.value = String(definition.playerManpower);
-		timeSystemCheckbox.checked = true;
-		timeYearInput.value = String(definition.startDate.year);
-		timeMonthInput.value = String(definition.startDate.month);
-		timeDayInput.value = String(definition.startDate.day);
-		noPeaceCheckbox.checked = true;
-		disableBombsCheckbox.checked = true;
-		disablePuppetsCheckbox.checked = true;
-		const operationCinematicCheckbox = document.getElementById(
-			"cinematic-mode-checkbox",
-		);
-		if (operationCinematicCheckbox) operationCinematicCheckbox.checked = false;
-		missilesEnabled = false;
-		await startWar();
-		setupPanel.style.display = "none";
-		casualtyPanel.style.display = "none";
-		statsPanel.style.display = "none";
-
-		godModeBtn.style.display = "none";
-		forcePeaceBtn.style.display = "none";
-		quickRestartBtn.style.display = "none";
-		restartScenarioBtn.style.display = "none";
-		commanderHud.style.display = "block";
-		document.body.classList.add("commander-active");
-		commanderStanceSelect.value = activeOperationRuntime.directive.stance;
-		commanderCitySelect.value = activeOperationRuntime.directive.targetCity;
-		commanderReserveSelect.value = String(
-			activeOperationRuntime.directive.reserve,
-		);
-		_planReassessNeeded[definition.playerSideIdx] = true;
-		if (window.innerWidth > 768) {
-			map.fitBounds(
-				[
-					[43.5, 20],
-					[56.5, 42.5],
-				],
-				{ paddingTopLeft: [350, 60], paddingBottomRight: [30, 30] },
-			);
-		} else {
-			map.fitBounds(
-				[
-					[43.5, 20],
-					[56.5, 42.5],
-				],
-				{
-					paddingTopLeft: [8, Math.round(window.innerHeight * 0.2)],
-					paddingBottomRight: [8, Math.round(window.innerHeight * 0.36)],
-				},
-			);
-		}
-		updateCommanderHud(true);
-		influenceLayer.render();
-	} catch (error) {
-		console.error("Commander operation failed to start", error);
-		clearOperationUi();
-		loadingOverlay.style.display = "none";
-		mainMenu.style.display = "flex";
-		alert(`Commander operation failed: ${error.message}`);
-		throw error;
-	} finally {
-		commanderDeployBtn.disabled = false;
-		commanderDeployBtn.textContent = "ASSUME COMMAND";
-	}
 }
 
 export function deepClone(obj) {
@@ -8060,900 +5997,16 @@ function updateWarOverview(force = false) {
 	renderWarOverview(warDeskOverviewRows());
 }
 
-function reopenConflictSetupAfterWar() {
-	if (gameMode !== "CONQUEST") return;
-	const setupAlreadyOpen =
-		gameState.startsWith("SELECTING") && setupPanel.style.display !== "none";
-	if (setupAlreadyOpen) return;
-	resetToSelection();
-	if (influenceLayer) {
-		influenceLayer.invalidate(RENDER_LAYERS.ALL);
-		influenceLayer.render();
-	}
+function reopenConflictSetupAfterWar(...args) {
+	return lifecycle.reopenConflictSetupAfterWar(...args);
 }
 
-export async function startWar() {
-	const activeSides = sides.filter((s) => s.length > 0);
-	if (activeSides.length < 2) {
-		alert("Please assign countries to at least two sides.");
-		return;
-	}
-
-	setLoadingThematic(false);
-	loadingOverlay.style.display = "flex";
-	loadingStatus.innerText = getTranslation("LOADING");
-	loadingBar.style.width = "0%";
-
-	await new Promise((r) => setTimeout(r, 50));
-
-	try {
-		await _startWarInner();
-	} catch (err) {
-		console.error("[MW] startWar FAILED:", err);
-		loadingOverlay.style.display = "none";
-		alert(`War failed to start: ${err.message}`);
-	}
+export async function startWar(...args) {
+	return lifecycle.startWar(...args);
 }
 
-export async function _startWarInner() {
-	invalidateWarLifecycleTimers();
-	if (gameMode === "CONQUEST")
-		applyBroadSetupPosture(
-			document.getElementById("setup-posture-select")?.value || "ADAPTIVE",
-		);
-	initAudio().then(() => {
-		playWarAmbiance();
-	});
-	playWarStartSound();
-
-	// Capture a clean snapshot of the scenario just before the war starts
-	// so QUICK RESTART can restore it instantly with no loading screen.
-	initialWorldControlMapSnapshot = worldControlMap
-		? new Uint16Array(worldControlMap)
-		: null;
-	initialDeJureMapSnapshot = deJureMap ? new Uint16Array(deJureMap) : null;
-	initialProvinceMapSnapshot = provinceMap ? new Int32Array(provinceMap) : null;
-	initialLandMaskSnapshot = landMask ? new Uint8Array(landMask) : null;
-	initialBiomeMaskSnapshot = biomeMask ? new Uint8Array(biomeMask) : null;
-	initialCountryMetadataSnapshot = deepClone(countryMetadata);
-	initialCitiesSnapshot = deepClone(cities);
-
-	const _attackers = sides[0] || [];
-	const _defenders = sides[1] || [];
-	resetOperationalAiRuntime();
-	document.body.classList.remove("conflict-active");
-	document.getElementById("war-desk").style.display = "none";
-	_warOverviewSides = [];
-	_warOverviewLastUpdate = -Infinity;
-	resetSimulationOptimizationRuntime();
-	capitalLostCountries = new Set();
-	resetSideHostilities();
-
-	// Initialize time system for this war
-	setGameTimeFromInputs();
-
-	// Read optional manual manpower overrides from the setup inputs
-	manualSideManpower.fill(null);
-	for (let si = 0; si < sides.length; si++) {
-		const mpInput = document.getElementById(`manpower-side-${si}`);
-		const parsed = mpInput ? parseInt(mpInput.value, 10) : NaN;
-		manualSideManpower[si] =
-			!Number.isNaN(parsed) && parsed > 0 ? parsed : null;
-	}
-
-	gameState = "SIMULATING";
-	isPaused = false;
-	influenceLayer?.setControlChangeTrackingEnabled(true);
-	influenceLayer?.invalidate(RENDER_LAYERS.ALL);
-	_simTickCount = 0;
-	warGraceEndTick = simFrameCount + CONFIG.WAR_GRACE_TICKS;
-	_lastCapitulationTick = Number.NEGATIVE_INFINITY;
-
-	// Hard reset dynamic war-state before building a new theater.
-	// This prevents stale frontline/occupation data from previous wars from
-	// pulling units to old hotspots or breaking capitulation logic.
-	for (let i = 0; i < landMask.length; i++) {
-		if (landMask[i] === 2) landMask[i] = 1;
-		for (let s = 0; s < sideInfluenceMaps.length; s++)
-			sideInfluenceMaps[s][i] = 0;
-		dominantSideMap[i] = -1;
-		occupationMap[i] = 0;
-		primaryOccupierMap[i] = 0;
-	}
-	_cachedP1T = 0;
-	_cachedP2T = 0;
-	_cachedSideTerritoryCounts = [];
-	_cachedSideTerritoryPcts = [];
-	latestCountryStats.clear();
-	aiCountryState.clear();
-	_warPlan = [];
-	_navalPlan.length = 0;
-	_navalSupplyPlan.length = 0;
-	_transportPlan.length = 0;
-	_coastalDefensePlan.length = 0;
-	_neutralGarrisonPlan.length = 0;
-	_defenderReactionPlan.length = 0;
-	_proposalReassessTick.length = 0;
-	_proposalsCache.length = 0;
-	_planReassessNeeded.length = 0;
-	_commanderPlanReplacePending.length = 0;
-	_sidePrevControlled.length = 0;
-	_sidePrevStrengthRatio.length = 0;
-	_sidePrevPosture.length = 0;
-	_sideMomentumHistory = [];
-	_sideWarPhase = [];
-	_frontIntelBySide = [];
-	_aiDebugPlans = [];
-	_aiPlanMemory.clear();
-	sides.flat().forEach((c) => {
-		if (!c) return;
-		c.lastControlledCount = undefined;
-		c.lastOwnedCount = undefined;
-		c._aiPrevControlled = undefined;
-		c._aiStallTicks = 0;
-		c._aiInitialCities = undefined;
-		c._aiInitialManpower = undefined;
-	});
-
-	// Cinematic Mode logic
-	cinematicMode = document.getElementById("cinematic-mode-checkbox")?.checked;
-	if (cinematicMode) {
-		document.getElementById("game-status").style.display = "none";
-		document.getElementById("stats-panel").style.display = "none";
-
-		// Start Recording
-		try {
-			const canvas = influenceLayer._container;
-			recordedChunks = [];
-			const stream = canvas.captureStream(30); // 30fps recording
-			mediaRecorder = new MediaRecorder(stream, {
-				mimeType: "video/webm; codecs=vp9",
-			});
-			mediaRecorder.ondataavailable = (e) => {
-				if (e.data.size > 0) recordedChunks.push(e.data);
-			};
-			mediaRecorder.start();
-		} catch (e) {
-			console.warn("MediaRecorder failed to start:", e);
-		}
-	} else {
-		document.getElementById("game-status").style.display = "flex";
-		document.getElementById("stats-panel").style.display = "block";
-	}
-	pauseBtn.innerText = "Pause";
-	pauseBtn.style.background = "#f39c12";
-	lastTreatyTime = Date.now();
-	sideCasualties.fill(0);
-	countryCasualties.clear();
-	casualtyByAttacker.clear();
-	sides.flat().forEach((c) => {
-		countryCasualties.set(c.id, 0);
-		casualtyByAttacker.set(c.id, new Map());
-	});
-	frameAccumulator = 0;
-	simFrameCount = 0;
-	// Reset cached frontline field state between wars.
-	// Without this, a new war may reuse old direction vectors and pull both
-	// teams toward the same stale hotspot from the previous conflict.
-	invalidateFrontlineField();
-	_frontlinePolys = {};
-	_neutralBorderPolys = {};
-	_frontlinePolyTick = -999;
-
-	setSpeed(0); // Conflicts start at 1x speed (Index 0 in SPEED_STEPS)
-
-	// Initialize diplomacy and technology toggles
-	peaceTreatiesDisabled = noPeaceCheckbox.checked;
-
-	const startYear = gameTimeEnabled && gameTimeDate ? gameTimeDate.year : 2024;
-	// Historical technology gate: bombs/missiles are disabled for any scenario starting before 1942
-	let isHistoricalGateActive = gameTimeEnabled && startYear < 1942;
-
-	// Also look at the scenario name to decide if this is a pre-missile era
-	const scName = (currentScenarioContext?.name || "").toLowerCase();
-	const preMissileKeywords = [
-		"1936",
-		"1914",
-		"1804",
-		"1492",
-		"1 ad",
-		"napoleonic",
-		"ww1",
-		"great war",
-		"renaissance",
-		"classical",
-		"antique",
-	];
-	if (preMissileKeywords.some((k) => scName.includes(k))) {
-		isHistoricalGateActive = true;
-	}
-
-	bombsDisabled =
-		disableBombsCheckbox.checked || !missilesEnabled || isHistoricalGateActive;
-
-	statusText.innerText = ffaMode
-		? "Free For All Active"
-		: "Global Conflict Active";
-	recalculateAllBounds();
-	setupPanel.style.display = "none";
-	statsPanel.style.display = "block";
-	casualtyPanel.style.display = "flex";
-	resetBtn.style.display = "block";
-	updateRestartVisibility();
-
-	// Final sync of mountain state before sim starts
-	mountainsEnabled = !setupDisableMountainsCheckbox.checked;
-	document.getElementById("speed-controls").style.display = "flex";
-	godModeBtn.style.display = "block";
-	if (godModeActive) godBombBtn.style.display = "block";
-	forcePeaceBtn.style.display = "block";
-	unitCountsDiv.style.display = "flex";
-	treatyAlert.style.display = "none";
-
-	const getCode = (feat) => {
-		if (!feat?.properties) return "un";
-		const p = feat.properties;
-		let code =
-			p.ISO_A2 || p.iso_a2 || p.ISO_A2_EH || p.iso_a2_eh || p.ADDR_A2 || "un";
-		if (code === "-99") code = "un";
-		return code.toLowerCase();
-	};
-
-	// Optimize: Single pass to count initial cells and set up masks/occupancy
-	const countryToSideMap = new Map();
-	const cellCounts = new Map();
-	const countryIndices = new Map();
-	const sideCellIndices = sides.map(() => []);
-	_mopUpOwnedCellCache.clear();
-	_mopUpDeJureCellCache.clear();
-
-	// Ensure country bounds are up to date before we derive any war theater extents
-	recalculateAllBounds();
-
-	initialCombatants = [];
-	sides.forEach((side, idx) => {
-		side.forEach((c) => {
-			initialCombatants.push({
-				id: c.id,
-				name: c.name,
-				sideIndex: idx,
-			});
-			countryToSideMap.set(c.id, idx);
-			cellCounts.set(c.id, 0);
-			countryIndices.set(c.id, []);
-
-			// Flag initialization: Reuse existing flag objects from metadata to prevent flickering and redundant fetches
-			const meta = countryMetadata[c.id - 1];
-			if (meta?.tempFlag) {
-				c.flag = meta.tempFlag;
-			} else {
-				c.flag = new Image();
-				c.flag.crossOrigin = "anonymous";
-				if (meta?.flagUrl) {
-					c.flag.src = meta.flagUrl;
-				} else {
-					const nameCode = findCodeByName(c.name);
-					const src = nameCode
-						? `https://flagcdn.com/w80/${nameCode}.webp`
-						: c.feature
-							? `https://flagcdn.com/w80/${getCode(c.feature)}.webp`
-							: null;
-					if (src) c.flag.src = src;
-				}
-				if (meta) meta.tempFlag = c.flag;
-			}
-			c.isCapitulated = false;
-			c.isSaturated = false;
-		});
-	});
-
-	primaryOccupierMap.fill(0);
-
-	// SATELLITE THEATER DEFINITION:
-	// Ensure we have complete, non-viewport-limited bounds for every country involved.
-	// This fixes the "early frontline cutoff" bug in big countries.
-	recalculateAllBounds(true);
-
-	// Determine the minimal bounding box that covers all warring countries on the grid
-	let minX = gridWidth - 1;
-	let maxX = 0;
-	let minY = gridHeight - 1;
-	let maxY = 0;
-
-	countryMetadata.forEach((meta) => {
-		if (!meta) return;
-		if (!countryToSideMap.has(meta.id)) return;
-		if (!meta.bounds) return;
-		minX = Math.min(minX, meta.bounds.minX);
-		maxX = Math.max(maxX, meta.bounds.maxX);
-		minY = Math.min(minY, meta.bounds.minY);
-		maxY = Math.max(maxY, meta.bounds.maxY);
-	});
-
-	// Fallback to full map if bounds are invalid for some reason
-	if (
-		!Number.isFinite(minX) ||
-		!Number.isFinite(maxX) ||
-		!Number.isFinite(minY) ||
-		!Number.isFinite(maxY) ||
-		minX < 0 ||
-		minY < 0 ||
-		maxX <= minX ||
-		maxY <= minY
-	) {
-		minX = 0;
-		minY = 0;
-		maxX = gridWidth - 1;
-		maxY = gridHeight - 1;
-	}
-
-	// THE OPTIMIZED PASS: Only scan the war theater bounding box, chunked to keep UI responsive
-	const regionWidth = maxX - minX + 1;
-	const regionHeight = maxY - minY + 1;
-	const regionTotalCells = regionWidth * regionHeight;
-	const chunkSize = 250000; // Smaller chunks for smoother big-war startup
-
-	let processed = 0;
-	for (let y = minY; y <= maxY; y++) {
-		const rowOffset = y * gridWidth;
-		for (let x = minX; x <= maxX; x++) {
-			const i = rowOffset + x;
-			const id = worldControlMap[i];
-			if (id > 0 && countryToSideMap.has(id)) {
-				const sideIdx = countryToSideMap.get(id);
-
-				landMask[i] = 2;
-				sideInfluenceMaps[sideIdx][i] = 1.0;
-				syncOccupationFromSideInfluence(i);
-				primaryOccupierMap[i] = id;
-
-				cellCounts.set(id, cellCounts.get(id) + 1);
-				countryIndices.get(id).push(i);
-				sideCellIndices[sideIdx].push(i);
-				cacheMopUpCell(_mopUpOwnedCellCache, id, i);
-				cacheMopUpCell(_mopUpDeJureCellCache, deJureMap[i], i);
-			}
-			processed++;
-			if (processed % chunkSize === 0) {
-				loadingBar.style.width = `${Math.min(90, (processed / regionTotalCells) * 70)}%`;
-				// Yield back to the browser so the UI doesn't freeze on giant conflicts
-				await new Promise((r) => setTimeout(r, 0));
-			}
-		}
-	}
-	scheduleCoastalTopologyJob();
-
-	// Set counts back to country objects
-	sides.forEach((side) => {
-		side.forEach((c) => {
-			c.initialCells = cellCounts.get(c.id) || 0;
-		});
-	});
-
-	// --- GENERALS & BATTLE PLANS ---
-	// Each side gets a "general" with a plan quality; underdogs with a brilliant plan get powerful buffs.
-	generals = [];
-	const sideLand = sides.map((side) =>
-		side.reduce((sum, c) => sum + (cellCounts.get(c.id) || 0), 0),
-	);
-
-	// Automatically switch to POLITICAL view at the start of every war for consistent visibility.
-	viewMode = "POLITICAL";
-	if (viewModeBtn) {
-		viewModeBtn.innerText = "POLITICAL";
-		viewModeBtn.style.background = "#3498db";
-	}
-	if (influenceLayer && typeof influenceLayer._update === "function") {
-		influenceLayer._forceRender = true;
-		influenceLayer._update();
-	}
-
-	sides.forEach((side, idx) => {
-		const myLand = sideLand[idx] || 0;
-		const enemyLand = sideLand.reduce(
-			(sum, v, i) => (areSidesHostile(idx, i) ? sum + v : sum),
-			0,
-		);
-		const isUnderdog = enemyLand > 0 && myLand < enemyLand;
-
-		// Base plan quality; underdogs get a small bias towards better plans.
-		// Overall values are kept modest so "cracked" generals are rare.
-		let planQuality = Math.random();
-		if (gameMode !== "CONQUEST" && isUnderdog) {
-			// Pull slightly towards the upper half but keep a lot of randomness.
-			planQuality = Math.min(1, planQuality * 0.3 + 0.3 + Math.random() * 0.2);
-		}
-
-		const general = {
-			sideIndex: idx,
-			isUnderdog,
-			planQuality,
-			name: isUnderdog ? `Underdog General ${idx + 1}` : `General ${idx + 1}`,
-		};
-		generals.push(general);
-
-		// If the plan is strong enough and this side is the underdog, consider super‑buffs.
-		// However, if the opposing pole already fields heavily buffed nations (buff/super/godly),
-		// their raw quality largely negates this general advantage.
-		const enemyHasStrongBuff = sides.some(
-			(otherSide, j) =>
-				areSidesHostile(idx, j) &&
-				otherSide.some((c) =>
-					["buff", "super", "godly"].includes(c.buffState || "none"),
-				),
-		);
-
-		// Make strong underdog generals much rarer (high threshold) and disable them
-		// when facing strongly buffed opponents (e.g. Luxembourg vs a buffed Germany).
-		if (
-			gameMode !== "CONQUEST" &&
-			isUnderdog &&
-			planQuality > 0.9 &&
-			!enemyHasStrongBuff
-		) {
-			side.forEach((c) => {
-				c.buffState = c.buffState === "godly" ? "godly" : "super";
-				const meta = countryMetadata[c.id - 1];
-				if (meta) meta.buffState = c.buffState;
-			});
-		}
-	});
-
-	sideColors = [...DEFAULT_SIDE_COLORS];
-	sides.forEach((side, idx) => {
-		if (side.length > 0 && side[0].color) {
-			sideColors[idx] = side[0].color;
-		}
-	});
-
-	rebuildStatsPanel();
-
-	activeTheaterCities = cities.filter((c) => {
-		const idx = getGridIndex(c.lat, c.lng);
-		if (idx !== -1 && landMask[idx] === 2) {
-			c.sovereignId = worldControlMap[idx];
-			return true;
-		}
-		return false;
-	});
-
-	// Identify frontline cells for each country for smarter spawning
-	const frontlineIndices = new Map();
-	sides.flat().forEach((c) => {
-		frontlineIndices.set(c.id, []);
-	});
-
-	// Scan warzone for borders to define the initial "front"
-	const totalCells = worldControlMap.length;
-	for (let i = 0; i < totalCells; i++) {
-		const id = worldControlMap[i];
-		if (id > 0 && countryToSideMap.has(id)) {
-			const sideIdx = countryToSideMap.get(id);
-			const _y = Math.floor(i / gridWidth);
-			const _x = i % gridWidth;
-			let isFrontline = false;
-			// Check cardinal neighbors and calculate push vector
-			const neighbors = [
-				{ id: i + 1, dx: 1, dy: 0 },
-				{ id: i - 1, dx: -1, dy: 0 },
-				{ id: i + gridWidth, dx: 0, dy: 1 },
-				{ id: i - gridWidth, dx: 0, dy: -1 },
-			];
-			let vx = 0,
-				vy = 0;
-			for (const n of neighbors) {
-				if (n.id >= 0 && n.id < totalCells) {
-					const nId = worldControlMap[n.id];
-					// A cell is a frontline if its neighbor belongs to an enemy side
-					if (
-						nId > 0 &&
-						countryToSideMap.has(nId) &&
-						areSidesHostile(sideIdx, countryToSideMap.get(nId))
-					) {
-						isFrontline = true;
-						vx -= n.dx; // Vector away from enemy neighbor
-						vy -= n.dy;
-					}
-				}
-			}
-			if (isFrontline) {
-				const mag = Math.sqrt(vx * vx + vy * vy);
-				frontlineIndices.get(id).push({
-					idx: i,
-					vx: mag > 0 ? vx / mag : 0,
-					vy: mag > 0 ? vy / mag : 0,
-				});
-			}
-		}
-	}
-	// Efficient spawn based on pre-collected indices
-
-	sides.forEach((side, sideIdx) => {
-		// Track how many units this side already has so we can enforce CONFIG.MAX_UNITS_PER_SIDE strictly.
-		let sideCurrentUnits = units.filter((u) => u.sideIndex === sideIdx).length;
-
-		side.forEach((c) => {
-			const theaterIndices = countryIndices.get(c.id);
-			const fronts = frontlineIndices.get(c.id);
-			if (!theaterIndices || theaterIndices.length === 0) return;
-
-			// Diminishing Density: Large countries have lower unit density to prevent overcrowding
-			const sizeFactor = Math.max(1, theaterIndices.length / 1500);
-			const densityScale = 1.0 / sizeFactor ** 0.45;
-
-			const fullDesiredCount = Math.floor(
-				theaterIndices.length * CONFIG.UNIT_DENSITY_FACTOR * densityScale,
-			);
-			const standingFloor = Math.max(
-				AI_MOBILIZATION.INITIAL_SPAWN_MIN,
-				Math.floor((c.startingUnitsFloor || 3) * 0.67),
-			);
-			let desiredCount = Math.floor(
-				fullDesiredCount * AI_MOBILIZATION.INITIAL_SPAWN_FRAC,
-			);
-			desiredCount = Math.max(standingFloor, desiredCount);
-			desiredCount = Math.min(
-				desiredCount,
-				Math.max(standingFloor, fullDesiredCount),
-			);
-
-			const remainingCap = Math.max(
-				0,
-				CONFIG.MAX_UNITS_PER_SIDE - sideCurrentUnits,
-			);
-			const count = Math.min(desiredCount, remainingCap);
-			if (count <= 0) return;
-
-			const friendlyCities = cities.filter((city) => {
-				if (!city.ownerId || city.ownerId !== c.id) return false;
-				const cIdx = getGridIndex(city.lat, city.lng);
-				return cIdx !== -1 && landMask[cIdx] !== 0;
-			});
-
-			for (let j = 0; j < count; j++) {
-				// At war start, spread units along the frontline with city preference.
-				let fromFront = false;
-				let fData;
-
-				if (
-					fronts &&
-					fronts.length > 0 &&
-					Math.random() < AI_MOBILIZATION.START_FROM_FRONT_CHANCE
-				) {
-					// Cycle-based frontline distribution
-					const fIdx = j % fronts.length;
-					fData = fronts[fIdx];
-					fromFront = true;
-				} else {
-					// Prefer spawning near friendly cities if available
-					if (friendlyCities.length > 0) {
-						const pick =
-							friendlyCities[Math.floor(Math.random() * friendlyCities.length)];
-						const cIdx = getGridIndex(pick.lat, pick.lng);
-						fData = { idx: cIdx, vx: 0, vy: 0 };
-					} else {
-						const tidx =
-							theaterIndices[Math.floor(Math.random() * theaterIndices.length)];
-						fData = { idx: tidx, vx: 0, vy: 0 };
-					}
-				}
-
-				// Spread units widely along the frontline, distributing evenly
-				const py = Math.floor(fData.idx / gridWidth);
-				const px = fData.idx % gridWidth;
-
-				const jitterRange = CONFIG.GRID_RES * 1.5;
-				const pushBack = fromFront ? CONFIG.GRID_RES * 0.6 : 0;
-
-				let lat =
-					py * CONFIG.GRID_RES -
-					90 +
-					(Math.random() - 0.5) * jitterRange +
-					fData.vy * pushBack;
-				let lng =
-					px * CONFIG.GRID_RES -
-					180 +
-					(Math.random() - 0.5) * jitterRange +
-					fData.vx * pushBack;
-
-				// Validation: Ensure final coordinate is within the country's sovereign grid
-				const finalIdx = getGridIndex(lat, lng);
-				if (finalIdx === -1 || worldControlMap[finalIdx] !== c.id) {
-					lat = py * CONFIG.GRID_RES - 90 + CONFIG.GRID_RES / 2;
-					lng = px * CONFIG.GRID_RES - 180 + CONFIG.GRID_RES / 2;
-				}
-
-				const isMountainCell = terrainMask && terrainMask[fData.idx] > 0.35;
-				const isAlpen = isMountainCell && Math.random() < 0.4;
-
-				units.push({
-					id: Math.random(),
-					kind: "army",
-					lat,
-					lng,
-					sideIndex: sideIdx,
-					sovereignId: c.id,
-					beneficiaryId: c.id,
-					isAlpenjager: !!isAlpen,
-					health: CONFIG.UNIT_HEALTH * (isAlpen ? CONFIG.ALPEN_HEALTH_MULT : 1),
-					lastAttack: 0,
-					deployTicks: 30,
-				});
-				sideCurrentUnits++;
-				if (sideCurrentUnits >= CONFIG.MAX_UNITS_PER_SIDE) break;
-			}
-		});
-	});
-	for (let sideIdx = 0; sideIdx < sides.length; sideIdx++) {
-		compactVariableStrengthFormationsForSide(sideIdx);
-	}
-
-	/**
-	 * Allied Cross‑Deployment:
-	 * After initial spawns, push a slice of each country's divisions into allied territory so weaker
-	 * friends aren't left with a paper-thin, isolated frontline that gets instantly rolled.
-	 */
-	sides.forEach((side, sideIdx) => {
-		if (!side || side.length < 2) return; // nothing to balance
-		const samePoleSides = side; // all entries here share the same pole by construction
-
-		// Sort allies by land size so bigger partners share more units with smaller ones
-		const sorted = samePoleSides
-			.map((c) => ({
-				country: c,
-				land: cellCounts.get(c.id) || 0,
-			}))
-			.sort((a, b) => b.land - a.land);
-
-		// Build quick lookup of candidate cells per country for redistribution
-		const perCountryCells = new Map();
-		sorted.forEach((entry) => {
-			perCountryCells.set(
-				entry.country.id,
-				(countryIndices.get(entry.country.id) || []).slice(),
-			);
-		});
-
-		const sideUnits = units.filter((u) => u.sideIndex === sideIdx);
-		if (!sideUnits.length) return;
-
-		// For each stronger country, move a small portion of its units into each weaker ally's land
-		for (let i = 0; i < sorted.length; i++) {
-			const strong = sorted[i];
-			if (!strong.land) continue;
-
-			const strongUnits = sideUnits.filter(
-				(u) => u.sovereignId === strong.country.id,
-			);
-			if (strongUnits.length === 0) continue;
-
-			// Up to ~20% of this country's units are available for cross‑deployment (min 2)
-			const poolSize = Math.max(2, Math.floor(strongUnits.length * 0.2));
-
-			for (let j = i + 1; j < sorted.length; j++) {
-				const weak = sorted[j];
-				if (!weak.land) continue;
-
-				const weakCells = perCountryCells.get(weak.country.id);
-				if (!weakCells || weakCells.length === 0) continue;
-
-				// Number of units to move into this specific ally's territory (capped)
-				const shareCount = Math.min(
-					Math.max(1, Math.floor(poolSize / (sorted.length - i - 1))),
-					strongUnits.length,
-				);
-				if (shareCount <= 0) continue;
-
-				for (let k = 0; k < shareCount; k++) {
-					const unit = strongUnits.pop();
-					if (!unit) break;
-
-					// Pick a random cell belonging to the weaker ally
-					const cellIdx =
-						weakCells[Math.floor(Math.random() * weakCells.length)];
-					const cy = Math.floor(cellIdx / gridWidth);
-					const cx = cellIdx % gridWidth;
-					const baseLat = cy * CONFIG.GRID_RES - 90;
-					const baseLng = cx * CONFIG.GRID_RES - 180;
-
-					// Slight jitter inside the target cell, but keep the unit firmly inside ally territory
-					const jitter = CONFIG.GRID_RES * 0.4;
-					unit.lat =
-						baseLat + CONFIG.GRID_RES / 2 + (Math.random() - 0.5) * jitter;
-					unit.lng =
-						baseLng + CONFIG.GRID_RES / 2 + (Math.random() - 0.5) * jitter;
-
-					// Make sure longitude stays normalized
-					if (unit.lng > 180) unit.lng -= 360;
-					else if (unit.lng < -180) unit.lng += 360;
-
-					// Credit for land capture stays with the original sovereign; we only change location
-					unit.beneficiaryId = strong.country.id;
-				}
-			}
-		}
-	});
-
-	// Historical Tech Guard for Base Generation
-	const currentYear = gameTimeDate ? gameTimeDate.year : 2024;
-	const allowSilos = !gameTimeEnabled || currentYear >= 1942;
-
-	sideCellIndices.forEach((validIndices, si) => {
-		if (!validIndices || validIndices.length === 0) return;
-
-		if (allowSilos) {
-			const baseCount = Math.min(
-				8,
-				Math.max(2, Math.floor(validIndices.length / 500)),
-			);
-			for (let i = 0; i < baseCount; i++) {
-				const randIdx =
-					validIndices[Math.floor(Math.random() * validIndices.length)];
-				const y = Math.floor(randIdx / gridWidth);
-				const x = randIdx % gridWidth;
-				bases.push({
-					lat: y * CONFIG.GRID_RES - 90 + CONFIG.GRID_RES / 2,
-					lng: x * CONFIG.GRID_RES - 180 + CONFIG.GRID_RES / 2,
-					sideIndex: si,
-				});
-			}
-		}
-	});
-
-	// Automated performance cases describe an exact personnel budget, not a
-	// request to create that many independently simulated map markers.
-	applyPendingBenchmarkForceOverride();
-
-	loadingOverlay.style.display = "none";
-
-	if (
-		tutorialActive &&
-		activeTutorialSet[currentTutorialStep].actionRequired === "START_WAR"
-	) {
-		advanceTutorial();
-	}
-
-	// Initialize displayed manpower, honoring any manual overrides if present.
-	// Total personnel includes deployed formations plus an uncommitted reserve.
-	sideSoldiers.fill(0);
-	initialSideSoldiers.fill(0);
-	sideRecruitableManpower.fill(0);
-	// Small wars keep one marker per nominal division; large wars retain exact
-	// personnel while using stronger, fewer formations.
-	const sideArmyFormationCounts = new Float64Array(MAX_SIDES);
-	const sideDeployedPersonnel = new Float64Array(MAX_SIDES);
-	const sideCellCounts = new Float64Array(MAX_SIDES);
-	const sideCityCounts = new Float64Array(MAX_SIDES);
-	for (let i = 0; i < units.length; i++) {
-		const sIdx = units[i].sideIndex;
-		if (sIdx >= 0 && sIdx < MAX_SIDES) {
-			sideArmyFormationCounts[sIdx]++;
-			sideDeployedPersonnel[sIdx] += getLiveFormationPersonnel(units[i]);
-		}
-	}
-
-	// Count territory cells and cities per side
-	for (const [countryId, cellArr] of countryIndices) {
-		const sIdx = countryToSideMap.get(countryId);
-		if (sIdx != null && sIdx >= 0 && sIdx < MAX_SIDES) {
-			sideCellCounts[sIdx] += cellArr.length;
-		}
-	}
-	for (const city of activeTheaterCities) {
-		const sIdx = countryToSideMap.get(city.sovereignId);
-		if (sIdx != null && sIdx >= 0 && sIdx < MAX_SIDES) {
-			sideCityCounts[sIdx]++;
-		}
-	}
-
-	for (let sIdx = 0; sIdx < MAX_SIDES; sIdx++) {
-		const initialArmyPool = sideDeployedPersonnel[sIdx];
-		// Manpower = 1% of total population
-		let populationPool = 0;
-		for (const [countryId, _cellArr] of countryIndices) {
-			const sIdx2 = countryToSideMap.get(countryId);
-			if (sIdx2 === sIdx) {
-				const meta = countryMetadata[countryId - 1];
-				if (meta?.pop) {
-					populationPool += meta.pop;
-				}
-			}
-		}
-		populationPool = Math.round(populationPool * 0.01);
-		// If no population data, fall back to territory-based calculation
-		if (populationPool === 0) {
-			populationPool =
-				Math.round(sideCellCounts[sIdx] * 200) +
-				Math.round(sideCityCounts[sIdx] * 10000);
-		}
-		const hasActiveForce = sideArmyFormationCounts[sIdx] > 0;
-		const autoPool = hasActiveForce
-			? Math.max(initialArmyPool, populationPool)
-			: initialArmyPool;
-		initialSideSoldiers[sIdx] = Math.max(
-			initialArmyPool,
-			manualSideManpower[sIdx] !== null ? manualSideManpower[sIdx] : autoPool,
-		);
-		sideSoldiers[sIdx] = initialSideSoldiers[sIdx];
-		sideRecruitableManpower[sIdx] = Math.max(
-			0,
-			sideSoldiers[sIdx] - initialArmyPool,
-		);
-		if (sideArmyFormationCounts[sIdx] > 0) {
-			soldiersPerUnit[sIdx] = CONFIG.UNIT_TO_SOLDIER_RATIO;
-		}
-	}
-
-	const bounds = L.latLngBounds([]);
-	sides.forEach((side) => {
-		side.forEach((c) => {
-			if (c.feature)
-				try {
-					bounds.extend(L.geoJSON(c.feature).getBounds());
-				} catch (_e) {
-					console.warn("GeoJSON bounds computation failed", _e);
-				}
-		});
-	});
-
-	if (!bounds.isValid()) {
-		for (let i = 0; i < worldControlMap.length; i++) {
-			const id = worldControlMap[i];
-			if (sides.some((s) => s.some((c) => c.id === id))) {
-				const y = Math.floor(i / gridWidth);
-				const x = i % gridWidth;
-				const lat = y * CONFIG.GRID_RES - 90;
-				const lng = x * CONFIG.GRID_RES - 180;
-				bounds.extend([lat, lng]);
-			}
-		}
-	}
-
-	if (bounds.isValid()) {
-		map.fitBounds(bounds.pad(0.2));
-	}
-
-	// Automatically join all vassals of countries starting the war if not disabled
-	if (!disablePuppetsCheckbox.checked && !_benchmarkSuppressAutomaticPuppets) {
-		sides.forEach((side, sIdx) => {
-			if (!side) return;
-			const initialVassals = [];
-			side.forEach((c) => {
-				if (!c) return;
-				countryMetadata.forEach((m) => {
-					if (
-						m &&
-						m.overlordId === c.id &&
-						!sides.flat().some((exist) => exist && exist.id === m.id)
-					) {
-						initialVassals.push(m.id);
-					}
-				});
-			});
-			initialVassals.forEach((vid) => {
-				recruitNeutralMidWar(vid, sIdx);
-			});
-		});
-	}
-
-	if (gameMode === "CONQUEST") {
-		initializeOperationalAiRuntime();
-		_warOverviewSides = sides.map((countries, index) => ({
-			uid: sideUids[index],
-			name: getSideDisplayName(index),
-			color: sideColors[index],
-			countries: countries.map((country) => ({
-				id: country.id,
-				name: country.name,
-				color: country.color,
-			})),
-		}));
-		document.getElementById("war-desk").style.display = "block";
-		document.body.classList.add("conflict-active");
-		updateWarOverview(true);
-	}
-
-	requestAnimationFrame(updateLoop);
+export async function _startWarInner(...args) {
+	return lifecycle._startWarInner(...args);
 }
 
 export function computeAdjacency() {
@@ -9099,540 +6152,14 @@ export function triggerRandomWar() {
 /**
  * Show benchmark results modal with frame timing statistics.
  */
-function restoreBenchmarkSettings() {
-	_benchmarkForcePersonnelPerSide = null;
-	_benchmarkSuppressAutomaticPuppets = false;
-	if (!_benchmarkRestoreSettings) return;
-	CONFIG.MAX_UNITS_PER_SIDE = _benchmarkRestoreSettings.maxUnitsPerSide;
-	if (noPeaceCheckbox) {
-		noPeaceCheckbox.checked = _benchmarkRestoreSettings.noPeaceChecked;
-	}
-	_benchmarkRestoreSettings = null;
-}
-
-function prepareIsolatedBenchmarkRun() {
-	invalidateWarLifecycleTimers();
-	if (animationFrameId !== null) {
-		cancelAnimationFrame(animationFrameId);
-		animationFrameId = null;
-	}
-	if (backgroundTickId) {
-		clearInterval(backgroundTickId);
-		backgroundTickId = null;
-	}
-	if (
-		initialWorldControlMapSnapshot?.length === worldControlMap?.length &&
-		initialDeJureMapSnapshot?.length === deJureMap?.length &&
-		initialProvinceMapSnapshot?.length === provinceMap?.length &&
-		initialLandMaskSnapshot?.length === landMask?.length
-	) {
-		worldControlMap.set(initialWorldControlMapSnapshot);
-		deJureMap.set(initialDeJureMapSnapshot);
-		provinceMap.set(initialProvinceMapSnapshot);
-		landMask.set(initialLandMaskSnapshot);
-		if (initialBiomeMaskSnapshot?.length === biomeMask?.length) {
-			biomeMask.set(initialBiomeMaskSnapshot);
-		}
-		if (initialCountryMetadataSnapshot) {
-			countryMetadata = deepClone(initialCountryMetadataSnapshot);
-		}
-		if (initialCitiesSnapshot) cities = deepClone(initialCitiesSnapshot);
-	}
-	occupationMap.fill(0);
-	resetSideInfluenceMaps();
-	primaryOccupierMap.fill(0);
-	units = [];
-	unitSpatialHash.clear();
-	for (const sideHash of unitHashBySide) sideHash.clear();
-	bombs = [];
-	explosions = [];
-	bases = [];
-	activeBattles = [];
-	_battleHash.clear();
-	resetOperationalAiRuntime();
-	document.body.classList.remove("conflict-active");
-	document.getElementById("war-desk").style.display = "none";
-	_warOverviewSides = [];
-	_warOverviewLastUpdate = -Infinity;
-	latestCountryStats.clear();
-	sideSoldiers.fill(0);
-	initialSideSoldiers.fill(0);
-	sideRecruitableManpower.fill(0);
-	soldiersPerUnit.fill(CONFIG.UNIT_TO_SOLDIER_RATIO);
-	sideCasualties.fill(0);
-	countryCasualties.clear();
-	casualtyByAttacker.clear();
-	capitalLostCountries = new Set();
-	frameAccumulator = 0;
-	simFrameCount = 0;
-}
-
-function showBenchmarkResults() {
-	if (_benchmarkTimeoutId !== null) {
-		clearTimeout(_benchmarkTimeoutId);
-		_benchmarkTimeoutId = null;
-	}
-	if (_perfSamples.length === 0) {
-		restoreBenchmarkSettings();
-		_benchmarkReject?.(new Error("Benchmark ended without frame samples."));
-		_benchmarkResolve = null;
-		_benchmarkReject = null;
-		return;
-	}
-	const avg = _perfSamples.reduce((a, b) => a + b, 0) / _perfSamples.length;
-	const max = Math.max(..._perfSamples);
-	const min = Math.min(..._perfSamples);
-	const avgFps = 1000 / avg;
-	const minFps = 1000 / max;
-	const maxFps = 1000 / min;
-	if (window.__perf) {
-		window.__perf._lastBenchmark = {
-			..._benchmarkMetadata,
-			frames: _perfSamples.length,
-			speed: simSpeed,
-			maxUnitsPerSide: _benchmarkUnitsPerSide,
-			avgFps,
-			minFps,
-			maxFps,
-			avgFrameMs: avg,
-			maxFrameMs: max,
-			minFrameMs: min,
-			endedAt: new Date().toISOString(),
-		};
-	}
-	const report = getPerfReportData();
-	if (benchmarkStatsEl) {
-		const initialPersonnel = _benchmarkMetadata?.initialPersonnelBySide || [];
-		const initialFormations =
-			_benchmarkMetadata?.initialFormationCountBySide || [];
-		const forceSummary = initialPersonnel.length
-			? ` &nbsp;|&nbsp; Personnel: ${initialPersonnel.map((value) => Math.round(value).toLocaleString()).join(" / ")} &nbsp;|&nbsp; Formations: ${initialFormations.join(" / ")}`
-			: _benchmarkUnitsPerSide
-				? ` &nbsp;|&nbsp; Nominal scale/side: ${_benchmarkUnitsPerSide.toLocaleString()}`
-				: "";
-		benchmarkStatsEl.innerHTML =
-			`Frames: ${_perfSamples.length} &nbsp;|&nbsp; Speed: ${simSpeed}x${forceSummary}<br>` +
-			`Avg FPS: ${avgFps.toFixed(0)} &nbsp;|&nbsp; Min FPS: ${minFps.toFixed(0)} &nbsp;|&nbsp; Max FPS: ${maxFps.toFixed(0)}<br>` +
-			`Avg frame: ${avg.toFixed(1)}ms &nbsp;|&nbsp; P95: ${report.frames.p95.toFixed(1)}ms &nbsp;|&nbsp; P99: ${report.frames.p99.toFixed(1)}ms &nbsp;|&nbsp; Max: ${max.toFixed(1)}ms<br>` +
-			`Main work: ${report.frameStages.mainWork.avg.toFixed(1)}ms &nbsp;|&nbsp; Sim: ${report.frameStages.simulation.avg.toFixed(1)}ms &nbsp;|&nbsp; HUD: ${report.frameStages.hud.avg.toFixed(1)}ms &nbsp;|&nbsp; Render: ${report.frameStages.render.avg.toFixed(1)}ms<br>` +
-			`Tick: ${report.ticks.avgMs.toFixed(1)}ms avg / ${report.ticks.p95Ms.toFixed(1)}ms P95 &nbsp;|&nbsp; Long tasks: ${report.browser.longTasks.count}`;
-	}
-	if (benchmarkResults) benchmarkResults.style.display = "flex";
-	if (window.__perf) {
-		window.__perf._frozenReport = report;
-		window.__perf._trackingPaused = true;
-	}
-	restoreBenchmarkSettings();
-	_benchmarkResolve?.(report);
-	_benchmarkResolve = null;
-	_benchmarkReject = null;
-}
 
 /**
  * Benchmark mode: load Modern Day scenario, launch Russia vs China at max speed.
  * Auto-fetches the 2022 preset if the main menu is open with no data loaded yet.
  */
-export async function startBenchmark(options = {}) {
-	if (_isBenchmarking || _isBenchmarkWarmingUp || _benchmarkResolve) {
-		throw new Error("A benchmark is already running.");
-	}
-	const requestedUnits = Number.isFinite(options.maxUnitsPerSide)
-		? Math.max(1, Math.floor(options.maxUnitsPerSide))
-		: null;
-	const durationMs = Number.isFinite(options.durationMs)
-		? Math.max(1_000, Math.floor(options.durationMs))
-		: 60_000;
-	const warmupMs = Number.isFinite(options.warmupMs)
-		? Math.max(0, Math.floor(options.warmupMs))
-		: 3000;
 
-	const benchmarkSpeedIndex = Number.isFinite(options.speedIndex)
-		? Math.max(
-				0,
-				Math.min(SPEED_STEPS.length - 1, Math.floor(options.speedIndex)),
-			)
-		: SPEED_STEPS.length - 1;
-	const benchmarkViewMode = options.viewMode === "FLAG" ? "FLAG" : "POLITICAL";
-	const perfMode =
-		options.perfMode === "detailed"
-			? "detailed"
-			: options.perfMode === "basic"
-				? "basic"
-				: null;
-	_benchmarkRestoreSettings = {
-		maxUnitsPerSide: CONFIG.MAX_UNITS_PER_SIDE,
-		noPeaceChecked: noPeaceCheckbox?.checked === true,
-	};
-	_benchmarkSuppressAutomaticPuppets = true;
-	if (requestedUnits !== null) {
-		CONFIG.MAX_UNITS_PER_SIDE = requestedUnits;
-		_benchmarkUnitsPerSide = requestedUnits;
-	} else {
-		_benchmarkUnitsPerSide = null;
-	}
-	// Load the 2022 Modern Day scenario if countryMetadata isn't populated yet
-	if (!countryMetadata || countryMetadata.length === 0) {
-		loadingStatus.innerText = "Loading Modern World Theater...";
-		loadingOverlay.style.display = "flex";
-		mainMenu.style.display = "none";
-		try {
-			const url = "assets/maps/world map 2022.json";
-			await performPresetLoad(COMPILED_SCENARIO_URLS.modern, "CONQUEST", {
-				jsonFallbackUrl: url,
-				prederivedEarth: true,
-			});
-		} catch (e) {
-			console.error(e);
-			alert("Failed to load 2022 Modern Day scenario.");
-			restoreBenchmarkSettings();
-			throw e;
-		}
-	}
-
-	// Match Russia and China by name (China may be "People's Republic of China")
-	const metaRussia = countryMetadata.find((m) => m && m.name === "Russia");
-	const metaChina = countryMetadata.find(
-		(m) => m && typeof m.name === "string" && m.name.includes("China"),
-	);
-	if (!metaRussia || !metaChina) {
-		alert("Russia or China not found in country data.");
-		restoreBenchmarkSettings();
-		throw new Error("Russia or China not found in country data.");
-	}
-	prepareIsolatedBenchmarkRun();
-	const isolatedRussia = countryMetadata.find(
-		(meta) => meta?.name === "Russia",
-	);
-	const isolatedChina = countryMetadata.find(
-		(meta) =>
-			meta && typeof meta.name === "string" && meta.name.includes("China"),
-	);
-	if (!isolatedRussia || !isolatedChina) {
-		restoreBenchmarkSettings();
-		throw new Error(
-			"Russia or China missing after benchmark world restoration.",
-		);
-	}
-
-	const russia = {
-		id: isolatedRussia.id,
-		name: isolatedRussia.name,
-		color: isolatedRussia.color,
-		role: "OFFENSE",
-		strategy: "BALANCED",
-		buffState: "none",
-	};
-	const china = {
-		id: isolatedChina.id,
-		name: isolatedChina.name,
-		color: isolatedChina.color,
-		role: "OFFENSE",
-		strategy: "BALANCED",
-		buffState: "none",
-	};
-
-	sides = [[russia], [china]];
-	activeSideIndex = 0;
-	if (noPeaceCheckbox) noPeaceCheckbox.checked = true;
-	// Scenario loading reapplies saved settings, so the programmatic benchmark
-	// cap must be restored immediately before war creation.
-	if (requestedUnits !== null) CONFIG.MAX_UNITS_PER_SIDE = requestedUnits;
-	_benchmarkForcePersonnelPerSide =
-		requestedUnits !== null
-			? requestedUnits * CONFIG.UNIT_TO_SOLDIER_RATIO
-			: null;
-	updateSidesUI();
-	await startWar();
-	_benchmarkForcePersonnelPerSide = null;
-	if (gameState !== "SIMULATING") {
-		restoreBenchmarkSettings();
-		throw new Error("Benchmark war failed to initialize.");
-	}
-	const benchmarkInitialPersonnelBySide = sides.map(
-		(_side, sideIdx) => sideSoldiers[sideIdx] || 0,
-	);
-	const benchmarkInitialFormationCountBySide = sides.map((_side, sideIdx) =>
-		units.reduce(
-			(count, unit) => count + Number(unit.sideIndex === sideIdx),
-			0,
-		),
-	);
-	viewMode = benchmarkViewMode;
-	if (viewModeBtn) {
-		viewModeBtn.innerText = viewMode === "FLAG" ? "FLAG VIEW" : "POLITICAL";
-		viewModeBtn.style.background = viewMode === "FLAG" ? "#8e44ad" : "#3498db";
-	}
-	recalculateAllBounds();
-	if (influenceLayer) influenceLayer._forceRender = true;
-	setSpeed(benchmarkSpeedIndex);
-	ensurePerfLongTaskObserver();
-	if (benchmarkResults) benchmarkResults.style.display = "none";
-	// Warm the simulation and JIT before resetting measured counters.
-	isPaused = false;
-	_isBenchmarkWarmingUp = warmupMs > 0;
-	if (perfOverlay && _isBenchmarkWarmingUp) {
-		perfOverlay.style.display = "block";
-		perfOverlay.textContent = `PERF WARM-UP · ${(warmupMs / 1000).toFixed(1)}s`;
-	}
-	if (warmupMs > 0) {
-		await new Promise((resolve) => setTimeout(resolve, warmupMs));
-	}
-	_isBenchmarkWarmingUp = false;
-	if (gameState !== "SIMULATING") {
-		restoreBenchmarkSettings();
-		throw new Error("Benchmark war ended during warm-up.");
-	}
-	// Initialize benchmark state after warm-up.
-	_perfSamples = [];
-	window.perfReset(perfMode || "basic");
-	window.__perf._traceMarksEnabled = options.traceMarks === true;
-	if (window.__perf) {
-		window.__perf._frameHistory = [];
-		window.__perf._frameSpikes = [];
-		window.__perf._scheduler = createPerfState(window.__perf._mode)._scheduler;
-		window.__perf._lastBenchmark = null;
-	}
-	_benchmarkMetadata = {
-		caseId: String(options.caseId || "benchmark"),
-		speedIndex: benchmarkSpeedIndex,
-		viewMode: benchmarkViewMode,
-		traceMarks: options.traceMarks === true,
-		durationMs,
-		warmupMs,
-		initialPersonnelBySide: benchmarkInitialPersonnelBySide,
-		initialFormationCountBySide: benchmarkInitialFormationCountBySide,
-		startedAt: new Date().toISOString(),
-	};
-	_perfBenchmarkEnd = performance.now() + durationMs;
-	_isBenchmarking = true;
-	return new Promise((resolve, reject) => {
-		_benchmarkResolve = resolve;
-		_benchmarkReject = reject;
-		_benchmarkTimeoutId = setTimeout(() => {
-			if (!_isBenchmarking) return;
-			_isBenchmarking = false;
-			isPaused = true;
-			_benchmarkMetadata.endedBy =
-				gameState === "SIMULATING" ? "WALL_CLOCK" : "WAR_ENDED";
-			showBenchmarkResults();
-		}, durationMs + 250);
-	});
-}
-
-export function activateCountryMidWar(country, sideIdx) {
-	const countryId = country.id;
-	if (!sides[sideIdx]) sides[sideIdx] = [];
-	if (!sides[sideIdx].some((member) => member.id === countryId)) {
-		sides[sideIdx].push(country);
-	}
-	const historicalCombatant = initialCombatants.find(
-		(entry) => entry.id === countryId,
-	);
-	if (historicalCombatant) historicalCombatant.sideIndex = sideIdx;
-	else {
-		initialCombatants.push({
-			id: countryId,
-			name: country.name,
-			sideIndex: sideIdx,
-		});
-	}
-
-	units.forEach((u) => {
-		if (u.sovereignId === countryId) {
-			u.sideIndex = sideIdx;
-			u.beneficiaryId = countryId;
-			u.deployTicks = 15;
-			clearUnitCommandAssignments(u);
-			// Phase 3: clear stale cache on side change
-			u._cachedTarget = null;
-			u._cachedScanKx = -999;
-			u._cachedScanKy = -999;
-		}
-	});
-
-	let cellCount = 0;
-	const theaterIndices = [];
-
-	for (let i = 0; i < worldControlMap.length; i++) {
-		if (worldControlMap[i] === countryId) {
-			cacheMopUpCell(_mopUpOwnedCellCache, countryId, i);
-			cacheMopUpCell(_mopUpDeJureCellCache, deJureMap[i], i);
-			landMask[i] = 2;
-			// Don't erase enemy occupation if the cell is already under enemy control.
-			// Otherwise the German army that already conquered Czechia would need to
-			// re-propagate influence from scratch — taking hundreds of throttled ticks.
-			const currentDs = dominantSideMap[i];
-			if (currentDs < 0 || currentDs === sideIdx) {
-				for (let s = 0; s < sideInfluenceMaps.length; s++)
-					sideInfluenceMaps[s][i] = 0;
-				sideInfluenceMaps[sideIdx][i] = 1.0;
-				syncOccupationFromSideInfluence(i);
-				primaryOccupierMap[i] = countryId;
-			}
-			theaterIndices.push(i);
-			cellCount++;
-		}
-	}
-	country.initialCells = cellCount;
-
-	// Add cities of the new country to the active theater so they can be captured
-	const newCities = cities.filter((c) => {
-		const idx = getGridIndex(c.lat, c.lng);
-		return idx !== -1 && worldControlMap[idx] === countryId;
-	});
-	activeTheaterCities = [...activeTheaterCities, ...newCities];
-
-	// Compute manpower pool contribution from the joining country (1% of population)
-	const popMeta = countryMetadata[countryId - 1];
-	const populationPool = popMeta?.pop ? Math.round(popMeta.pop * 0.01) : 0;
-	// Fall back to territory-based if no population data
-	const territoryPool = Math.round(cellCount * 200);
-	const cityPool = Math.round(newCities.length * 10000);
-	const joiningPool =
-		populationPool > 0 ? populationPool : Math.max(0, territoryPool + cityPool);
-	if (initialSideSoldiers[sideIdx] <= 0) {
-		initialSideSoldiers[sideIdx] = joiningPool;
-		sideSoldiers[sideIdx] = joiningPool;
-	} else {
-		initialSideSoldiers[sideIdx] += joiningPool;
-		sideSoldiers[sideIdx] += joiningPool;
-	}
-
-	const meta = countryMetadata[countryId - 1];
-	if (meta?.tempFlag) {
-		country.flag = meta.tempFlag;
-	} else {
-		country.flag = new Image();
-		country.flag.crossOrigin = "anonymous";
-		if (meta?.flagUrl) {
-			country.flag.src = meta.flagUrl;
-		}
-		if (meta) meta.tempFlag = country.flag;
-	}
-
-	// Identify frontline cells for the intervening country for smart spawning
-	const frontlines = [];
-	theaterIndices.forEach((i) => {
-		let isF = false;
-		let vx = 0,
-			vy = 0;
-		const neighbors = [
-			{ id: i + 1, dx: 1, dy: 0 },
-			{ id: i - 1, dx: -1, dy: 0 },
-			{ id: i + gridWidth, dx: 0, dy: 1 },
-			{ id: i - gridWidth, dx: 0, dy: -1 },
-		];
-		for (const n of neighbors) {
-			if (n.id >= 0 && n.id < worldControlMap.length) {
-				const nId = worldControlMap[n.id];
-				// A cell is a frontline if its neighbor belongs to an enemy side
-				if (nId > 0 && nId !== countryId) {
-					const nSide = sides.findIndex((s) => s.some((c) => c.id === nId));
-					if (nSide !== -1 && areSidesHostile(sideIdx, nSide)) {
-						isF = true;
-						vx -= n.dx;
-						vy -= n.dy;
-					}
-				}
-			}
-		}
-		if (isF) {
-			const mag = Math.sqrt(vx * vx + vy * vy);
-			frontlines.push({
-				idx: i,
-				vx: mag > 0 ? vx / mag : 0,
-				vy: mag > 0 ? vy / mag : 0,
-			});
-		}
-	});
-
-	// Diminishing Density: Large countries have lower unit density to prevent overcrowding
-	const sizeFactor = Math.max(1, theaterIndices.length / 1500);
-	const densityScale = 1.0 / sizeFactor ** 0.45;
-
-	let count = Math.floor(
-		theaterIndices.length * CONFIG.UNIT_DENSITY_FACTOR * densityScale,
-	);
-	const remainingFormationSlots = Math.max(
-		0,
-		CONFIG.MAX_UNITS_PER_SIDE -
-			units.reduce(
-				(total, unit) => total + Number(unit.sideIndex === sideIdx),
-				0,
-			),
-	);
-	count = theaterIndices.length
-		? Math.min(
-				remainingFormationSlots,
-				Math.max(4, Math.min(count, CONFIG.MAX_UNITS_PER_SIDE)),
-			)
-		: 0;
-
-	for (let j = 0; j < count; j++) {
-		let fData;
-		let fromFront = false;
-		if (frontlines.length > 0 && Math.random() < 0.95) {
-			fData = frontlines[Math.floor(Math.random() * frontlines.length)];
-			fromFront = true;
-		} else {
-			const idx =
-				theaterIndices[Math.floor(Math.random() * theaterIndices.length)];
-			fData = { idx, vx: 0, vy: 0 };
-		}
-
-		const y = Math.floor(fData.idx / gridWidth);
-		const x = fData.idx % gridWidth;
-
-		// Use pushback logic consistent with startWar for clean frontline deployment
-		const pushBack = fromFront ? CONFIG.GRID_RES * 0.45 : 0;
-
-		const spawnIdx = fData.idx;
-		const isMountainCell = terrainMask && terrainMask[spawnIdx] > 0.35;
-		const isAlpen = isMountainCell && Math.random() < 0.4;
-
-		const unitId = Math.random();
-		const activatedUnit = {
-			id: unitId,
-			kind: "army",
-			lat:
-				y * CONFIG.GRID_RES -
-				90 +
-				(Math.random() - 0.5) * CONFIG.GRID_RES * 1.2 +
-				fData.vy * pushBack,
-			lng:
-				x * CONFIG.GRID_RES -
-				180 +
-				(Math.random() - 0.5) * CONFIG.GRID_RES * 1.2 +
-				fData.vx * pushBack,
-			sideIndex: sideIdx,
-			sovereignId: countryId,
-			beneficiaryId: countryId,
-			isAlpenjager: !!isAlpen,
-			health: CONFIG.UNIT_HEALTH * (isAlpen ? CONFIG.ALPEN_HEALTH_MULT : 1),
-			lastAttack: 0,
-			deployTicks: 30,
-		};
-		setUnitFormationPersonnel(
-			activatedUnit,
-			Math.max(
-				1,
-				Math.round(soldiersPerUnit[sideIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO),
-			),
-		);
-		units.push(activatedUnit);
-	}
-	const joiningLivePersonnel = getCountryLivePersonnel(countryId);
-	const unfundedPersonnel = Math.max(0, joiningLivePersonnel - joiningPool);
-	sideRecruitableManpower[sideIdx] += Math.max(
-		0,
-		joiningPool - joiningLivePersonnel,
-	);
-	if (unfundedPersonnel > 0) {
-		sideSoldiers[sideIdx] += unfundedPersonnel;
-		initialSideSoldiers[sideIdx] += unfundedPersonnel;
-	}
-	recalculateAllBounds();
-	reconcileOperationalAiLifecycle("country-activated");
+export function activateCountryMidWar(...args) {
+	return lifecycle.activateCountryMidWar(...args);
 }
 
 export function launchBomb(fromLat, fromLng, toLat, toLng, sideIdx) {
@@ -9674,9 +6201,7 @@ export function launchBomb(fromLat, fromLng, toLat, toLng, sideIdx) {
  */
 
 function lngDelta(a, b) {
-	let d = a - b;
-	if (d > 180) d -= 360;
-	else if (d < -180) d += 360;
+	const d = normalizeLongitudeDelta(a - b);
 	return d;
 }
 
@@ -9686,687 +6211,28 @@ function geoDistSq(aLat, aLng, bLat, bLng) {
 	return dLat * dLat + dLng * dLng;
 }
 
-function getCommanderCityDefenseMovement(unit, plan, fallbackSignature) {
-	const currentPlanSignature = plan.signature || fallbackSignature;
-	const assignedToPlan = unit._assignedPlanSignature === currentPlanSignature;
-	const planLimit = Math.max(1, plan.maxAssignedUnits || 5);
-	const planFull = !assignedToPlan && (plan.activeUnitCount || 0) >= planLimit;
-	const anchor = plan.target;
-	const closeEnough =
-		assignedToPlan ||
-		!anchor ||
-		geoDistSq(unit.lat, unit.lng, anchor.lat, anchor.lng) <= 100;
-	if (planFull || !closeEnough) return null;
-	unit._assignedPlanSignature = currentPlanSignature;
-	plan.activeUnitCount = Math.min(planLimit, (plan.activeUnitCount || 0) + 1);
-	const points = plan.garrisonPoints?.length
-		? plan.garrisonPoints
-		: [plan.target];
-	const pointIndex = Math.floor(Math.abs(unit.id * 1000000) % points.length);
-	const point = points[pointIndex];
-	const deltaLat = point.lat - unit.lat;
-	let deltaLng = point.lng - unit.lng;
-	if (deltaLng > 180) deltaLng -= 360;
-	else if (deltaLng < -180) deltaLng += 360;
-	const distance = Math.sqrt(deltaLat * deltaLat + deltaLng * deltaLng);
-	if (distance <= 0.16) {
-		return { lat: 0, lng: 0, speed: 0.2 };
-	}
-	return {
-		lat: deltaLat / distance,
-		lng: deltaLng / distance,
-		speed: 1.35,
-	};
-}
+const aiPlanner = createAiPlanner(applicationRuntime);
+export const { scoreProposal, selectPlans } = aiPlanner;
+const {
+	getSideStrategyProfile,
+	estimateLocalForces,
+	operationalLocalRisk,
+	findLandPathSummary,
+	findNearestSeaIdx,
+	findSeaPathSummary,
+	getPlanSignature,
+} = aiPlanner;
 
-function getSideStrategyProfile(sideIdx) {
-	if (
-		gameMode === "OPERATION" &&
-		activeOperationDefinition &&
-		activeOperationRuntime &&
-		sideIdx === activeOperationDefinition.playerSideIdx
-	) {
-		const stance =
-			COMMANDER_STANCES[activeOperationRuntime.directive.stance] ||
-			COMMANDER_STANCES.BALANCED;
-		return {
-			dominant: stance.strategy,
-			weights: { [stance.strategy]: 1 },
-			aggression: stance.offenseShare,
-		};
-	}
-	const sideCountries = sides[sideIdx] || [];
-	const weights = {
-		TURTLE: 0,
-		DEFENSIVE: 0,
-		BALANCED: 0,
-		AGGRESSIVE: 0,
-		BLITZ: 0,
-	};
-	for (const country of sideCountries) {
-		const strategy = (country.strategy || "BALANCED").toUpperCase();
-		const stats = latestCountryStats.get(country.id);
-		const weight = Math.max(1, stats?.units || country.initialCells || 1);
-		weights[strategy] = (weights[strategy] || 0) + weight;
-	}
-	let dominant = "BALANCED";
-	let bestWeight = -1;
-	for (const [strategy, weight] of Object.entries(weights)) {
-		if (weight > bestWeight) {
-			bestWeight = weight;
-			dominant = strategy;
-		}
-	}
-	return {
-		dominant,
-		weights,
-		aggression:
-			(weights.BLITZ * 1.0 +
-				weights.AGGRESSIVE * 0.75 +
-				weights.BALANCED * 0.45 +
-				weights.DEFENSIVE * 0.2) /
-			Math.max(
-				1,
-				Object.values(weights).reduce((sum, v) => sum + v, 0),
-			),
-	};
-}
+const aiRuntime = createAiRuntime(applicationRuntime);
+const {
+	operationalUnitPower,
+	reconcileOperationalAiLifecycle,
+	initializeOperationalAiRuntime,
+	updateOperationalAiTaskForces,
+} = aiRuntime;
 
-function operationalUnitPower(unit) {
-	if (!unit || unit.health <= 0) return 0;
-	let power = Math.max(0, getLiveFormationStrength(unit));
-	const sideCountry = sides[unit.sideIndex]?.find(
-		(country) => country.id === unit.sovereignId,
-	);
-	const buff = getEffectiveBuffState(
-		sideCountry,
-		countryMetadata[unit.sovereignId - 1] || null,
-	);
-	power *=
-		{
-			buff: 2.5,
-			super: 10,
-			godly: 40,
-			weakened: 0.7,
-			crippled: 0.4,
-		}[buff] || 1;
-	return power;
-}
-
-function serializeOperationalUnit(unit) {
-	const country = sides[unit.sideIndex]?.find(
-		(candidate) => candidate.id === unit.sovereignId,
-	);
-
-	return {
-		id: unit.id,
-		sideUid: sideUids[unit.sideIndex] || "",
-		countryId: unit.sovereignId,
-		countryRole: country?.role === "SUPPORT" ? "SUPPORT" : "PRIMARY",
-		kind: unit.kind || "army",
-		lat: unit.lat,
-		lng: unit.lng,
-		health: unit.health,
-		maxHealth:
-			unit.maxHealth ||
-			CONFIG.UNIT_HEALTH * (unit.isAlpenjager ? CONFIG.ALPEN_HEALTH_MULT : 1),
-		combatPower: operationalUnitPower(unit),
-		deployed: unit.deployTicks <= 0 && !unit.isAtSea,
-		commandEligible:
-			!unit.navalAssigned && !unit.supplyAssigned && !unit.garrisonAssigned,
-		taskForceId: unit._taskForceUid || null,
-	};
-}
-
-function reconcileOperationalAiLifecycle(reason = "world-change") {
-	if (gameMode !== "CONQUEST") return;
-	if (_aiTaskForcesBySide.size === 0) return;
-	ensureSideIdentities();
-	const activeSideUids = new Set();
-	const sideIndexByUid = new Map();
-	for (let sideIndex = 0; sideIndex < sides.length; sideIndex++) {
-		const uid = sideUids[sideIndex];
-		if (!uid || !sides[sideIndex]?.length) continue;
-		activeSideUids.add(uid);
-		sideIndexByUid.set(uid, sideIndex);
-	}
-	const liveUnitsById = new Map(
-		units
-			.filter((unit) => unit.health > 0)
-			.map((unit) => [String(unit.id), unit]),
-	);
-	const liveUnitIds = new Set(liveUnitsById.keys());
-
-	const nextTaskForces = new Map();
-	for (const [sideUid] of sideIndexByUid) {
-		const taskForces = cleanupAiTaskForces(
-			_aiTaskForcesBySide.get(sideUid) || [],
-			{ liveUnitIds, activeSideUids },
-		).map((taskForce) => {
-			const assignedUnitIds = taskForce.assignedUnitIds.filter((unitId) => {
-				const unit = liveUnitsById.get(String(unitId));
-				return unit && sideUids[unit.sideIndex] === sideUid;
-			});
-			const assigned = new Set(assignedUnitIds.map(String));
-			return {
-				...taskForce,
-				assignedUnitIds,
-				unitRoles: Object.fromEntries(
-					Object.entries(taskForce.unitRoles || {}).filter(([unitId]) =>
-						assigned.has(String(unitId)),
-					),
-				),
-			};
-		});
-		nextTaskForces.set(sideUid, taskForces);
-	}
-	_aiTaskForcesBySide = nextTaskForces;
-
-	const validAssignments = new Map();
-	for (const taskForces of nextTaskForces.values()) {
-		for (const taskForce of taskForces) {
-			for (const unitId of taskForce.assignedUnitIds) {
-				validAssignments.set(String(unitId), taskForce.id);
-			}
-		}
-	}
-	for (const unit of units) {
-		if (validAssignments.get(String(unit.id)) === unit._taskForceUid) continue;
-		unit._taskForceUid = null;
-		unit._taskForceRole = null;
-		unit._taskForceOrder = null;
-	}
-
-	requestOperationalAiReassessment();
-	if (reason) _aiOperationsDirty = true;
-}
-
-function initializeOperationalAiRuntime() {
-	resetOperationalAiRuntime();
-	document.body.classList.remove("conflict-active");
-	document.getElementById("war-desk").style.display = "none";
-	_warOverviewSides = [];
-	_warOverviewLastUpdate = -Infinity;
-	if (gameMode !== "CONQUEST") return;
-	ensureSideIdentities();
-	for (let sideIndex = 0; sideIndex < sides.length; sideIndex++) {
-		if (sides[sideIndex]?.length)
-			_aiTaskForcesBySide.set(sideUids[sideIndex], []);
-	}
-	refreshLiveCombatPower();
-	_aiOperationsDirty = true;
-}
-
-function estimateLocalForces(sideIdx, lat, lng, radiusSq = 9) {
-	let friendlies = 0,
-		enemies = 0,
-		friendlyHealth = 0,
-		enemyHealth = 0;
-	const visit = (unit) => {
-		if (
-			unit.health <= 0 ||
-			unit.deployTicks > 0 ||
-			geoDistSq(unit.lat, unit.lng, lat, lng) > radiusSq
-		)
-			return;
-		if (unit.sideIndex === sideIdx) {
-			friendlies++;
-			friendlyHealth += operationalUnitPower(unit);
-		} else if (areSidesHostile(sideIdx, unit.sideIndex)) {
-			enemies++;
-			enemyHealth += operationalUnitPower(unit);
-		}
-	};
-	if (unitSpatialHash.size) {
-		const radius = Math.sqrt(radiusSq);
-		const columns = Math.ceil(360 / UNIT_HASH_CELL_SIZE);
-		const x0 = Math.floor((lng - radius + 180) / UNIT_HASH_CELL_SIZE);
-		const x1 = Math.floor((lng + radius + 180) / UNIT_HASH_CELL_SIZE);
-		const y0 = Math.max(
-			0,
-			Math.floor((lat - radius + 90) / UNIT_HASH_CELL_SIZE),
-		);
-		const y1 = Math.min(
-			Math.floor(180 / UNIT_HASH_CELL_SIZE),
-			Math.floor((lat + radius + 90) / UNIT_HASH_CELL_SIZE),
-		);
-		for (let x = x0; x <= x1; x++)
-			for (let y = y0; y <= y1; y++) {
-				for (const unit of unitSpatialHash.get(
-					(((x % columns) + columns) % columns) * 100 + y,
-				) || [])
-					visit(unit);
-			}
-	} else {
-		for (const unit of units) visit(unit);
-	}
-	return {
-		friendlies,
-		enemies,
-		friendlyHealth,
-		enemyHealth,
-		ratio: friendlyHealth / Math.max(0.25, enemyHealth),
-	};
-}
-
-function operationalLocalRisk(local) {
-	const ourForcesNear =
-		gameMode === "CONQUEST" ? local.friendlyHealth : local.friendlies;
-	const enemyForcesNear =
-		gameMode === "CONQUEST" ? local.enemyHealth : local.enemies;
-	return {
-		enemyForcesNear,
-		ourForcesNear,
-		enemyCounterWeight:
-			enemyForcesNear / Math.max(0.25, ourForcesNear + enemyForcesNear),
-	};
-}
-
-function buildFrontIntel(sideIdx) {
-	const fronts = [];
-	const keys = Object.keys(_frontlinePolys || {});
-	for (const key of keys) {
-		const [a, b] = key.split("_").map(Number);
-		if (a !== sideIdx && b !== sideIdx) continue;
-		const enemySide = a === sideIdx ? b : a;
-		const poly = _frontlinePolys[key];
-		if (!poly || poly.length === 0) continue;
-
-		let lat = 0;
-		let lng = 0;
-		const samples = [];
-		const stride = Math.max(1, Math.floor(poly.length / 18));
-		for (let p = 0; p < poly.length; p += stride) {
-			const pt = poly[p];
-			samples.push(pt);
-			lat += pt.lat;
-			lng += pt.lng;
-		}
-		if (samples.length === 0) continue;
-		lat /= samples.length;
-		lng /= samples.length;
-
-		let friendlies = 0;
-		let enemies = 0;
-		let friendlyPower = 0;
-		let enemyPower = 0;
-		let bestWeakPoint = samples[0];
-		let bestWeakScore = -Infinity;
-		if (gameMode !== "CONQUEST") {
-			for (const unit of units) {
-				if (unit.deployTicks > 0 || unit.health <= 0) continue;
-				if (
-					!samples.some(
-						(sample) =>
-							geoDistSq(unit.lat, unit.lng, sample.lat, sample.lng) <= 16,
-					)
-				) {
-					continue;
-				}
-				if (unit.sideIndex === sideIdx) friendlies++;
-				else if (areSidesHostile(sideIdx, unit.sideIndex)) enemies++;
-			}
-			friendlyPower = friendlies;
-			enemyPower = enemies;
-		} else {
-			for (const sample of samples) {
-				const local = estimateLocalForces(sideIdx, sample.lat, sample.lng, 16);
-				friendlies = Math.max(friendlies, local.friendlies);
-				enemies = Math.max(enemies, local.enemies);
-				friendlyPower = Math.max(friendlyPower, local.friendlyHealth);
-				enemyPower = Math.max(enemyPower, local.enemyHealth);
-			}
-		}
-		for (const sample of samples) {
-			const local = estimateLocalForces(sideIdx, sample.lat, sample.lng, 4.0);
-			const overstackPenalty = Math.max(
-				0,
-				local.friendlies - Math.max(4, local.enemies * 2),
-			);
-			const weakScore =
-				Math.min(local.ratio, 2.5) * 10 +
-				Math.min(local.enemies, 12) * 0.6 -
-				overstackPenalty * 0.8;
-			if (weakScore > bestWeakScore) {
-				bestWeakScore = weakScore;
-				bestWeakPoint = sample;
-			}
-		}
-
-		let enemyCitiesNear = 0;
-		let friendlyCitiesThreatened = 0;
-		for (const city of activeTheaterCities) {
-			if (geoDistSq(city.lat, city.lng, lat, lng) > 64) continue;
-			const idx = getGridIndex(city.lat, city.lng);
-			if (idx === -1) continue;
-			const citySide = dominantSideMap[idx];
-			if (citySide === sideIdx) friendlyCitiesThreatened++;
-			else if (citySide === enemySide) enemyCitiesNear++;
-		}
-
-		const localRatio =
-			gameMode === "CONQUEST"
-				? friendlyPower / Math.max(0.25, enemyPower)
-				: friendlies / Math.max(1, enemies);
-		const pressureScore =
-			localRatio * 30 +
-			enemyCitiesNear * 8 -
-			friendlyCitiesThreatened * 5 +
-			Math.min(20, poly.length / 15);
-		fronts.push({
-			pairKey: key,
-			enemySide,
-			lat,
-			lng,
-			length: poly.length,
-			samples,
-			weakPoint: { lat: bestWeakPoint.lat, lng: bestWeakPoint.lng },
-			friendlies,
-			enemies,
-			friendlyPower,
-			enemyPower,
-			localRatio,
-			enemyCitiesNear,
-			friendlyCitiesThreatened,
-			pressureScore,
-		});
-	}
-	fronts.sort((a, b) => b.pressureScore - a.pressureScore);
-	_frontIntelBySide[sideIdx] = fronts;
-	return fronts;
-}
-
-function findNearestFront(fronts, lat, lng) {
-	let best = null;
-	let bestDist = Infinity;
-	for (const front of fronts || []) {
-		const dSq = geoDistSq(lat, lng, front.lat, front.lng);
-		if (dSq < bestDist) {
-			bestDist = dSq;
-			best = front;
-		}
-	}
-	return { front: best, distSq: bestDist };
-}
-
-function canTraverseLandForPlan(idx, sideIdx, targetIdx) {
-	if (idx === targetIdx) return true;
-	if (idx < 0 || idx >= landMask.length || landMask[idx] === 0) return false;
-	const ds = dominantSideMap[idx];
-	const targetSide = targetIdx >= 0 ? dominantSideMap[targetIdx] : -1;
-	if (ds === sideIdx || ds === -1) return true;
-	return (
-		targetSide >= 0 && ds === targetSide && areSidesHostile(sideIdx, targetSide)
-	);
-}
-
-function acquirePlanBfsBuffers(total) {
-	if (_planBfsSeen.length !== total) {
-		_planBfsSeen = new Uint32Array(total);
-		_planBfsParent = new Int32Array(total);
-		_planBfsQueue = new Int32Array(total);
-		_planBfsGeneration = 0;
-	}
-	_planBfsGeneration = (_planBfsGeneration + 1) >>> 0;
-	if (_planBfsGeneration === 0) {
-		_planBfsSeen.fill(0);
-		_planBfsGeneration = 1;
-	}
-	return {
-		seen: _planBfsSeen,
-		parent: _planBfsParent,
-		queue: _planBfsQueue,
-		generation: _planBfsGeneration,
-	};
-}
-
-function findLandPathSummary(startIdx, targetIdx, sideIdx, maxVisited = 70000) {
-	if (startIdx === -1 || targetIdx === -1) return { reachable: false };
-	if (!canTraverseLandForPlan(startIdx, sideIdx, targetIdx)) {
-		const startRow = Math.floor(startIdx / gridWidth);
-		const startCol = startIdx % gridWidth;
-		let replacement = -1;
-		let replacementDist = Infinity;
-		for (let dr = -3; dr <= 3; dr++) {
-			for (let dc = -3; dc <= 3; dc++) {
-				const row = startRow + dr;
-				const col = startCol + dc;
-				if (row < 0 || row >= gridHeight || col < 0 || col >= gridWidth)
-					continue;
-				const idx = row * gridWidth + col;
-				if (!canTraverseLandForPlan(idx, sideIdx, targetIdx)) continue;
-				const dSq = dr * dr + dc * dc;
-				if (dSq < replacementDist) {
-					replacementDist = dSq;
-					replacement = idx;
-				}
-			}
-		}
-		if (replacement === -1) return { reachable: false };
-		startIdx = replacement;
-	}
-	const total = landMask.length;
-	const { seen, parent, queue, generation } = acquirePlanBfsBuffers(total);
-	let head = 0;
-	let tail = 0;
-	let visited = 0;
-	queue[tail++] = startIdx;
-	seen[startIdx] = generation;
-	parent[startIdx] = -1;
-	const offsets = [1, -1, gridWidth, -gridWidth];
-	while (head < tail && visited < maxVisited) {
-		const cur = queue[head++];
-		visited++;
-		if (cur === targetIdx) {
-			const waypoints = [];
-			let walk = cur;
-			let steps = 0;
-			while (walk !== -1 && walk !== startIdx && steps < 2048) {
-				if (steps === 12 || steps === 30 || steps === 60) {
-					const r = Math.floor(walk / gridWidth);
-					const c = walk % gridWidth;
-					waypoints.unshift({
-						lat: r * CONFIG.GRID_RES - 90,
-						lng: c * CONFIG.GRID_RES - 180,
-					});
-				}
-				walk = parent[walk];
-				steps++;
-			}
-			return {
-				reachable: true,
-				visited,
-				distanceCells: steps,
-				waypoints: waypoints.slice(0, 3),
-			};
-		}
-		const col = cur % gridWidth;
-		for (const off of offsets) {
-			if ((off === 1 && col === gridWidth - 1) || (off === -1 && col === 0)) {
-				continue;
-			}
-			const ni = cur + off;
-			if (ni < 0 || ni >= total || seen[ni] === generation) continue;
-			if (!canTraverseLandForPlan(ni, sideIdx, targetIdx)) continue;
-			seen[ni] = generation;
-			parent[ni] = cur;
-			if (tail < queue.length) queue[tail++] = ni;
-		}
-	}
-	return { reachable: false, visited, distanceCells: Infinity, waypoints: [] };
-}
-
-function findNearestSeaIdx(idx, radius = 6) {
-	if (idx < 0 || idx >= landMask.length) return -1;
-	const row0 = Math.floor(idx / gridWidth);
-	const col0 = idx % gridWidth;
-	let best = -1;
-	let bestDist = Infinity;
-	for (let dr = -radius; dr <= radius; dr++) {
-		for (let dc = -radius; dc <= radius; dc++) {
-			const row = row0 + dr;
-			const col = col0 + dc;
-			if (row < 0 || row >= gridHeight || col < 0 || col >= gridWidth) continue;
-			const ni = row * gridWidth + col;
-			if (landMask[ni] !== 0) continue;
-			const dSq = dr * dr + dc * dc;
-			if (dSq < bestDist) {
-				bestDist = dSq;
-				best = ni;
-			}
-		}
-	}
-	return best;
-}
-
-function findSeaPathSummary(startIdx, targetIdx, maxVisited = 120000) {
-	if (startIdx === -1 || targetIdx === -1) return { reachable: false };
-	if (landMask[startIdx] !== 0 || landMask[targetIdx] !== 0) {
-		return { reachable: false };
-	}
-	const total = landMask.length;
-	const { seen, queue, generation } = acquirePlanBfsBuffers(total);
-	let head = 0;
-	let tail = 0;
-	let visited = 0;
-	let distanceCells = 0;
-	queue[tail++] = startIdx;
-	seen[startIdx] = generation;
-	const offsets = [1, -1, gridWidth, -gridWidth];
-	while (head < tail && visited < maxVisited) {
-		const levelEnd = tail;
-		while (head < levelEnd) {
-			const cur = queue[head++];
-			visited++;
-			if (cur === targetIdx) {
-				return { reachable: true, visited, distanceCells };
-			}
-			const col = cur % gridWidth;
-			for (const off of offsets) {
-				if ((off === 1 && col === gridWidth - 1) || (off === -1 && col === 0)) {
-					continue;
-				}
-				const ni = cur + off;
-				if (
-					ni < 0 ||
-					ni >= total ||
-					seen[ni] === generation ||
-					landMask[ni] !== 0
-				)
-					continue;
-				seen[ni] = generation;
-				if (tail < queue.length) queue[tail++] = ni;
-			}
-		}
-		distanceCells++;
-	}
-	return { reachable: false, visited, distanceCells: Infinity };
-}
-
-function getPlanSignature(sideIdx, planLike) {
-	const target = planLike?.target;
-	const lat = target ? Math.round(target.lat * 2) / 2 : 0;
-	const lng = target ? Math.round(target.lng * 2) / 2 : 0;
-	const identity = planLike?.victimId != null ? `:${planLike.victimId}` : "";
-	return `${sideIdx}:${planLike?.type || "UNKNOWN"}${identity}:${lat}:${lng}`;
-}
-
-function getProposalMemory(sideIdx, proposal) {
-	return _aiPlanMemory.get(getPlanSignature(sideIdx, proposal)) || null;
-}
-
-function recordPlanOutcome(sideIdx, plan, outcome) {
-	if (!plan) return;
-	if (outcome !== "started" && plan._terminalOutcomeRecorded) return;
-	if (outcome !== "started") plan._terminalOutcomeRecorded = outcome;
-	const key = plan.signature || getPlanSignature(sideIdx, plan);
-	const previous = _aiPlanMemory.get(key) || {
-		attempts: 0,
-		successes: 0,
-		failures: 0,
-	};
-	const next = {
-		...previous,
-		type: plan.type,
-		targetName: plan.target?.name || previous.targetName || "",
-		lastTick: simFrameCount,
-		attempts: previous.attempts + (outcome === "started" ? 1 : 0),
-		successes: previous.successes + (outcome === "success" ? 1 : 0),
-		failures: previous.failures + (outcome === "failed" ? 1 : 0),
-		lastOutcome: outcome,
-	};
-	_aiPlanMemory.set(key, next);
-	const eventType = {
-		started: "AI_PLAN_STARTED",
-		success: "AI_PLAN_SUCCEEDED",
-		failed: "AI_PLAN_FAILED",
-		replaced: "AI_PLAN_REPLACED",
-	}[outcome];
-	const retainLegacyEvent =
-		gameMode !== "CONQUEST" ||
-		["NAVAL_INVASION", "NAVAL_SUPPLY"].includes(plan.type);
-	if (eventType && retainLegacyEvent) {
-		const _targetCountryId =
-			plan.victimId || plan.target?.sovereignId || plan.target?.ownerId || null;
-	}
-}
-
-function measurePlanProgressSignal(sideIdx, plan) {
-	if (!plan?.target) return 0;
-	const targetIdx = getGridIndex(plan.target.lat, plan.target.lng);
-	if (targetIdx !== -1 && dominantSideMap[targetIdx] === sideIdx) return 1;
-	let sampled = 0;
-	let controlled = 0;
-	const centerRow = Math.floor((plan.target.lat + 90) / CONFIG.GRID_RES);
-	const centerCol = Math.floor((plan.target.lng + 180) / CONFIG.GRID_RES);
-	for (let dr = -4; dr <= 4; dr += 2) {
-		for (let dc = -4; dc <= 4; dc += 2) {
-			const row = centerRow + dr;
-			const col = centerCol + dc;
-			if (row < 0 || row >= gridHeight || col < 0 || col >= gridWidth) continue;
-			const idx = row * gridWidth + col;
-			if (landMask[idx] === 0) continue;
-			sampled++;
-			if (dominantSideMap[idx] === sideIdx) controlled++;
-		}
-	}
-	const controlSignal = sampled > 0 ? controlled / sampled : 0;
-	const local = estimateLocalForces(
-		sideIdx,
-		plan.target.lat,
-		plan.target.lng,
-		9.0,
-	);
-	const forceSignal = Math.min(0.25, local.friendlies / 40);
-	return Math.min(1, controlSignal + forceSignal);
-}
-
-function applyPlanProgressMemory(sideIdx, plan) {
-	if (!plan) return;
-	if (plan.type === "DEFEND") {
-		plan.lastProgressTick = simFrameCount;
-		return;
-	}
-	const signal = measurePlanProgressSignal(sideIdx, plan);
-	if (plan._bestProgressSignal === undefined) {
-		plan._bestProgressSignal = signal;
-		plan.lastProgressTick = simFrameCount;
-	} else if (signal > plan._bestProgressSignal + 0.03) {
-		plan._bestProgressSignal = signal;
-		plan.lastProgressTick = simFrameCount;
-	}
-	plan.progress = Math.max(plan.progress || 0, signal);
-}
-
-function selectEvenlySpaced(items, limit) {
-	if (items.length <= limit) return items;
-	const selected = new Array(limit);
-	const step = (items.length - 1) / Math.max(1, limit - 1);
-	for (let i = 0; i < limit; i++) {
-		selected[i] = items[Math.round(i * step)];
-	}
-	return selected;
-}
+const aiProposalPipeline = createAiProposalPipeline(applicationRuntime);
+export const { generateAllProposals } = aiProposalPipeline;
 
 /**
  * Proposal Engine: generate every possible plan candidate for a side.
@@ -10374,1176 +6240,7 @@ function selectEvenlySpaced(items, limit) {
  * @param {number} sideIdx
  * @returns {Array<Object>}
  */
-export function generateAllProposals(sideIdx) {
-	const proposals = [];
-	const sideCountries = sides[sideIdx] || [];
-	if (sideCountries.length === 0) return proposals;
 
-	const sideUnits = _tickUnitsBySide[sideIdx] || [];
-	const unitCount = sideUnits.filter((u) => u.deployTicks === 0).length;
-
-	if (unitCount < 3) return proposals;
-
-	const myAllyIds = new Set(sideCountries.map((c) => c.id));
-	const frontIntel = buildFrontIntel(sideIdx);
-	const landPathCache = new Map();
-	const getLandPath = (startIdx, targetIdx) => {
-		const key = `${startIdx}:${targetIdx}`;
-		if (!landPathCache.has(key)) {
-			landPathCache.set(key, findLandPathSummary(startIdx, targetIdx, sideIdx));
-		}
-		return landPathCache.get(key);
-	};
-
-	// ── Pre-compute shared data ──
-
-	// Friendly unit centroid
-	let uLat = 0,
-		uLng = 0,
-		uCount = 0;
-	for (let ui = 0; ui < units.length; ui++) {
-		const u = units[ui];
-		if (u.sideIndex !== sideIdx || u.deployTicks > 0) continue;
-		uLat += u.lat;
-		uLng += u.lng;
-		uCount++;
-	}
-	if (uCount > 0) {
-		uLat /= uCount;
-		uLng /= uCount;
-	}
-
-	// Enemy territory centroid
-	let _eLat = 0,
-		_eLng = 0,
-		eCount = 0;
-	for (let i = 0; i < dominantSideMap.length; i += 20) {
-		if (landMask[i] === 0) continue;
-		if (areSidesHostile(sideIdx, dominantSideMap[i])) {
-			const row = Math.floor(i / gridWidth);
-			const col = i % gridWidth;
-			_eLat += row * CONFIG.GRID_RES - 90;
-			_eLng += col * CONFIG.GRID_RES - 180;
-			eCount++;
-		}
-	}
-	if (eCount > 0) {
-		_eLat /= eCount;
-		_eLng /= eCount;
-	}
-
-	// Friendly coastal staging cells (for naval proposals)
-	let friendlyCoastCells = [];
-	const sampledFriendly = new Set();
-	let enemyCoastalTiles = [];
-	const sampledEnemy = new Set();
-	const coastalStride = Math.max(
-		1,
-		Math.floor(_coastalLandIndices.length / 24_000),
-	);
-	for (
-		let coastalIndex = 0;
-		_coastalTopologyReady && coastalIndex < _coastalLandIndices.length;
-		coastalIndex += coastalStride
-	) {
-		const gi = _coastalLandIndices[coastalIndex];
-		const row = Math.floor(gi / gridWidth);
-		const col = gi % gridWidth;
-		const lat = row * CONFIG.GRID_RES - 90;
-		const lng = col * CONFIG.GRID_RES - 180;
-		const key = `${Math.floor(lat)}_${Math.floor(lng)}`;
-		if (dominantSideMap[gi] !== sideIdx) continue;
-		if (sampledFriendly.has(key)) continue;
-		sampledFriendly.add(key);
-		friendlyCoastCells.push({ lat, lng, idx: gi });
-	}
-
-	// Enemy coastal tiles (for naval and coastal defense)
-	for (
-		let coastalIndex = 0;
-		_coastalTopologyReady && coastalIndex < _coastalLandIndices.length;
-		coastalIndex += coastalStride
-	) {
-		const gi = _coastalLandIndices[coastalIndex];
-		if (dominantSideMap[gi] === sideIdx) continue;
-		const cellOwnerId = worldControlMap[gi];
-		const ownerSide = _tickCountryToSideMap.get(cellOwnerId);
-		if (ownerSide === undefined || !areSidesHostile(sideIdx, ownerSide))
-			continue;
-		if (myAllyIds.has(cellOwnerId)) continue;
-		const row = Math.floor(gi / gridWidth);
-		const col = gi % gridWidth;
-		const lat = row * CONFIG.GRID_RES - 90;
-		const lng = col * CONFIG.GRID_RES - 180;
-		const key = `${Math.floor(lat)}_${Math.floor(lng)}`;
-		if (sampledEnemy.has(key)) continue;
-		sampledEnemy.add(key);
-		enemyCoastalTiles.push({ lat, lng, idx: gi });
-	}
-	// Strategic proposals need geographic coverage, not every coastal grid cell.
-	// Keep a deterministic world-order sample so quadratic zone and distance
-	// checks stay bounded even for large coalitions with continental coastlines.
-	friendlyCoastCells = selectEvenlySpaced(friendlyCoastCells, 96);
-	enemyCoastalTiles = selectEvenlySpaced(enemyCoastalTiles, 96);
-
-	// ── 1. CAPTURE_CITY proposals ──
-	const enemyCities = [];
-	for (let ci = 0; ci < activeTheaterCities.length; ci++) {
-		const city = activeTheaterCities[ci];
-		const cIdx = getGridIndex(city.lat, city.lng);
-		if (cIdx === -1) continue;
-		const ownerId = city.ownerId;
-		if (myAllyIds.has(ownerId)) continue;
-		const citySide = _tickCountryToSideMap.get(ownerId);
-		if (
-			citySide === undefined ||
-			!areSidesHostile(sideIdx, citySide) ||
-			dominantSideMap[cIdx] === sideIdx
-		)
-			continue;
-		enemyCities.push({
-			city,
-			isCapital: city.isCapital,
-			idx: cIdx,
-		});
-	}
-
-	// Find frontline centroid for distance reference
-	let fLat = 0,
-		fLng = 0,
-		fCount = 0;
-	if (_frontlinePolys) {
-		for (const key of Object.keys(_frontlinePolys)) {
-			const [a, b] = key.split("_").map(Number);
-			if (a !== sideIdx && b !== sideIdx) continue;
-			const poly = _frontlinePolys[key];
-			if (!poly) continue;
-			const stride = Math.max(1, Math.floor(poly.length / 20));
-			for (let p = 0; p < poly.length; p += stride) {
-				fLat += poly[p].lat;
-				fLng += poly[p].lng;
-				fCount++;
-			}
-		}
-	}
-	if (fCount > 0) {
-		fLat /= fCount;
-		fLng /= fCount;
-	}
-
-	const prioritizedEnemyCities = enemyCities
-		.map((ec) => {
-			const nearest = findNearestFront(frontIntel, ec.city.lat, ec.city.lng);
-			const capitalBoost = ec.isCapital ? 1000 : 0;
-			return {
-				...ec,
-				_nearestFront: nearest.front,
-				_frontDistSq: nearest.distSq,
-				_sortScore: capitalBoost - nearest.distSq,
-			};
-		})
-		.sort((a, b) => b._sortScore - a._sortScore)
-		.slice(0, 12);
-
-	for (const ec of prioritizedEnemyCities) {
-		// Score proximity to frontline
-		let deLng = ec.city.lng - fLng;
-		if (deLng > 180) deLng -= 360;
-		else if (deLng < -180) deLng += 360;
-		const dSq = (ec.city.lat - fLat) ** 2 + deLng ** 2;
-
-		const source = ec._nearestFront?.weakPoint ||
-			ec._nearestFront || {
-				lat: fCount > 0 ? fLat : uLat,
-				lng: fCount > 0 ? fLng : uLng,
-			};
-		const sourceIdx = getGridIndex(source.lat, source.lng);
-		const path = getLandPath(sourceIdx, ec.idx);
-
-		// Skip if bounded land pathing cannot reach this target.
-		if (!path.reachable) continue;
-		const local = estimateLocalForces(sideIdx, ec.city.lat, ec.city.lng, 9.0);
-
-		proposals.push({
-			type: "CAPTURE_CITY",
-			targetSideIndex: _tickCountryToSideMap.get(ec.city.ownerId),
-			targetCountryId: ec.city.ownerId,
-			target: {
-				lat: ec.city.lat,
-				lng: ec.city.lng,
-				name: ec.city.name || "Enemy City",
-				isCapital: ec.isCapital,
-				ownerId: ec.city.ownerId,
-			},
-			stagingCells: [],
-			arrowPoints:
-				uCount > 0 && eCount > 0
-					? [
-							{ lat: source.lat, lng: source.lng },
-							{ lat: ec.city.lat, lng: ec.city.lng },
-						]
-					: null,
-			estimatedForceNeeded: Math.ceil(unitCount * 0.15),
-			theaterId: ec._nearestFront?.pairKey || null,
-			frontIntel: ec._nearestFront || null,
-			riskAssessment: operationalLocalRisk(local),
-			geographicData: {
-				frontlineDistSq: dSq,
-				reachesTarget: path.reachable,
-				minSeaDist: Infinity,
-				minLandDist: Math.max(
-					Math.sqrt(dSq || 1),
-					(path.distanceCells || 1) * CONFIG.GRID_RES,
-				),
-				pathDistanceCells: path.distanceCells || 0,
-			},
-			_waypoints: path.waypoints || [],
-		});
-	}
-
-	// Commander Mode adds one explicit city directive to the normal proposal pool.
-	// Friendly targets become localized defense plans; lost targets promote the
-	// matching capture proposal into a high-priority recapture order.
-	if (
-		gameMode === "OPERATION" &&
-		activeOperationDefinition &&
-		activeOperationRuntime &&
-		sideIdx === activeOperationDefinition.playerSideIdx
-	) {
-		const directive = activeOperationRuntime.directive;
-		const targetCity = getOperationCity(directive.targetCity);
-		const targetIdx = targetCity
-			? getGridIndex(targetCity.lat, targetCity.lng)
-			: -1;
-		const friendly = targetIdx !== -1 && dominantSideMap[targetIdx] === sideIdx;
-		if (targetCity && friendly) {
-			const garrisonPoints = [];
-			for (let pointIndex = 0; pointIndex < 12; pointIndex++) {
-				const angle = (pointIndex / 12) * Math.PI * 2;
-				const lat = targetCity.lat + Math.sin(angle) * 0.55;
-				const lng = targetCity.lng + Math.cos(angle) * 0.8;
-				const idx = getGridIndex(lat, lng);
-				if (idx !== -1 && dominantSideMap[idx] === sideIdx) {
-					garrisonPoints.push({ lat, lng });
-				}
-			}
-			if (!garrisonPoints.length) {
-				garrisonPoints.push({ lat: targetCity.lat, lng: targetCity.lng });
-			}
-			const nearest = findNearestFront(
-				frontIntel,
-				targetCity.lat,
-				targetCity.lng,
-			);
-			const local = estimateLocalForces(
-				sideIdx,
-				targetCity.lat,
-				targetCity.lng,
-				16,
-			);
-			proposals.push({
-				type: "DEFEND_CITY",
-				isCommanderDirective: true,
-				target: {
-					lat: targetCity.lat,
-					lng: targetCity.lng,
-					name: activeOperationDefinition.targetCities[directive.targetCity]
-						.displayName,
-					isCapital: !!targetCity.isCapital,
-				},
-				garrisonPoints,
-				stagingCells: [],
-				arrowPoints: nearest.front
-					? [
-							{ lat: nearest.front.lat, lng: nearest.front.lng },
-							{ lat: targetCity.lat, lng: targetCity.lng },
-						]
-					: null,
-				estimatedForceNeeded: Math.max(8, Math.ceil(unitCount * 0.35)),
-				theaterId: nearest.front?.pairKey || null,
-				frontIntel: nearest.front || null,
-				riskAssessment: operationalLocalRisk(local),
-				geographicData: { reachesTarget: true, minLandDist: 0 },
-			});
-		} else if (targetCity) {
-			let recapture = proposals.find(
-				(proposal) =>
-					proposal.type === "CAPTURE_CITY" &&
-					proposal.target?.name === targetCity.name,
-			);
-			if (!recapture) {
-				const nearest = findNearestFront(
-					frontIntel,
-					targetCity.lat,
-					targetCity.lng,
-				);
-				const source = nearest.front?.weakPoint ||
-					nearest.front || {
-						lat: uLat,
-						lng: uLng,
-					};
-				const sourceIdx = getGridIndex(source.lat, source.lng);
-				const path = getLandPath(sourceIdx, targetIdx);
-				const local = estimateLocalForces(
-					sideIdx,
-					targetCity.lat,
-					targetCity.lng,
-					16,
-				);
-				recapture = {
-					type: "CAPTURE_CITY",
-					isCommanderDirective: true,
-					target: {
-						lat: targetCity.lat,
-						lng: targetCity.lng,
-						name: activeOperationDefinition.targetCities[directive.targetCity]
-							.displayName,
-						isCapital: !!targetCity.isCapital,
-					},
-					stagingCells: [],
-					arrowPoints: [
-						{ lat: source.lat, lng: source.lng },
-						{ lat: targetCity.lat, lng: targetCity.lng },
-					],
-					estimatedForceNeeded: Math.max(8, Math.ceil(unitCount * 0.35)),
-					theaterId: nearest.front?.pairKey || null,
-					frontIntel: nearest.front || null,
-					riskAssessment: operationalLocalRisk(local),
-					geographicData: {
-						frontlineDistSq: nearest.distSq || 0,
-						reachesTarget: path.reachable,
-						minSeaDist: Infinity,
-						minLandDist: Math.max(
-							Math.sqrt(nearest.distSq || 1),
-							(path.distanceCells || 1) * CONFIG.GRID_RES,
-						),
-						pathDistanceCells: path.distanceCells || 0,
-					},
-					_waypoints: path.waypoints || [],
-				};
-				proposals.push(recapture);
-			} else {
-				recapture.isCommanderDirective = true;
-			}
-		}
-	}
-
-	// ── 2. ENCIRCLE proposals ──
-	const frontlineKeys = Object.keys(_frontlinePolys || {});
-	for (const key of frontlineKeys) {
-		const [a, b] = key.split("_").map(Number);
-		if (a !== sideIdx && b !== sideIdx) continue;
-		const poly = _frontlinePolys[key];
-		if (!poly || poly.length < 5) continue;
-
-		const stride = Math.max(1, Math.floor(poly.length / 20));
-		for (let ci = 0; ci < Math.min(500, poly.length); ci += stride) {
-			const cell = poly[ci];
-			const localForces = estimateLocalForces(sideIdx, cell.lat, cell.lng, 1.0);
-			const friendlyCount = localForces.friendlies,
-				enemyCount = localForces.enemies;
-			const friendlyPower = localForces.friendlyHealth;
-			const enemyPower = localForces.enemyHealth;
-			const radSq = 1.0;
-
-			const canEncircle =
-				gameMode === "CONQUEST"
-					? enemyCount >= 2 && friendlyPower >= Math.max(0.25, enemyPower) * 3
-					: enemyCount >= 2 && friendlyCount >= enemyCount * 3;
-			if (canEncircle) {
-				// Water check: verify friendly units can reach the encirclement target by land
-				let crossesWater = false;
-				let stagingPoint = null;
-				if (friendlyCount > 0) {
-					let fLat = 0,
-						fLng = 0;
-					for (let ui = 0; ui < units.length; ui++) {
-						const other = units[ui];
-						if (other.deployTicks > 0 || other.sideIndex !== sideIdx) continue;
-						const dLat2 = other.lat - cell.lat;
-						let dLng2 = other.lng - cell.lng;
-						if (dLng2 > 180) dLng2 -= 360;
-						else if (dLng2 < -180) dLng2 += 360;
-						if (dLat2 * dLat2 + dLng2 * dLng2 > radSq) continue;
-						fLat += other.lat;
-						fLng += other.lng;
-					}
-					if (friendlyCount > 0) {
-						fLat /= friendlyCount;
-						fLng /= friendlyCount;
-						stagingPoint = { lat: fLat, lng: fLng };
-						const ddLat = cell.lat - fLat;
-						let ddLng = cell.lng - fLng;
-						if (ddLng > 180) ddLng -= 360;
-						else if (ddLng < -180) ddLng += 360;
-						const lineLen = Math.sqrt(ddLat * ddLat + ddLng * ddLng);
-						if (lineLen > 0.5) {
-							const steps = Math.min(12, Math.ceil(lineLen / 0.4));
-							let waterSamples = 0;
-							for (let s = 1; s < steps; s++) {
-								const t = s / steps;
-								const wIdx = getGridIndex(fLat + ddLat * t, fLng + ddLng * t);
-								if (wIdx !== -1 && landMask[wIdx] === 0) waterSamples++;
-							}
-							if (waterSamples > steps * 0.4) crossesWater = true;
-						}
-					}
-				}
-				if (crossesWater) continue;
-
-				proposals.push({
-					type: "ENCIRCLE",
-					targetSideIndex: a === sideIdx ? b : a,
-					target: {
-						lat: cell.lat,
-						lng: cell.lng,
-						name: "Encirclement Pocket",
-						isCapital: false,
-					},
-					stagingCells: [],
-					arrowPoints: [
-						stagingPoint || { lat: cell.lat, lng: cell.lng },
-						{ lat: cell.lat, lng: cell.lng },
-					],
-					stagingPoint,
-					estimatedForceNeeded: Math.ceil(unitCount * 0.3),
-					theaterId: key,
-					frontIntel: frontIntel.find((f) => f.pairKey === key) || null,
-					riskAssessment: {
-						enemyForcesNear: gameMode === "CONQUEST" ? enemyPower : enemyCount,
-						ourForcesNear:
-							gameMode === "CONQUEST" ? friendlyPower : friendlyCount,
-						enemyCounterWeight:
-							gameMode === "CONQUEST"
-								? enemyPower / Math.max(0.25, friendlyPower + enemyPower)
-								: enemyCount / Math.max(1, friendlyCount + enemyCount),
-					},
-					geographicData: {
-						frontlineDistSq: 1,
-						reachesTarget: true,
-						minSeaDist: Infinity,
-						minLandDist: 1,
-					},
-				});
-				break;
-			}
-		}
-	}
-
-	// ── 3. PUSH_FRONT proposals (one per land-connected enemy side) ──
-	// Collect enemy sides that share a land frontline with us
-	const landConnectedEnemySides = new Set();
-	if (_frontlinePolys) {
-		for (const key of Object.keys(_frontlinePolys)) {
-			const [a, b] = key.split("_").map(Number);
-			if (a === sideIdx && b !== sideIdx && _frontlinePolys[key]?.length > 0) {
-				landConnectedEnemySides.add(b);
-			} else if (
-				b === sideIdx &&
-				a !== sideIdx &&
-				_frontlinePolys[key]?.length > 0
-			) {
-				landConnectedEnemySides.add(a);
-			}
-		}
-	}
-	// Generate a PUSH_FRONT proposal for each land-connected enemy side
-	if (uCount > 0 && landConnectedEnemySides.size > 0) {
-		for (const enemySide of landConnectedEnemySides) {
-			// Compute centroid of this specific enemy side's territory
-			let esLat = 0,
-				esLng = 0,
-				esCount = 0;
-			for (let i = 0; i < dominantSideMap.length; i += 20) {
-				if (landMask[i] === 0) continue;
-				if (dominantSideMap[i] !== enemySide) continue;
-				const row = Math.floor(i / gridWidth);
-				const col = i % gridWidth;
-				esLat += row * CONFIG.GRID_RES - 90;
-				esLng += col * CONFIG.GRID_RES - 180;
-				esCount++;
-			}
-			if (esCount === 0) continue;
-			esLat /= esCount;
-			esLng /= esCount;
-
-			const front =
-				frontIntel.find((f) => f.enemySide === enemySide) ||
-				findNearestFront(frontIntel, esLat, esLng).front;
-			const source = front?.weakPoint || front || { lat: uLat, lng: uLng };
-			const path = getLandPath(
-				getGridIndex(source.lat, source.lng),
-				getGridIndex(esLat, esLng),
-			);
-			if (!path.reachable) continue;
-			const local = estimateLocalForces(sideIdx, source.lat, source.lng, 9.0);
-
-			proposals.push({
-				type: "PUSH_FRONT",
-				targetSideIndex: enemySide,
-				target: {
-					lat: esLat,
-					lng: esLng,
-					name: `Enemy Side ${enemySide}`,
-					isCapital: false,
-				},
-				stagingCells: [],
-				arrowPoints: [
-					{ lat: source.lat, lng: source.lng },
-					{ lat: esLat, lng: esLng },
-				],
-				estimatedForceNeeded: Math.ceil(unitCount * 0.5),
-				theaterId: front?.pairKey || null,
-				frontIntel: front || null,
-				riskAssessment: operationalLocalRisk(local),
-				geographicData: {
-					frontlineDistSq: 0,
-					reachesTarget: path.reachable,
-					minSeaDist: Infinity,
-					minLandDist: (path.distanceCells || 0) * CONFIG.GRID_RES,
-					pathDistanceCells: path.distanceCells || 0,
-				},
-				_waypoints: path.waypoints || [],
-			});
-		}
-	}
-
-	// ── 4. DEFEND proposal ──
-	const flPts = [];
-	if (_frontlinePolys) {
-		for (const key of frontlineKeys) {
-			const [a, b] = key.split("_").map(Number);
-			if (a !== sideIdx && b !== sideIdx) continue;
-			const poly = _frontlinePolys[key];
-			if (!poly) continue;
-			const pStride = Math.max(1, Math.floor(poly.length / 60));
-			for (let p = 0; p < poly.length; p += pStride) {
-				flPts.push({ lat: poly[p].lat, lng: poly[p].lng });
-			}
-		}
-	}
-	proposals.push({
-		type: "DEFEND",
-		target: null,
-		stagingCells: [],
-		arrowPoints: null,
-		frontlinePoints: flPts,
-		estimatedForceNeeded: Math.ceil(unitCount * 0.3),
-		frontIntel: frontIntel[0] || null,
-		geographicData: {
-			frontlineDistSq: 0,
-			reachesTarget: true,
-			minSeaDist: Infinity,
-			minLandDist: 0,
-		},
-	});
-
-	// ── 5. NAVAL_INVASION proposals ──
-	// Only propose naval invasions if enough units are near the coast
-	let _coastalUnitCount = 0;
-	for (let _cui = 0; _cui < (_tickUnitsBySide[sideIdx] || []).length; _cui++) {
-		const _cu = _tickUnitsBySide[sideIdx][_cui];
-		if (_cu.deployTicks > 0) continue;
-		for (let _fci = 0; _fci < friendlyCoastCells.length; _fci++) {
-			const _dLat = _cu.lat - friendlyCoastCells[_fci].lat;
-			let _dLng = _cu.lng - friendlyCoastCells[_fci].lng;
-			if (_dLng > 180) _dLng -= 360;
-			else if (_dLng < -180) _dLng += 360;
-			if (_dLat * _dLat + _dLng * _dLng < 9.0) {
-				_coastalUnitCount++;
-				break;
-			}
-		}
-	}
-
-	if (
-		friendlyCoastCells.length > 0 &&
-		enemyCoastalTiles.length > 0 &&
-		_coastalUnitCount >= 5
-	) {
-		let navalPathChecks = 0;
-		for (const et of enemyCoastalTiles) {
-			let minSeaDist = Infinity;
-			let minLandDist = Infinity;
-			for (const fc of friendlyCoastCells) {
-				const dLat2 = et.lat - fc.lat;
-				let dLng2 = et.lng - fc.lng;
-				if (dLng2 > 180) dLng2 -= 360;
-				else if (dLng2 < -180) dLng2 += 360;
-				const dSq2 = dLat2 * dLat2 + dLng2 * dLng2;
-				if (dSq2 < minSeaDist) minSeaDist = dSq2;
-			}
-			if (_frontlinePolys) {
-				for (const key of frontlineKeys) {
-					const [a, b] = key.split("_").map(Number);
-					if (a !== sideIdx && b !== sideIdx) continue;
-					const poly = _frontlinePolys[key];
-					if (!poly) continue;
-					for (
-						let p = 0;
-						p < poly.length;
-						p += Math.max(1, Math.floor(poly.length / 10))
-					) {
-						const dLat2 = et.lat - poly[p].lat;
-						let dLng2 = et.lng - poly[p].lng;
-						if (dLng2 > 180) dLng2 -= 360;
-						else if (dLng2 < -180) dLng2 += 360;
-						const dSq2 = dLat2 * dLat2 + dLng2 * dLng2;
-						if (dSq2 < minLandDist) minLandDist = dSq2;
-					}
-				}
-			}
-			if (minSeaDist > 400 || minSeaDist < 4.0) continue;
-			if (minLandDist < 0.1) continue;
-
-			// Find closest friendly coast as staging point
-			let bestStaging = null;
-			let bestStagingDist = Infinity;
-			for (const fc of friendlyCoastCells) {
-				const dLat2 = et.lat - fc.lat;
-				let dLng2 = et.lng - fc.lng;
-				if (dLng2 > 180) dLng2 -= 360;
-				else if (dLng2 < -180) dLng2 += 360;
-				const dSq2 = dLat2 * dLat2 + dLng2 * dLng2;
-				if (dSq2 < bestStagingDist) {
-					bestStagingDist = dSq2;
-					bestStaging = fc;
-				}
-			}
-			if (!bestStaging) continue;
-			if (navalPathChecks >= 12) continue;
-			navalPathChecks++;
-			const seaStart = findNearestSeaIdx(bestStaging.idx);
-			const seaTarget = findNearestSeaIdx(et.idx);
-			const seaPath = findSeaPathSummary(seaStart, seaTarget);
-			if (!seaPath.reachable) continue;
-			minSeaDist = Math.max(
-				minSeaDist,
-				Math.max(1, seaPath.distanceCells) * CONFIG.GRID_RES,
-			);
-
-			proposals.push({
-				type: "NAVAL_INVASION",
-				target: {
-					lat: et.lat,
-					lng: et.lng,
-					name: "Enemy Coast",
-					isCapital: false,
-				},
-				stagingPoint: { lat: bestStaging.lat, lng: bestStaging.lng },
-				arrowPoints: [
-					{ lat: bestStaging.lat, lng: bestStaging.lng },
-					{ lat: et.lat, lng: et.lng },
-				],
-				estimatedForceNeeded: Math.ceil(unitCount * 0.15),
-				geographicData: {
-					frontlineDistSq: 0,
-					reachesTarget: true,
-					minSeaDist,
-					minLandDist,
-					seaPathDistanceCells: seaPath.distanceCells || 0,
-				},
-			});
-		}
-	}
-
-	// ── 6. NAVAL_SUPPLY proposal ──
-	if (_navalPlan[sideIdx]?.phase === "LANDING") {
-		const np = _navalPlan[sideIdx];
-		let bestStaging = null;
-		let bestStagingDist = Infinity;
-		for (const fc of friendlyCoastCells) {
-			const dLat2 = np.target.lat - fc.lat;
-			let dLng2 = np.target.lng - fc.lng;
-			if (dLng2 > 180) dLng2 -= 360;
-			else if (dLng2 < -180) dLng2 += 360;
-			const dSq2 = dLat2 * dLat2 + dLng2 * dLng2;
-			if (dSq2 < bestStagingDist) {
-				bestStagingDist = dSq2;
-				bestStaging = fc;
-			}
-		}
-		if (bestStaging && bestStagingDist <= 400) {
-			const seaStart = findNearestSeaIdx(bestStaging.idx);
-			const targetIdx = getGridIndex(np.target.lat, np.target.lng);
-			const seaTarget = findNearestSeaIdx(targetIdx);
-			const seaPath = findSeaPathSummary(seaStart, seaTarget);
-			if (seaPath.reachable) {
-				proposals.push({
-					type: "NAVAL_SUPPLY",
-					target: {
-						lat: np.target.lat,
-						lng: np.target.lng,
-						name: np.target.name || "Supply Target",
-						isCapital: false,
-					},
-					stagingPoint: { lat: bestStaging.lat, lng: bestStaging.lng },
-					arrowPoints: [
-						{ lat: bestStaging.lat, lng: bestStaging.lng },
-						{ lat: np.target.lat, lng: np.target.lng },
-					],
-					estimatedForceNeeded: Math.ceil(unitCount * 0.1),
-					geographicData: {
-						frontlineDistSq: 0,
-						reachesTarget: true,
-						minSeaDist: Math.max(
-							bestStagingDist,
-							Math.max(1, seaPath.distanceCells) * CONFIG.GRID_RES,
-						),
-						minLandDist: 0,
-						seaPathDistanceCells: seaPath.distanceCells || 0,
-					},
-				});
-			}
-		}
-	}
-
-	// ── 7. COASTAL_DEFENSE proposals ──
-	if (friendlyCoastCells.length > 0 && enemyCoastalTiles.length > 0) {
-		// Cluster friendly coast cells into contiguous zones
-		for (const fc of friendlyCoastCells) {
-			fc._visited = false;
-		}
-		const coastalZones = [];
-		for (const seed of friendlyCoastCells) {
-			if (seed._visited) continue;
-			const zone = [seed];
-			seed._visited = true;
-			for (let zi = 0; zi < zone.length; zi++) {
-				for (const other of friendlyCoastCells) {
-					if (other._visited) continue;
-					const dLat2 = zone[zi].lat - other.lat;
-					let dLng2 = zone[zi].lng - other.lng;
-					if (dLng2 > 180) dLng2 -= 360;
-					else if (dLng2 < -180) dLng2 += 360;
-					if (dLat2 * dLat2 + dLng2 * dLng2 < 4.0) {
-						other._visited = true;
-						zone.push(other);
-					}
-				}
-			}
-			coastalZones.push(zone);
-		}
-		for (const fc of friendlyCoastCells) {
-			delete fc._visited;
-		}
-
-		for (const zone of coastalZones) {
-			let zLat = 0,
-				zLng = 0;
-			for (const cell of zone) {
-				zLat += cell.lat;
-				zLng += cell.lng;
-			}
-			zLat /= zone.length;
-			zLng /= zone.length;
-
-			let threatScore = 0;
-			for (const et of enemyCoastalTiles) {
-				const dLat2 = zLat - et.lat;
-				let dLng2 = zLng - et.lng;
-				if (dLng2 > 180) dLng2 -= 360;
-				else if (dLng2 < -180) dLng2 += 360;
-				const dSq2 = dLat2 * dLat2 + dLng2 * dLng2;
-				if (dSq2 < 400) threatScore++;
-			}
-			threatScore = Math.min(1, threatScore / 50);
-
-			let enemyNavalThreat = 0;
-			for (let ei = 0; ei < sides.length; ei++) {
-				if (!areSidesHostile(sideIdx, ei)) continue;
-				const plan = _navalPlan[ei];
-				if (
-					plan?.target &&
-					geoDistSq(zLat, zLng, plan.target.lat, plan.target.lng) < 100
-				)
-					enemyNavalThreat += 0.3;
-			}
-
-			const zonePolyline = zone.map((c) => ({ lat: c.lat, lng: c.lng }));
-			proposals.push({
-				type: "COASTAL_DEFENSE",
-				target: { lat: zLat, lng: zLng, name: "Coastal Zone" },
-				stagingCells: [],
-				arrowPoints: null,
-				zonePolyline,
-				estimatedForceNeeded: Math.ceil(
-					zone.length * 0.8 * (threatScore + 0.2),
-				),
-				threatScore: Math.min(1, threatScore + enemyNavalThreat),
-				geographicData: {
-					frontlineDistSq: 0,
-					reachesTarget: true,
-					minSeaDist: 0,
-					minLandDist: 0,
-				},
-			});
-		}
-	}
-
-	// ── 8. NEUTRAL_GARRISON proposals ──
-	if (adjacencyCache) {
-		// Build sovereign unit count map for threat estimation
-		const sovUnitCounts = new Map();
-		for (const uu of units) {
-			if (uu.deployTicks > 0) continue;
-			sovUnitCounts.set(
-				uu.sovereignId,
-				(sovUnitCounts.get(uu.sovereignId) || 0) + 1,
-			);
-		}
-		for (const [countryId, neighbors] of adjacencyCache.entries()) {
-			if (!myAllyIds.has(countryId)) continue;
-			for (const nId of neighbors) {
-				const nSide = _tickCountryToSideMap.get(nId);
-				if (nSide !== undefined) continue;
-				if (myAllyIds.has(nId)) continue;
-
-				const alreadyProposed = proposals.some(
-					(p) => p.type === "NEUTRAL_GARRISON" && p.neutralCountryId === nId,
-				);
-				if (alreadyProposed) continue;
-
-				const neutralUnitCount = sovUnitCounts.get(nId) || 0;
-				const estimatedThreat = Math.max(5, Math.ceil(neutralUnitCount * 0.3));
-
-				proposals.push({
-					type: "NEUTRAL_GARRISON",
-					target: {
-						lat: 0,
-						lng: 0,
-						name: `Neutral Border #${nId}`,
-					},
-					stagingCells: [],
-					arrowPoints: null,
-					neutralCountryId: nId,
-					combatantCountryId: countryId,
-					borderLength: _neutralBorderPolys[countryId]?.length || 0,
-					estimatedForceNeeded: Math.min(
-						Math.ceil(unitCount * 0.25),
-						estimatedThreat,
-					),
-					geographicData: {
-						frontlineDistSq: 0,
-						reachesTarget: true,
-						minSeaDist: Infinity,
-						minLandDist: 0,
-					},
-				});
-			}
-		}
-	}
-
-	// ── Exclave reinforcement ──
-	// For each country on this side, detect territory not land-connected
-	// to the capital (exclaves) and generate supply runs to reinforce them.
-	// Uses one BFS per side from all capitals; only triggers when exclave
-	// borders enemy territory.
-	if (
-		friendlyCoastCells.length > 0 &&
-		unitCount >= 8 &&
-		proposals.length < 12
-	) {
-		const totalCells = landMask.length;
-		const reachable = new Uint8Array(totalCells);
-		const bfsq = new Int32Array(totalCells);
-		let qTail = 0;
-		const MAX_BFS = 80000;
-		for (const c of sideCountries) {
-			const capLat = c.capital?.lat;
-			if (capLat == null) continue;
-			const capLng = c.capital?.lng !== undefined ? c.capital.lng : c.lng;
-			const ci = getGridIndex(capLat, capLng);
-			if (ci !== -1 && landMask[ci] !== 0 && !reachable[ci]) {
-				bfsq[qTail++] = ci;
-				reachable[ci] = 1;
-			}
-		}
-		if (qTail > 0) {
-			for (let qHead = 0; qHead < qTail && qHead < MAX_BFS; qHead++) {
-				const gi = bfsq[qHead];
-				const row = Math.floor(gi / gridWidth);
-				const col = gi % gridWidth;
-				for (let dr = -1; dr <= 1; dr++) {
-					for (let dc = -1; dc <= 1; dc++) {
-						if (dr === 0 && dc === 0) continue;
-						const nr = row + dr,
-							nc = col + dc;
-						if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth)
-							continue;
-						const ni = nr * gridWidth + nc;
-						if (reachable[ni]) continue;
-						if (landMask[ni] === 0) continue;
-						const nds = dominantSideMap[ni];
-						if (nds !== -1 && nds !== sideIdx) continue;
-						reachable[ni] = 1;
-						bfsq[qTail++] = ni;
-					}
-				}
-			}
-			// Sample-scan for unreachable exclaves with enemy adjacency
-			for (const country of sideCountries) {
-				const exclaveCells = [];
-				const step = Math.max(3, Math.floor(totalCells / 6000));
-				for (let gi = 0; gi < totalCells; gi += step) {
-					if (landMask[gi] === 0) continue;
-					if (reachable[gi]) continue;
-					if (dominantSideMap[gi] !== sideIdx) continue;
-					if (worldControlMap[gi] !== country.id) continue;
-					const r = Math.floor(gi / gridWidth);
-					const cc = gi % gridWidth;
-					let hasEnemy = false;
-					for (let dr = -1; dr <= 1 && !hasEnemy; dr++) {
-						for (let dc = -1; dc <= 1 && !hasEnemy; dc++) {
-							if (dr === 0 && dc === 0) continue;
-							const nr = r + dr,
-								nc = cc + dc;
-							if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth)
-								continue;
-							const ni = nr * gridWidth + nc;
-							if (landMask[ni] === 0) continue;
-							const nds = dominantSideMap[ni];
-							if (areSidesHostile(sideIdx, nds)) hasEnemy = true;
-						}
-					}
-					if (hasEnemy) {
-						exclaveCells.push({
-							lat: r * CONFIG.GRID_RES - 90,
-							lng: cc * CONFIG.GRID_RES - 180,
-						});
-					}
-				}
-				if (exclaveCells.length < 5) continue;
-
-				// Centroid of exclave
-				let exLat = 0,
-					exLng = 0;
-				for (const ec of exclaveCells) {
-					exLat += ec.lat;
-					exLng += ec.lng;
-				}
-				exLat /= exclaveCells.length;
-				exLng /= exclaveCells.length;
-
-				// Skip if existing supply plan targets near this exclave
-				const sp = _navalSupplyPlan[sideIdx];
-				if (sp && sp.phase !== "DELIVERED") {
-					const st = sp.target;
-					if (st) {
-						const dLat = st.lat - exLat;
-						let dLng = st.lng - exLng;
-						if (dLng > 180) dLng -= 360;
-						else if (dLng < -180) dLng += 360;
-						if (dLat * dLat + dLng * dLng < 16) continue;
-					}
-				}
-
-				// Find nearest friendly staging point
-				let bestStaging = null;
-				let bestDist = Infinity;
-				for (const fc of friendlyCoastCells) {
-					const sgi = getGridIndex(fc.lat, fc.lng);
-					if (sgi === -1 || !reachable[sgi]) continue;
-					const dLat = exLat - fc.lat;
-					let dLng = exLng - fc.lng;
-					if (dLng > 180) dLng -= 360;
-					else if (dLng < -180) dLng += 360;
-					const dSq = dLat * dLat + dLng * dLng;
-					if (dSq < bestDist) {
-						bestDist = dSq;
-						bestStaging = fc;
-					}
-				}
-				if (!bestStaging || bestDist > 400) continue;
-
-				proposals.push({
-					type: "NAVAL_SUPPLY",
-					target: {
-						lat: exLat,
-						lng: exLng,
-						name: `${country.name} Exclave`,
-						isCapital: false,
-					},
-					stagingPoint: { lat: bestStaging.lat, lng: bestStaging.lng },
-					arrowPoints: [
-						{ lat: bestStaging.lat, lng: bestStaging.lng },
-						{ lat: exLat, lng: exLng },
-					],
-					estimatedForceNeeded: Math.ceil(unitCount * 0.08),
-					geographicData: {
-						frontlineDistSq: 0,
-						reachesTarget: true,
-						minSeaDist: bestDist,
-						minLandDist: 0,
-					},
-				});
-			}
-		}
-	}
-	// ── Friendly-only reachability for waypoint routing ──
-	// Compute which cells are reachable from side capitals through friendly-only
-	// territory (not neutral/enemy). Used to route units around neutral blocks.
-	const friendlyTotal = landMask.length;
-	const friendlyOnly = new Uint8Array(friendlyTotal);
-	const fq = new Int32Array(friendlyTotal);
-	let fqTail = 0;
-	for (const c of sideCountries) {
-		const capLat = c.capital?.lat;
-		if (capLat == null) continue;
-		const capLng = c.capital?.lng !== undefined ? c.capital.lng : c.lng;
-		const ci = getGridIndex(capLat, capLng);
-		if (ci !== -1 && landMask[ci] !== 0 && !friendlyOnly[ci]) {
-			fq[fqTail++] = ci;
-			friendlyOnly[ci] = 1;
-		}
-	}
-	for (let qHead = 0; qHead < fqTail; qHead++) {
-		const gi = fq[qHead];
-		const row = Math.floor(gi / gridWidth);
-		const col = gi % gridWidth;
-		for (let dr = -1; dr <= 1; dr++) {
-			for (let dc = -1; dc <= 1; dc++) {
-				if (dr === 0 && dc === 0) continue;
-				const nr = row + dr,
-					nc = col + dc;
-				if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
-				const ni = nr * gridWidth + nc;
-				if (friendlyOnly[ni]) continue;
-				if (landMask[ni] === 0) continue;
-				if (dominantSideMap[ni] !== sideIdx) continue;
-				friendlyOnly[ni] = 1;
-				fq[fqTail++] = ni;
-			}
-		}
-	}
-	// Add waypoints for land proposals whose targets are blocked by neutral territory
-	for (const p of proposals) {
-		if (
-			p.type !== "CAPTURE_CITY" &&
-			p.type !== "ENCIRCLE" &&
-			p.type !== "PUSH_FRONT" &&
-			p.type !== "DEFEND"
-		)
-			continue;
-		if (!p.target) continue;
-		const tIdx = getGridIndex(p.target.lat, p.target.lng);
-		if (tIdx === -1) continue;
-		// Target reachable through friendly territory — no waypoint needed
-		if (friendlyOnly[tIdx]) continue;
-		// Find the closest friendly-reachable frontier cell to the target
-		let bestDist = Infinity;
-		let bestLat = 0,
-			bestLng = 0;
-		const wstep = Math.max(3, Math.floor(friendlyTotal / 6000));
-		for (let gi = 0; gi < friendlyTotal; gi += wstep) {
-			if (!friendlyOnly[gi]) continue;
-			if (landMask[gi] === 0) continue;
-			// Only cells at the frontline (adjacent to enemy territory)
-			const r = Math.floor(gi / gridWidth);
-			const ccol = gi % gridWidth;
-			let bordersEnemy = false;
-			for (let dr = -1; dr <= 1 && !bordersEnemy; dr++) {
-				for (let dc = -1; dc <= 1 && !bordersEnemy; dc++) {
-					if (dr === 0 && dc === 0) continue;
-					const nr2 = r + dr,
-						nc2 = ccol + dc;
-					if (nr2 < 0 || nr2 >= gridHeight || nc2 < 0 || nc2 >= gridWidth)
-						continue;
-					const ni2 = nr2 * gridWidth + nc2;
-					if (landMask[ni2] === 0) continue;
-					const nds2 = dominantSideMap[ni2];
-					if (areSidesHostile(sideIdx, nds2)) bordersEnemy = true;
-				}
-			}
-			if (!bordersEnemy) continue;
-			const clat = r * CONFIG.GRID_RES - 90;
-			const clng = ccol * CONFIG.GRID_RES - 180;
-			const dLat = p.target.lat - clat;
-			let dLng = p.target.lng - clng;
-			if (dLng > 180) dLng -= 360;
-			else if (dLng < -180) dLng += 360;
-			const dSq = dLat * dLat + dLng * dLng;
-			if (dSq < bestDist) {
-				bestDist = dSq;
-				bestLat = clat;
-				bestLng = clng;
-			}
-		}
-		if (bestDist < Infinity) {
-			p._waypoints = [...(p._waypoints || []), { lat: bestLat, lng: bestLng }];
-		}
-	}
-	// ── 9. TRANSPORT proposals ──
-	// Find units stranded far from the frontline and propose fast transport to front.
-	// Simulates railways/logistics — prevents large countries from losing due to
-	// units spawning far behind the front.
-	{
-		const sideUnitList = _tickUnitsBySide[sideIdx] || [];
-		const deployed = sideUnitList.filter(
-			(u) => u.deployTicks === 0 && u.health > 0,
-		);
-		if (deployed.length >= 6 && frontIntel.length > 0) {
-			const strandedThreshold = 3.0; // degrees from frontline
-			let strandedCount = 0;
-			let strandedLat = 0,
-				strandedLng = 0;
-			const targetFrontCounts = new Map();
-			for (const u of deployed) {
-				const nearest = findNearestFront(frontIntel, u.lat, u.lng);
-				const dSq = nearest.distSq;
-				if (dSq > strandedThreshold * strandedThreshold) {
-					strandedCount++;
-					strandedLat += u.lat;
-					strandedLng += u.lng;
-					const key = nearest.front?.pairKey || frontIntel[0].pairKey;
-					targetFrontCounts.set(key, (targetFrontCounts.get(key) || 0) + 1);
-				}
-			}
-			if (strandedCount >= 5) {
-				strandedLat /= strandedCount;
-				strandedLng /= strandedCount;
-				let targetFront = frontIntel[0];
-				let targetFrontCount = -1;
-				for (const front of frontIntel) {
-					const count = targetFrontCounts.get(front.pairKey) || 0;
-					const score = count * 10 + front.pressureScore;
-					if (score > targetFrontCount) {
-						targetFrontCount = score;
-						targetFront = front;
-					}
-				}
-				const targetPoint = targetFront?.weakPoint || {
-					lat: fLat,
-					lng: fLng,
-				};
-				proposals.push({
-					type: "TRANSPORT",
-					target: {
-						lat: targetPoint.lat,
-						lng: targetPoint.lng,
-						name: "Nearest Frontline",
-					},
-					stagingCells: [],
-					arrowPoints: [
-						{ lat: strandedLat, lng: strandedLng },
-						{ lat: targetPoint.lat, lng: targetPoint.lng },
-					],
-					estimatedForceNeeded: strandedCount,
-					strandedCount,
-					theaterId: targetFront?.pairKey || null,
-					frontIntel: targetFront || null,
-					geographicData: {
-						frontlineDistSq: 0,
-						reachesTarget: true,
-						minSeaDist: Infinity,
-						minLandDist: 0,
-					},
-				});
-			}
-		}
-	}
-	return proposals;
-}
 /**
  * Score a proposal based on strategic value, feasibility, risk, urgency,
  * and posture/strategy alignment. Returns a numeric priority score.
@@ -11551,231 +6248,7 @@ export function generateAllProposals(sideIdx) {
  * @param {number} sideIdx
  * @returns {number} priority score
  */
-export function scoreProposal(proposal, sideIdx) {
-	const strategyProfile = getSideStrategyProfile(sideIdx);
-	const strategy = strategyProfile.dominant;
-	const sideUnits = _tickUnitsBySide[sideIdx] || [];
-	const unitCount = sideUnits.filter((u) => u.deployTicks === 0).length;
-	const friendlyCombatPower =
-		gameMode === "CONQUEST"
-			? sideUnits.reduce(
-					(sum, unit) =>
-						unit.deployTicks === 0 && unit.health > 0
-							? sum + operationalUnitPower(unit)
-							: sum,
-					0,
-				)
-			: unitCount;
-	const enemyUnitCount =
-		gameMode === "CONQUEST"
-			? getKnownEnemyPowerForSide(sideIdx)
-			: units.filter(
-					(u) =>
-						areSidesHostile(sideIdx, u.sideIndex) &&
-						u.deployTicks === 0 &&
-						u.health > 0,
-				).length;
-	const globalForceRatio =
-		friendlyCombatPower /
-		Math.max(gameMode === "CONQUEST" ? 0.25 : 1, enemyUnitCount);
-	const geo = proposal.geographicData || {};
-	const risk = proposal.riskAssessment || {};
-	const localForceRatio =
-		risk.ourForcesNear != null || risk.enemyForcesNear != null
-			? (risk.ourForcesNear || 0) / Math.max(1, risk.enemyForcesNear || 0)
-			: globalForceRatio;
-	const effectiveForceRatio = globalForceRatio * 0.35 + localForceRatio * 0.65;
-	const front = proposal.frontIntel || null;
-	const memory = getProposalMemory(sideIdx, proposal);
-	let score = 0;
 
-	// ── Strategic Value (0–40) ──
-	if (proposal.type === "CAPTURE_CITY") {
-		if (proposal.target?.isCapital) score += 30;
-		else score += 10;
-		score += Math.sqrt(Math.max(0, geo.minLandDist || 0)) * 3;
-	}
-	if (proposal.type === "NAVAL_INVASION") {
-		score += Math.sqrt(Math.max(0, geo.minLandDist || 0)) * 3;
-		const seaDist = Math.sqrt(geo.minSeaDist || 1);
-		if (seaDist > 3 && seaDist < 20) score += 15;
-	}
-	if (proposal.type === "COASTAL_DEFENSE") {
-		score += (proposal.threatScore || 0) * 25;
-	}
-	if (proposal.type === "NEUTRAL_GARRISON") {
-		score += Math.min(20, (proposal.borderLength || 0) * 0.3);
-	}
-	if (proposal.type === "DEFEND" || proposal.type === "DEFEND_CITY") {
-		score += 10;
-		if (globalForceRatio < 1.0) score += 15;
-		if (proposal.type === "DEFEND_CITY") score += 20;
-	}
-	if (proposal.type === "ENCIRCLE") {
-		score += 25;
-	}
-	if (proposal.type === "PUSH_FRONT") {
-		score += 15;
-	}
-	if (proposal.type === "NAVAL_SUPPLY") {
-		score += 20;
-	}
-	if (proposal.type === "TRANSPORT") {
-		score += 25 + Math.min(30, (proposal.strandedCount || 0) * 2);
-		// Transport is logistics, not combat — immune to force ratio penalties
-		score *= 1.2; // mild universal boost
-		proposal.scoreBreakdown = {
-			strategy,
-			globalForceRatio,
-			localForceRatio,
-			effectiveForceRatio,
-			memory,
-		};
-		return Math.round(score * 100) / 100;
-	}
-
-	if (front) {
-		if (proposal.type === "PUSH_FRONT" || proposal.type === "ENCIRCLE") {
-			score += Math.min(25, Math.max(0, front.pressureScore * 0.25));
-		}
-		if (proposal.type === "DEFEND") {
-			score += Math.min(
-				20,
-				front.enemies * 0.5 + front.friendlyCitiesThreatened * 6,
-			);
-		}
-		if (proposal.type === "CAPTURE_CITY") {
-			score += Math.min(18, front.enemyCitiesNear * 5 + front.localRatio * 4);
-		}
-	}
-
-	// ── Feasibility (0–30) ──
-	if (effectiveForceRatio >= 2.0) score += 20;
-	else if (effectiveForceRatio >= 1.0) score += 10;
-	else score -= 15;
-
-	if (geo.reachesTarget) score += 10;
-	else score -= 30;
-
-	// ── Risk (0–20, inverted) ──
-	if (effectiveForceRatio >= 4.0) score += 20;
-	else if (effectiveForceRatio >= 2.5) score += 10;
-	else score -= 20;
-	score -= Math.min(15, (risk.enemyCounterWeight || 0) * 15);
-
-	// ── Urgency (0–10) ──
-	// Enemy naval landing on our territory boosts COASTAL_DEFENSE
-	let enemyLandedOnUs = false;
-	for (let ei = 0; ei < sides.length; ei++) {
-		if (!areSidesHostile(sideIdx, ei)) continue;
-		const plan = _navalPlan[ei];
-		const idx = plan?.target
-			? getGridIndex(plan.target.lat, plan.target.lng)
-			: -1;
-		if (
-			plan?.phase === "LANDING" &&
-			idx >= 0 &&
-			dominantSideMap[idx] === sideIdx
-		)
-			enemyLandedOnUs = true;
-	}
-
-	if (enemyLandedOnUs && proposal.type === "COASTAL_DEFENSE") {
-		score += 20;
-	}
-
-	// ── Posture / Strategy alignment multiplier ──
-	const isOffensive = [
-		"CAPTURE_CITY",
-		"ENCIRCLE",
-		"PUSH_FRONT",
-		"NAVAL_INVASION",
-	].includes(proposal.type);
-	const isDefensive = [
-		"DEFEND",
-		"DEFEND_CITY",
-		"COASTAL_DEFENSE",
-		"NEUTRAL_GARRISON",
-	].includes(proposal.type);
-
-	const multipliers = {
-		BLITZ: { offensive: 1.4, defensive: 0.4 },
-		AGGRESSIVE: { offensive: 1.3, defensive: 0.5 },
-		BALANCED: { offensive: 1.0, defensive: 1.0 },
-		DEFENSIVE: { offensive: 0.4, defensive: 1.4 },
-		TURTLE: { offensive: 0.0, defensive: 1.5 },
-	};
-	const mult = multipliers[strategy] || multipliers.BALANCED;
-	// TURTLE: only permit offensive plans when we have overall force advantage
-	if (strategy === "TURTLE" && globalForceRatio >= 1.0) {
-		mult.offensive = 0.3;
-	}
-	if (isOffensive) score *= mult.offensive;
-	else if (isDefensive) score *= mult.defensive;
-
-	if (strategy === "BLITZ" && isOffensive) {
-		if (front?.localRatio >= 1.6) score *= 1.18;
-		if ((geo.pathDistanceCells || 0) > 120) score *= 0.85;
-	}
-	if (strategy === "AGGRESSIVE" && isOffensive && effectiveForceRatio >= 0.9) {
-		score *= 1.08;
-	}
-	if (strategy === "DEFENSIVE" && proposal.type === "CAPTURE_CITY") {
-		score *=
-			proposal.target?.isCapital && effectiveForceRatio >= 1.5 ? 0.9 : 0.65;
-	}
-	if (strategy === "TURTLE" && isOffensive && effectiveForceRatio < 1.6) {
-		score *= 0.05;
-	}
-
-	if (memory?.lastOutcome === "failed") score *= 0.7;
-	if (memory?.lastOutcome === "success") score *= 1.1;
-	if (memory?.failures > memory?.successes + 1) score *= 0.55;
-
-	// ── Special modifiers ──
-	if (proposal.type === "CAPTURE_CITY" && !geo.reachesTarget) {
-		score *= 0.1;
-	}
-	// Boost naval proposals when no land connection exists
-	if (!_frontlinePolys || Object.keys(_frontlinePolys).length === 0) {
-		if (
-			isOffensive &&
-			proposal.type !== "CAPTURE_CITY" &&
-			proposal.type !== "ENCIRCLE"
-		) {
-			score *= 1.3;
-		}
-	}
-	if (
-		gameMode === "OPERATION" &&
-		activeOperationDefinition &&
-		activeOperationRuntime &&
-		sideIdx === activeOperationDefinition.playerSideIdx
-	) {
-		if (proposal.isCommanderDirective) score += 120;
-		const planClass = isOffensive ? "OFFENSE" : isDefensive ? "DEFENSE" : null;
-		for (const modifier of getActiveCommanderModifiers(planClass)) {
-			score *= modifier.multiplier || 1;
-		}
-	}
-
-	proposal.scoreBreakdown = {
-		strategy,
-		globalForceRatio,
-		localForceRatio,
-		effectiveForceRatio,
-		front: front
-			? {
-					pairKey: front.pairKey,
-					enemySide: front.enemySide,
-					localRatio: front.localRatio,
-					pressureScore: front.pressureScore,
-				}
-			: null,
-		memory,
-	};
-	return Math.round(score * 100) / 100;
-}
 /**
  * Select the best plans from scored proposals, allocate forces, and
  * create actual war plan objects. Returns array of created plan entries.
@@ -11783,2305 +6256,12 @@ export function scoreProposal(proposal, sideIdx) {
  * @param {Array<Object>} scoredProposals - proposals with priority scores
  * @returns {Object} Selected offensive, defensive, naval, and garrison plans.
  */
-export function selectPlans(sideIdx, scoredProposals) {
-	if (!scoredProposals || scoredProposals.length === 0) return {};
 
-	const strategyProfile = getSideStrategyProfile(sideIdx);
-	const strategy = strategyProfile.dominant;
-	const sideUnits = _tickUnitsBySide[sideIdx] || [];
-	const unitCount = sideUnits.filter((u) => u.deployTicks === 0).length;
-
-	// Force allocation by strategy
-	let alloc = {
-		BLITZ: { offense: 0.85, defense: 0.1, reserve: 0.05 },
-		AGGRESSIVE: { offense: 0.75, defense: 0.2, reserve: 0.05 },
-		BALANCED: { offense: 0.5, defense: 0.4, reserve: 0.1 },
-		DEFENSIVE: { offense: 0.25, defense: 0.65, reserve: 0.1 },
-		TURTLE: { offense: 0.0, defense: 0.9, reserve: 0.1 },
-	}[strategy] || { offense: 0.5, defense: 0.4, reserve: 0.1 };
-	if (
-		gameMode === "OPERATION" &&
-		activeOperationDefinition &&
-		activeOperationRuntime &&
-		sideIdx === activeOperationDefinition.playerSideIdx
-	) {
-		alloc = calculateDirectiveAllocation(
-			activeOperationRuntime.directive,
-			getActiveCommanderModifiers(),
-		);
-	}
-
-	// TURTLE: only allocate offense when we have force advantage
-	if (strategy === "TURTLE") {
-		const turtleEnemyCount =
-			gameMode === "CONQUEST"
-				? getKnownEnemyPowerForSide(sideIdx)
-				: units.filter(
-						(u) =>
-							areSidesHostile(sideIdx, u.sideIndex) &&
-							u.deployTicks === 0 &&
-							u.health > 0,
-					).length;
-		if (unitCount >= turtleEnemyCount) {
-			alloc.offense = 0.3;
-			alloc.defense = 0.6;
-		}
-	}
-
-	const totalForce = Math.max(1, unitCount);
-	const offensiveForce = Math.floor(totalForce * alloc.offense);
-	const defensiveForce = Math.floor(totalForce * alloc.defense);
-
-	// Sort by priority descending
-	const sorted = [...scoredProposals].sort(
-		(a, b) => (b.priority || 0) - (a.priority || 0),
-	);
-
-	// Group proposals by type
-	const offensives = sorted.filter(
-		(p) =>
-			["CAPTURE_CITY", "ENCIRCLE", "PUSH_FRONT"].includes(p.type) &&
-			(p.priority || 0) > 0,
-	);
-	const navals = sorted.filter(
-		(p) => p.type === "NAVAL_INVASION" && (p.priority || 0) > 0,
-	);
-	const supplies = sorted.filter(
-		(p) => p.type === "NAVAL_SUPPLY" && (p.priority || 0) > 0,
-	);
-	const defs = sorted.filter(
-		(p) =>
-			(p.type === "DEFEND" || p.type === "DEFEND_CITY") &&
-			(p.priority || 0) > 0,
-	);
-	const coastals = sorted.filter(
-		(p) => p.type === "COASTAL_DEFENSE" && (p.priority || 0) > 0,
-	);
-	const garrisons = sorted.filter(
-		(p) => p.type === "NEUTRAL_GARRISON" && (p.priority || 0) > 0,
-	);
-
-	const transports = sorted.filter(
-		(p) => p.type === "TRANSPORT" && (p.priority || 0) > 0,
-	);
-
-	const result = {};
-
-	// ── Land offensive slot 1 ──
-	const directiveDefense = defs.find(
-		(proposal) =>
-			proposal.type === "DEFEND_CITY" && proposal.isCommanderDirective,
-	);
-	const land1 = offensives[0];
-	// ── Land offensive slot 2 ──
-	let land2 = directiveDefense || null;
-	if (!land2 && land1 && offensives.length > 1) {
-		const secondCandidates = offensives.slice(1);
-		const differentTheater = secondCandidates.find(
-			(p) => p.theaterId && p.theaterId !== land1.theaterId,
-		);
-		const second = differentTheater || secondCandidates[0];
-		const minSecondRatio = differentTheater ? 0.3 : 0.6;
-		if ((second.priority || 0) >= (land1.priority || 1) * minSecondRatio) {
-			const sameTheater =
-				land1.theaterId &&
-				second.theaterId &&
-				land1.theaterId === second.theaterId;
-			// Check direction conflict
-			if (
-				land1.target &&
-				second.target &&
-				land1.arrowPoints &&
-				second.arrowPoints
-			) {
-				const d1Lat = land1.target.lat - land1.arrowPoints[0].lat;
-				let d1Lng = land1.target.lng - land1.arrowPoints[0].lng;
-				const d2Lat = second.target.lat - second.arrowPoints[0].lat;
-				let d2Lng = second.target.lng - second.arrowPoints[0].lng;
-				if (d1Lng > 180) d1Lng -= 360;
-				else if (d1Lng < -180) d1Lng += 360;
-				if (d2Lng > 180) d2Lng -= 360;
-				else if (d2Lng < -180) d2Lng += 360;
-				const m1 = Math.sqrt(d1Lat * d1Lat + d1Lng * d1Lng);
-				const m2 = Math.sqrt(d2Lat * d2Lat + d2Lng * d2Lng);
-				const dot =
-					m1 > 0 && m2 > 0 ? (d1Lat * d2Lat + d1Lng * d2Lng) / (m1 * m2) : 0;
-				if (
-					dot <= 0.85 &&
-					(!sameTheater || second.priority >= land1.priority * 0.85)
-				) {
-					land2 = second;
-				}
-			} else {
-				if (!sameTheater || second.priority >= land1.priority * 0.85) {
-					land2 = second;
-				}
-			}
-		}
-	}
-
-	// ── Naval invasion slot ──
-	const naval1 = navals[0];
-
-	// ── Supply slot ──
-	const supply1 = supplies[0];
-
-	// ── Defensive slot ──
-	const defend1 = defs.find((proposal) => proposal !== directiveDefense);
-
-	// ── Coastal defense zones ──
-	const selectedCoastal = coastals.filter((p) => (p.threatScore || 0) >= 0.1);
-
-	// ── Neutral garrisons ──
-	const selectedGarr = garrisons;
-	// ── Occupation garrisons ──
-
-	// ── Force allocation ──
-	const selectedOff = [
-		land1,
-		land2 !== directiveDefense ? land2 : null,
-		naval1,
-		supply1,
-	].filter(Boolean);
-	const offSum = selectedOff.reduce((s, p) => s + (p.priority || 0), 0);
-	// Count local enemies near each target and scale force accordingly
-	const _allUnits = units || [];
-	for (const p of selectedOff) {
-		p.allocatedForce =
-			offSum > 0 ? Math.ceil(offensiveForce * ((p.priority || 0) / offSum)) : 0;
-		// Scale by local enemy presence
-		const localRisk = p.riskAssessment || {};
-		const localEnemiesFromRisk = localRisk.enemyForcesNear || 0;
-		if (p.target && gameMode !== "CONQUEST") {
-			let localEnemies = 0;
-			for (const eu of _allUnits) {
-				if (!areSidesHostile(sideIdx, eu.sideIndex)) continue;
-				const dLat = p.target.lat - eu.lat;
-				let dLng = p.target.lng - eu.lng;
-				if (dLng > 180) dLng -= 360;
-				else if (dLng < -180) dLng += 360;
-				if (dLat * dLat + dLng * dLng < 9.0) localEnemies++; // within ~3°
-			}
-			if (localEnemies > 0) {
-				p.allocatedForce = Math.max(
-					p.allocatedForce,
-					Math.ceil(localEnemies * 1.5),
-				);
-			}
-		}
-		p.allocatedForce = Math.max(
-			p.allocatedForce,
-			Math.ceil((p.estimatedForceNeeded || 0) * 0.8),
-			Math.ceil(localEnemiesFromRisk * 1.25),
-		);
-		p.allocatedForce = Math.min(
-			p.allocatedForce,
-			Math.max(3, Math.ceil(totalForce * 0.75)),
-		);
-	}
-
-	const selectedDef = [
-		directiveDefense,
-		defend1,
-		...selectedCoastal,
-		...selectedGarr,
-	].filter(Boolean);
-	const defSum = selectedDef.reduce((s, p) => s + (p.priority || 0), 0);
-	for (const p of selectedDef) {
-		p.allocatedForce =
-			defSum > 0 ? Math.ceil(defensiveForce * ((p.priority || 0) / defSum)) : 0;
-	}
-	// Ensure minimum force
-	for (const p of selectedOff) {
-		if (p.allocatedForce < 3) p.allocatedForce = Math.min(3, offensiveForce);
-	}
-	for (const p of selectedDef) {
-		if (p.allocatedForce < 3) p.allocatedForce = Math.min(3, defensiveForce);
-	}
-
-	// ── Convert to plan objects ──
-	const makePlan = (p, phase) => {
-		const targetIndex = p.target
-			? getGridIndex(p.target.lat, p.target.lng)
-			: -1;
-		const targetSideIndex = Number.isInteger(p.targetSideIndex)
-			? p.targetSideIndex
-			: targetIndex >= 0 && dominantSideMap[targetIndex] >= 0
-				? dominantSideMap[targetIndex]
-				: Number.isInteger(p.frontIntel?.enemySide)
-					? p.frontIntel.enemySide
-					: -1;
-		const targetCountryId =
-			p.targetCountryId ||
-			p.target?.ownerId ||
-			(targetIndex >= 0 ? worldControlMap[targetIndex] || null : null);
-		const plan = {
-			type: p.type,
-			phase,
-			target: p.target || null,
-			targetCountryId,
-			targetSideUid: sideUids[targetSideIndex] || null,
-			stagingCells: p.stagingCells || [],
-			arrowPoints: p.arrowPoints || null,
-			frontlinePoints: p.frontlinePoints || null,
-			_waypoints: p._waypoints || [],
-			stagingPoint: p.stagingPoint || null,
-			zonePolyline: p.zonePolyline || null,
-			borderPolyline:
-				p.combatantCountryId != null
-					? _neutralBorderPolys[p.combatantCountryId] || null
-					: null,
-			neutralCountryId: p.neutralCountryId || null,
-			victimId: p.victimId || null,
-			annexerId: p.annexerId || null,
-			garrisonPoints: p.garrisonPoints || null,
-			requiredGarrison: p.requiredGarrison || null,
-			garrisonDeficit: p.garrisonDeficit || 0,
-			garrisonCoverage: p.garrisonCoverage || 0,
-			resistance: p.resistance || 0,
-			startedTick: simFrameCount,
-			lastProgressTick: simFrameCount,
-			progress: 0,
-			signature: getPlanSignature(sideIdx, p),
-			priority: p.priority || 0,
-			theaterId: p.theaterId || null,
-			scoreBreakdown: p.scoreBreakdown || null,
-			riskAssessment: p.riskAssessment || null,
-			frontIntel: p.frontIntel
-				? {
-						pairKey: p.frontIntel.pairKey,
-						enemySide: p.frontIntel.enemySide,
-						localRatio: p.frontIntel.localRatio,
-						pressureScore: p.frontIntel.pressureScore,
-						weakPoint: p.frontIntel.weakPoint,
-					}
-				: null,
-			maxAssignedUnits: p.allocatedForce || 5,
-			activeUnitCount: 0,
-		};
-		recordPlanOutcome(sideIdx, plan, "started");
-		return plan;
-	};
-
-	if (land1) result.land1 = makePlan(land1, "EXECUTION");
-	if (land2) result.land2 = makePlan(land2, "EXECUTION");
-	if (naval1) result.naval = makePlan(naval1, "GATHERING");
-	if (supply1) result.supply = makePlan(supply1, "GATHERING");
-	if (defend1) result.defend = makePlan(defend1, "EXECUTION");
-	result.coastal = selectedCoastal.map((p) => makePlan(p, "EXECUTION"));
-	result.garrisons = selectedGarr.map((p) => makePlan(p, "EXECUTION"));
-
-	if (transports[0]) result.transport = makePlan(transports[0], "EXECUTION");
-
-	return result;
-}
-
-function isOperationalLandPlan(plan) {
-	return !!(
-		plan &&
-		[
-			"CAPTURE_CITY",
-			"ENCIRCLE",
-			"PUSH_FRONT",
-			"DEFEND",
-			"DEFEND_CITY",
-		].includes(plan.type)
-	);
-}
-
-function isOperationalDefensePlanType(planType) {
-	return planType === "DEFEND" || planType === "DEFEND_CITY";
-}
-
-function operationalPlanStillHostile(sideIndex, plan) {
-	if (!plan?.target || isOperationalDefensePlanType(plan.type)) return true;
-	if (plan.targetCountryId) {
-		const targetSideIndex = findCountrySideIndex(plan.targetCountryId);
-		return targetSideIndex >= 0 && areSidesHostile(sideIndex, targetSideIndex);
-	}
-	if (plan.targetSideUid) {
-		const targetSideIndex = sideUids.indexOf(plan.targetSideUid);
-		return targetSideIndex >= 0 && areSidesHostile(sideIndex, targetSideIndex);
-	}
-	const targetIndex = getGridIndex(plan.target.lat, plan.target.lng);
-	if (targetIndex === -1) return false;
-	const targetSide = dominantSideMap[targetIndex];
-	return targetSide >= 0 && areSidesHostile(sideIndex, targetSide);
-}
-
-function discardNonHostileOperationalPlans(sideIndex) {
-	for (const slot of [sideIndex, sideIndex + sides.length]) {
-		const plan = _warPlan[slot];
-		if (
-			isOperationalLandPlan(plan) &&
-			!operationalPlanStillHostile(sideIndex, plan)
-		) {
-			_warPlan[slot] = null;
-		}
-	}
-}
-
-function getOperationalSelectedPlans(sideIndex) {
-	const selected = [
-		_warPlan[sideIndex],
-		_warPlan[sideIndex + sides.length],
-	].filter(
-		(plan) =>
-			isOperationalLandPlan(plan) &&
-			operationalPlanStillHostile(sideIndex, plan),
-	);
-	const defensivePlan = _aiDebugPlans[sideIndex]?.selected?.defend;
-	if (
-		isOperationalLandPlan(defensivePlan) &&
-		(_sideWarPhase[sideIndex] === "COLLAPSING" || selected.length === 0)
-	) {
-		selected.push(defensivePlan);
-	}
-	return selected.filter(
-		(plan, index, list) =>
-			list.findIndex((candidate) => candidate.signature === plan.signature) ===
-			index,
-	);
-}
-
-function getOperationalFrontage(sideIndex, plan) {
-	if (plan.frontlinePoints?.length) return plan.frontlinePoints.slice(0, 40);
-	const poly = plan.theaterId ? _frontlinePolys?.[plan.theaterId] : null;
-	if (poly?.length) {
-		const stride = Math.max(1, Math.floor(poly.length / 30));
-		return poly
-			.filter((_, index) => index % stride === 0)
-			.slice(0, 30)
-			.map((point) => ({ lat: point.lat, lng: point.lng }));
-	}
-	const front = (_frontIntelBySide[sideIndex] || []).find(
-		(candidate) => candidate.pairKey === plan.theaterId,
-	);
-	return (front?.samples || []).map((point) => ({
-		lat: point.lat,
-		lng: point.lng,
-	}));
-}
-
-function operationalPlanInput(sideIndex, plan, landingHandoff = null) {
-	const sideUid = sideUids[sideIndex];
-	const availableUnits = (_tickUnitsBySide[sideIndex] || []).filter(
-		(unit) => unit.health > 0 && unit.deployTicks <= 0 && !unit.isAtSea,
-	);
-	const requestedFormationCount = Math.max(1, plan.maxAssignedUnits || 5);
-	const availablePower = availableUnits.reduce(
-		(sum, unit) => sum + operationalUnitPower(unit),
-		0,
-	);
-	const requestedPower =
-		availablePower *
-		Math.min(1, requestedFormationCount / Math.max(1, availableUnits.length));
-	const landingPower = (landingHandoff?.unitIds || []).reduce((sum, unitId) => {
-		const unit = availableUnits.find(
-			(candidate) => String(candidate.id) === String(unitId),
-		);
-		return sum + (unit ? operationalUnitPower(unit) : 0);
-	}, 0);
-	const landingAnchor = landingHandoff?.anchor || null;
-	const baseSignature = plan.signature || getPlanSignature(sideIndex, plan);
-	const stagingAnchor =
-		landingAnchor ||
-		plan.stagingPoint ||
-		plan.stagingCells?.[0] ||
-		plan.frontIntel?.weakPoint ||
-		plan.arrowPoints?.[0] ||
-		plan.target;
-	const route = [
-		...(plan._waypoints || []),
-		...(plan.target ? [plan.target] : []),
-	];
-	return {
-		signature: baseSignature,
-		planSignature: baseSignature,
-		planType: plan.type,
-		type: plan.type,
-		sideUid,
-		theaterId: plan.theaterId || null,
-		target: plan.target ? { ...plan.target } : stagingAnchor,
-		stagingAnchor: stagingAnchor ? { ...stagingAnchor } : null,
-		route,
-		posture: getSideStrategyProfile(sideIndex).dominant,
-		assignedUnitIds: landingHandoff?.unitIds || [],
-		desiredPower: Math.max(1, requestedPower, landingPower),
-		maxAssignedUnits: Math.max(
-			3,
-			requestedFormationCount,
-			landingHandoff?.unitIds?.length || 0,
-		),
-		priority: plan.priority || 0,
-	};
-}
-
-function interpolateOperationalPoint(start, end, progress, lateral = 0) {
-	if (!start && !end) return null;
-	if (!start) return { lat: end.lat, lng: end.lng };
-	if (!end) return { lat: start.lat, lng: start.lng };
-	const clamped = Math.max(0, Math.min(1, progress));
-	const dLat = end.lat - start.lat;
-	const dLng = lngDelta(end.lng, start.lng);
-	const distance = Math.sqrt(dLat * dLat + dLng * dLng) || 1;
-	let lng = start.lng + dLng * clamped - (dLat / distance) * lateral;
-	while (lng > 180) lng -= 360;
-	while (lng < -180) lng += 360;
-	return {
-		lat: Math.max(
-			-89.5,
-			Math.min(89.5, start.lat + dLat * clamped + (dLng / distance) * lateral),
-		),
-		lng,
-	};
-}
-
-function interpolateOperationalCorridor(taskForce, progress, lateral = 0) {
-	const points = [
-		taskForce.stagingAnchor,
-		...(taskForce.route || []),
-		taskForce.target,
-	].filter((point, index, list) => {
-		if (!point) return false;
-		const previous = list[index - 1];
-		return (
-			!previous ||
-			geoDistSq(point.lat, point.lng, previous.lat, previous.lng) > 0.0001
-		);
-	});
-	if (points.length < 2) {
-		return interpolateOperationalPoint(
-			taskForce.stagingAnchor,
-			taskForce.target,
-			progress,
-			lateral,
-		);
-	}
-	const segmentLengths = [];
-	let totalLength = 0;
-	for (let index = 1; index < points.length; index++) {
-		const length = Math.sqrt(
-			geoDistSq(
-				points[index - 1].lat,
-				points[index - 1].lng,
-				points[index].lat,
-				points[index].lng,
-			),
-		);
-		segmentLengths.push(length);
-		totalLength += length;
-	}
-	let remaining = Math.max(0, Math.min(1, progress)) * Math.max(totalLength, 1);
-	for (let index = 0; index < segmentLengths.length; index++) {
-		const length = segmentLengths[index];
-		if (remaining <= length || index === segmentLengths.length - 1) {
-			return interpolateOperationalPoint(
-				points[index],
-				points[index + 1],
-				length > 0 ? remaining / length : 1,
-				lateral,
-			);
-		}
-		remaining -= length;
-	}
-	return interpolateOperationalPoint(points.at(-2), points.at(-1), 1, lateral);
-}
-
-function findOperationalWithdrawalAnchor(sideIndex, taskForce, members) {
-	const sideUid = sideUids[sideIndex];
-	const origin = members.length
-		? {
-				lat: members.reduce((sum, unit) => sum + unit.lat, 0) / members.length,
-				lng: members.reduce((sum, unit) => sum + unit.lng, 0) / members.length,
-			}
-		: taskForce.target || taskForce.stagingAnchor;
-	const candidates = [];
-	if (taskForce.stagingAnchor) {
-		const startIdx = getGridIndex(origin.lat, origin.lng);
-		const stagingIdx = getGridIndex(
-			taskForce.stagingAnchor.lat,
-			taskForce.stagingAnchor.lng,
-		);
-		const stagingFriendly =
-			stagingIdx !== -1 &&
-			landMask[stagingIdx] > 0 &&
-			(dominantSideMap[stagingIdx] === sideIndex ||
-				dominantSideMap[stagingIdx] === -1);
-		const stagingPath = stagingFriendly
-			? findLandPathSummary(startIdx, stagingIdx, sideIndex, 30000)
-			: { reachable: false };
-		if (stagingPath.reachable) {
-			candidates.push({
-				...taskForce.stagingAnchor,
-				id: "original-assembly",
-				sideUid,
-				controlStrength: 1,
-			});
-		}
-	}
-	const friendlyCities = (activeTheaterCities || [])
-		.filter((city) => {
-			const idx = getGridIndex(city.lat, city.lng);
-			return idx !== -1 && dominantSideMap[idx] === sideIndex;
-		})
-		.sort(
-			(left, right) =>
-				geoDistSq(origin.lat, origin.lng, left.lat, left.lng) -
-				geoDistSq(origin.lat, origin.lng, right.lat, right.lng),
-		)
-		.slice(0, 8);
-	for (const city of friendlyCities) {
-		const startIdx = getGridIndex(origin.lat, origin.lng);
-		const targetIdx = getGridIndex(city.lat, city.lng);
-		const path = findLandPathSummary(startIdx, targetIdx, sideIndex, 30000);
-		if (!path.reachable) continue;
-		candidates.push({
-			lat: city.lat,
-			lng: city.lng,
-			name: city.name || "Defensive line",
-			id: `city-${city.id || city.name || targetIdx}`,
-			sideUid,
-			controlStrength: city.isCapital ? 1.5 : 1.1,
-		});
-	}
-
-	const enemyEstimates = units
-		.filter(
-			(unit) => unit.health > 0 && areSidesHostile(sideIndex, unit.sideIndex),
-		)
-		.map((unit) => ({
-			lat: unit.lat,
-			lng: unit.lng,
-			estimatedPower: operationalUnitPower(unit),
-			confidence: 1,
-		}));
-	return (
-		selectWithdrawalAnchor(taskForce, candidates, {
-			origin,
-			enemyEstimates,
-		}) ||
-		taskForce.stagingAnchor ||
-		origin
-	);
-}
-
-function _taskForceLocation(taskForce) {
-	const target = taskForce.target || taskForce.stagingAnchor;
-	return target
-		? {
-				name: target.name || "Operational sector",
-				lat: target.lat,
-				lng: target.lng,
-			}
-		: null;
-}
-
-function clearOperationalPlanForTaskForce(sideIndex, taskForce) {
-	const slots = [sideIndex, sideIndex + sides.length];
-	for (const slot of slots) {
-		if (_warPlan[slot]?.signature === taskForce.planSignature) {
-			_warPlan[slot] = null;
-		}
-	}
-	_planReassessNeeded[sideIndex] = true;
-}
-
-function assignOperationalTaskForceOrders(
-	sideIndex,
-	taskForce,
-	plan,
-	unitsById,
-) {
-	const members = taskForce.assignedUnitIds
-		.map((unitId) => unitsById.get(String(unitId)))
-		.filter(Boolean);
-	const assembly = taskForce.stagingAnchor || taskForce.target;
-	const objective = taskForce.target || assembly;
-	const frontage = getOperationalFrontage(sideIndex, plan || taskForce);
-	const byRole = new Map();
-	for (const unit of members) {
-		const role = taskForce.unitRoles[String(unit.id)]?.role || "LINE";
-		if (!byRole.has(role)) byRole.set(role, []);
-		byRole.get(role).push(unit);
-	}
-	for (const roleMembers of byRole.values()) {
-		roleMembers.sort((left, right) =>
-			String(left.id).localeCompare(String(right.id)),
-		);
-	}
-	for (const unit of members) {
-		const role = taskForce.unitRoles[String(unit.id)]?.role || "LINE";
-		const roleMembers = byRole.get(role) || [unit];
-		const roleIndex = roleMembers.indexOf(unit);
-		const centeredIndex = roleIndex - (roleMembers.length - 1) / 2;
-		const lateralSpacing =
-			role === "LINE" ? 0.16 : role === "RESERVE" ? 0.12 : 0.1;
-		const lateralLimit = role === "LINE" ? 2.4 : role === "RESERVE" ? 1.8 : 1.2;
-		const lateral = Math.max(
-			-lateralLimit,
-			Math.min(lateralLimit, centeredIndex * lateralSpacing),
-		);
-		let target = assembly;
-		let speed = 1;
-		if (taskForce.phase === "ASSEMBLING") {
-			const depth =
-				role === "SPEARHEAD"
-					? 0.12
-					: role === "LINE"
-						? 0
-						: role === "SUPPORT"
-							? -0.12
-							: -0.28;
-			target = interpolateOperationalPoint(assembly, objective, depth, lateral);
-			speed = role === "RESERVE" ? 1.05 : 1.55;
-		} else if (taskForce.phase === "ATTACKING") {
-			if (isOperationalDefensePlanType(taskForce.planType) && frontage.length) {
-				target = frontage[roleIndex % frontage.length];
-				speed = 0.7;
-			} else {
-				let routeProgress = 0;
-				if (role === "SPEARHEAD") {
-					routeProgress = Math.min(1, 0.35 + taskForce.progress * 0.75);
-					speed = 2.15;
-				} else if (role === "LINE") {
-					routeProgress = Math.min(1, 0.2 + taskForce.progress * 0.85);
-					speed = 1.65;
-				} else if (role === "SUPPORT") {
-					routeProgress = Math.min(0.72, 0.1 + taskForce.progress * 0.58);
-					speed = 1.4;
-				} else {
-					routeProgress =
-						taskForce.progress >= 0.4
-							? Math.min(0.45, taskForce.progress * 0.5)
-							: 0;
-					speed = routeProgress > 0 ? 1.3 : 0.35;
-				}
-				target = interpolateOperationalCorridor(
-					taskForce,
-					routeProgress,
-					lateral,
-				);
-			}
-		} else if (taskForce.phase === "CONSOLIDATING") {
-			target = interpolateOperationalPoint(
-				assembly,
-				objective,
-				1,
-				lateral * 0.75,
-			);
-			speed = 0.8;
-		} else if (["WITHDRAWING", "REGROUPING"].includes(taskForce.phase)) {
-			target = interpolateOperationalPoint(
-				taskForce.withdrawalAnchor || assembly,
-				assembly,
-				0,
-				lateral,
-			);
-			speed = taskForce.phase === "WITHDRAWING" ? 1.85 : 0.45;
-		} else if (taskForce.phase === "CULMINATED") {
-			target = { lat: unit.lat, lng: unit.lng };
-			speed = 0.25;
-		}
-		unit._taskForceUid = taskForce.id;
-		unit._taskForceRole = role;
-		unit._taskForceOrder = target
-			? {
-					target,
-					phase: taskForce.phase,
-					role,
-					speed,
-					tick: _simTickCount,
-				}
-			: null;
-	}
-	return { assembly, objective, frontage, members };
-}
-
-function updateOperationalAiTaskForces() {
-	if (gameMode !== "CONQUEST" || _aiTaskForcesBySide.size === 0) return;
-	if (!_aiOperationsDirty && _simTickCount - _aiLastOperationsTick < 15) {
-		return;
-	}
-	_aiLastOperationsTick = _simTickCount;
-	_aiOperationsDirty = false;
-	const unitsById = new Map(units.map((unit) => [String(unit.id), unit]));
-	const allAssignedUnitIds = new Set();
-	const liveTaskForceIds = new Set();
-
-	for (let sideIndex = 0; sideIndex < sides.length; sideIndex++) {
-		const sideUid = sideUids[sideIndex];
-		if (!sideUid || !sides[sideIndex]?.length) continue;
-		discardNonHostileOperationalPlans(sideIndex);
-		const selectedPlans = getOperationalSelectedPlans(sideIndex);
-		let landingHandoff = _aiPendingLandingHandoffs.get(sideUid) || null;
-		if (landingHandoff && _simTickCount - landingHandoff.tick > 1800) {
-			_aiPendingLandingHandoffs.delete(sideUid);
-			landingHandoff = null;
-		}
-		const handoffCandidates = landingHandoff
-			? selectedPlans.filter((plan) => plan.target)
-			: [];
-		if (landingHandoff && handoffCandidates.length === 0) {
-			const targetIndex = getGridIndex(
-				landingHandoff.anchor.lat,
-				landingHandoff.anchor.lng,
-			);
-			let targetSideIndex =
-				targetIndex >= 0 ? dominantSideMap[targetIndex] : -1;
-			if (!areSidesHostile(sideIndex, targetSideIndex)) {
-				targetSideIndex = sides.findIndex(
-					(side, candidateIndex) =>
-						side?.length && areSidesHostile(sideIndex, candidateIndex),
-				);
-			}
-			const beachheadPlan = {
-				type: "PUSH_FRONT",
-				phase: "EXECUTION",
-				target: { ...landingHandoff.anchor },
-				targetSideUid: sideUids[targetSideIndex] || null,
-				stagingPoint: { ...landingHandoff.anchor },
-				startedTick: landingHandoff.frame,
-				lastProgressTick: landingHandoff.frame,
-				progress: 0,
-				priority: 200,
-				maxAssignedUnits: Math.max(3, landingHandoff.unitIds.length),
-				signature: `${sideIndex}:BEACHHEAD:${Math.round(landingHandoff.anchor.lat * 2) / 2}:${Math.round(landingHandoff.anchor.lng * 2) / 2}`,
-			};
-			const slot = !_warPlan[sideIndex]
-				? sideIndex
-				: !_warPlan[sideIndex + sides.length]
-					? sideIndex + sides.length
-					: sideIndex;
-			_warPlan[slot] = beachheadPlan;
-			selectedPlans.push(beachheadPlan);
-			handoffCandidates.push(beachheadPlan);
-		}
-		const postLandingCandidates = handoffCandidates.filter(
-			(plan) => (plan.startedTick || 0) >= landingHandoff.frame,
-		);
-		const handoffPlan = landingHandoff
-			? (postLandingCandidates.length
-					? postLandingCandidates
-					: handoffCandidates
-				).sort(
-					(left, right) =>
-						geoDistSq(
-							left.target.lat,
-							left.target.lng,
-							landingHandoff.anchor.lat,
-							landingHandoff.anchor.lng,
-						) -
-						geoDistSq(
-							right.target.lat,
-							right.target.lng,
-							landingHandoff.anchor.lat,
-							landingHandoff.anchor.lng,
-						),
-				)[0] || null
-			: null;
-		const handoffPlanSignature = handoffPlan
-			? handoffPlan.signature || getPlanSignature(sideIndex, handoffPlan)
-			: null;
-		const planInputs = selectedPlans.map((plan) => {
-			const signature = plan.signature || getPlanSignature(sideIndex, plan);
-			return operationalPlanInput(
-				sideIndex,
-				plan,
-				signature === handoffPlanSignature ? landingHandoff : null,
-			);
-		});
-		const selectedSignatures = new Set(
-			planInputs.map((plan) => plan.signature),
-		);
-		const existing = _aiTaskForcesBySide.get(sideUid) || [];
-		const retiring = [];
-		for (const taskForce of existing) {
-			if (
-				selectedSignatures.has(taskForce.signature) ||
-				taskForce.phase === "COMPLETE"
-			) {
-				continue;
-			}
-			const members = taskForce.assignedUnitIds
-				.map((unitId) => unitsById.get(String(unitId)))
-				.filter(Boolean);
-			const withdrawalAnchor =
-				taskForce.withdrawalAnchor ||
-				findOperationalWithdrawalAnchor(sideIndex, taskForce, members);
-			const alreadyRetiring = [
-				"CULMINATED",
-				"WITHDRAWING",
-				"REGROUPING",
-			].includes(taskForce.phase);
-			retiring.push({
-				...taskForce,
-				phase:
-					taskForce.phase === "REGROUPING"
-						? "REGROUPING"
-						: taskForce.phase === "WITHDRAWING"
-							? "WITHDRAWING"
-							: "CULMINATED",
-				phaseStartedTick: alreadyRetiring
-					? taskForce.phaseStartedTick
-					: _simTickCount,
-				withdrawalAnchor,
-				completionReason: taskForce.completionReason || "PLAN_CANCELLED",
-			});
-		}
-		const reservedUnitIds = new Set(
-			retiring.flatMap((taskForce) => taskForce.assignedUnitIds.map(String)),
-		);
-		const readinessUnits = (_tickUnitsBySide[sideIndex] || []).map((unit) =>
-			serializeOperationalUnit(unit),
-		);
-		const operationalUnits = readinessUnits.map((serialized) => {
-			const allocationUnit = { ...serialized };
-			if (reservedUnitIds.has(String(serialized.id))) {
-				allocationUnit.commandEligible = false;
-			}
-			return allocationUnit;
-		});
-		const taskForces = reconcileAiTaskForces(
-			existing.filter((taskForce) =>
-				selectedSignatures.has(taskForce.signature),
-			),
-			planInputs,
-			operationalUnits,
-			{
-				tick: _simTickCount,
-			},
-		);
-		taskForces.push(...retiring);
-		const retained = [];
-		for (let taskForce of taskForces) {
-			const plan = selectedPlans.find(
-				(candidate) =>
-					(candidate.signature || getPlanSignature(sideIndex, candidate)) ===
-					taskForce.planSignature,
-			);
-			const runtime = _aiTaskForceTransitionById.get(taskForce.id) || {};
-
-			const members = taskForce.assignedUnitIds
-				.map((unitId) => unitsById.get(String(unitId)))
-				.filter(Boolean);
-			const readinessResult = calculateTaskForceReadiness(
-				taskForce,
-				readinessUnits,
-				{
-					assemblyRadiusSq: 9,
-				},
-			);
-			const targetIdx = taskForce.target
-				? getGridIndex(taskForce.target.lat, taskForce.target.lng)
-				: -1;
-			const objectiveAchieved =
-				!isOperationalDefensePlanType(taskForce.planType) &&
-				targetIdx !== -1 &&
-				dominantSideMap[targetIdx] === sideIndex;
-			const closestObjectiveDistance = taskForce.target
-				? members.reduce(
-						(best, unit) =>
-							Math.min(
-								best,
-								Math.sqrt(
-									geoDistSq(
-										unit.lat,
-										unit.lng,
-										taskForce.target.lat,
-										taskForce.target.lng,
-									),
-								),
-							),
-						Infinity,
-					)
-				: 0;
-			const initialDistance =
-				Number.isFinite(runtime.initialObjectiveDistance) &&
-				runtime.initialObjectiveDistance > 0
-					? runtime.initialObjectiveDistance
-					: Number.isFinite(closestObjectiveDistance)
-						? Math.max(0.5, closestObjectiveDistance)
-						: null;
-			const progress = objectiveAchieved
-				? 1
-				: isOperationalDefensePlanType(taskForce.planType)
-					? taskForce.progress
-					: !Number.isFinite(closestObjectiveDistance) || !initialDistance
-						? taskForce.progress
-						: Math.max(
-								taskForce.progress,
-								1 - closestObjectiveDistance / Math.max(0.5, initialDistance),
-							);
-
-			const opposition = {
-				estimatedPower: taskForce.target
-					? estimateLocalForces(
-							sideIndex,
-							taskForce.target.lat,
-							taskForce.target.lng,
-							16,
-						).enemyHealth
-					: 0,
-			};
-			const supplyCollapsed =
-				members.length > 0 &&
-				members.filter(
-					(unit) =>
-						_simTickCount -
-							(unit._supplyCollapsedTick ?? Number.NEGATIVE_INFINITY) <=
-						15,
-				).length >= Math.ceil(members.length * 0.35);
-			const encirclementRiskSevere =
-				members.length > 0 &&
-				members.filter((unit) => (unit.encircledTicks || 0) >= 60).length >=
-					Math.ceil(members.length * 0.35);
-			let withdrawalAnchor = taskForce.withdrawalAnchor;
-			if (
-				["CULMINATED", "WITHDRAWING"].includes(taskForce.phase) &&
-				!withdrawalAnchor
-			) {
-				withdrawalAnchor = findOperationalWithdrawalAnchor(
-					sideIndex,
-					taskForce,
-					members,
-				);
-			}
-			const withdrawalArrived = !!(
-				withdrawalAnchor &&
-				members.length > 0 &&
-				members.filter(
-					(unit) =>
-						geoDistSq(
-							unit.lat,
-							unit.lng,
-							withdrawalAnchor.lat,
-							withdrawalAnchor.lng,
-						) <= 1,
-				).length >= Math.ceil(members.length * 0.65)
-			);
-			if (
-				taskForce.phase === "REGROUPING" &&
-				_sideWarPhase[sideIndex] === "COLLAPSING"
-			) {
-				taskForce = {
-					...taskForce,
-					planType: "DEFEND",
-					readiness: readinessResult.readiness,
-					currentPower: readinessResult.currentPower,
-					completionReason: "COLLAPSING_DEFENSE",
-					outcome: null,
-				};
-			} else {
-				taskForce = advanceAiTaskForce(taskForce, {
-					tick: _simTickCount,
-					readinessResult,
-					progress,
-					objectiveAchieved,
-
-					supplyCollapsed,
-					encirclementRiskSevere,
-					forceRatio:
-						readinessResult.currentPower /
-						Math.max(0.25, opposition.estimatedPower),
-					withdrawalAnchor,
-					withdrawalArrived,
-				});
-			}
-
-			if (taskForce.phase === "COMPLETE") {
-				clearOperationalPlanForTaskForce(sideIndex, taskForce);
-				for (const unit of members) {
-					unit._taskForceUid = null;
-					unit._taskForceRole = null;
-					unit._taskForceOrder = null;
-				}
-				continue;
-			}
-			const geometry = assignOperationalTaskForceOrders(
-				sideIndex,
-				taskForce,
-				plan,
-				unitsById,
-			);
-			taskForce = {
-				...taskForce,
-				assemblyArea: geometry.assembly,
-				frontage: geometry.frontage,
-				corridor: [
-					geometry.assembly,
-					...(taskForce.route || []),
-					geometry.objective,
-				].filter(Boolean),
-			};
-			for (const unitId of taskForce.assignedUnitIds) {
-				allAssignedUnitIds.add(String(unitId));
-			}
-			liveTaskForceIds.add(taskForce.id);
-			_aiTaskForceTransitionById.set(taskForce.id, {
-				initialObjectiveDistance:
-					runtime.initialObjectiveDistance || initialDistance,
-			});
-			retained.push(taskForce);
-		}
-		_aiTaskForcesBySide.set(sideUid, retained);
-		const receivingTaskForce = landingHandoff
-			? retained.find(
-					(taskForce) => taskForce.signature === handoffPlanSignature,
-				)
-			: null;
-		const liveLandingUnitIds = (landingHandoff?.unitIds || []).filter(
-			(unitId) => {
-				const unit = unitsById.get(String(unitId));
-				return unit && unit.health > 0 && sideUids[unit.sideIndex] === sideUid;
-			},
-		);
-		if (
-			receivingTaskForce &&
-			liveLandingUnitIds.every((unitId) =>
-				receivingTaskForce.assignedUnitIds.some(
-					(assignedId) => String(assignedId) === String(unitId),
-				),
-			)
-		) {
-			_aiPendingLandingHandoffs.delete(sideUid);
-		}
-	}
-	for (const unit of units) {
-		if (allAssignedUnitIds.has(String(unit.id))) continue;
-		unit._taskForceUid = null;
-		unit._taskForceRole = null;
-		unit._taskForceOrder = null;
-	}
-	for (const taskForceId of Array.from(_aiTaskForceTransitionById.keys())) {
-		if (!liveTaskForceIds.has(taskForceId)) {
-			_aiTaskForceTransitionById.delete(taskForceId);
-		}
-	}
-}
-
-function shouldReassess(si) {
-	const REASSESS_INTERVAL = 300; // sim-ticks (was visual frames; now per-tick)
-	const HARD_COOLDOWN = 150; // minimum sim-ticks between reassessments (even forced)
-	const FORCED_COOLDOWN = 20; // shorter cooldown for forced reassess — prevents infinite retry loops
-
-	const lastReassess = _proposalReassessTick[si] || 0;
-
-	// Forced reassess (enemy offensive, plan stall, territory shift): bypass regular
-	// cooldown but enforce a short gap to prevent CPU-burning retry cascades
-	if (_planReassessNeeded[si]) {
-		const gap = _simTickCount - lastReassess;
-		if (gap >= FORCED_COOLDOWN) {
-			if (window.__perf) window.__perf.reassess_forced++;
-			return true;
-		}
-		// Flag stays set; will retry in FORCED_COOLDOWN ticks
-		return false;
-	}
-
-	// Hard cooldown: prevent eval-block spam
-	if (_simTickCount - lastReassess < HARD_COOLDOWN) return false;
-
-	// Stagger first reassessment per side to avoid all 70 sides firing on the
-	// same tick — spreads reassessments across 140 ticks (70 sides × 2 offset)
-	if (
-		lastReassess === 0 &&
-		_simTickCount < HARD_COOLDOWN + (si % (HARD_COOLDOWN / 2)) * 2
-	) {
-		return false;
-	}
-	let result = false;
-
-	if (_simTickCount - lastReassess >= REASSESS_INTERVAL) {
-		result = true;
-		if (window.__perf) window.__perf.reassess_interval++;
-	}
-	if (!_warPlan[si]) {
-		result = true;
-		if (window.__perf) window.__perf.reassess_noPlan++;
-	}
-
-	// Territory change >2%
-	const sideCountries = sides[si];
-	if (sideCountries) {
-		let cur = 0;
-		for (const c of sideCountries) {
-			const stats = latestCountryStats.get(c.id);
-			if (stats) cur += stats.controlled || 0;
-		}
-		const prev = _sidePrevControlled[si] || 0;
-		if (!result && prev > 0 && Math.abs(cur - prev) / Math.max(1, cur) > 0.02) {
-			result = true;
-			if (window.__perf) window.__perf.reassess_territory++;
-		}
-		_sidePrevControlled[si] = cur;
-	}
-
-	// Posture change
-	const curPosture = _sidePosture[si] || "BALANCED";
-	const prevPosture = _sidePrevPosture[si];
-	if (!result && prevPosture !== undefined && prevPosture !== curPosture) {
-		result = true;
-		if (window.__perf) window.__perf.reassess_posture++;
-	}
-	_sidePrevPosture[si] = curPosture;
-
-	// Force ratio change >20%
-	const ourUnits = _tickUnitsBySide[si]
-		? gameMode === "CONQUEST"
-			? _tickUnitsBySide[si].reduce(
-					(sum, unit) =>
-						unit.health > 0 && unit.deployTicks <= 0
-							? sum + operationalUnitPower(unit)
-							: sum,
-					0,
-				)
-			: _tickUnitsBySide[si].length
-		: 0;
-	let totalEnemyUnits =
-		gameMode === "CONQUEST" ? getKnownEnemyPowerForSide(si) : 0;
-	if (gameMode !== "CONQUEST") {
-		for (let ei = 0; ei < sides.length; ei++) {
-			if (!areSidesHostile(si, ei)) continue;
-			if (!sides[ei] || sides[ei].length === 0) continue;
-			totalEnemyUnits += _tickUnitsBySide[ei] ? _tickUnitsBySide[ei].length : 0;
-		}
-	}
-	const curRatio = totalEnemyUnits > 0 ? ourUnits / totalEnemyUnits : Infinity;
-	const prevRatio = _sidePrevStrengthRatio[si];
-	if (
-		!result &&
-		prevRatio !== undefined &&
-		prevRatio > 0 &&
-		Number.isFinite(curRatio)
-	) {
-		if (Math.abs(curRatio - prevRatio) / Math.max(0.01, prevRatio) > 0.2) {
-			result = true;
-			if (window.__perf) window.__perf.reassess_ratio++;
-		}
-	}
-	_sidePrevStrengthRatio[si] = curRatio;
-
-	return result;
-}
+const aiPlanExecutor = createAiPlanExecutor(applicationRuntime);
+export const { evaluateAllPlans } = aiPlanExecutor;
 
 const NAVAL_STALL_TICKS = 600; // ticks of no progress before abandoning naval/coastal plan
-const NAVAL_ABORT_TICKS = 1800; // longer stall before aborting second-wave naval plan
-
-export function evaluateAllPlans() {
-	// ── Reassessment: run the proposal pipeline when triggers fire ──
-	const _tp = performance.now();
-	// Detect all sides that need new plans, but only generate proposals for one
-	// side per simulation tick. Proposal generation contains bounded pathfinding
-	// and coastal analysis; spreading it across ticks prevents several coalitions
-	// from creating the same main-thread spike without changing queue order.
-	for (let si = 0; si < sides.length; si++) {
-		if (!sides[si] || sides[si].length === 0) continue;
-		if (_pendingProposalSideSet.has(si)) continue;
-		if (shouldReassess(si)) {
-			_pendingProposalSides.push(si);
-			_pendingProposalSideSet.add(si);
-		}
-	}
-
-	const si = _pendingProposalSides.shift();
-	if (si !== undefined) {
-		_pendingProposalSideSet.delete(si);
-		if (sides[si] && sides[si].length > 0) {
-			window.__perf.proposalRuns++;
-			const forceReplace = !!_planReassessNeeded[si];
-			const commanderReplacement =
-				forceReplace && !!_commanderPlanReplacePending[si];
-			_planReassessNeeded[si] = false;
-			const proposals = generateAllProposals(si);
-
-			// Score each proposal
-			for (const p of proposals) {
-				p.priority = scoreProposal(p, si);
-			}
-
-			// Select and apply plans
-			const selected = selectPlans(si, proposals);
-
-			// Apply land plans to _warPlan slots
-			// Only overwrite on forced reassessment; otherwise fill gaps
-			const replaceLandPlans = forceReplace && gameMode !== "CONQUEST";
-			if (selected.land1 && (!_warPlan[si] || replaceLandPlans)) {
-				if (_warPlan[si] && replaceLandPlans) {
-					recordPlanOutcome(
-						si,
-						_warPlan[si],
-						commanderReplacement ? "replaced" : "failed",
-					);
-				}
-				_warPlan[si] = selected.land1;
-			}
-			if (selected.land2) {
-				const lSlot2 = si + sides.length;
-				if (!_warPlan[lSlot2] || replaceLandPlans) {
-					if (_warPlan[lSlot2] && replaceLandPlans) {
-						recordPlanOutcome(
-							si,
-							_warPlan[lSlot2],
-							commanderReplacement ? "replaced" : "failed",
-						);
-					}
-					if (_warPlan.length <= lSlot2) {
-						_warPlan[lSlot2] = selected.land2;
-					} else {
-						_warPlan[lSlot2] = selected.land2;
-					}
-				}
-			}
-
-			// Apply naval / supply plans — naval plans have their own lifecycle
-			// and should not be force-replaced just because a land plan triggered reassessment
-			if (selected.naval) {
-				if (!_navalPlan[si]) {
-					_navalPlan[si] = selected.naval;
-				} else if (forceReplace) {
-					// Only replace if current naval plan is truly stalled (>1200 ticks no progress)
-					const nptsp =
-						simFrameCount - (_navalPlan[si].lastProgressTick || simFrameCount);
-					const nptss =
-						simFrameCount - (_navalPlan[si].startedTick || simFrameCount);
-					if (nptsp > 1200 && nptss > 1200) {
-						for (const u of _tickUnitsBySide[si] || []) {
-							if (u.navalAssigned) {
-								u.navalAssigned = false;
-								u.isTransport = false;
-							}
-						}
-						_navalPlan[si] = selected.naval;
-					}
-				}
-			}
-			if (selected.supply && !_navalSupplyPlan[si]) {
-				_navalSupplyPlan[si] = selected.supply;
-			}
-
-			// Apply coastal defense plans
-			if (selected.coastal && selected.coastal.length > 0) {
-				for (let ci = 0; ci < selected.coastal.length; ci++) {
-					const slot = si * 10 + ci;
-					_coastalDefensePlan[slot] = selected.coastal[ci];
-				}
-			}
-
-			// Apply neutral garrison plans
-			if (selected.garrisons && selected.garrisons.length > 0) {
-				for (let gi = 0; gi < selected.garrisons.length; gi++) {
-					const slot = si * 10 + gi;
-					_neutralGarrisonPlan[slot] = selected.garrisons[gi];
-				}
-			}
-
-			// Apply transport plan
-			if (selected.transport) {
-				if (!_transportPlan[si] || forceReplace) {
-					_transportPlan[si] = selected.transport;
-				}
-			}
-
-			// Track failed proposals (standard reassessment interval handles retry)
-			if (!_warPlan[si]) {
-				window.__perf.proposalFailed++;
-			}
-
-			const selectedDebugPlans = [
-				selected.land1,
-				selected.land2,
-				selected.naval,
-				selected.defend,
-				selected.transport,
-			].filter(Boolean);
-			const selectedDebugSignatures = new Set(
-				selectedDebugPlans.map((p) => p.signature || getPlanSignature(si, p)),
-			);
-			_aiDebugPlans[si] = {
-				tick: simFrameCount,
-				strategy: getSideStrategyProfile(si).dominant,
-				selected: {
-					land1: selected.land1 || null,
-					land2: selected.land2 || null,
-					naval: selected.naval || null,
-					defend: selected.defend || null,
-					transport: selected.transport || null,
-				},
-				topRejected: proposals
-					.filter((p) => !selectedDebugSignatures.has(getPlanSignature(si, p)))
-					.sort((a, b) => (b.priority || 0) - (a.priority || 0))
-					.slice(0, 5)
-					.map((p) => ({
-						type: p.type,
-						target: p.target?.name || "",
-						priority: p.priority || 0,
-						theaterId: p.theaterId || null,
-						scoreBreakdown: p.scoreBreakdown || null,
-					})),
-				fronts: (_frontIntelBySide[si] || []).slice(0, 4).map((f) => ({
-					pairKey: f.pairKey,
-					enemySide: f.enemySide,
-					localRatio: f.localRatio,
-					pressureScore: f.pressureScore,
-					friendlies: f.friendlies,
-					enemies: f.enemies,
-				})),
-			};
-			_proposalReassessTick[si] = _simTickCount;
-			_proposalsCache[si] = proposals;
-			_commanderPlanReplacePending[si] = false;
-		}
-	}
-	window.__perf.proposals =
-		(window.__perf.proposals || 0) + performance.now() - _tp;
-
-	// Reset plan activeUnitCount every tick (cheap, no unit iteration)
-	for (let _ri = 0; _ri < sides.length; _ri++) {
-		if (!sides[_ri] || sides[_ri].length === 0) continue;
-		if (_warPlan[_ri]) _warPlan[_ri].activeUnitCount = 0;
-		const _l2 = _ri + sides.length;
-		if (_warPlan[_l2]) _warPlan[_l2].activeUnitCount = 0;
-		if (_navalPlan[_ri]) {
-			_navalPlan[_ri].activeUnitCount = 0;
-		}
-		if (_navalSupplyPlan[_ri]) _navalSupplyPlan[_ri].activeUnitCount = 0;
-		if (_transportPlan[_ri]) _transportPlan[_ri].activeUnitCount = 0;
-		if (_defenderReactionPlan[_ri])
-			_defenderReactionPlan[_ri].activeUnitCount = 0;
-		for (let _ci = 0; _ci < 10; _ci++) {
-			const _cp = _coastalDefensePlan[_ri * 10 + _ci];
-			if (_cp) _cp.activeUnitCount = 0;
-			const _gp = _neutralGarrisonPlan[_ri * 10 + _ci];
-			if (_gp) _gp.activeUnitCount = 0;
-		}
-	}
-
-	const _te = performance.now();
-	if (isSimulationPhaseDue(_simTickCount, 5, 2)) {
-		if (gameMode !== "CONQUEST") {
-			for (let si = 0; si < sides.length; si++) {
-				if (!sides[si] || sides[si].length === 0) continue;
-				const plan = _warPlan[si];
-				const plan2 = _warPlan[si + sides.length];
-				if (!plan && !plan2) {
-					continue;
-				}
-				if (!plan) continue;
-
-				// Reset per-tick unit count
-				plan.activeUnitCount = 0;
-
-				const ticksSinceStart =
-					simFrameCount - (plan.startedTick || simFrameCount);
-				const ticksSinceProgress =
-					simFrameCount - (plan.lastProgressTick || simFrameCount);
-				if (plan.type === "DEFEND_CITY") {
-					const targetIdx = plan.target
-						? getGridIndex(plan.target.lat, plan.target.lng)
-						: -1;
-					if (targetIdx === -1 || dominantSideMap[targetIdx] !== si) {
-						recordPlanOutcome(si, plan, "replaced");
-						_commanderPlanReplacePending[si] = true;
-						_planReassessNeeded[si] = true;
-					} else {
-						plan.lastProgressTick = simFrameCount;
-						plan.progress = Math.min(
-							1,
-							(plan.activeUnitCount || 0) /
-								Math.max(1, plan.maxAssignedUnits || 1),
-						);
-					}
-					continue;
-				}
-
-				if (
-					plan.type === "CAPTURE_CITY" ||
-					plan.type === "ENCIRCLE" ||
-					plan.type === "PUSH_FRONT" ||
-					plan.type === "DEFEND"
-				) {
-					if (plan.target) {
-						// Check if target area is now under friendly control
-						const tIdx = getGridIndex(plan.target.lat, plan.target.lng);
-						const captured = tIdx !== -1 && dominantSideMap[tIdx] === si;
-						if (captured) {
-							plan.phase = "CONSOLIDATION";
-							plan.progress = 1.0;
-							recordPlanOutcome(si, plan, "success");
-							// After consolidation period, generate next plan
-							if (ticksSinceProgress > NAVAL_STALL_TICKS) {
-								_planReassessNeeded[si] = true;
-							}
-							continue;
-						}
-					}
-
-					// PREPARATION → EXECUTION: advance when enough units rally at staging cells
-					if (plan.phase === "PREPARATION" && plan.stagingCells?.length > 0) {
-						let gathered = 0;
-						for (const u of _tickUnitsBySide[si] || []) {
-							if (u.deployTicks > 0) continue;
-							const sc =
-								plan.stagingCells[
-									Math.floor(
-										Math.abs(u.id * 1000000) % plan.stagingCells.length,
-									)
-								];
-							if (!sc) continue;
-							const sdLat = sc.lat - u.lat;
-							let sdLng = sc.lng - u.lng;
-							if (sdLng > 180) sdLng -= 360;
-							else if (sdLng < -180) sdLng += 360;
-							if (sdLat * sdLat + sdLng * sdLng < 2.0) gathered++;
-						}
-						if (gathered >= Math.min(plan.maxAssignedUnits || 5, 5)) {
-							plan.phase = "EXECUTION";
-							plan.lastProgressTick = simFrameCount;
-						}
-					}
-
-					applyPlanProgressMemory(si, plan);
-
-					// Check for stall
-					if (
-						simFrameCount - (plan.lastProgressTick || simFrameCount) >
-							NAVAL_STALL_TICKS &&
-						ticksSinceStart > NAVAL_STALL_TICKS
-					) {
-						recordPlanOutcome(si, plan, "failed");
-						_planReassessNeeded[si] = true; // Failed — reassess
-						continue;
-					}
-
-					// Counter-offensive interrupt: if enemy pushes back significantly, abort
-					const sideCountries = sides[si] || [];
-					if (sideCountries.length > 0) {
-						const firstCountry = sideCountries[0];
-						const stats = latestCountryStats.get(firstCountry.id);
-						if (stats && plan._territoryAtStart !== undefined) {
-							const territoryLoss =
-								plan._territoryAtStart - (stats.controlled || 0);
-							if (territoryLoss > 50) {
-								recordPlanOutcome(si, plan, "failed");
-								_planReassessNeeded[si] = true; // Enemy counter-offensive → reassess
-								continue;
-							}
-						}
-						// Track territory at plan start for interrupt detection
-						if (stats && plan._territoryAtStart === undefined) {
-							plan._territoryAtStart = stats.controlled || 0;
-						}
-					}
-				}
-
-				applyPlanProgressMemory(si, plan);
-			}
-
-			// ── Land Plan Slot 2 Evaluation ──
-			for (let si = 0; si < sides.length; si++) {
-				if (!sides[si] || sides[si].length === 0) continue;
-				const lSlot2 = si + sides.length;
-				const plan2 = _warPlan[lSlot2];
-				if (!plan2) continue;
-
-				plan2.activeUnitCount = 0;
-
-				const ticksSinceStart2 =
-					simFrameCount - (plan2.startedTick || simFrameCount);
-				const ticksSinceProgress2 =
-					simFrameCount - (plan2.lastProgressTick || simFrameCount);
-
-				if (
-					plan2.type === "CAPTURE_CITY" ||
-					plan2.type === "ENCIRCLE" ||
-					plan2.type === "PUSH_FRONT" ||
-					plan2.type === "DEFEND"
-				) {
-					if (plan2.target) {
-						const tIdx2 = getGridIndex(plan2.target.lat, plan2.target.lng);
-						const captured2 = tIdx2 !== -1 && dominantSideMap[tIdx2] === si;
-						if (captured2) {
-							plan2.phase = "CONSOLIDATION";
-							plan2.progress = 1.0;
-							recordPlanOutcome(si, plan2, "success");
-							if (ticksSinceProgress2 > NAVAL_STALL_TICKS) {
-								_planReassessNeeded[si] = true;
-							}
-							continue;
-						}
-					}
-
-					if (plan2.phase === "PREPARATION" && plan2.stagingCells?.length > 0) {
-						let gathered2 = 0;
-						for (const u of _tickUnitsBySide[si] || []) {
-							if (u.deployTicks > 0) continue;
-							const sc =
-								plan2.stagingCells[
-									Math.floor(
-										Math.abs(u.id * 1000000) % plan2.stagingCells.length,
-									)
-								];
-							if (!sc) continue;
-							const sdLat2 = sc.lat - u.lat;
-							let sdLng2 = sc.lng - u.lng;
-							if (sdLng2 > 180) sdLng2 -= 360;
-							else if (sdLng2 < -180) sdLng2 += 360;
-							if (sdLat2 * sdLat2 + sdLng2 * sdLng2 < 2.0) gathered2++;
-						}
-						if (gathered2 >= Math.min(plan2.maxAssignedUnits || 5, 5)) {
-							plan2.phase = "EXECUTION";
-							plan2.lastProgressTick = simFrameCount;
-						}
-					}
-
-					applyPlanProgressMemory(si, plan2);
-
-					if (
-						simFrameCount - (plan2.lastProgressTick || simFrameCount) >
-							NAVAL_ABORT_TICKS &&
-						ticksSinceStart2 > NAVAL_STALL_TICKS
-					) {
-						recordPlanOutcome(si, plan2, "failed");
-						_planReassessNeeded[si] = true;
-						continue;
-					}
-
-					const sideCountries2 = sides[si] || [];
-					if (sideCountries2.length > 0) {
-						const firstCountry2 = sideCountries2[0];
-						const stats2 = latestCountryStats.get(firstCountry2.id);
-						if (stats2 && plan2._territoryAtStart !== undefined) {
-							const territoryLoss2 =
-								plan2._territoryAtStart - (stats2.controlled || 0);
-							if (territoryLoss2 > 50) {
-								recordPlanOutcome(si, plan2, "failed");
-								_planReassessNeeded[si] = true;
-								continue;
-							}
-						}
-						if (stats2 && plan2._territoryAtStart === undefined) {
-							plan2._territoryAtStart = stats2.controlled || 0;
-						}
-					}
-				}
-
-				applyPlanProgressMemory(si, plan2);
-			}
-		}
-
-		// ── Naval Plan Evaluation ──
-		for (let si = 0; si < sides.length; si++) {
-			if (!sides[si] || sides[si].length === 0) continue;
-			const np = _navalPlan[si];
-			if (!np) {
-				// Don't force reassessment — naval plans are optional; the 300-tick interval handles it
-				continue;
-			}
-
-			// Reset per-tick counter
-			np.activeUnitCount = 0;
-
-			const ticksSinceStart = simFrameCount - (np.startedTick || simFrameCount);
-			const ticksSinceProgress =
-				simFrameCount - (np.lastProgressTick || simFrameCount);
-
-			// Check if target is captured
-			if (np.target) {
-				const tIdx = getGridIndex(np.target.lat, np.target.lng);
-				if (tIdx !== -1 && dominantSideMap[tIdx] === si) {
-					// Target captured — clear naval plan
-					_navalPlan[si] = null;
-					continue;
-				}
-			}
-
-			// Stall detection: if stalled for 30s, cancel naval plan
-			if (
-				ticksSinceProgress > NAVAL_STALL_TICKS &&
-				ticksSinceStart > NAVAL_STALL_TICKS
-			) {
-				// Release all assigned units
-				for (const u of _tickUnitsBySide[si] || []) {
-					if (u.navalAssigned) {
-						u.navalAssigned = false;
-						u.isTransport = false;
-					}
-				}
-				_navalPlan[si] = null;
-				_planReassessNeeded[si] = true;
-				continue;
-			}
-
-			// Phase transitions
-			if (np.phase === "GATHERING") {
-				// Count how many naval units are near staging point
-				let gathered = 0;
-				for (const u of _tickUnitsBySide[si] || []) {
-					if (!u.navalAssigned) continue;
-					const sdLat = np.stagingPoint.lat - u.lat;
-					let sdLng = np.stagingPoint.lng - u.lng;
-					if (sdLng > 180) sdLng -= 360;
-					else if (sdLng < -180) sdLng += 360;
-					if (sdLat * sdLat + sdLng * sdLng < 0.5) gathered++;
-				}
-				// Force advance if gathering takes too long (staging point on land, ships loop)
-				if (
-					gathered >= Math.min(np.maxAssignedUnits, 5) ||
-					ticksSinceProgress > NAVAL_STALL_TICKS
-				) {
-					np.phase = "EMBARKATION";
-					np.lastProgressTick = simFrameCount;
-				}
-			} else if (np.phase === "EMBARKATION") {
-				// Check if most naval units are at sea
-				let atSea = 0;
-				let total = 0;
-				for (const u of _tickUnitsBySide[si] || []) {
-					if (!u.navalAssigned) continue;
-					total++;
-					const gi = getGridIndex(u.lat, u.lng);
-					if (gi === -1 || landMask[gi] === 0) atSea++;
-				}
-				if (total > 0 && atSea >= Math.ceil(total * 0.6)) {
-					np.phase = "TRANSIT";
-					np.lastProgressTick = simFrameCount;
-				}
-			} else if (np.phase === "TRANSIT") {
-				// Check if naval units are reaching the target coast
-				let landed = 0;
-				for (const u of _tickUnitsBySide[si] || []) {
-					if (!u.navalAssigned) continue;
-					const gi = getGridIndex(u.lat, u.lng);
-					if (gi !== -1 && landMask[gi] > 0) {
-						const tdLat = np.target.lat - u.lat;
-						let tdLng = np.target.lng - u.lng;
-						if (tdLng > 180) tdLng -= 360;
-						else if (tdLng < -180) tdLng += 360;
-						if (tdLat * tdLat + tdLng * tdLng < 2.0) landed++;
-					}
-				}
-				if (landed >= 3) {
-					np.phase = "LANDING";
-					np.lastProgressTick = simFrameCount;
-					// Immediately generate supply plan for the landing
-					if (!_navalSupplyPlan[si]) _planReassessNeeded[si] = true;
-				}
-			} else if (np.phase === "LANDING") {
-				// After enough time in landing, the plan completes
-				if (ticksSinceProgress > 900) {
-					// Count enemies within 5 degrees of the landing zone
-					let _nearEnemies = 0;
-					let _nearFriendlies = 0;
-					for (const u of units) {
-						if (u.deployTicks > 0) continue;
-						const dLat = np.target.lat - u.lat;
-						let dLng = np.target.lng - u.lng;
-						if (dLng > 180) dLng -= 360;
-						else if (dLng < -180) dLng += 360;
-						const dSq = dLat * dLat + dLng * dLng;
-						if (dSq < 25.0) {
-							if (u.sideIndex === si) _nearFriendlies++;
-							else _nearEnemies++;
-						}
-					}
-
-					// Release naval-assigned units so they join the new land plan
-					const landingUnitIds = [];
-					for (const u of _tickUnitsBySide[si] || []) {
-						if (u.navalAssigned) {
-							const gridIndex = getGridIndex(u.lat, u.lng);
-							if (u.health > 0 && gridIndex >= 0 && landMask[gridIndex] > 0) {
-								landingUnitIds.push(u.id);
-							}
-							u.navalAssigned = false;
-							u.isTransport = false;
-						}
-					}
-					if (gameMode === "CONQUEST" && sideUids[si]) {
-						_aiPendingLandingHandoffs.set(sideUids[si], {
-							anchor: {
-								lat: np.target.lat,
-								lng: np.target.lng,
-								name: np.target.name || "Naval beachhead",
-							},
-							unitIds: landingUnitIds,
-							tick: _simTickCount,
-							frame: simFrameCount,
-						});
-						_aiOperationsDirty = true;
-					}
-					_navalPlan[si] = null;
-
-					_planReassessNeeded[si] = true;
-				}
-			}
-		}
-
-		// ── Naval Supply Plan Evaluation ──
-		for (let si = 0; si < sides.length; si++) {
-			if (!sides[si] || sides[si].length === 0) continue;
-			const sp = _navalSupplyPlan[si];
-
-			if (!sp) {
-				// Don't force reassessment — naval supply plans are optional; the 300-tick interval handles it
-				continue;
-			}
-
-			sp.activeUnitCount = 0;
-
-			// If the parent naval plan is gone, let supply finish independently
-
-			const ticksSinceProgress =
-				simFrameCount - (sp.lastProgressTick || simFrameCount);
-
-			// Stall detection
-			if (ticksSinceProgress > NAVAL_STALL_TICKS) {
-				// line 8745
-				for (const u of _tickUnitsBySide[si] || []) {
-					if (u.supplyAssigned) {
-						u.supplyAssigned = false;
-						u.isTransport = false;
-					}
-				}
-				_navalSupplyPlan[si] = null;
-				_planReassessNeeded[si] = true;
-				continue;
-			}
-
-			// Phase transitions (mirrors naval invasion: GATHERING -> EMBARKATION -> TRANSIT -> DELIVERED)
-			if (sp.phase === "GATHERING") {
-				let gathered = 0;
-				for (const u of _tickUnitsBySide[si] || []) {
-					if (!u.supplyAssigned) continue;
-					const sdLat = sp.stagingPoint.lat - u.lat;
-					let sdLng = sp.stagingPoint.lng - u.lng;
-					if (sdLng > 180) sdLng -= 360;
-					else if (sdLng < -180) sdLng += 360;
-					if (sdLat * sdLat + sdLng * sdLng < 0.5) gathered++;
-				}
-				if (
-					gathered >= Math.min(sp.maxAssignedUnits, 3) ||
-					ticksSinceProgress > NAVAL_STALL_TICKS
-				) {
-					sp.phase = "EMBARKATION";
-					sp.lastProgressTick = simFrameCount;
-				}
-			} else if (sp.phase === "EMBARKATION") {
-				let atSea = 0;
-				let total = 0;
-				for (const u of _tickUnitsBySide[si] || []) {
-					if (!u.supplyAssigned) continue;
-					total++;
-					const gi = getGridIndex(u.lat, u.lng);
-					if (gi === -1 || landMask[gi] === 0) atSea++;
-				}
-				if (total > 0 && atSea >= Math.ceil(total * 0.6)) {
-					sp.phase = "TRANSIT";
-					sp.lastProgressTick = simFrameCount;
-				}
-			} else if (sp.phase === "TRANSIT") {
-				let landed = 0;
-				for (const u of _tickUnitsBySide[si] || []) {
-					if (!u.supplyAssigned) continue;
-					const gi = getGridIndex(u.lat, u.lng);
-					if (gi !== -1 && landMask[gi] > 0) {
-						const tdLat = sp.target.lat - u.lat;
-						let tdLng = sp.target.lng - u.lng;
-						if (tdLng > 180) tdLng -= 360;
-						else if (tdLng < -180) tdLng += 360;
-						if (tdLat * tdLat + tdLng * tdLng < 2.0) landed++;
-					}
-				}
-				if (landed >= 2) {
-					sp.phase = "DELIVERED";
-					sp.lastProgressTick = simFrameCount;
-				}
-			} else if (sp.phase === "DELIVERED") {
-				if (ticksSinceProgress > NAVAL_STALL_TICKS) {
-					for (const u of _tickUnitsBySide[si] || []) {
-						if (u.supplyAssigned) {
-							u.supplyAssigned = false;
-							u.isTransport = false;
-						}
-					}
-					_navalSupplyPlan[si] = null;
-				}
-			}
-
-			if (sp) sp.lastProgressTick = simFrameCount;
-		}
-
-		// ── Enemy Offensive Detection ──
-		for (let si = 0; gameMode !== "CONQUEST" && si < sides.length; si++) {
-			if (!sides[si] || sides[si].length === 0) continue;
-			for (let ei = 0; ei < sides.length; ei++) {
-				if (!areSidesHostile(si, ei)) continue;
-				if (!sides[ei] || sides[ei].length === 0) continue;
-				for (const enemyPlan of [_warPlan[ei], _warPlan[ei + sides.length]]) {
-					if (!enemyPlan?.target) continue;
-					if (
-						enemyPlan.type !== "CAPTURE_CITY" &&
-						enemyPlan.type !== "ENCIRCLE"
-					)
-						continue;
-					const tIdx = getGridIndex(enemyPlan.target.lat, enemyPlan.target.lng);
-					if (tIdx !== -1 && dominantSideMap[tIdx] === si) {
-						// Don't force reassessment — territory change detection (line 7903)
-						// handles this via the standard path. Setting the flag here caused
-						// ALL reassessments to be forced (30/30) because it fires every 5 ticks.
-						break;
-					}
-				}
-			}
-		}
-
-		// ── Coastal Defense Plan Evaluation ──
-		for (let si = 0; si < sides.length; si++) {
-			for (let ci = 0; ci < 10; ci++) {
-				const slot = si * 10 + ci;
-				const cp = _coastalDefensePlan[slot];
-				if (!cp) continue;
-				cp.activeUnitCount = 0;
-				if (cp.target) {
-					const tIdx = getGridIndex(cp.target.lat, cp.target.lng);
-					if (tIdx !== -1 && dominantSideMap[tIdx] !== si) {
-						for (const u of _tickUnitsBySide[si] || []) {
-							if (u.coastalAssigned) u.coastalAssigned = false;
-						}
-						_coastalDefensePlan[slot] = null;
-						continue;
-					}
-				}
-				// Decay threat flags after 900 ticks (~15s)
-				if (cp.threatenedTick && simFrameCount - cp.threatenedTick > 900) {
-					cp.threatenedByTransit = false;
-					cp.threatenedByGathering = false;
-					delete cp.threatContact;
-					delete cp.threatenedTick;
-				}
-			}
-		}
-
-		// ── Neutral Garrison Plan Evaluation ──
-		for (let si = 0; si < sides.length; si++) {
-			for (let gi = 0; gi < 10; gi++) {
-				const slot = si * 10 + gi;
-				const gp = _neutralGarrisonPlan[slot];
-				if (!gp) continue;
-				gp.activeUnitCount = 0;
-				// Cancel if the neutral country has joined a side (became combatant)
-				if (
-					gp.neutralCountryId != null &&
-					_tickCountryToSideMap.get(gp.neutralCountryId) !== undefined
-				) {
-					for (const u of _tickUnitsBySide[si] || []) {
-						if (u.garrisonAssigned) u.garrisonAssigned = false;
-					}
-					_neutralGarrisonPlan[slot] = null;
-				}
-			}
-		}
-
-		// ── Proactive Detection: Enemy TRANSIT & GATHERING near our coast ──
-		for (let si = 0; gameMode !== "CONQUEST" && si < sides.length; si++) {
-			if (!sides[si] || sides[si].length === 0) continue;
-			for (let ei = 0; ei < sides.length; ei++) {
-				if (!areSidesHostile(si, ei)) continue;
-				if (!sides[ei] || sides[ei].length === 0) continue;
-				const enemyNP = _navalPlan[ei];
-				if (!enemyNP?.target) continue;
-
-				if (enemyNP.phase === "TRANSIT") {
-					for (const u of _tickUnitsBySide[ei] || []) {
-						if (!u.navalAssigned) continue;
-						for (let csi = si * 10; csi < si * 10 + 10; csi++) {
-							const cp = _coastalDefensePlan[csi];
-							if (!cp?.target) continue;
-							const dLat = u.lat - cp.target.lat;
-							let dLng = u.lng - cp.target.lng;
-							if (dLng > 180) dLng -= 360;
-							else if (dLng < -180) dLng += 360;
-							if (dLat * dLat + dLng * dLng < 25.0) {
-								cp.threatenedByTransit = true;
-								cp.threatContact = {
-									lat: u.lat,
-									lng: u.lng,
-								};
-								cp.threatenedTick = simFrameCount;
-							}
-						}
-					}
-				} else if (enemyNP.phase === "GATHERING" && enemyNP.stagingPoint) {
-					for (let csi = si * 10; csi < si * 10 + 10; csi++) {
-						const cp = _coastalDefensePlan[csi];
-						if (!cp?.target) continue;
-						const dLat = enemyNP.stagingPoint.lat - cp.target.lat;
-						let dLng = enemyNP.stagingPoint.lng - cp.target.lng;
-						if (dLng > 180) dLng -= 360;
-						else if (dLng < -180) dLng += 360;
-						if (dLat * dLat + dLng * dLng < 100.0) {
-							cp.threatenedByGathering = true;
-							cp.threatContact = {
-								lat: enemyNP.stagingPoint.lat,
-								lng: enemyNP.stagingPoint.lng,
-							};
-							cp.threatenedTick = simFrameCount;
-						}
-					}
-				}
-			}
-		}
-
-		// ── Defender Reaction (Structured) ──
-		for (let si = 0; si < sides.length; si++) {
-			if (!sides[si] || sides[si].length === 0) continue;
-			const rp = _defenderReactionPlan[si];
-
-			// ---- Cancel stale / obsolete reaction plans ----
-			if (rp) {
-				const enemyNP =
-					rp.enemySideIdx != null ? _navalPlan[rp.enemySideIdx] : null;
-				const enemySideDead =
-					rp.enemySideIdx != null &&
-					(!sides[rp.enemySideIdx] || sides[rp.enemySideIdx].length === 0);
-
-				let shouldCancel = false;
-				if (enemySideDead || !enemyNP) {
-					shouldCancel = true;
-				} else if (rp._landingDefeatedTick) {
-					if (simFrameCount - rp._landingDefeatedTick > NAVAL_STALL_TICKS)
-						shouldCancel = true;
-				}
-
-				if (!shouldCancel && simFrameCount - rp.lastProgressTick > 1800) {
-					shouldCancel = true;
-				}
-
-				if (shouldCancel) {
-					for (const u of _tickUnitsBySide[si] || []) {
-						u._defenderReactTarget = null;
-					}
-					_defenderReactionPlan[si] = null;
-				}
-			}
-
-			// Track arrivals: units within 1° of target clear their flag
-			if (_defenderReactionPlan[si]) {
-				_defenderReactionPlan[si].activeUnitCount = 0;
-				let anyArrived = false;
-				for (const u of _tickUnitsBySide[si] || []) {
-					if (!u._defenderReactTarget) continue;
-					_defenderReactionPlan[si].activeUnitCount++;
-					const rdLat = u._defenderReactTarget.lat - u.lat;
-					let rdLng = u._defenderReactTarget.lng - u.lng;
-					if (rdLng > 180) rdLng -= 360;
-					else if (rdLng < -180) rdLng += 360;
-					if (rdLat * rdLat + rdLng * rdLng < 1.0) {
-						u._defenderReactTarget = null;
-						anyArrived = true;
-					}
-				}
-				if (anyArrived) {
-					_defenderReactionPlan[si].lastProgressTick = simFrameCount;
-				}
-			}
-
-			// ---- Detect threats & manage reaction plan ----
-			if (gameMode === "CONQUEST") continue;
-			// Check both naval and land threats from enemies
-			for (let ei = 0; ei < sides.length; ei++) {
-				if (!areSidesHostile(si, ei)) continue;
-				if (!sides[ei] || sides[ei].length === 0) continue;
-				const enemyNP = _navalPlan[ei];
-				const enemyLand1 = gameMode === "CONQUEST" ? null : _warPlan[ei];
-				const enemyLand2 =
-					gameMode === "CONQUEST" ? null : _warPlan[ei + sides.length];
-
-				// Check naval plan
-				let threatTarget = null;
-				let onOurTerritory = false;
-				if (enemyNP?.target) {
-					const tIdx = getGridIndex(enemyNP.target.lat, enemyNP.target.lng);
-					if (tIdx !== -1 && dominantSideMap[tIdx] === si) {
-						threatTarget = enemyNP.target;
-						onOurTerritory = true;
-					}
-				}
-				// Check land plans targeting our territory
-				if (!threatTarget) {
-					for (const lp of [enemyLand1, enemyLand2]) {
-						if (!lp?.target || lp.phase !== "EXECUTION") continue;
-						const tIdx = getGridIndex(lp.target.lat, lp.target.lng);
-						if (tIdx !== -1 && dominantSideMap[tIdx] === si) {
-							threatTarget = lp.target;
-							onOurTerritory = true;
-							break;
-						}
-					}
-				}
-				if (!threatTarget) continue;
-
-				const rpCur = _defenderReactionPlan[si];
-				if (rpCur && rpCur.enemySideIdx !== ei) continue;
-
-				// TRANSIT: pre-emptive reaction if heading to our territory
-				if (enemyNP && enemyNP.phase === "TRANSIT" && onOurTerritory) {
-					let rpCur2 = _defenderReactionPlan[si];
-					if (!rpCur2) {
-						const preActive = Math.min(
-							10,
-							Math.floor((_tickUnitsBySide[si]?.length || 0) * 0.15),
-						);
-						if (preActive >= 3) {
-							_defenderReactionPlan[si] = {
-								type: "DEFEND",
-								target: {
-									lat: enemyNP.target.lat,
-									lng: enemyNP.target.lng,
-								},
-								enemySideIdx: ei,
-								phase: "EXECUTION",
-								maxUnits: preActive,
-								activeUnitCount: 0,
-								startedTick: simFrameCount,
-								lastProgressTick: simFrameCount,
-							};
-							rpCur2 = _defenderReactionPlan[si];
-						}
-					}
-					if (!rpCur2 || rpCur2.activeUnitCount >= rpCur2.maxUnits) continue;
-
-					const slotsOpen = rpCur2.maxUnits - rpCur2.activeUnitCount;
-					let recruited = 0;
-					for (const u of _tickUnitsBySide[si] || []) {
-						// side-filtered via _tickUnitsBySide
-						if (u.deployTicks > 0) continue;
-						if (u.navalAssigned || u.supplyAssigned) continue;
-						if (u.coastalAssigned || u.garrisonAssigned) continue;
-						if (u._defenderReactTarget) continue;
-
-						const dLat = rpCur2.target.lat - u.lat;
-						let dLng = rpCur2.target.lng - u.lng;
-						if (dLng > 180) dLng -= 360;
-						else if (dLng < -180) dLng += 360;
-						const dSq = dLat * dLat + dLng * dLng;
-
-						if (dSq < 9.0 || dSq > 100.0) continue;
-
-						u._defenderReactTarget = {
-							lat: rpCur2.target.lat,
-							lng: rpCur2.target.lng,
-						};
-						recruited++;
-						if (recruited >= slotsOpen) break;
-					}
-					rpCur2.activeUnitCount += recruited;
-				}
-
-				// ---- Land threat response (enemy land plan targeting our territory) ----
-				if (!enemyNP && onOurTerritory) {
-					let rpCur = _defenderReactionPlan[si];
-					if (rpCur && rpCur.enemySideIdx !== ei) continue;
-					// Count enemy units near the threatened area
-					let enemyForceNear = 0;
-					for (const eu of _tickUnitsBySide[ei] || []) {
-						const dLat = threatTarget.lat - eu.lat;
-						let dLng = threatTarget.lng - eu.lng;
-						if (dLng > 180) dLng -= 360;
-						else if (dLng < -180) dLng += 360;
-						if (dLat * dLat + dLng * dLng < 9.0) enemyForceNear++;
-					}
-					if (enemyForceNear < 3) continue;
-					if (!rpCur) {
-						const reactForce = Math.min(
-							Math.ceil(enemyForceNear * 1.5),
-							Math.floor((_tickUnitsBySide[si]?.length || 0) * 0.3),
-						);
-						if (reactForce >= 3) {
-							_defenderReactionPlan[si] = {
-								type: "DEFEND",
-								target: {
-									lat: threatTarget.lat,
-									lng: threatTarget.lng,
-								},
-								enemySideIdx: ei,
-								phase: "EXECUTION",
-								maxUnits: reactForce,
-								activeUnitCount: 0,
-								startedTick: simFrameCount,
-								lastProgressTick: simFrameCount,
-							};
-							rpCur = _defenderReactionPlan[si];
-						}
-					}
-					if (!rpCur || rpCur.activeUnitCount >= rpCur.maxUnits) continue;
-					const slotsOpen = rpCur.maxUnits - rpCur.activeUnitCount;
-					let recruited = 0;
-					for (const u of _tickUnitsBySide[si] || []) {
-						if (u.deployTicks > 0) continue;
-						if (u.navalAssigned || u.supplyAssigned) continue;
-						if (u.coastalAssigned || u.garrisonAssigned) continue;
-						if (u._defenderReactTarget) continue;
-						const dLat = rpCur.target.lat - u.lat;
-						let dLng = rpCur.target.lng - u.lng;
-						if (dLng > 180) dLng -= 360;
-						else if (dLng < -180) dLng += 360;
-						const dSq = dLat * dLat + dLng * dLng;
-						if (dSq < 9.0 || dSq > 100.0) continue;
-						u._defenderReactTarget = {
-							lat: rpCur.target.lat,
-							lng: rpCur.target.lng,
-						};
-						recruited++;
-						if (recruited >= slotsOpen) break;
-					}
-					rpCur.activeUnitCount += recruited;
-				}
-
-				// LANDING: full reactive response
-				if (enemyNP && enemyNP.phase === "LANDING" && onOurTerritory) {
-					let enemyLandingForce = 0;
-					for (const u of _tickUnitsBySide[ei] || []) {
-						// side-filtered via _tickUnitsBySide
-						const dLat = enemyNP.target.lat - u.lat;
-						let dLng = enemyNP.target.lng - u.lng;
-						if (dLng > 180) dLng -= 360;
-						else if (dLng < -180) dLng += 360;
-						if (dLat * dLat + dLng * dLng < 4.0) enemyLandingForce++;
-					}
-
-					let rpCur2 = _defenderReactionPlan[si];
-					if (!rpCur2 && enemyLandingForce >= 3) {
-						_defenderReactionPlan[si] = {
-							type: "DEFEND",
-							target: {
-								lat: enemyNP.target.lat,
-								lng: enemyNP.target.lng,
-							},
-							enemySideIdx: ei,
-							phase: "EXECUTION",
-							maxUnits: 0,
-							activeUnitCount: 0,
-							startedTick: simFrameCount,
-							lastProgressTick: simFrameCount,
-						};
-						rpCur2 = _defenderReactionPlan[si];
-					}
-
-					if (!rpCur2) continue;
-
-					if (enemyLandingForce < 3) {
-						if (!rpCur2._landingDefeatedTick)
-							rpCur2._landingDefeatedTick = simFrameCount;
-						continue;
-					}
-					rpCur2._landingDefeatedTick = 0;
-
-					let localDefenders = 0;
-					for (const u of _tickUnitsBySide[si] || []) {
-						// side-filtered via _tickUnitsBySide
-						if (u.deployTicks > 0) continue;
-						const dLat = enemyNP.target.lat - u.lat;
-						let dLng = enemyNP.target.lng - u.lng;
-						if (dLng > 180) dLng -= 360;
-						else if (dLng < -180) dLng += 360;
-						if (dLat * dLat + dLng * dLng < 9.0) localDefenders++;
-					}
-
-					const ratio = localDefenders / Math.max(1, enemyLandingForce);
-					if (ratio < 1.5) {
-						const needed = Math.ceil(enemyLandingForce * 1.5 - localDefenders);
-						rpCur2.maxUnits = Math.max(rpCur2.maxUnits, needed);
-					}
-
-					if (rpCur2.activeUnitCount >= rpCur2.maxUnits) continue;
-
-					const slotsOpen = rpCur2.maxUnits - rpCur2.activeUnitCount;
-					let recruited = 0;
-					for (const u of _tickUnitsBySide[si] || []) {
-						// side-filtered via _tickUnitsBySide
-						if (u.deployTicks > 0) continue;
-						if (u.navalAssigned || u.supplyAssigned) continue;
-						if (u.coastalAssigned || u.garrisonAssigned) continue;
-						if (u._defenderReactTarget) continue;
-
-						const dLat = rpCur2.target.lat - u.lat;
-						let dLng = rpCur2.target.lng - u.lng;
-						if (dLng > 180) dLng -= 360;
-						else if (dLng < -180) dLng += 360;
-						const dSq = dLat * dLat + dLng * dLng;
-
-						if (dSq < 9.0 || dSq > 100.0) continue;
-
-						u._defenderReactTarget = {
-							lat: rpCur2.target.lat,
-							lng: rpCur2.target.lng,
-						};
-						recruited++;
-						if (recruited >= slotsOpen) break;
-					}
-					rpCur2.activeUnitCount += recruited;
-				}
-			}
-		}
-	}
-
-	// ── Orphan _defenderReactTarget Cleanup ──
-	for (const u of units) {
-		if (u._defenderReactTarget && !_defenderReactionPlan[u.sideIndex]) {
-			u._defenderReactTarget = null;
-		}
-	}
-
-	// Clean up plans for inactive sides
-	// Land plans use indices 0..sides.length-1 (slot 1) and
-	// sides.length..sides.length*2-1 (slot 2). Only null beyond slot 2.
-	for (let si = sides.length * 2; si < _warPlan.length; si++) {
-		_warPlan[si] = null;
-	}
-	for (let si = sides.length; si < _navalPlan.length; si++) {
-		// Release any assigned units
-		for (const u of units) {
-			if (u.navalAssigned) {
-				u.navalAssigned = false;
-				u.isTransport = false;
-			}
-		}
-		_navalPlan[si] = null;
-	}
-	for (let si = sides.length; si < _navalSupplyPlan.length; si++) {
-		for (const u of units) {
-			if (u.supplyAssigned) {
-				u.supplyAssigned = false;
-				u.isTransport = false;
-			}
-		}
-		_navalSupplyPlan[si] = null;
-	}
-	for (let si = sides.length; si < _transportPlan.length; si++) {
-		_transportPlan[si] = null;
-	}
-	for (let si = sides.length * 10; si < _coastalDefensePlan.length; si++) {
-		for (const u of units) {
-			if (u.coastalAssigned) u.coastalAssigned = false;
-		}
-		_coastalDefensePlan[si] = null;
-	}
-	for (let si = sides.length * 10; si < _neutralGarrisonPlan.length; si++) {
-		for (const u of _tickUnitsBySide[si] || []) {
-			if (u.garrisonAssigned) u.garrisonAssigned = false;
-		}
-		_neutralGarrisonPlan[si] = null;
-	}
-	for (let si = sides.length; si < _defenderReactionPlan.length; si++) {
-		for (const u of _tickUnitsBySide[si] || []) {
-			u._defenderReactTarget = null;
-		}
-		_defenderReactionPlan[si] = null;
-	}
-	window.__perf.eval = (window.__perf.eval || 0) + performance.now() - _te;
-}
+// longer stall before aborting second-wave naval plan
 
 function recordCountryCombatLoss(victimId, loss, attackerId = null) {
 	if (!Number.isFinite(loss) || loss <= 0 || victimId <= 0) return;
@@ -14109,7 +6289,7 @@ function applyLandUnitDamage(targetUnit, damage, attacker = null) {
 	)
 		return 0;
 	const effectiveDamage = Math.min(targetUnit.health, damage);
-	const attackerId = attacker?.sovereignId || Number(attacker) || null;
+	const attackerId = attacker?.sovereignId || Number(attacker);
 	let personnelLoss = 0;
 	{
 		const beforePersonnel = getLiveFormationPersonnel(targetUnit);
@@ -14142,6050 +6322,28 @@ function applyLandUnitDamage(targetUnit, damage, attacker = null) {
 	return personnelLoss;
 }
 
-export function performSimulationTick() {
-	// PERF PROFILER - check window.__perf in console
-	if (!window.__perf) window.__perf = createPerfState();
-	window.__perf.ticks++;
-	// ── Perf snapshot for per-tick delta computation ──
-	const _perfEnabled =
-		window.__perf._mode !== "off" && !window.__perf._trackingPaused;
-	const _perfSnap = _perfEnabled ? {} : null;
-	const _perfKeys = [
-		"plans",
-		"legacyPlans",
-		"operationalTaskForces",
-		"proposals",
-		"eval",
-		"neutralBorder",
-		"recruit",
-		"unitLoop",
-		"post",
-		"prePlans",
-		"influence",
-		"smoothing",
-		"phase0",
-		"phase67",
-		"phase133",
-		"spatialHash",
-		"frontline",
-		"frontlineDispatch",
-		"frontlinePolys",
-		"frontlineLayoutApply",
-		"frontlineSlotApply",
-		"phaseWheel",
-		"consolidate",
-		"caches",
-		"victory",
-		"aiPosture",
-		"posture",
-		"render",
-		"unitSetupTerrain",
-		"unitScanPhase",
-		"unitEnemyScan",
-		"unitAllyScan",
-		"unitGarrisonCoastal",
-		"unitRetreatMopUp",
-		"unitRetreatDecision",
-		"unitGlobalFallback",
-		"unitFrontlinePress",
-		"unitMopUpSearch",
-		"unitMopUpTargetSearch",
-		"unitCityObjective",
-		"unitGarrisonTarget",
-		"unitCombatMove",
-	];
-	if (_perfEnabled) {
-		for (const k of _perfKeys) _perfSnap[k] = window.__perf[k] || 0;
-		for (const k of [
-			"proposalRuns",
-			"proposalFailed",
-			"reassess_noPlan",
-			"reassess_interval",
-			"reassess_forced",
-			"reassess_territory",
-			"reassess_posture",
-			"reassess_ratio",
-		])
-			_perfSnap[k] = window.__perf[k] || 0;
-		for (const k of [
-			"coastDeflectHalved",
-			"knockbackBlocked",
-			"waterPathPenalized",
-			"coastStuckAbandoned",
-		])
-			_perfSnap[k] = window.__perf[k] || 0;
-		for (const k of [
-			"tacticalFriendlyCandidatePairs",
-			"tacticalEnemyCandidateVisits",
-			"tacticalAcceptedPairs",
-			"tacticalFriendlyPairs",
-			"tacticalHostileCellVisits",
-			"tacticalCacheHits",
-			"tacticalCacheMisses",
-			"tacticalGhostInvalidations",
-			"tacticalFastLaneUnits",
-		]) {
-			_perfSnap[k] = window.__perf[k] || 0;
-		}
-	}
-	if (_frontlineLayoutApplyPendingMs || _frontlineSlotApplyPendingMs) {
-		const asyncApplyMs =
-			_frontlineLayoutApplyPendingMs + _frontlineSlotApplyPendingMs;
-		window.__perf.frontlineLayoutApply += _frontlineLayoutApplyPendingMs;
-		window.__perf.frontlineSlotApply += _frontlineSlotApplyPendingMs;
-		window.__perf.frontlinePolys += asyncApplyMs;
-		window.__perf.frontline += asyncApplyMs;
-		_frontlineLayoutApplyPendingMs = 0;
-		_frontlineSlotApplyPendingMs = 0;
-	}
-	_simTickCount++;
-	let _dbgLogCount = 999999; // DEBUG: throttled out (was 0)
-	let moveDirLat, moveDirLng;
-	const _t0 = performance.now();
-
-	// If war is over, stop simulation mechanics (but update loop may continue for aftermath recording)
-	if (gameState === "WAR_OVER") return false;
-	// If in God Mode but the war hasn't started yet, don't tick simulation mechanics
-	if (godModeActive && preGodModeState !== "SIMULATING") return false;
-
-	_tickAllCombatants = sides.flat();
-	const _allCombatants = _tickAllCombatants;
-
-	// 0. Initial Utility Helpers
-	const recordDamage = (targetUnit, dmg, attackerUnit) => {
-		if (
-			Number.isNaN(dmg) ||
-			dmg <= 0 ||
-			Number.isNaN(targetUnit.health) ||
-			targetUnit.health <= 0
-		) {
-			if (simFrameCount > 100 && simFrameCount < 500 && _dbgLogCount++ < 200) {
-				console.warn(
-					"[RECD-DBG] recordDamage REJECTED:",
-					"isNaN(dmg)=",
-					Number.isNaN(dmg),
-					"dmg=",
-					dmg,
-					"dmg<=0=",
-					dmg <= 0,
-					"isNaN(health)=",
-					Number.isNaN(targetUnit.health),
-					"health<=0=",
-					targetUnit.health <= 0,
-					"targetSideIdx=",
-					targetUnit.sideIndex,
-					"attackerSideIdx=",
-					attackerUnit?.sideIndex,
-				);
-			}
-			return;
-		}
-
-		applyLandUnitDamage(targetUnit, dmg, attackerUnit);
-	};
-
-	// Random War Mode mid‑simulation has been disabled to avoid corrupting existing wars.
-	// Random wars can still be started manually from the setup screen via the Random War button.
-
-	// 0. Initialize Tick Caches early to avoid access-before-initialization errors
-	activeBattles = [];
-	_battleHash.clear();
-	latestCountryStats.clear();
-	const countryStats = latestCountryStats;
-	_tickCombatantIds.clear();
-	const combatantIds = _tickCombatantIds;
-	_tickCountryToSideMap.clear();
-	const countryToSideMap = _tickCountryToSideMap;
-	_tickCountryById.clear();
-	const _countryById = _tickCountryById;
-
-	sides.forEach((side, idx) => {
-		side.forEach((c) => {
-			combatantIds.add(c.id);
-			countryToSideMap.set(c.id, idx);
-			_countryById.set(c.id, c);
-			countryStats.set(c.id, { units: 0, controlled: 0, owned: 0 });
-		});
-	});
-
-	const isNeutral = (idx) =>
-		idx !== -1 && landMask[idx] > 0 && !combatantIds.has(worldControlMap[idx]);
-	const isNeutralCountry = (idx) => isNeutral(idx) && worldControlMap[idx] > 0;
-
-	// Determine unit counts once
-	const _tInfluence = performance.now();
-	let p1UnitsCount = 0;
-	let p2UnitsCount = 0;
-	for (let i = 0; i < units.length; i++) {
-		const u = units[i];
-		const countsAsLandFormation = u.kind === "army";
-		const formationEquivalent = countsAsLandFormation
-			? getLiveFormationStrength(u)
-			: 0;
-		if (countsAsLandFormation && u.sideIndex === 0)
-			p1UnitsCount += formationEquivalent;
-		else if (countsAsLandFormation && u.sideIndex === 1)
-			p2UnitsCount += formationEquivalent;
-		const s = countryStats.get(u.sovereignId);
-		if (s && countsAsLandFormation) s.units += formationEquivalent;
-	}
-
-	// 1. Update territory
-	updatePersistentInfluence(p1UnitsCount, p2UnitsCount, countryToSideMap);
-	window.__perf.influence =
-		(window.__perf.influence || 0) + performance.now() - _tInfluence;
-
-	// 1a. Occupancy Smoothing: Occasionally clean up primaryOccupierMap during war to prevent speckling
-	const _tSmooth = performance.now();
-	if (isSimulationPhaseDue(_simTickCount, 120, 83)) {
-		const sampleCount = 5000;
-		const modified = [];
-		for (let s = 0; s < sampleCount; s++) {
-			const idx = Math.floor(Math.random() * primaryOccupierMap.length);
-			if (landMask[idx] !== 2 || primaryOccupierMap[idx] === 0) continue;
-
-			const myId = primaryOccupierMap[idx];
-			const mySide = countryToSideMap.get(myId);
-
-			// Sample 3x3 neighborhood
-			const y = Math.floor(idx / gridWidth);
-			const x = idx % gridWidth;
-			const counts = Object.create(null);
-			for (let dy = -1; dy <= 1; dy++) {
-				for (let dx = -1; dx <= 1; dx++) {
-					const nx = x + dx;
-					const ny = y + dy;
-					if (nx >= 0 && nx < gridWidth && ny >= 0 && ny < gridHeight) {
-						const nId = primaryOccupierMap[ny * gridWidth + nx];
-						const nSide = countryToSideMap.get(nId);
-						// Only count allies
-						if (nId > 0 && nSide !== undefined && nSide === mySide) {
-							counts[nId] = (counts[nId] || 0) + 1;
-						}
-					}
-				}
-			}
-
-			let dominantAlly = myId;
-			let maxC = 0;
-			for (const id of Object.keys(counts)) {
-				const c = counts[id];
-				if (c > maxC) {
-					maxC = c;
-					dominantAlly = Number(id);
-				}
-			}
-
-			// If the occupier is a tiny island in an allied sea (majority neighbors are a single ally), flip to them.
-			if (maxC >= 5 && dominantAlly !== myId) {
-				modified.push({ idx, dominantAlly });
-			}
-		}
-		// Apply modifications without a massive 24MB array GC copy
-		for (let i = 0; i < modified.length; i++) {
-			const change = modified[i];
-			primaryOccupierMap[change.idx] = change.dominantAlly;
-			_territoryLedger?.markControllerChange(change.idx);
-			influenceLayer?.notifyControlCellsChanged(change.idx);
-		}
-	}
-	window.__perf.smoothing =
-		(window.__perf.smoothing || 0) + performance.now() - _tSmooth;
-
-	// 1b. Territorial Integrity: Collapse deep pockets and isolated protrusions (Enclaves/Exclaves)
-	// We sample the grid to find territory that is surrounded by the enemy.
-	// This aggressively decays "border gore" and isolated bubbles.
-	// Full-map statistics run as deterministic fixed-size chunks. This keeps
-	// results atomic without producing a multi-million-cell frame spike.
-	const optimizationFactor = getOptimizationFactor();
-	const countInterval = 200;
-	const shouldCountLand = isSimulationPhaseDue(
-		_simTickCount,
-		countInterval,
-		37,
-	);
-	const shouldCommitTerritoryDecision = isSimulationPhaseDue(
-		_simTickCount,
-		countInterval,
-		133,
-	);
-	if (isSimulationPhaseDue(_simTickCount, countInterval, 67)) {
-		const _tP0 = performance.now();
-		const integBase = 5000;
-		const integSamples = Math.max(
-			1000,
-			Math.floor(integBase / optimizationFactor),
-		);
-		for (let s = 0; s < integSamples; s++) {
-			const idx = Math.floor(Math.random() * landMask.length);
-			if (landMask[idx] !== 2) continue;
-			const dsIdx = dominantSideMap[idx];
-			if (dsIdx < 0) continue;
-
-			const ownerId = worldControlMap[idx];
-			const sideIdx = countryToSideMap.get(ownerId);
-			if (sideIdx === undefined) continue;
-
-			const isEnemyOccupation = areSidesHostile(sideIdx, dsIdx);
-			const isSelfOccupation = dsIdx === sideIdx;
-
-			const y = Math.floor(idx / gridWidth);
-			const x = idx % gridWidth;
-			let sovereignNeighbors = 0;
-			let enemyOccupiedNeighbors = 0;
-
-			for (let dy = -1; dy <= 1; dy++) {
-				for (let dx = -1; dx <= 1; dx++) {
-					if (dy === 0 && dx === 0) continue;
-					const ny = y + dy;
-					const nx = x + dx;
-					if (ny < 0 || ny >= gridHeight || nx < 0 || nx >= gridWidth) continue;
-					const nIdx = ny * gridWidth + nx;
-					if (worldControlMap[nIdx] === ownerId) sovereignNeighbors++;
-					const nDsIdx = dominantSideMap[nIdx];
-					if (areSidesHostile(sideIdx, nDsIdx)) enemyOccupiedNeighbors++;
-				}
-			}
-
-			if (isEnemyOccupation && sovereignNeighbors >= 6) {
-				for (let si = 0; si < sideInfluenceMaps.length; si++)
-					sideInfluenceMaps[si][idx] *= 0.8;
-				syncOccupationFromSideInfluence(idx);
-			}
-
-			if (isSelfOccupation && enemyOccupiedNeighbors >= 7) {
-				sideInfluenceMaps[dsIdx][idx] *= 0.75;
-				syncOccupationFromSideInfluence(idx);
-			}
-		}
-		window.__perf.phase67 += performance.now() - _tP0;
-	} // end territorial integrity
-
-	// 2. Statistics & Soldiers: shared territory ledger and direct manpower counts.
-	const _tP133 = performance.now();
-	_simulationJobs.step(160_000);
-	stepTerritoryLedger(countryToSideMap, 160_000);
-	if (shouldCommitTerritoryDecision) {
-		const decisionSnapshot = flushTerritoryLedger(countryToSideMap);
-		publishTerritoryLedgerSnapshot(decisionSnapshot, true);
-	}
-	window.__perf.phase133 =
-		(window.__perf.phase133 || 0) + performance.now() - _tP133;
-	const territoryCensusFresh = _territoryLedgerDecisionTick === _simTickCount;
-	const p1T = _cachedP1T,
-		p2T = _cachedP2T;
-	const _p1LandScore = p1T + p2T > 0 ? (p1T / (p1T + p2T)) * 100 : 50;
-
-	// Manpower is a fixed pool initialized at war start and reduced by casualties;
-	// do not recompute it from current unit counts here.
-	// We only ensure it never goes negative and keep casualties in sync with it below.
-	for (let sIdx = 0; sIdx < MAX_SIDES; sIdx++) {
-		sideSoldiers[sIdx] = Math.max(0, sideSoldiers[sIdx]);
-	}
-
-	// 3. AI & Combat (Including Mid-War Recruitment)
-	// NOTE: shouldCountLand and countInterval are now computed earlier (before territorial integrity)
-	//       to share the same throttle cadence across all heavy grid scans.
-
-	// Build Spatial Hash for ultra-fast O(1) local combat & target lookup
-	// Shared with renderer to allow high-performance unit culling
-	const _tsh = performance.now();
-	for (const arr of unitSpatialHash.values()) arr.length = 0;
-	for (let si = 0; si < sides.length; si++) {
-		for (const arr of unitHashBySide[si].values()) arr.length = 0;
-	}
-	const unitHash = unitSpatialHash;
-	const HASH_SIZE = UNIT_HASH_CELL_SIZE;
-	_unitLiveGeneration++;
-	for (let i = 0; i < units.length; i++) {
-		const u = units[i];
-		if (Number.isNaN(u.lat) || Number.isNaN(u.lng)) continue;
-		u._liveGeneration = _unitLiveGeneration;
-		const country = _countryById.get(u.sovereignId);
-		let allyWeight = Math.max(0, getLiveFormationStrength(u));
-		if (country?.buffState === "super") allyWeight *= 200;
-		else if (country?.buffState === "buff") allyWeight *= 50;
-		u._tickAllyWeight = allyWeight;
-		u._tickLocalAllyCount = CONFIG.ENABLE_SIDE_HASH_COMBAT
-			? Math.max(0, getLiveFormationStrength(u))
-			: 1;
-		u._tickHasNearbyHostile = false;
-		u.repulsionVector = null;
-		const kx = Math.floor((u.lng + 180) / HASH_SIZE);
-		const ky = Math.floor((u.lat + 90) / HASH_SIZE);
-		const k = kx * 100 + ky;
-		let arr = unitHash.get(k);
-		if (!arr) {
-			arr = [];
-			unitHash.set(k, arr);
-		}
-		arr.push(u);
-		// Phase 1: also index into per-side hash (unused until ENABLE_SIDE_HASH_COMBAT)
-		const si = u.sideIndex;
-		if (si >= 0 && si < sides.length) {
-			let sArr = unitHashBySide[si].get(k);
-			if (!sArr) {
-				sArr = [];
-				unitHashBySide[si].set(k, sArr);
-			}
-			sArr.push(u);
-		}
-	}
-	const _tTactical = performance.now();
-	if (CONFIG.ENABLE_SIDE_HASH_COMBAT) {
-		rebuildTacticalGrid(_tacticalGrid, units, {
-			getSide: (unit) =>
-				unit.health > 0 && getLiveFormationStrength(unit) > 0
-					? unit.sideIndex
-					: null,
-			getStrength: (unit) => getLiveFormationStrength(unit),
-			getAllyWeight: (unit) => unit._tickAllyWeight || 1,
-		});
-		let hostileCellVisits = 0;
-		const tacticalRadiusSq = 0.6 * 0.6;
-		for (let sideIdx = 0; sideIdx < sides.length; sideIdx++) {
-			const sideCells = _tacticalGrid.bySide.get(String(sideIdx));
-			if (!sideCells) continue;
-			for (const cell of sideCells.values()) {
-				let hasTaskForceUnit = false;
-				for (const unit of cell.units) {
-					if (unit._taskForceUid) {
-						hasTaskForceUnit = true;
-						break;
-					}
-				}
-				if (!hasTaskForceUnit) continue;
-				for (let hostileIdx = 0; hostileIdx < sides.length; hostileIdx++) {
-					if (!areSidesHostile(sideIdx, hostileIdx)) continue;
-					hostileCellVisits += forEachNeighborCell(
-						_tacticalGrid,
-						hostileIdx,
-						cell,
-						(hostileCell) => {
-							for (const unit of cell.units) {
-								if (!unit._taskForceUid) continue;
-								if (unit._tickHasNearbyHostile) continue;
-								for (const hostile of hostileCell.units) {
-									const deltaLat = unit.lat - hostile.lat;
-									let deltaLng = unit.lng - hostile.lng;
-									if (deltaLng > 180) deltaLng -= 360;
-									else if (deltaLng < -180) deltaLng += 360;
-									if (
-										deltaLat * deltaLat + deltaLng * deltaLng <=
-										tacticalRadiusSq
-									) {
-										unit._tickHasNearbyHostile = true;
-										break;
-									}
-								}
-							}
-						},
-						{ radiusCells: 1 },
-					);
-				}
-			}
-		}
-		let tacticalCandidatePairs = 0;
-		let tacticalAcceptedPairs = 0;
-		let tacticalFriendlyPairs = 0;
-		const repulsionRadiusSq = 0.45 * 0.45;
-		for (let sideIdx = 0; sideIdx < sides.length; sideIdx++) {
-			const pairResult = forEachUnorderedNeighborPair(
-				_tacticalGrid,
-				sideIdx,
-				(left, right, distanceSq) => {
-					tacticalFriendlyPairs++;
-					const leftSkipsLocal =
-						left.navalAssigned || left.supplyAssigned || left.coastalAssigned;
-					const rightSkipsLocal =
-						right.navalAssigned ||
-						right.supplyAssigned ||
-						right.coastalAssigned;
-					if (!leftSkipsLocal) {
-						left._tickLocalAllyCount += right._tickAllyWeight || 1;
-					}
-					if (!rightSkipsLocal) {
-						right._tickLocalAllyCount += left._tickAllyWeight || 1;
-					}
-					const slotsReplaceRepulsion =
-						left._taskForceUid &&
-						right._taskForceUid &&
-						left._taskForceUid === right._taskForceUid &&
-						!left._tickHasNearbyHostile &&
-						!right._tickHasNearbyHostile;
-					if (
-						slotsReplaceRepulsion ||
-						distanceSq >= repulsionRadiusSq ||
-						distanceSq <= 0.00001
-					) {
-						return;
-					}
-					const distance = Math.sqrt(distanceSq);
-					let deltaLng = left.lng - right.lng;
-					if (deltaLng > 180) deltaLng -= 360;
-					else if (deltaLng < -180) deltaLng += 360;
-					const deltaLat = left.lat - right.lat;
-					if (!leftSkipsLocal) {
-						left.repulsionVector = left.repulsionVector || { lat: 0, lng: 0 };
-						left.repulsionVector.lat += deltaLat / distance;
-						left.repulsionVector.lng += deltaLng / distance;
-					}
-					if (!rightSkipsLocal) {
-						right.repulsionVector = right.repulsionVector || { lat: 0, lng: 0 };
-						right.repulsionVector.lat -= deltaLat / distance;
-						right.repulsionVector.lng -= deltaLng / distance;
-					}
-				},
-				{ radiusCells: 1, radiusSq: tacticalRadiusSq },
-			);
-			tacticalCandidatePairs += pairResult.candidatePairs;
-			tacticalAcceptedPairs += pairResult.acceptedPairs;
-		}
-		window.__perf.tacticalFriendlyCandidatePairs += tacticalCandidatePairs;
-		window.__perf.tacticalAcceptedPairs += tacticalAcceptedPairs;
-		window.__perf.tacticalFriendlyPairs += tacticalFriendlyPairs;
-		window.__perf.tacticalHostileCellVisits += hostileCellVisits;
-		window.__perf.tacticalMaxBucketOccupancy =
-			_tacticalGrid.counters.maxBucketOccupancy;
-		window.__perf.tacticalPeakBucketOccupancy = Math.max(
-			window.__perf.tacticalPeakBucketOccupancy || 0,
-			_tacticalGrid.counters.maxBucketOccupancy,
-		);
-		window.__perf.tacticalCellCount = _tacticalGrid.counters.cellCount;
-		window.__perf.tacticalInsertedUnits = _tacticalGrid.counters.insertedUnits;
-	}
-	window.__perf.unitAllyScan += performance.now() - _tTactical;
-	window.__perf.spatialHash =
-		(window.__perf.spatialHash || 0) + performance.now() - _tsh;
-
-	const _tFrontline = performance.now();
-	// Direction fields and polyline/slot layouts share one async worker. While it
-	// is busy, each work type coalesces to one newest snapshot for the next tick.
-	const fieldDue =
-		_simTickCount - frontlineFieldTick >= FRONTLINE_FIELD_UPDATE_INTERVAL &&
-		isSimulationPhaseDue(_simTickCount, 7, 3);
-	const layoutDue =
-		_simTickCount - _frontlinePolyTick >= FRONTLINE_POLY_UPDATE_INTERVAL &&
-		isSimulationPhaseDue(_simTickCount, 7, 5);
-	if (
-		fieldDue ||
-		layoutDue ||
-		(!_workerBusy &&
-			(_frontlineWorkerPendingField || _frontlineWorkerPendingLayout))
-	) {
-		const _tFrontlineDispatch = performance.now();
-		dispatchFrontlineWork(fieldDue, layoutDue);
-		window.__perf.frontlineDispatch += performance.now() - _tFrontlineDispatch;
-	}
-	window.__perf.frontline =
-		(window.__perf.frontline || 0) + performance.now() - _tFrontline;
-
-	const _tPhaseWheel = performance.now();
-	advanceSimulationPhaseWheel();
-	window.__perf.phaseWheel += performance.now() - _tPhaseWheel;
-	// Consume only committed census data; partial tile refreshes never leak into AI or
-	// surrender decisions.
-	_allCombatants.forEach((c) => {
-		const stats = countryStats.get(c.id);
-		if (!stats) return;
-		const fallback = stats.units === 0 ? 0 : c.initialCells || 0;
-		stats.controlled = c.lastControlledCount ?? fallback;
-		stats.owned = c.lastOwnedCount ?? fallback;
-		if (territoryCensusFresh) {
-			const frontCount = c.lastFrontlineCount || 0;
-			if (stats.units >= frontCount) c.isSaturated = true;
-			else if (stats.units < frontCount * 0.6) c.isSaturated = false;
-		}
-	});
-
-	while (_tickUnitsBySide.length < sides.length) _tickUnitsBySide.push([]);
-	for (let si = 0; si < sides.length; si++) _tickUnitsBySide[si].length = 0;
-	const _tbs = performance.now();
-	for (let ui = 0; ui < units.length; ui++) {
-		const sIdx = units[ui].sideIndex;
-		if (sIdx >= 0 && sIdx < sides.length)
-			_tickUnitsBySide[sIdx].push(units[ui]);
-	}
-	const unitsBySide = _tickUnitsBySide;
-	const hostileUnitCountsBySide = sides.map((_, sideIdx) => {
-		let count = 0;
-		for (let otherIdx = 0; otherIdx < unitsBySide.length; otherIdx++) {
-			if (areSidesHostile(sideIdx, otherIdx)) {
-				count += unitsBySide[otherIdx]?.length || 0;
-			}
-		}
-		return count;
-	});
-
-	// Overwhelming force: if one side has 10x more deployed personnel, all units attack evenly
-	const _overwhelmingForce = new Array(sides.length).fill(false);
-	if (sides.length === 2) {
-		const side0Strength = unitsBySide[0].reduce(
-			(total, unit) => total + getLiveFormationStrength(unit),
-			0,
-		);
-		const side1Strength = unitsBySide[1].reduce(
-			(total, unit) => total + getLiveFormationStrength(unit),
-			0,
-		);
-		if (side0Strength > 0 && side1Strength > 0) {
-			if (side0Strength >= side1Strength * 10) {
-				_overwhelmingForce[0] = true;
-			} else if (side1Strength >= side0Strength * 10) {
-				_overwhelmingForce[1] = true;
-			}
-		}
-	}
-
-	// Pre-compute grid index for every unit (O(n) once, avoids O(n) getGridIndex per enemy)
-	_tickUnitGridIdx.clear();
-	const _unitGridIdx = _tickUnitGridIdx;
-	for (let _ugi = 0; _ugi < units.length; _ugi++) {
-		const _ug = units[_ugi];
-		const idx = getGridIndex(_ug.lat, _ug.lng);
-		_unitGridIdx.set(_ug, idx);
-		_ug._isAtSea = idx === -1 || landMask[idx] === 0;
-	}
-
-	window.__perf.caches = (window.__perf.caches || 0) + performance.now() - _tbs;
-
-	const _tVictory = performance.now();
-
-	// Calculate Victory Ratios for each side to coordinate surges
-	const sideVictoryRatios = unitsBySide.map((sideUnits, sIdx) => {
-		if (sideUnits.length === 0) return 0;
-		const winners = sideUnits.filter((u) => u.victoryBoostTicks > 0).length;
-		const ratio = winners / sideUnits.length;
-
-		// Global Surge State: Update coordinated push status for each side
-		const sideCountries = sides[sIdx];
-		if (sideCountries) {
-			sideCountries.forEach((c) => {
-				// Lowered surge threshold to 60% momentum for more consistent offensive action.
-				// A side starts a coordinated surge when victory momentum is good (>60%)
-				// and frontline saturation is achieved.
-				if (!c.isSurging && ratio > 0.6 && c.isSaturated) {
-					c.isSurging = true;
-				}
-				// The surge breaks and units hold once momentum falls below 35%.
-				else if (c.isSurging && ratio < 0.35) {
-					c.isSurging = false;
-				}
-
-				// If not saturated, immediately kill any active surge to force line-filling.
-				if (!c.isSaturated) c.isSurging = false;
-			});
-		}
-
-		return ratio;
-	});
-
-	// Calculate centroids for each side to help with strategic "fanning out"
-	// Group-Based Hive Intelligence: Partition each side into 4 tactical battle groups
-	const numGroups = 4;
-	const sideCentroids = sides.map((_, idx) => {
-		const sideUnits = unitsBySide[idx];
-		if (sideUnits.length === 0) return null;
-
-		const groups = Array.from({ length: numGroups }, () => ({
-			latSum: 0,
-			lngSum: 0,
-			count: 0,
-			vLat: 0,
-			vLng: 0,
-		}));
-		sideUnits.forEach((u) => {
-			const gIdx = Math.floor(u.id * 1000) % numGroups;
-			groups[gIdx].latSum += u.lat;
-			groups[gIdx].lngSum += u.lng;
-			groups[gIdx].vLat += u.dirLat || 0;
-			groups[gIdx].vLng += u.dirLng || 0;
-			groups[gIdx].count++;
-		});
-
-		return groups.map((g) =>
-			g.count > 0
-				? {
-						lat: g.latSum / g.count,
-						lng: g.lngSum / g.count,
-						vLat: g.vLat / g.count,
-						vLng: g.vLng / g.count,
-						count: g.count,
-					}
-				: null,
-		);
-	});
-
-	// Pre-calculate unitless hostile nations for each side. SUPPORT is an AI role,
-	// not immunity from final occupation.
-	const sideToCollapsedNationIds = sides.map((_side, idx) => {
-		const enemies = [];
-		sides.forEach((s, sIdx) => {
-			const isEnemy = areSidesHostile(idx, sIdx);
-			if (isEnemy && s.length > 0) {
-				s.forEach((country) => {
-					const stats = countryStats.get(country.id);
-					if (stats && stats.units === 0 && stats.controlled > 0) {
-						enemies.push(country.id);
-					}
-				});
-			}
-		});
-		enemies.sort((a, b) => a - b);
-		return enemies;
-	});
-	for (let sideIndex = 0; sideIndex < unitsBySide.length; sideIndex++) {
-		const sideUnits = unitsBySide[sideIndex] || [];
-		const targetCountryIds = sideToCollapsedNationIds[sideIndex] || [];
-		for (let unitIndex = 0; unitIndex < sideUnits.length; unitIndex++) {
-			sideUnits[unitIndex]._mopUpAssignedCountryId =
-				selectAssignedMopUpCountryId(targetCountryIds, unitIndex);
-		}
-	}
-
-	_tickCountryToCityCount.clear();
-	const countryToCityCount = _tickCountryToCityCount;
-	_tickCountryCapitalLost.clear();
-	const countryCapitalLost = _tickCountryCapitalLost;
-
-	for (const city of activeTheaterCities) {
-		const idx = getGridIndex(city.lat, city.lng);
-		if (idx < 0) continue;
-		const ownerId = primaryOccupierMap[idx];
-		if (ownerId > 0)
-			countryToCityCount.set(
-				ownerId,
-				(countryToCityCount.get(ownerId) || 0) + 1,
-			);
-		if (
-			city.isCapital &&
-			city.sovereignId > 0 &&
-			areSidesHostile(
-				countryToSideMap.get(city.sovereignId),
-				dominantSideMap[idx],
-			)
-		)
-			countryCapitalLost.set(city.sovereignId, true);
-	}
-	// Expose capital-loss state globally so recruitment/spawn logic can react to supply failure
-	capitalLostCountries = new Set(countryCapitalLost.keys());
-
-	// --- COUNTRY AI POSTURE (Desperation + realism tuning) ---
-	// Recomputed on counting frames and reused between them.
-	const _tAiPosture = performance.now();
-	window.__perf.victory =
-		(window.__perf.victory || 0) + performance.now() - _tVictory;
-	if (shouldCountLand) {
-		_allCombatants.forEach((country) => {
-			if (!country) return;
-			const stats = countryStats.get(country.id);
-			if (!stats) return;
-
-			const initialLand = Math.max(1, country.initialCells || 1);
-			const controlRatio = stats.controlled / initialLand;
-			const cityCount = countryToCityCount.get(country.id) || 0;
-			if (country._aiInitialCities === undefined)
-				country._aiInitialCities = cityCount;
-			const initCities = Math.max(1, country._aiInitialCities || 1);
-			const cityRatio = cityCount / initCities;
-
-			const prevControlled =
-				country._aiPrevControlled !== undefined
-					? country._aiPrevControlled
-					: stats.controlled;
-			const deltaControlled = stats.controlled - prevControlled;
-			country._aiPrevControlled = stats.controlled;
-
-			const stallDeltaThreshold = Math.max(
-				1,
-				Math.floor(initialLand * AI_DESPERATION.OFFENSE_STALL_DELTA_FRAC),
-			);
-			const isStalled = Math.abs(deltaControlled) <= stallDeltaThreshold;
-			if (isStalled) {
-				country._aiStallTicks = (country._aiStallTicks || 0) + countInterval;
-			} else {
-				country._aiStallTicks = Math.max(
-					0,
-					(country._aiStallTicks || 0) - countInterval * 2,
-				);
-			}
-
-			const role = country.role || "OFFENSE";
-			const canUseOffensiveDesperation =
-				role === "OFFENSE" &&
-				simFrameCount >= AI_DESPERATION.OFFENSE_MIN_WAR_TICKS &&
-				(country._aiStallTicks || 0) >= AI_DESPERATION.OFFENSE_STALL_TICKS &&
-				controlRatio > 0.45;
-
-			// UNDER_MOBILIZED: safe territory but severely under‑armied relative to manpower pool
-			const deployedPersonnel = stats.units * CONFIG.UNIT_TO_SOLDIER_RATIO;
-			if (country._aiInitialManpower === undefined) {
-				const metadata = countryMetadata[country.id - 1] || country;
-				const estimatedPool = metadata?.pop
-					? Math.round(metadata.pop * 0.01)
-					: Math.round(initialLand * 200 + initCities * 10000);
-				country._aiInitialManpower = Math.max(deployedPersonnel, estimatedPool);
-			}
-			const mobilizationRatio =
-				deployedPersonnel / Math.max(1, country._aiInitialManpower);
-			const canUseUnderMobilized = mobilizationRatio < 0.75;
-
-			const lastStand =
-				controlRatio <= AI_DESPERATION.LAST_STAND_TRIGGER_RATIO ||
-				cityRatio <= AI_DESPERATION.CITY_RATIO_LAST_STAND_TRIGGER;
-			const defensiveDesperation =
-				!lastStand &&
-				(controlRatio <= AI_DESPERATION.DEFENSE_TRIGGER_RATIO ||
-					cityRatio <= AI_DESPERATION.CITY_RATIO_DEFENSE_TRIGGER);
-
-			let mode = AI_POSTURE.NORMAL;
-			if (lastStand) mode = AI_POSTURE.LAST_STAND;
-			else if (defensiveDesperation) mode = AI_POSTURE.DEFENSIVE_DESPERATION;
-			else if (canUseOffensiveDesperation)
-				mode = AI_POSTURE.OFFENSIVE_DESPERATION;
-			else if (canUseUnderMobilized) mode = AI_POSTURE.UNDER_MOBILIZED;
-
-			let profile = {
-				mode,
-				recruitCapMult: 1.0,
-				recruitChanceMult: 1.0,
-				retreatTriggerMultiple: 8.0,
-				frontlineBlend: 0.35,
-				speedMult: 1.0,
-				targetCityWeight: 0.0,
-				forceDefensive: false,
-				reserveShare: 0.02,
-				peacePressure: 0.0,
-			};
-			if (mode === AI_POSTURE.OFFENSIVE_DESPERATION) {
-				profile = {
-					mode,
-					recruitCapMult: 1.2,
-					recruitChanceMult: 1.45,
-					retreatTriggerMultiple: 10.0,
-					frontlineBlend: 0.45,
-					speedMult: 1.08,
-					targetCityWeight: 0.45,
-					forceDefensive: false,
-					reserveShare: 0.01,
-					peacePressure: 0.02,
-				};
-			} else if (mode === AI_POSTURE.DEFENSIVE_DESPERATION) {
-				profile = {
-					mode,
-					recruitCapMult: 1.45,
-					recruitChanceMult: 1.8,
-					retreatTriggerMultiple: 5.8,
-					frontlineBlend: 0.4,
-					speedMult: 0.96,
-					targetCityWeight: 0.18,
-					forceDefensive: true,
-					reserveShare: 0.06,
-					peacePressure: 0.36,
-				};
-			} else if (mode === AI_POSTURE.LAST_STAND) {
-				profile = {
-					mode,
-					recruitCapMult: 1.85,
-					recruitChanceMult: 2.5,
-					retreatTriggerMultiple: 4.8,
-					frontlineBlend: 0.3,
-					speedMult: 0.92,
-					targetCityWeight: 0.05,
-					forceDefensive: true,
-					reserveShare: 0.1,
-					peacePressure: 0.7,
-				};
-			} else if (mode === AI_POSTURE.UNDER_MOBILIZED) {
-				profile = {
-					mode,
-					recruitCapMult: 3.0,
-					recruitChanceMult: 5.0,
-					retreatTriggerMultiple: 8.0,
-					frontlineBlend: 0.35,
-					speedMult: 1.0,
-					targetCityWeight: 0.0,
-					forceDefensive: false,
-					reserveShare: 0.02,
-					peacePressure: 0.0,
-				};
-			}
-
-			// Total war strategies (TURTLE, BLITZ): all-in mobilization
-			// 4x unit cap, 6x recruitment speed — meat grinder that sustains itself
-			if (
-				gameMode !== "CONQUEST" &&
-				(country.strategy === "TURTLE" || country.strategy === "BLITZ")
-			) {
-				profile.recruitCapMult *= 4.0;
-				profile.recruitChanceMult *= 6.0;
-			}
-
-			aiCountryState.set(country.id, profile);
-		});
-	}
-	window.__perf.aiPosture =
-		(window.__perf.aiPosture || 0) + performance.now() - _tAiPosture;
-
-	// ── Momentum Tracking & War Phase Computation ──
-	if (shouldCountLand) {
-		const MOMENTUM_WINDOW = 10;
-		for (let si = 0; si < sides.length; si++) {
-			if (!sides[si] || sides[si].length === 0) continue;
-			if (!_sideMomentumHistory[si]) _sideMomentumHistory[si] = [];
-			let totalControlled = 0;
-			for (const c of sides[si]) {
-				const s = countryStats.get(c.id);
-				if (s) totalControlled += s.controlled || 0;
-			}
-			_sideMomentumHistory[si].push({
-				tick: simFrameCount,
-				controlled: totalControlled,
-			});
-			if (_sideMomentumHistory[si].length > MOMENTUM_WINDOW) {
-				_sideMomentumHistory[si].shift();
-			}
-		}
-
-		// Compute war phase from momentum slope
-		for (let si = 0; si < sides.length; si++) {
-			const hist = _sideMomentumHistory[si];
-			if (!hist || hist.length < 3) {
-				_sideWarPhase[si] = "STALEMATE";
-				continue;
-			}
-
-			const first = hist[0].controlled;
-			const last = hist[hist.length - 1].controlled;
-			const delta = last - first;
-			const deltaRatio = first > 0 ? delta / first : 0;
-
-			// Count consecutive trend direction (last 3 entries)
-			let trendUp = 0;
-			let trendDown = 0;
-			for (let i = Math.max(0, hist.length - 3); i < hist.length; i++) {
-				if (i > 0) {
-					if (hist[i].controlled > hist[i - 1].controlled) trendUp++;
-					else if (hist[i].controlled < hist[i - 1].controlled) trendDown++;
-				}
-			}
-
-			const mpRatio =
-				initialSideSoldiers[si] > 0
-					? sideSoldiers[si] / initialSideSoldiers[si]
-					: 1;
-
-			if (deltaRatio < -0.05 || mpRatio < 0.1) {
-				_sideWarPhase[si] = "COLLAPSING";
-			} else if (deltaRatio < -0.005 || trendDown >= 2) {
-				_sideWarPhase[si] = "RETREATING";
-			} else if (deltaRatio > 0.005 || trendUp >= 2) {
-				_sideWarPhase[si] = "ADVANCING";
-			} else {
-				_sideWarPhase[si] = "STALEMATE";
-			}
-		}
-	}
-	refreshLiveCombatPower();
-
-	// ── Auto Posture: per-side strength ratio → OFFENSIVE/BALANCED/DEFENSIVE ──
-	const _tpo = performance.now();
-	const sideStrength = new Array(sides.length).fill(0);
-	const sideUnitCounts = new Array(sides.length).fill(0);
-	for (let i = 0; i < units.length; i++) {
-		const u = units[i];
-		if (u.deployTicks > 0) continue;
-		const si = u.sideIndex;
-		if (si < 0 || si >= sides.length) continue;
-		sideUnitCounts[si]++;
-		const meta = countryMetadata[u.sovereignId - 1];
-		const buff = getEffectiveBuffState(
-			sides[si]?.find((c) => c.id === u.sovereignId),
-			meta || null,
-		);
-		const buffMult =
-			{
-				buff: 2.5,
-				super: 10,
-				godly: 40,
-				weakened: 0.7,
-				crippled: 0.4,
-			}[buff] || 1.0;
-		sideStrength[si] +=
-			gameMode === "CONQUEST"
-				? operationalUnitPower(u)
-				: buffMult * (u.health / CONFIG.UNIT_HEALTH);
-	}
-
-	_sidePosture = new Array(sides.length).fill("BALANCED");
-	for (let si = 0; si < sides.length; si++) {
-		if (sideUnitCounts[si] === 0) continue;
-		let totalEnemyStrength =
-			gameMode === "CONQUEST" ? getKnownEnemyPowerForSide(si) : 0;
-		let totalEnemyUnits = totalEnemyStrength;
-		if (gameMode !== "CONQUEST") {
-			for (let ej = 0; ej < sides.length; ej++) {
-				if (!areSidesHostile(si, ej)) continue;
-				totalEnemyStrength += sideStrength[ej];
-				totalEnemyUnits += sideUnitCounts[ej];
-			}
-		}
-		// Check if this side has LAST_STAND or OFFENSIVE_DESPERATION countries
-		let hasLastStand = false;
-		let hasOffDesp = false;
-		sides[si].forEach((c) => {
-			const prof = aiCountryState.get(c.id);
-			if (prof?.mode === AI_POSTURE.LAST_STAND) hasLastStand = true;
-			if (prof?.mode === AI_POSTURE.OFFENSIVE_DESPERATION) hasOffDesp = true;
-		});
-
-		// Force defensive posture if a defender reaction plan is active
-		if (_defenderReactionPlan[si]) _sidePosture[si] = "DEFENSIVE";
-		if (hasLastStand) {
-			_sidePosture[si] = "DEFENSIVE";
-		} else if (hasOffDesp) {
-			_sidePosture[si] = "OFFENSIVE";
-		} else if (totalEnemyUnits > 0) {
-			const ratio = sideStrength[si] / Math.max(1, totalEnemyStrength);
-			if (ratio > 1.5) _sidePosture[si] = "OFFENSIVE";
-			else if (ratio < 0.7) _sidePosture[si] = "DEFENSIVE";
-		}
-
-		// Apply posture to country profiles
-		// MANPOWER: critically low manpower forces defensive posture regardless of strength
-		if (initialSideSoldiers[si] > 0) {
-			const mpRatio = sideSoldiers[si] / initialSideSoldiers[si];
-			if (mpRatio < 0.15) {
-				_sidePosture[si] = "DEFENSIVE"; // under 15% manpower = forced defense
-			}
-		}
-
-		if (_sidePosture[si] === "DEFENSIVE") {
-			sides[si].forEach((c) => {
-				const prof = aiCountryState.get(c.id);
-				if (prof) {
-					prof.forceDefensive = true;
-					// Scale defensive severity by manpower: lower MP = tighter defense
-					const mpRatio =
-						initialSideSoldiers[si] > 0
-							? Math.max(0, sideSoldiers[si] / initialSideSoldiers[si])
-							: 0;
-					const defensiveScale =
-						mpRatio < 0.25 ? 0.6 : mpRatio < 0.5 ? 0.8 : 1.0;
-					prof.frontlineBlend = Math.min(
-						prof.frontlineBlend,
-						0.3 * defensiveScale,
-					);
-					prof.speedMult = Math.min(prof.speedMult, 0.96 * defensiveScale);
-				}
-			});
-		} else if (_sidePosture[si] === "OFFENSIVE") {
-			sides[si].forEach((c) => {
-				const prof = aiCountryState.get(c.id);
-				if (prof) {
-					prof.forceDefensive = false;
-					prof.frontlineBlend = Math.max(prof.frontlineBlend, 0.4);
-				}
-			});
-		}
-	}
-
-	// Evaluate war plans — check completion/failure, regenerate if needed
-	window.__perf.posture =
-		(window.__perf.posture || 0) + performance.now() - _tpo;
-	// Cumulative pre-plans profiler: everything from tick start (_t0) to here
-	window.__perf.prePlans =
-		(window.__perf.prePlans || 0) + performance.now() - _t0;
-	const _t1 = performance.now();
-	const _tLegacyPlans = performance.now();
-	evaluateAllPlans();
-	window.__perf.legacyPlans += performance.now() - _tLegacyPlans;
-	const _tOperationalTaskForces = performance.now();
-	updateOperationalAiTaskForces();
-	const operationalTaskForceMs = performance.now() - _tOperationalTaskForces;
-	window.__perf.operationalTaskForces += operationalTaskForceMs;
-	recordPerfMeasure(
-		"Operational AI · Task Forces",
-		_tOperationalTaskForces,
-		operationalTaskForceMs,
-	);
-	window.__perf.plans += performance.now() - _t1;
-
-	// ── Compute neutral border polylines only when political topology changes ──
-	const _tn = performance.now();
-	const neutralBorderSignature = `${_simulationWorldGeneration}:${_politicalMapRevision}:${[...combatantIds].sort((left, right) => left - right).join(",")}`;
-	if (
-		adjacencyCache &&
-		neutralBorderSignature !== _neutralBorderCacheSignature
-	) {
-		_neutralBorderCacheSignature = neutralBorderSignature;
-		_neutralBorderPolys = {};
-
-		// Identify combatant countries with neutral neighbors
-		const combatantNeutralBorders = {};
-		for (const [countryId, neighbors] of adjacencyCache.entries()) {
-			if (!combatantIds.has(countryId)) continue;
-			const neutralNeighbors = [];
-			for (const nId of neighbors) {
-				if (combatantIds.has(nId)) continue;
-				neutralNeighbors.push(nId);
-			}
-			if (neutralNeighbors.length > 0) {
-				combatantNeutralBorders[countryId] = new Set();
-			}
-		}
-
-		// Full-grid scan to find frontier cells between combatants and neutrals
-		if (Object.keys(combatantNeutralBorders).length > 0) {
-			const total = gridWidth * gridHeight;
-			for (let i = 0; i < total; i++) {
-				if (landMask[i] !== 2) continue;
-				const owner = worldControlMap[i];
-				if (!combatantNeutralBorders[owner]) continue;
-				const nb4 = [i + 1, i - 1, i + gridWidth, i - gridWidth];
-				for (let nb = 0; nb < 4; nb++) {
-					const ni = nb4[nb];
-					if (ni < 0 || ni >= total) continue;
-					if (landMask[ni] !== 2) continue;
-					const nbOwner = worldControlMap[ni];
-					if (nbOwner === 0 || nbOwner === owner) continue;
-					if (!combatantIds.has(nbOwner)) {
-						combatantNeutralBorders[owner].add(i);
-						break;
-					}
-				}
-			}
-
-			for (const [countryId, cells] of Object.entries(
-				combatantNeutralBorders,
-			)) {
-				if (cells.size === 0) continue;
-				const poly = [];
-				for (const idx of cells) {
-					const y = Math.floor(idx / gridWidth);
-					const x = idx % gridWidth;
-					poly.push({
-						lat: y * CONFIG.GRID_RES - 90,
-						lng: x * CONFIG.GRID_RES - 180,
-					});
-				}
-				_neutralBorderPolys[countryId] = poly;
-			}
-		}
-	}
-	// Prevent infinite re-run when no borders exist: sentinel key stops the length===0 fallback
-	if (Object.keys(_neutralBorderPolys).length === 0) {
-		_neutralBorderPolys.__empty = true;
-	}
-	window.__perf.neutralBorder += performance.now() - _tn;
-
-	const _t2 = performance.now();
-	// Mid-War Recruitment (Steady, Land-Capped, and Underdog-Aware)
-	sides.forEach((side, sIdx) => {
-		side.forEach((country) => {
-			const stats = countryStats.get(country.id);
-			if (!stats) return;
-			const aiProfile = aiCountryState.get(country.id) || null;
-
-			const currentUnits = stats.units;
-			const initialLand = country.initialCells || 1;
-			const currentLand = stats.controlled;
-
-			const supplyFailed = capitalLostCountries.has(country.id);
-			// Increased army caps to accommodate the much higher frontline saturation requirements.
-			// Less aggressive size scaling to allow large empires to maintain thick lines.
-			const sizeFactor = Math.max(1, currentLand / 2000);
-			const densityScale = 1.0 / sizeFactor ** 0.35;
-			// Stronger city-based cap: more cities = more potential divisions in the field.
-			const cityCount = countryToCityCount.get(country.id) || 0;
-			const landCityMultiplier = 1 + cityCount * 0.12; // each city adds +12% to this country's cap (capped later by side limits)
-			const landBasedCap = Math.max(
-				8,
-				Math.floor(
-					currentLand *
-						CONFIG.UNIT_DENSITY_FACTOR *
-						1.5 *
-						densityScale *
-						landCityMultiplier,
-				),
-			);
-			const sideLimit = CONFIG.MAX_UNITS_PER_SIDE;
-
-			// Flexible Limit: allow bigger armies but still clamp for performance
-			const flexibleLimit =
-				sideLimit * (1 + Math.min(3.0, currentLand / 4000 + cityCount * 0.15));
-			let absoluteCap = Math.min(landBasedCap, flexibleLimit);
-			if (gameMode !== "CONQUEST" && aiProfile) {
-				absoluteCap = Math.floor(absoluteCap * aiProfile.recruitCapMult);
-			}
-
-			// When manual manpower is set, allow recruiting up to the manpower-based cap
-			const manualMP = manualSideManpower[sIdx];
-			if (manualMP !== null) {
-				absoluteCap = Math.max(
-					absoluteCap,
-					Math.floor(manualMP / CONFIG.UNIT_TO_SOLDIER_RATIO),
-				);
-			}
-
-			// GODLY Buff: Higher cap and ignores flexible limits
-			if (country.buffState === "godly") {
-				absoluteCap = Math.max(absoluteCap, 3600);
-			}
-
-			// If the capital has fallen, supply is failing: drastically limit total fieldable troops
-			if (supplyFailed) {
-				absoluteCap = Math.max(15, Math.floor(absoluteCap * 0.3));
-			}
-			// MANPOWER: hard cap based on remaining side manpower
-			const recruitableFormationEquivalents =
-				sideRecruitableManpower[sIdx] > 0
-					? Math.ceil(
-							sideRecruitableManpower[sIdx] /
-								(soldiersPerUnit[sIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO),
-						)
-					: 0;
-			if (
-				recruitableFormationEquivalents === 0 &&
-				sideRecruitableManpower[sIdx] <= 0
-			) {
-				absoluteCap = 0; // no manpower = no more troops
-			} else if (recruitableFormationEquivalents > 0) {
-				absoluteCap = Math.min(
-					absoluteCap,
-					currentUnits + recruitableFormationEquivalents,
-				);
-			}
-
-			const isTotalWar =
-				gameMode !== "CONQUEST" &&
-				(country.strategy === "TURTLE" || country.strategy === "BLITZ");
-			const overcapLimit = isTotalWar
-				? Math.floor(absoluteCap * 1.2)
-				: absoluteCap;
-			if (currentUnits < overcapLimit) {
-				const controlRatio = currentLand / initialLand;
-				const cityCountLocal = countryToCityCount.get(country.id) || 0;
-				const cityBonus = 0.5 + cityCountLocal * 0.5; // Cities are a primary driver of recruitment speed
-
-				// Manpower Scale: Diminishing returns on recruitment for massive nations
-				// to prevent them from overwhelmingly flooding the screen with unit flags.
-				const landRatio = currentLand / 2000; // Reference size
-				const scaleFactor = Math.max(0.8, landRatio ** 0.4); // raised floor so small countries aren't recruit-starved
-
-				// Underdog Bonus: help nations that have lost most of their land cycle recruits faster
-				const underdogFactor =
-					gameMode !== "CONQUEST" && controlRatio < 0.4
-						? (0.4 - controlRatio) * 2.0
-						: 0;
-
-				// Annexation Urgency: once a country drops under 60% of its original land,
-				// ramp recruitment up sharply the closer it gets to zero to avoid soft capitulations.
-				const annexationUrgency =
-					gameMode !== "CONQUEST" && controlRatio < 0.6
-						? (0.6 - controlRatio) * 4.0
-						: 0;
-				const annexationMultiplier = 1 + annexationUrgency;
-
-				// Faster baseline recruitment, heavily amplified by city count, underdog status,
-				// and annexation urgency.
-				const baseRecruitmentChance = 0.012; // doubled for more aggressive mid-war reinforcement
-				let recruitmentChance =
-					baseRecruitmentChance *
-					scaleFactor *
-					(controlRatio + cityBonus + underdogFactor) *
-					annexationMultiplier;
-				const mobilizationMult =
-					simFrameCount < AI_MOBILIZATION.EARLY_TICKS
-						? 1 +
-							(AI_MOBILIZATION.EARLY_RECRUIT_MULT - 1) *
-								(1 - simFrameCount / AI_MOBILIZATION.EARLY_TICKS)
-						: 1;
-				recruitmentChance *= mobilizationMult;
-				if (gameMode !== "CONQUEST" && aiProfile) {
-					recruitmentChance *= aiProfile.recruitChanceMult;
-				}
-
-				if (country.buffState === "godly") {
-					recruitmentChance *= 12.0; // 12x recruitment speed
-				}
-
-				// If the capital is lost, recruitment almost collapses
-				if (supplyFailed) {
-					recruitmentChance *= 0.1; // 90% reduction in new troops
-					// MANPOWER: scale recruitment chance by remaining manpower ratio
-					// At 50% manpower: 70% chance. At 25%: 35%. At 0%: no recruits.
-					if (initialSideSoldiers[sIdx] > 0) {
-						const mpRatio = Math.max(
-							0,
-							sideSoldiers[sIdx] / initialSideSoldiers[sIdx],
-						);
-						if (mpRatio <= 0) {
-							recruitmentChance = 0; // no manpower = no new units
-						} else {
-							recruitmentChance *= Math.min(1, mpRatio * 2); // linear scale, capped at 100%
-						}
-					}
-				}
-
-				// Cap-fill urgency: the more empty the army, the harder they draft
-				const capFillRatio = Math.min(
-					1,
-					currentUnits / Math.max(1, absoluteCap),
-				);
-				const capFillMult = 1.0 + (1 - capFillRatio) * 3.0; // 1× at full → 4× at empty
-				recruitmentChance *= capFillMult;
-				// Total war double-dip: extra recruitment pressure when losses mount
-				if (isTotalWar && capFillRatio < 0.5) {
-					recruitmentChance *= 1.0 + (0.5 - capFillRatio) * 4.0; // up to 3× extra when half-empty
-				}
-				// Momentum-based recruitment: panic conscription when losing
-				const warPhase = _sideWarPhase[sIdx];
-				if (gameMode !== "CONQUEST" && warPhase === "COLLAPSING") {
-					recruitmentChance *= 5.0; // desperate mass mobilization
-				} else if (gameMode !== "CONQUEST" && warPhase === "RETREATING") {
-					recruitmentChance *= 3.0; // accelerated recruitment
-				}
-				// Clamp per-tick chance at 80% to prevent deterministic spam
-				if (recruitmentChance > 0.8) recruitmentChance = 0.8;
-
-				// Panic conscription: spawn multiple units per tick when desperate
-				let spawnsThisTick = 1;
-				if (
-					gameMode !== "CONQUEST" &&
-					warPhase === "COLLAPSING" &&
-					currentUnits < absoluteCap * 0.3
-				) {
-					spawnsThisTick = 5;
-				} else if (
-					gameMode !== "CONQUEST" &&
-					warPhase === "RETREATING" &&
-					currentUnits < absoluteCap * 0.5
-				) {
-					spawnsThisTick = 3;
-				}
-				for (let sp = 0; sp < spawnsThisTick; sp++) {
-					if (Math.random() < recruitmentChance) {
-						spawnSingleUnit(sIdx, country.id);
-					}
-				}
-			}
-		});
-	});
-
-	// Precompute city list once per tick
-	const globalCityTargets = activeTheaterCities?.length
-		? activeTheaterCities
-		: cities;
-	const enemyCityCandidatesBySide = getEnemyCityCandidatesBySide(
-		globalCityTargets,
-		countryToSideMap,
-	);
-
-	// PERF: Pre-group cities by sovereignId once, instead of cities.filter() per-unit (was 4.3% self-time).
-	_tickCitiesBySovereign.clear();
-	const _citiesBySovereign = _tickCitiesBySovereign;
-	if (cities?.length) {
-		for (let ci = 0; ci < cities.length; ci++) {
-			const c = cities[ci];
-			const oid = c.ownerId || c.sovereignId || null;
-			if (oid !== null) {
-				let arr = _citiesBySovereign.get(oid);
-				if (!arr) {
-					arr = [];
-					_citiesBySovereign.set(oid, arr);
-				}
-				arr.push(c);
-			}
-		}
-	}
-
-	// PERF: Pre-build Map<id, metadata> for O(1) lookup instead of countryMetadata.find() per-unit (was 1.5% self-time).
-	_tickMetadataById.clear();
-	const _metadataById = _tickMetadataById;
-	for (let mi = 0; mi < countryMetadata.length; mi++) {
-		const m = countryMetadata[mi];
-		if (m && m.id !== undefined) _metadataById.set(m.id, m);
-	}
-
-	window.__perf.recruit += performance.now() - _t2;
-	const _t3 = performance.now();
-	// Pre-build city grid index Set once per tick (not per unit)
-	const _cityIdxSetTick = new Set();
-	for (let _cci = 0; _cci < activeTheaterCities.length; _cci++) {
-		const _cIdx = getGridIndex(
-			activeTheaterCities[_cci].lat,
-			activeTheaterCities[_cci].lng,
-		);
-		if (_cIdx !== -1) _cityIdxSetTick.add(_cIdx);
-	}
-	// Pre-build city-by-sovereign Map for O(1) lookup in combat (replaces O(C) activeTheaterCities.find)
-	const _theaterCitiesBySovereign = new Map();
-	for (let _cci = 0; _cci < activeTheaterCities.length; _cci++) {
-		const city = activeTheaterCities[_cci];
-		if (!city.sovereignId) continue;
-		let arr = _theaterCitiesBySovereign.get(city.sovereignId);
-		if (!arr) {
-			arr = [];
-			_theaterCitiesBySovereign.set(city.sovereignId, arr);
-		}
-		arr.push(city);
-	}
-	const _detailedPerfEnabled = window.__perf._mode === "detailed";
-	for (let i = units.length - 1; i >= 0; i--) {
-		const u = units[i];
-		const _u1 = _detailedPerfEnabled ? performance.now() : 0; // per-unit sub-timer start
-
-		// Scrub NaN units immediately to prevent rendering crashes
-		if (Number.isNaN(u.lat) || Number.isNaN(u.lng)) {
-			returnUnitPersonnelToReserve(u);
-			units.splice(i, 1);
-			continue;
-		}
-		if (u.health <= 0 || getLiveFormationStrength(u) <= 0) {
-			units.splice(i, 1);
-			continue;
-		}
-
-		u.dirLat = 0;
-		u.dirLng = 0; // Reset movement indicators for the current tick
-
-		// Handle deployment/mobilization phase
-		if (u.deployTicks > 0) {
-			u.deployTicks--;
-			continue; // Skip AI and movement while deploying
-		}
-
-		let sideIndex = u.sideIndex !== undefined ? u.sideIndex : 0;
-		const gIdx = Math.floor(u.id * 1000) % numGroups;
-		const centroids = sideCentroids[sideIndex];
-		const groupCentroid = centroids ? centroids[gIdx] : null;
-
-		// Ensure sideIndex is valid if sides were removed via capitulation
-		if (sideIndex >= sides.length) sideIndex = sides.length - 1;
-		if (sideIndex < 0) sideIndex = 0;
-
-		// Sync index back to object for the renderer
-		u.sideIndex = sideIndex;
-
-		const sideList = sides[sideIndex];
-		if (!sideList) continue;
-
-		const countryObj = _countryById.get(u.sovereignId);
-
-		const aiProfile = aiCountryState.get(u.sovereignId) || {
-			mode: "NORMAL",
-			retreatTriggerMultiple: 8.0,
-			frontlineBlend: 0.35,
-			speedMult: 1.0,
-			targetCityWeight: 0.0,
-			forceDefensive: false,
-			reserveShare: 0.02,
-			peacePressure: 0.0,
-		};
-		const isDefensive = countryObj?.strategy === "DEFENSIVE";
-		const effectiveDefensive = isDefensive || aiProfile.forceDefensive;
-		const metaForBuff = _metadataById.get(u.sovereignId) || null;
-		const effectiveBuff = getEffectiveBuffState(countryObj, metaForBuff);
-
-		let damageDealtMult = 1.0;
-		let damageTakenMult = 1.0;
-		let speedBuffMult = 1.0;
-
-		// Victory Boost Logic: Momentum Phase
-		if (u.victoryBoostTicks > 0) {
-			u.victoryBoostTicks--;
-			damageDealtMult *= 1.4; // Reduced damage boost for longer battles
-			speedBuffMult *= 1.3; // Reduced speed boost for slower pushing
-		}
-
-		// Capital Loss Penalty (Nerfed to prevent instant collapse of smaller nations)
-		if (countryCapitalLost.has(u.sovereignId)) {
-			damageDealtMult *= 0.8; // 20% reduction (was 35%)
-			damageTakenMult *= 1.15; // 15% more vulnerable (was 25%)
-			speedBuffMult *= 0.9; // 10% slower (was 20%)
-		}
-
-		// Momentum cascade effects
-		const warPhase = _sideWarPhase[u.sideIndex];
-		if (warPhase === "COLLAPSING") {
-			damageDealtMult *= 0.7;
-		} else if (gameMode !== "CONQUEST" && warPhase === "ADVANCING") {
-			damageDealtMult *= 1.15;
-		}
-
-		const gridIdxNow = _unitGridIdx.get(u) ?? -1;
-		const _uSideIdx = countryToSideMap.get(u.sovereignId);
-		const isAtSea = gridIdxNow === -1 || landMask[gridIdxNow] === 0;
-		const mountainIntensity =
-			mountainsEnabled && gridIdxNow !== -1 ? terrainMask[gridIdxNow] : 0;
-		const isMountain = mountainIntensity > 0;
-		const currentControl = getControlValue(u.lat, u.lng);
-
-		// Cache terrain and sea states for the renderer
-		u.isAtSea = isAtSea;
-		u.mountainIntensity = mountainIntensity;
-
-		if (countryObj) {
-			if (effectiveBuff === "buff") {
-				damageDealtMult = 2.5;
-				damageTakenMult = 0.6;
-				speedBuffMult = 1.3;
-			} else if (effectiveBuff === "super") {
-				damageDealtMult = 10.0;
-				damageTakenMult = 0.2;
-				speedBuffMult = 1.8;
-			} else if (effectiveBuff === "godly") {
-				damageDealtMult = 40.0;
-				damageTakenMult = 0.015;
-				speedBuffMult = 2.2;
-			} else if (effectiveBuff === "weakened") {
-				damageDealtMult = 0.7;
-				damageTakenMult = 1.4;
-				speedBuffMult = 0.7; // slightly slower when weakened
-			} else if (effectiveBuff === "crippled") {
-				damageDealtMult = 0.4;
-				damageTakenMult = 2.5;
-				speedBuffMult = 0.7;
-			}
-
-			// Continuous attack/defense modifiers from sliders (-90% .. +90%)
-			const atkPct =
-				typeof countryObj.attackBuffPercent === "number"
-					? countryObj.attackBuffPercent
-					: 0;
-			const defPct =
-				typeof countryObj.defenseBuffPercent === "number"
-					? countryObj.defenseBuffPercent
-					: 0;
-			const atkFactor = 1 + atkPct / 100;
-			const defFactor = 1 + defPct / 100;
-			if (atkFactor > 0) damageDealtMult *= atkFactor;
-			// positive defPct reduces damageTaken (tougher), negative increases (softer)
-			if (defFactor > 0.01) damageTakenMult *= 1 / defFactor;
-		}
-
-		// Terrain Modifiers: Mountains reduce speed and lethality based on intensity (size/scale)
-		if (isMountain) {
-			// Intensity 1.0 = full penalty, Intensity 0.1 = minimal penalty
-			speedBuffMult *= 1.0 - 0.65 * mountainIntensity;
-			damageDealtMult *= 1.0 - 0.4 * mountainIntensity;
-			damageTakenMult *= 1.0 - 0.4 * mountainIntensity;
-		}
-
-		// Alpenjägers: small, quiet buffs with emphasis on mountain warfare
-		if (u.isAlpenjager) {
-			if (isMountain) {
-				speedBuffMult *= CONFIG.ALPEN_MTN_SPEED_MULT;
-			}
-			damageDealtMult *= CONFIG.ALPEN_COMBAT_MULT;
-			damageTakenMult *= 1.0 / CONFIG.ALPEN_COMBAT_MULT;
-		}
-
-		// Exile Disbandment: If a navy is at sea and its nation has lost all land, it slowly disbands
-		if (isAtSea && countryObj) {
-			const stats = countryStats.get(u.sovereignId);
-			if (stats && stats.controlled === 0) {
-				if (Math.random() < 0.02) {
-					returnUnitPersonnelToReserve(u);
-					units.splice(i, 1);
-					continue;
-				}
-			}
-			// Non-transport units at sea take attrition until they reach land
-			if (!u.isTransport) {
-				recordDamage(u, CONFIG.ATTRITION_DAMAGE * 3.0);
-			}
-		}
-
-		// --- ENCIRCLEMENT DETECTION ---
-		let encirclementFactor = 0;
-		const isMega = effectiveBuff === "super";
-		const isSuper = effectiveBuff === "buff";
-		const _isWeak = effectiveBuff === "weakened";
-		const _isCripple = effectiveBuff === "crippled";
-
-		if (!isAtSea && !isMega && !isSuper && gridIdxNow !== -1) {
-			const eR = CONFIG.ENCIRCLEMENT_RADIUS;
-			const eRCells = Math.round(eR / CONFIG.GRID_RES);
-			const gw = gridWidth;
-			const row = Math.floor(gridIdxNow / gw);
-			const col = gridIdxNow % gw;
-			const offsets = [
-				[0, eRCells],
-				[0, -eRCells],
-				[eRCells, 0],
-				[-eRCells, 0],
-				[Math.round(eRCells * 0.7), Math.round(eRCells * 0.7)],
-				[-Math.round(eRCells * 0.7), -Math.round(eRCells * 0.7)],
-				[Math.round(eRCells * 0.7), -Math.round(eRCells * 0.7)],
-				[-Math.round(eRCells * 0.7), Math.round(eRCells * 0.7)],
-			];
-			let enemyCount = 0;
-			for (let oi = 0; oi < offsets.length; oi++) {
-				const [dc, dr] = offsets[oi];
-				const nr = row + dr;
-				const nc = col + dc;
-				if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gw) continue;
-				const sIdx = nr * gw + nc;
-				if (landMask[sIdx] > 0 && isEnemyTerritory(sIdx, u.sideIndex))
-					enemyCount++;
-			}
-			encirclementFactor = enemyCount / offsets.length;
-		}
-		const isEncircled = encirclementFactor > 0.875;
-
-		// Track encirclement duration for escalating pressure
-		if (isEncircled) {
-			u.encircledTicks = (u.encircledTicks || 0) + 1;
-		} else {
-			u.encircledTicks = 0;
-		}
-
-		if (isEncircled && !isMega && !isSuper) {
-			// Escalating penalty: longer encirclement = worse combat effectiveness
-			const encircleDuration =
-				u.encircledTicks > 180 ? 0.15 : u.encircledTicks > 60 ? 0.2 : 0.25;
-			damageDealtMult *= encircleDuration;
-			damageTakenMult *= 4.0;
-		}
-
-		// Attrition logic: logistics strain increases the further you push into large nations
-		const inEnemyTerritory =
-			!isAtSea && isEnemyTerritory(gridIdxNow, u.sideIndex);
-
-		// Attrition is disabled during Victory Boost (momentum) to prevent breakthroughs from stalling instantly
-		if (
-			(inEnemyTerritory || isEncircled) &&
-			!isMega &&
-			!isSuper &&
-			(u.victoryBoostTicks <= 0 || isEncircled)
-		) {
-			// Logistics Strain: Attrition scales with the target's total land area
-			let targetLandSize = 0;
-			const enemySideIndices = sides
-				.map((_, idx) => idx)
-				.filter((idx) => areSidesHostile(sideIndex, idx));
-			enemySideIndices.forEach((idx) => {
-				sides[idx].forEach((enemy) => {
-					const s = countryStats.get(enemy.id);
-					if (s) targetLandSize += s.controlled;
-				});
-			});
-
-			const logisticsPenalty = Math.max(
-				1,
-				Math.log10(targetLandSize / 500 + 1),
-			);
-			// War Fatigue: Attrition damage scales with war duration, wearing out enemies over time
-			const warFatigueFactor = 1.0 + simFrameCount / 8000;
-			let dmg =
-				CONFIG.ATTRITION_DAMAGE *
-				(1 + Math.abs(currentControl) * 3) *
-				logisticsPenalty *
-				warFatigueFactor;
-
-			if (isEncircled) {
-				// Escalating attrition: longer encirclement = faster death
-				const encircleTickScale =
-					u.encircledTicks > 360
-						? 4.0
-						: u.encircledTicks > 180
-							? 2.5
-							: u.encircledTicks > 60
-								? 1.5
-								: 1.0;
-				dmg *= CONFIG.ENCIRCLEMENT_DAMAGE_MULT * encircleTickScale;
-			}
-			// SUPPLY CUT-OFF: units deep in enemy territory with no friendly tiles nearby
-			// take extreme damage — they're completely isolated from logistics.
-			if (inEnemyTerritory && !isEncircled && !isAtSea) {
-				let friendlyTilesNearby = 0;
-				const cutoffRadius = Math.round(0.8 / CONFIG.GRID_RES);
-				const gr = gridWidth;
-				const cRow = Math.floor(gridIdxNow / gr);
-				const cCol = gridIdxNow % gr;
-				for (let dr = -cutoffRadius; dr <= cutoffRadius; dr++) {
-					for (let dc = -cutoffRadius; dc <= cutoffRadius; dc++) {
-						if (dr === 0 && dc === 0) continue;
-						const nr = cRow + dr,
-							nc = cCol + dc;
-						if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth)
-							continue;
-						const ni = nr * gr + nc;
-						if (landMask[ni] > 0 && dominantSideMap[ni] === u.sideIndex) {
-							friendlyTilesNearby++;
-						}
-					}
-				}
-				// No friendly tiles within ~0.8° → total supply collapse
-				if (friendlyTilesNearby === 0) {
-					u._supplyCollapsedTick = _simTickCount;
-					dmg += 2.5; // massive cut-off damage: ~25× base attrition
-				} else if (friendlyTilesNearby < 3) {
-					u._supplyCollapsedTick = Number.NEGATIVE_INFINITY;
-					dmg += 0.8; // severely isolated
-				} else if (friendlyTilesNearby < 8) {
-					u._supplyCollapsedTick = Number.NEGATIVE_INFINITY;
-					dmg += 0.3; // partially cut off
-				} else {
-					u._supplyCollapsedTick = Number.NEGATIVE_INFINITY;
-				}
-			}
-			recordDamage(u, dmg * damageTakenMult);
-
-			// Instant death triggers full remaining health as casualties
-		}
-
-		// --- EXPEDITIONARY SUPPORT SYSTEM ---
-		const role = countryObj?.role || "OFFENSE";
-		const alliesMetadata = sideList.filter((c) => c.id !== u.sovereignId);
-		const offensiveAllies = alliesMetadata.filter((c) => c.role === "OFFENSE");
-
-		if (role === "SUPPORT") {
-			if (offensiveAllies.length > 0) {
-				if (
-					!u.beneficiaryId ||
-					u.beneficiaryId === u.sovereignId ||
-					!offensiveAllies.some((a) => a.id === u.beneficiaryId)
-				) {
-					u.beneficiaryId =
-						offensiveAllies[
-							Math.floor(Math.random() * offensiveAllies.length)
-						].id;
-				}
-			} else if (alliesMetadata.length > 0) {
-				if (!u.beneficiaryId || u.beneficiaryId === u.sovereignId) {
-					u.beneficiaryId =
-						alliesMetadata[
-							Math.floor(Math.random() * alliesMetadata.length)
-						].id;
-				}
-			} else {
-				u.beneficiaryId = u.sovereignId;
-			}
-		} else {
-			// Offensive units: Drastically reduced chance to randomly wander off to support allies (like Britain to Canada)
-			// unless their sovereign land is almost entirely occupied.
-			const myStats = countryStats.get(u.sovereignId);
-			const myInitial = countryObj?.initialCells || 1;
-			const beingOverrun = myStats
-				? myStats.controlled < myInitial * 0.3
-				: false;
-
-			// Significantly reduced probability to wander to an ally's territory (0.02% per frame)
-			if (
-				!beingOverrun &&
-				Math.random() < 0.0002 &&
-				alliesMetadata.length > 0
-			) {
-				u.beneficiaryId =
-					alliesMetadata[Math.floor(Math.random() * alliesMetadata.length)].id;
-			} else if (Math.random() < 0.12 || !u.beneficiaryId) {
-				// High chance to reset to sovereign target to ensure focus on the main theater
-				u.beneficiaryId = u.sovereignId;
-			}
-		}
-
-		// ── unitLoop sub-timer checkpoint: end setupTerrain, start unitSpatialHash ──
-		const _u2 = _detailedPerfEnabled ? performance.now() : 0;
-		if (_detailedPerfEnabled) window.__perf.unitSetupTerrain += _u2 - _u1;
-
-		// Tactical Awareness: Identify enemies and local balance of power using O(1) Spatial Hash
-		let target = null;
-		let minDist = Infinity;
-		let retreatVector = null;
-
-		const tacticalRadiusSq = 0.6 * 0.6;
-		const repulsionRadiusSq = 0.45 * 0.45;
-		let localEnemyCount = 0;
-		let localAllyCount = u._tickLocalAllyCount || 1;
-		let enemyCentroidLat = 0;
-		let enemyCentroidLng = 0;
-
-		// Skip full spatial-hash scan for units that have been idle for a while,
-		// but maintain a wider 5×5 sweep so nearby enemies are never invisible.
-		const idleTicks = simFrameCount - (u.lastCombatTick || 0);
-		const isTacticallyIdle =
-			idleTicks > 60 &&
-			idleTicks < 600 && // force re-scan after 600 idle frames to break perpetual idle loop
-			u.mopUpTargetId === 0;
-
-		const _isAlpen = !!u.isAlpenjager;
-		const hasOperationalAssignment =
-			gameMode === "CONQUEST" && !!u._taskForceUid;
-		const operationalFastLane = !!(
-			CONFIG.ENABLE_SIDE_HASH_COMBAT &&
-			hasOperationalAssignment &&
-			u._taskForceOrder?.target &&
-			!u._tickHasNearbyHostile &&
-			!isAtSea
-		);
-		if (operationalFastLane) {
-			target = u._taskForceOrder.target;
-			window.__perf.tacticalFastLaneUnits++;
-		}
-
-		const kx = Math.floor((u.lng + 180) / HASH_SIZE);
-		const ky = Math.floor((u.lat + 90) / HASH_SIZE);
-		const maxKx = Math.ceil(360 / HASH_SIZE);
-
-		// War-plan movement variables — declared here so both scan paths can use them
-		let planSpeedMult = 1.0;
-		let planDirLat = 0,
-			planDirLng = 0,
-			isPlanUnit = false;
-
-		// Active units search adjacent 3×3 hash cells; idle units widen to 5×5
-		const fullScan = !isTacticallyIdle;
-		const skipAllyScan =
-			u.navalAssigned || u.supplyAssigned || u.coastalAssigned;
-		if (CONFIG.ENABLE_SIDE_HASH_COMBAT) {
-			// ═══ Phase 1: side-separated spatial hash scan ═══
-			if (!window.__perf._sideHashLogged) {
-				window.__perf._sideHashLogged = true;
-				console.info(
-					"%c⚡ Phase 1 active: side-separated spatial hash scan",
-					"color:#0f0;font-size:14px",
-				);
-			}
-
-			// ── Phase 3: stale-target skip ──
-			let didStaleSkip = operationalFastLane;
-			if (
-				u._cachedTarget &&
-				(u._cachedTarget._liveGeneration !== _unitLiveGeneration ||
-					u._cachedTarget.health <= 0)
-			) {
-				if (u._cachedTarget._liveGeneration !== _unitLiveGeneration) {
-					window.__perf.tacticalGhostInvalidations++;
-				}
-				u._cachedTarget = null;
-				u._cachedLocalEnemyCount = 0;
-			}
-			if (
-				!operationalFastLane &&
-				CONFIG.ENABLE_STALE_TARGET_SKIP &&
-				u._cachedTarget &&
-				u._cachedTarget.health > 0 &&
-				areSidesHostile(sideIndex, u._cachedTarget.sideIndex)
-			) {
-				const movedCell = u._cachedScanKx !== kx || u._cachedScanKy !== ky;
-				const staleScanInterval =
-					simSpeed >= 3
-						? CONFIG.STALE_TARGET_SCAN_INTERVAL_FAST
-						: CONFIG.STALE_TARGET_SCAN_INTERVAL;
-				const staleMaxDistSq =
-					simSpeed >= 3
-						? CONFIG.STALE_TARGET_MAX_CACHE_DIST_SQ_FAST
-						: CONFIG.STALE_TARGET_MAX_CACHE_DIST_SQ;
-				const refreshDue =
-					_simTickCount - (u._lastFullScanTick ?? -staleScanInterval) >=
-						staleScanInterval &&
-					stableUnitCohort(u, staleScanInterval) ===
-						_simTickCount % staleScanInterval;
-				if (!movedCell && !refreshDue) {
-					const cached = u._cachedTarget;
-					let deLng = cached.lng - u.lng;
-					if (deLng > 180) deLng -= 360;
-					else if (deLng < -180) deLng += 360;
-					const cdSq = (u.lat - cached.lat) ** 2 + deLng ** 2;
-					if (cdSq <= staleMaxDistSq) {
-						target = cached;
-						localEnemyCount = Math.max(1, u._cachedLocalEnemyCount || 0);
-						enemyCentroidLat =
-							u._cachedEnemyCentroidLat || cached.lat * localEnemyCount;
-						enemyCentroidLng =
-							u._cachedEnemyCentroidLng || cached.lng * localEnemyCount;
-						didStaleSkip = true;
-						window.__perf.tacticalCacheHits++;
-						// Proximity damage vs cached target (same logic as full scan)
-						if (cdSq < 0.09) {
-							const inWarGrace = simFrameCount < warGraceEndTick;
-							if (!inWarGrace) {
-								const eIdx = _unitGridIdx.get(cached) ?? -1;
-								const eAtSea = eIdx === -1 || landMask[eIdx] === 0;
-								let proximityDamage =
-									CONFIG.COMBAT_DAMAGE *
-									0.45 *
-									damageDealtMult *
-									(1.0 - Math.sqrt(cdSq) / 0.3);
-								if (isAtSea && eAtSea) proximityDamage *= 2.2;
-								if (cached.isTransport && !u.isTransport)
-									proximityDamage *= 1.05;
-								if (u.isTransport && !cached.isTransport) {
-									recordDamage(
-										u,
-										proximityDamage * 1.05 * damageTakenMult,
-										cached,
-									);
-									proximityDamage *= 0.85;
-								}
-								recordDamage(
-									cached,
-									formationDamage(proximityDamage, u, cached, {
-										mountain: isMountain || cached.mountainIntensity > 0,
-										urban:
-											_cityIdxSetTick.has(gridIdxNow) ||
-											_cityIdxSetTick.has(eIdx),
-									}),
-									u,
-								);
-								recordDamage(
-									u,
-									formationDamage(
-										proximityDamage * 0.8 * damageTakenMult,
-										cached,
-										u,
-										{
-											mountain: isMountain || cached.mountainIntensity > 0,
-											urban:
-												_cityIdxSetTick.has(gridIdxNow) ||
-												_cityIdxSetTick.has(eIdx),
-										},
-									),
-									cached,
-								);
-								u.lastCombatTick = simFrameCount;
-								cached.lastCombatTick = simFrameCount;
-								if (cached.health <= 0) u.victoryBoostTicks = 240;
-								const battleLat = (u.lat + cached.lat) / 2;
-								const battleLng = (u.lng + cached.lng) / 2;
-								const bKey = _battleKey(battleLat, battleLng);
-								let existing = null;
-								for (let bk = -1; bk <= 1 && !existing; bk++) {
-									for (let bl = -1; bl <= 1 && !existing; bl++) {
-										const nk = bKey + bk * 10000 + bl;
-										const b = _battleHash.get(nk);
-										if (b && (u.lat - b.lat) ** 2 + (u.lng - b.lng) ** 2 < 0.16)
-											existing = b;
-									}
-								}
-								if (existing) {
-									existing.participants++;
-									existing.lat =
-										(existing.lat * (existing.participants - 1) + battleLat) /
-										existing.participants;
-									existing.lng =
-										(existing.lng * (existing.participants - 1) + battleLng) /
-										existing.participants;
-									const newKey = _battleKey(existing.lat, existing.lng);
-									if (newKey !== bKey) _battleHash.set(newKey, existing);
-								} else {
-									const battle = {
-										lat: battleLat,
-										lng: battleLng,
-										participants: 2,
-									};
-									activeBattles.push(battle);
-									_battleHash.set(bKey, battle);
-								}
-							}
-						}
-					}
-				}
-			}
-			if (
-				!operationalFastLane &&
-				CONFIG.ENABLE_STALE_TARGET_SKIP &&
-				!didStaleSkip
-			) {
-				window.__perf.tacticalCacheMisses++;
-			}
-
-			// ── Enemy pass: iterate each enemy side's hash cells ──
-			if (!didStaleSkip) {
-				for (let ei = 0; ei < sides.length; ei++) {
-					if (!areSidesHostile(sideIndex, ei)) continue;
-					const eHash = unitHashBySide[ei];
-					for (let dy = -2; dy <= 2; dy++) {
-						for (let dx = -2; dx <= 2; dx++) {
-							if (fullScan && (dx < -1 || dx > 1 || dy < -1 || dy > 1))
-								continue;
-							let cx = kx + dx;
-							const cy = ky + dy;
-							if (cx < 0) cx += maxKx;
-							else if (cx >= maxKx) cx -= maxKx;
-							const arr = eHash.get(cx * 100 + cy);
-							if (!arr) continue;
-							for (let j = 0; j < arr.length; j++) {
-								const e = arr[j];
-								window.__perf.tacticalEnemyCandidateVisits++;
-								let deLng = e.lng - u.lng;
-								if (deLng > 180) deLng -= 360;
-								else if (deLng < -180) deLng += 360;
-								const dSq = (u.lat - e.lat) ** 2 + deLng ** 2;
-								// (enemy — no isEnemy check; bucket is enemy-only)
-								const eIdx = _unitGridIdx.get(e) ?? -1;
-								const eAtSea = e._isAtSea;
-								if (effectiveDefensive && !isAtSea) {
-									const isEnemyInMyMandatedLand =
-										eIdx !== -1 && worldControlMap[eIdx] === u.sovereignId;
-									if (!isEnemyInMyMandatedLand && dSq > 0.25) continue;
-								}
-								const distMult = eAtSea && !isAtSea ? 50.0 : 1.0;
-								const noisyDSq = dSq * distMult;
-								const healthModifier =
-									Math.max(0, 1.0 - (e.health || 100) / 100) * 0.02;
-								let targetScore = noisyDSq - healthModifier;
-								let eBuff = "none";
-								// Only do expensive _countryById lookup for viable candidates
-								if (targetScore < minDist) {
-									const eCountry = _countryById.get(e.sovereignId);
-									eBuff = eCountry?.buffState || "none";
-									const superPenalty =
-										!isMega &&
-										!isSuper &&
-										(eBuff === "super" || eBuff === "godly")
-											? 5.0
-											: 0;
-									targetScore += superPenalty;
-								}
-								if (targetScore < minDist) {
-									// Water-path + neutral-path check: penalize enemies unreachable by friendly land
-									if (!isAtSea && !eAtSea && dSq > 4.0) {
-										const lineLen = Math.sqrt(dSq);
-										const steps = Math.min(12, Math.ceil(lineLen / 0.4));
-										let waterSamples = 0;
-										let neutralSamples = 0;
-										for (let s = 1; s < steps; s++) {
-											const t = s / steps;
-											const wIdx = getGridIndex(
-												u.lat + (e.lat - u.lat) * t,
-												u.lng + deLng * t,
-											);
-											if (wIdx !== -1 && landMask[wIdx] === 0) waterSamples++;
-											if (wIdx !== -1 && isNeutralCountry(wIdx))
-												neutralSamples++;
-										}
-										if (waterSamples > steps * 0.3) {
-											targetScore += 10000;
-											window.__perf.waterPathPenalized =
-												(window.__perf.waterPathPenalized || 0) + 1;
-										}
-										if (neutralSamples > steps * 0.3) {
-											targetScore += 10000;
-										}
-									}
-									if (targetScore < minDist) {
-										minDist = targetScore;
-										target = e;
-									}
-								}
-								if (dSq < tacticalRadiusSq) {
-									let eWeight = Math.max(0, getLiveFormationStrength(e));
-									if (eAtSea) eWeight *= isAtSea ? 0.6 : 0.2;
-									if (eBuff === "super") eWeight *= 200;
-									else if (eBuff === "buff") eWeight *= 50;
-									localEnemyCount += eWeight;
-									enemyCentroidLat += e.lat * eWeight;
-									enemyCentroidLng += e.lng * eWeight;
-									if (dSq < 0.09) {
-										const inWarGrace = simFrameCount < warGraceEndTick;
-										if (inWarGrace) continue;
-										let proximityDamage =
-											CONFIG.COMBAT_DAMAGE *
-											0.45 *
-											damageDealtMult *
-											(1.0 - Math.sqrt(dSq) / 0.3);
-										if (isAtSea && eAtSea) proximityDamage *= 2.2;
-										if (e.isTransport && !u.isTransport)
-											proximityDamage *= 1.05;
-										if (u.isTransport && !e.isTransport) {
-											recordDamage(
-												u,
-												proximityDamage * 1.05 * damageTakenMult,
-												e,
-											);
-											proximityDamage *= 0.85;
-										}
-										recordDamage(
-											e,
-											formationDamage(proximityDamage, u, e, {
-												mountain: isMountain || e.mountainIntensity > 0,
-												urban:
-													_cityIdxSetTick.has(gridIdxNow) ||
-													_cityIdxSetTick.has(_unitGridIdx.get(e) ?? -1),
-											}),
-											u,
-										);
-										recordDamage(
-											u,
-											formationDamage(
-												proximityDamage * 0.8 * damageTakenMult,
-												e,
-												u,
-												{
-													mountain: isMountain || e.mountainIntensity > 0,
-													urban:
-														_cityIdxSetTick.has(gridIdxNow) ||
-														_cityIdxSetTick.has(_unitGridIdx.get(e) ?? -1),
-												},
-											),
-											e,
-										);
-										u.lastCombatTick = simFrameCount;
-										e.lastCombatTick = simFrameCount;
-										if (e.health <= 0) u.victoryBoostTicks = 240;
-										const battleLat = (u.lat + e.lat) / 2;
-										const battleLng = (u.lng + e.lng) / 2;
-										const bKey = _battleKey(battleLat, battleLng);
-										let existing = null;
-										for (let bk = -1; bk <= 1 && !existing; bk++) {
-											for (let bl = -1; bl <= 1 && !existing; bl++) {
-												const nk = bKey + bk * 10000 + bl;
-												const b = _battleHash.get(nk);
-												if (
-													b &&
-													(u.lat - b.lat) ** 2 + (u.lng - b.lng) ** 2 < 0.16
-												)
-													existing = b;
-											}
-										}
-										if (existing) {
-											existing.participants++;
-											existing.lat =
-												(existing.lat * (existing.participants - 1) +
-													battleLat) /
-												existing.participants;
-											existing.lng =
-												(existing.lng * (existing.participants - 1) +
-													battleLng) /
-												existing.participants;
-											const newKey = _battleKey(existing.lat, existing.lng);
-											if (newKey !== bKey) _battleHash.set(newKey, existing);
-										} else {
-											const battle = {
-												lat: battleLat,
-												lng: battleLng,
-												participants: 2,
-											};
-											activeBattles.push(battle);
-											_battleHash.set(bKey, battle);
-										}
-									}
-								}
-							}
-						}
-					}
-				}
-				// ── Phase 3: update stale-target cache after full scan ──
-				if (CONFIG.ENABLE_STALE_TARGET_SKIP) {
-					u._cachedTarget = target?.health !== undefined ? target : null;
-					u._cachedScanKx = kx;
-					u._cachedScanKy = ky;
-					u._cachedLocalEnemyCount = localEnemyCount;
-					u._cachedEnemyCentroidLat = enemyCentroidLat;
-					u._cachedEnemyCentroidLng = enemyCentroidLng;
-					u._lastFullScanTick = _simTickCount;
-				}
-			}
-			// ── End stale-skip guard ──
-
-			const _tEnemyDone = _detailedPerfEnabled ? performance.now() : 0;
-			if (_detailedPerfEnabled) {
-				window.__perf.unitEnemyScan =
-					(window.__perf.unitEnemyScan || 0) + _tEnemyDone - _u2;
-			}
-
-			// ── Garrison (moved out of neighbor loop — runs once per unit) ──
-			if (
-				!hasOperationalAssignment &&
-				!u.navalAssigned &&
-				!u.supplyAssigned &&
-				!u.coastalAssigned
-			) {
-				let bestGP = null;
-				let bestGPDist = Infinity;
-				for (let gsi = _uSideIdx * 10; gsi < _uSideIdx * 10 + 10; gsi++) {
-					const gp = _neutralGarrisonPlan[gsi];
-					if (!gp || gp.type !== "NEUTRAL_GARRISON") continue;
-					if ((gp.activeUnitCount || 0) >= (gp.maxAssignedUnits || 0)) continue;
-					if (!gp.borderPolyline || gp.borderPolyline.length === 0) continue;
-					const dLat = gp.target.lat - u.lat;
-					let dLng = gp.target.lng - u.lng;
-					if (dLng > 180) dLng -= 360;
-					else if (dLng < -180) dLng += 360;
-					const gdSq = dLat * dLat + dLng * dLng;
-					if (gdSq < 256.0 && gdSq < bestGPDist) {
-						bestGPDist = gdSq;
-						bestGP = gp;
-					}
-				}
-				if (u.garrisonAssigned) {
-					let foundGP = false;
-					for (let gsi = _uSideIdx * 10; gsi < _uSideIdx * 10 + 10; gsi++) {
-						const gp = _neutralGarrisonPlan[gsi];
-						if (
-							!gp ||
-							gp.type !== "NEUTRAL_GARRISON" ||
-							!gp.borderPolyline ||
-							gp.borderPolyline.length === 0
-						)
-							continue;
-						const dLat = gp.target.lat - u.lat;
-						let dLng = gp.target.lng - u.lng;
-						if (dLng > 180) dLng -= 360;
-						else if (dLng < -180) dLng += 360;
-						if (dLat * dLat + dLng * dLng < 256.0) {
-							foundGP = true;
-							isPlanUnit = true;
-							gp.activeUnitCount = (gp.activeUnitCount || 0) + 1;
-							const slot =
-								gp.borderPolyline[
-									Math.floor(Math.abs(u.id * 777) % gp.borderPolyline.length)
-								];
-							const sLat = slot.lat - u.lat;
-							let sLng = slot.lng - u.lng;
-							if (sLng > 180) sLng -= 360;
-							else if (sLng < -180) sLng += 360;
-							const sDist = Math.sqrt(sLat * sLat + sLng * sLng);
-							if (sDist > 0.01) {
-								planDirLat = sLat / sDist;
-								planDirLng = sLng / sDist;
-							}
-							planSpeedMult = 0.5;
-							moveDirLat = 0;
-							moveDirLng = 0;
-							break;
-						}
-					}
-					if (!foundGP) {
-						u.garrisonAssigned = false;
-					}
-				} else if (bestGP) {
-					u.garrisonAssigned = true;
-				}
-			}
-
-			// ── Coastal defense (moved out of neighbor loop — runs once per unit) ──
-			if (!hasOperationalAssignment && !u.navalAssigned && !u.supplyAssigned) {
-				let bestCDPlan = null;
-				let bestCDSlot = -1;
-				let bestCDDist = Infinity;
-				for (let csi = _uSideIdx * 10; csi < _uSideIdx * 10 + 10; csi++) {
-					const cp = _coastalDefensePlan[csi];
-					if (!cp || cp.type !== "COASTAL_DEFENSE") continue;
-					if ((cp.activeUnitCount || 0) >= (cp.maxAssignedUnits || 0)) continue;
-					if (!cp.target) continue;
-					const dLat = cp.target.lat - u.lat;
-					let dLng = cp.target.lng - u.lng;
-					if (dLng > 180) dLng -= 360;
-					else if (dLng < -180) dLng += 360;
-					const cdSq = dLat * dLat + dLng * dLng;
-					if (cdSq < 64.0 && cdSq < bestCDDist) {
-						bestCDDist = cdSq;
-						bestCDPlan = cp;
-						bestCDSlot = csi;
-					}
-				}
-				if (u.coastalAssigned) {
-					let foundCD = false;
-					for (let csi = _uSideIdx * 10; csi < _uSideIdx * 10 + 10; csi++) {
-						const cp = _coastalDefensePlan[csi];
-						if (
-							!cp ||
-							cp.type !== "COASTAL_DEFENSE" ||
-							!cp.zonePolyline ||
-							cp.zonePolyline.length === 0
-						)
-							continue;
-						const sdLat = cp.target.lat - u.lat;
-						let sdLng = cp.target.lng - u.lng;
-						if (sdLng > 180) sdLng -= 360;
-						else if (sdLng < -180) sdLng += 360;
-						if (sdLat * sdLat + sdLng * sdLng < 64.0) {
-							foundCD = true;
-							isPlanUnit = true;
-							cp.activeUnitCount = (cp.activeUnitCount || 0) + 1;
-							const threatActive =
-								cp.threatContact &&
-								simFrameCount - (cp.threatenedTick || 0) < 900;
-							if (threatActive) {
-								const tLat = cp.threatContact.lat - u.lat;
-								let tLng = cp.threatContact.lng - u.lng;
-								if (tLng > 180) tLng -= 360;
-								else if (tLng < -180) tLng += 360;
-								const tDist = Math.sqrt(tLat * tLat + tLng * tLng);
-								if (tDist > 0.01) {
-									planDirLat = tLat / tDist;
-									planDirLng = tLng / tDist;
-								}
-								planSpeedMult = 1.5;
-							} else {
-								const slot =
-									cp.zonePolyline[
-										Math.floor(Math.abs(u.id * 777) % cp.zonePolyline.length)
-									];
-								const sLat = slot.lat - u.lat;
-								let sLng = slot.lng - u.lng;
-								if (sLng > 180) sLng -= 360;
-								else if (sLng < -180) sLng += 360;
-								const sDist = Math.sqrt(sLat * sLat + sLng * sLng);
-								if (sDist > 0.01) {
-									planDirLat = sLat / sDist;
-									planDirLng = sLng / sDist;
-								}
-								planSpeedMult = 0.5;
-							}
-							moveDirLat = 0;
-							moveDirLng = 0;
-							break;
-						}
-					}
-					if (!foundCD) {
-						u.coastalAssigned = false;
-					}
-				} else if (bestCDPlan) {
-					u.coastalAssigned = true;
-					_coastalDefensePlan[bestCDSlot]._slotIdx = bestCDSlot;
-				}
-			}
-
-			const _tGarrisonCoastal = _detailedPerfEnabled ? performance.now() : 0;
-			if (_detailedPerfEnabled) {
-				window.__perf.unitGarrisonCoastal =
-					(window.__perf.unitGarrisonCoastal || 0) +
-					_tGarrisonCoastal -
-					_tEnemyDone;
-			}
-
-			// precomputed once above instead of rescanning 9–25 coarse buckets per unit.
-		} else {
-			// ═══ Legacy scan (flag off): iterates global unitSpatialHash ═══
-			for (let dy = -2; dy <= 2; dy++) {
-				for (let dx = -2; dx <= 2; dx++) {
-					// When idle: scan 5x5 for overlap detection; active: 3x3
-					if (fullScan && (dx < -1 || dx > 1 || dy < -1 || dy > 1)) continue;
-					let cx = kx + dx;
-					const cy = ky + dy;
-
-					if (cx < 0) cx += maxKx;
-					else if (cx >= maxKx) cx -= maxKx;
-
-					const arr = unitHash.get(cx * 100 + cy);
-					if (!arr) continue;
-
-					for (let j = 0; j < arr.length; j++) {
-						const e = arr[j];
-						if (e === u) continue;
-
-						const isEnemy = areSidesHostile(sideIndex, e.sideIndex);
-
-						let deLng = e.lng - u.lng;
-						if (deLng > 180) deLng -= 360;
-						else if (deLng < -180) deLng += 360;
-
-						const dSq = (u.lat - e.lat) ** 2 + deLng ** 2;
-
-						if (isEnemy) {
-							window.__perf.tacticalEnemyCandidateVisits++;
-							const eIdx = _unitGridIdx.get(e) ?? -1;
-							const eAtSea = e._isAtSea;
-
-							if (effectiveDefensive && !isAtSea) {
-								const isEnemyInMyMandatedLand =
-									eIdx !== -1 && worldControlMap[eIdx] === u.sovereignId;
-								if (!isEnemyInMyMandatedLand && dSq > 0.25) continue;
-							}
-
-							const distMult = eAtSea && !isAtSea ? 50.0 : 1.0;
-							const noisyDSq = dSq * distMult;
-
-							const healthModifier =
-								Math.max(0, 1.0 - (e.health || 100) / 100) * 0.02;
-							let targetScore = noisyDSq - healthModifier;
-							let eBuff = "none";
-							// Only do expensive _countryById lookup for viable candidates
-							if (targetScore < minDist) {
-								const eCountry = _countryById.get(e.sovereignId);
-								eBuff = eCountry?.buffState || "none";
-								const superPenalty =
-									!isMega &&
-									!isSuper &&
-									(eBuff === "super" || eBuff === "godly")
-										? 5.0
-										: 0;
-								targetScore += superPenalty;
-							}
-							if (targetScore < minDist) {
-								// Water-path + neutral-path check: penalize enemies unreachable by friendly land
-								if (!isAtSea && !eAtSea && dSq > 4.0) {
-									const lineLen = Math.sqrt(dSq);
-									const steps = Math.min(12, Math.ceil(lineLen / 0.4));
-									let waterSamples = 0;
-									let neutralSamples = 0;
-									for (let s = 1; s < steps; s++) {
-										const t = s / steps;
-										const wIdx = getGridIndex(
-											u.lat + (e.lat - u.lat) * t,
-											u.lng + deLng * t,
-										);
-										if (wIdx !== -1 && landMask[wIdx] === 0) waterSamples++;
-										if (wIdx !== -1 && isNeutralCountry(wIdx)) neutralSamples++;
-									}
-									if (waterSamples > steps * 0.3) {
-										targetScore += 10000;
-										window.__perf.waterPathPenalized =
-											(window.__perf.waterPathPenalized || 0) + 1;
-									}
-									if (neutralSamples > steps * 0.3) {
-										targetScore += 10000;
-									}
-								}
-								if (targetScore < minDist) {
-									minDist = targetScore;
-									target = e;
-								}
-							}
-
-							if (dSq < tacticalRadiusSq) {
-								let eWeight = Math.max(0, getLiveFormationStrength(e));
-								if (eAtSea) eWeight *= isAtSea ? 0.6 : 0.2;
-
-								if (eBuff === "super") eWeight *= 200;
-								else if (eBuff === "buff") eWeight *= 50;
-
-								localEnemyCount += eWeight;
-								enemyCentroidLat += e.lat * eWeight;
-								enemyCentroidLng += e.lng * eWeight;
-
-								if (dSq < 0.09) {
-									const inWarGrace = simFrameCount < warGraceEndTick;
-									if (inWarGrace) continue;
-									let proximityDamage =
-										CONFIG.COMBAT_DAMAGE *
-										0.45 *
-										damageDealtMult *
-										(1.0 - Math.sqrt(dSq) / 0.3);
-									if (isAtSea && eAtSea) proximityDamage *= 2.2;
-									// Transports take extra damage at sea from non-transport enemies
-									if (e.isTransport && !u.isTransport) proximityDamage *= 1.05;
-									if (u.isTransport && !e.isTransport) {
-										recordDamage(
-											u,
-											proximityDamage * 1.05 * damageTakenMult,
-											e,
-										);
-										proximityDamage *= 0.85;
-									}
-
-									recordDamage(
-										e,
-										formationDamage(proximityDamage, u, e, {
-											mountain: isMountain || e.mountainIntensity > 0,
-											urban:
-												_cityIdxSetTick.has(gridIdxNow) ||
-												_cityIdxSetTick.has(_unitGridIdx.get(e) ?? -1),
-										}),
-										u,
-									);
-									recordDamage(
-										u,
-										formationDamage(
-											proximityDamage * 0.8 * damageTakenMult,
-											e,
-											u,
-											{
-												mountain: isMountain || e.mountainIntensity > 0,
-												urban:
-													_cityIdxSetTick.has(gridIdxNow) ||
-													_cityIdxSetTick.has(_unitGridIdx.get(e) ?? -1),
-											},
-										),
-										e,
-									);
-
-									u.lastCombatTick = simFrameCount;
-									e.lastCombatTick = simFrameCount;
-									if (e.health <= 0) u.victoryBoostTicks = 240;
-
-									const battleLat = (u.lat + e.lat) / 2;
-									const battleLng = (u.lng + e.lng) / 2;
-									const bKey = _battleKey(battleLat, battleLng);
-									let existing = null;
-									for (let bk = -1; bk <= 1 && !existing; bk++) {
-										for (let bl = -1; bl <= 1 && !existing; bl++) {
-											const nk = bKey + bk * 10000 + bl;
-											const b = _battleHash.get(nk);
-											if (
-												b &&
-												(u.lat - b.lat) ** 2 + (u.lng - b.lng) ** 2 < 0.16
-											)
-												existing = b;
-										}
-									}
-									if (existing) {
-										existing.participants++;
-										existing.lat =
-											(existing.lat * (existing.participants - 1) + battleLat) /
-											existing.participants;
-										existing.lng =
-											(existing.lng * (existing.participants - 1) + battleLng) /
-											existing.participants;
-										const newKey = _battleKey(existing.lat, existing.lng);
-										if (newKey !== bKey) _battleHash.set(newKey, existing);
-									} else {
-										const battle = {
-											lat: battleLat,
-											lng: battleLng,
-											participants: 2,
-										};
-										activeBattles.push(battle);
-										_battleHash.set(bKey, battle);
-									}
-								}
-							}
-						} else if (!hasOperationalAssignment && !skipAllyScan) {
-							// Neutral garrison: station along borders with neutrals
-							let bestGP = null;
-							let bestGPDist = Infinity;
-							for (let gsi = _uSideIdx * 10; gsi < _uSideIdx * 10 + 10; gsi++) {
-								const gp = _neutralGarrisonPlan[gsi];
-								if (!gp || gp.type !== "NEUTRAL_GARRISON") continue;
-								if ((gp.activeUnitCount || 0) >= (gp.maxAssignedUnits || 0))
-									continue;
-								if (!gp.borderPolyline || gp.borderPolyline.length === 0)
-									continue;
-								const dLat = gp.target.lat - u.lat;
-								let dLng = gp.target.lng - u.lng;
-								if (dLng > 180) dLng -= 360;
-								else if (dLng < -180) dLng += 360;
-								const dSq = dLat * dLat + dLng * dLng;
-								if (dSq < 256.0 && dSq < bestGPDist) {
-									bestGPDist = dSq;
-									bestGP = gp;
-								}
-							}
-
-							if (u.garrisonAssigned) {
-								let foundGP = false;
-								for (
-									let gsi = _uSideIdx * 10;
-									gsi < _uSideIdx * 10 + 10;
-									gsi++
-								) {
-									const gp = _neutralGarrisonPlan[gsi];
-									if (
-										!gp ||
-										gp.type !== "NEUTRAL_GARRISON" ||
-										!gp.borderPolyline ||
-										gp.borderPolyline.length === 0
-									)
-										continue;
-									const dLat = gp.target.lat - u.lat;
-									let dLng = gp.target.lng - u.lng;
-									if (dLng > 180) dLng -= 360;
-									else if (dLng < -180) dLng += 360;
-									if (dLat * dLat + dLng * dLng < 256.0) {
-										foundGP = true;
-										isPlanUnit = true;
-										gp.activeUnitCount = (gp.activeUnitCount || 0) + 1;
-										const slot =
-											gp.borderPolyline[
-												Math.floor(
-													Math.abs(u.id * 777) % gp.borderPolyline.length,
-												)
-											];
-										const sLat = slot.lat - u.lat;
-										let sLng = slot.lng - u.lng;
-										if (sLng > 180) sLng -= 360;
-										else if (sLng < -180) sLng += 360;
-										const sDist = Math.sqrt(sLat * sLat + sLng * sLng);
-										if (sDist > 0.01) {
-											planDirLat = sLat / sDist;
-											planDirLng = sLng / sDist;
-										}
-										planSpeedMult = 0.5;
-										moveDirLat = 0;
-										moveDirLng = 0;
-										break;
-									}
-								}
-								if (!foundGP) {
-									u.garrisonAssigned = false;
-								}
-							} else if (bestGP) {
-								u.garrisonAssigned = true;
-							}
-						} else if (
-							!hasOperationalAssignment &&
-							!u.navalAssigned &&
-							!u.supplyAssigned
-						) {
-							// Coastal defense: station units along vulnerable coastlines
-							let bestCDPlan = null;
-							let bestCDSlot = -1;
-							let bestCDDist = Infinity;
-							for (let csi = _uSideIdx * 10; csi < _uSideIdx * 10 + 10; csi++) {
-								const cp = _coastalDefensePlan[csi];
-								if (!cp || cp.type !== "COASTAL_DEFENSE") continue;
-								if ((cp.activeUnitCount || 0) >= (cp.maxAssignedUnits || 0))
-									continue;
-								if (!cp.target) continue;
-								const dLat = cp.target.lat - u.lat;
-								let dLng = cp.target.lng - u.lng;
-								if (dLng > 180) dLng -= 360;
-								else if (dLng < -180) dLng += 360;
-								const dSq = dLat * dLat + dLng * dLng;
-								if (dSq < 64.0 && dSq < bestCDDist) {
-									bestCDDist = dSq;
-									bestCDPlan = cp;
-									bestCDSlot = csi;
-								}
-							}
-
-							if (u.coastalAssigned) {
-								let foundCD = false;
-								for (
-									let csi = _uSideIdx * 10;
-									csi < _uSideIdx * 10 + 10;
-									csi++
-								) {
-									const cp = _coastalDefensePlan[csi];
-									if (
-										!cp ||
-										cp.type !== "COASTAL_DEFENSE" ||
-										!cp.zonePolyline ||
-										cp.zonePolyline.length === 0
-									)
-										continue;
-									const sdLat = cp.target.lat - u.lat;
-									let sdLng = cp.target.lng - u.lng;
-									if (sdLng > 180) sdLng -= 360;
-									else if (sdLng < -180) sdLng += 360;
-									if (sdLat * sdLat + sdLng * sdLng < 64.0) {
-										foundCD = true;
-										isPlanUnit = true;
-										cp.activeUnitCount = (cp.activeUnitCount || 0) + 1;
-										const threatActive =
-											cp.threatContact &&
-											simFrameCount - (cp.threatenedTick || 0) < 900;
-										if (threatActive) {
-											const tLat = cp.threatContact.lat - u.lat;
-											let tLng = cp.threatContact.lng - u.lng;
-											if (tLng > 180) tLng -= 360;
-											else if (tLng < -180) tLng += 360;
-											const tDist = Math.sqrt(tLat * tLat + tLng * tLng);
-											if (tDist > 0.01) {
-												planDirLat = tLat / tDist;
-												planDirLng = tLng / tDist;
-											}
-											planSpeedMult = 1.5;
-										} else {
-											const slot =
-												cp.zonePolyline[
-													Math.floor(
-														Math.abs(u.id * 777) % cp.zonePolyline.length,
-													)
-												];
-											const sLat = slot.lat - u.lat;
-											let sLng = slot.lng - u.lng;
-											if (sLng > 180) sLng -= 360;
-											else if (sLng < -180) sLng += 360;
-											const sDist = Math.sqrt(sLat * sLat + sLng * sLng);
-											if (sDist > 0.01) {
-												planDirLat = sLat / sDist;
-												planDirLng = sLng / sDist;
-											}
-											planSpeedMult = 0.5;
-										}
-										moveDirLat = 0;
-										moveDirLng = 0;
-										break;
-									}
-								}
-								if (!foundCD) {
-									u.coastalAssigned = false;
-								}
-							} else if (bestCDPlan) {
-								u.coastalAssigned = true;
-								_coastalDefensePlan[bestCDSlot]._slotIdx = bestCDSlot;
-							}
-						} else {
-							// Allies logic
-							if (dSq < tacticalRadiusSq) {
-								let aWeight = 1;
-								const aSideIdx = countryToSideMap.get(e.sovereignId);
-								const aCountry =
-									aSideIdx !== undefined
-										? _countryById.get(e.sovereignId)
-										: null;
-								if (aCountry?.buffState === "super") aWeight *= 200;
-								else if (aCountry?.buffState === "buff") aWeight *= 50;
-
-								localAllyCount += aWeight;
-
-								if (dSq < repulsionRadiusSq && dSq > 0.00001) {
-									const d = Math.sqrt(dSq);
-									if (!u.repulsionVector)
-										u.repulsionVector = { lat: 0, lng: 0 };
-									u.repulsionVector.lat += (u.lat - e.lat) / d;
-									u.repulsionVector.lng += (u.lng - e.lng) / d;
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-
-		u.lastAllyCount = localAllyCount;
-
-		if (
-			simFrameCount > 100 &&
-			simFrameCount < 500 &&
-			_dbgLogCount++ < 200 &&
-			simFrameCount % 10 === 0
-		) {
-			console.warn(
-				"[HASH-DBG] unit summary:",
-				"sideIdx=",
-				u.sideIndex,
-				"enemiesFound=",
-				localEnemyCount,
-				"alliesFound=",
-				localAllyCount,
-				"targetSet=",
-				!!target,
-				"targetIsUnit=",
-				target && typeof target.health !== "undefined",
-				"isTacticallyIdle=",
-				isTacticallyIdle,
-				"idleTicks=",
-				idleTicks,
-			);
-		}
-
-		// ── unitLoop sub-timer checkpoint: end unitSpatialHash, start retreatMopUp ──
-		const _u3 = _detailedPerfEnabled ? performance.now() : 0;
-		if (_detailedPerfEnabled) {
-			window.__perf.unitScanPhase =
-				(window.__perf.unitScanPhase || 0) + _u3 - _u2;
-		}
-
-		// Retreat logic: If enemy force is > 5x ally force (increased threshold to prevent premature dodging)
-		if (
-			localEnemyCount > localAllyCount * aiProfile.retreatTriggerMultiple &&
-			localEnemyCount >= 5
-		) {
-			const avgLat = enemyCentroidLat / localEnemyCount;
-			const avgLng = enemyCentroidLng / localEnemyCount;
-			const dirLat = u.lat - avgLat;
-			const dirLng = u.lng - avgLng;
-			const mag = Math.sqrt(dirLat * dirLat + dirLng * dirLng);
-			if (mag > 0) {
-				retreatVector = { lat: dirLat / mag, lng: dirLng / mag };
-			}
-		}
-
-		const _u3a = _detailedPerfEnabled ? performance.now() : 0;
-		if (_detailedPerfEnabled) window.__perf.unitRetreatDecision += _u3a - _u3;
-
-		const targetIdx = target ? getGridIndex(target.lat, target.lng) : -1;
-		const _targetAtSea =
-			target && (targetIdx === -1 || landMask[targetIdx] === 0);
-
-		const totalEnemiesCount = hostileUnitCountsBySide[sideIndex] || 0;
-
-		const pocketContained =
-			localEnemyCount > 0 && localAllyCount > localEnemyCount * 3;
-
-		// Global Target Fallback (if no enemies were found in the local 6-degree spatial hash but enemies exist somewhere)
-		// Add scatter to avoid blob: ±1° random offset
-		if (!operationalFastLane && !target && totalEnemiesCount > 0) {
-			let bestCentroidDist = Infinity;
-			sideCentroids.forEach((centroids, idx) => {
-				const isEnemySide = areSidesHostile(sideIndex, idx);
-				if (isEnemySide && centroids) {
-					centroids.forEach((c) => {
-						if (!c) return;
-						let dcLng = c.lng - u.lng;
-						if (dcLng > 180) dcLng -= 360;
-						else if (dcLng < -180) dcLng += 360;
-						const dSq = (u.lat - c.lat) ** 2 + dcLng ** 2;
-						if (dSq < bestCentroidDist) {
-							bestCentroidDist = dSq;
-							// Add scatter to avoid blob: ±1° random offset
-							const scatterLat = (Math.random() - 0.5) * 2;
-							const scatterLng = (Math.random() - 0.5) * 2;
-							target = {
-								lat: c.lat + scatterLat,
-								lng: c.lng + scatterLng,
-							};
-						}
-					});
-				}
-			});
-		}
-
-		const _u3b = _detailedPerfEnabled ? performance.now() : 0;
-		if (_detailedPerfEnabled) window.__perf.unitGlobalFallback += _u3b - _u3a;
-
-		// Unified behavior: Units hunt enemies when nearby, but switch to focused territory capture (mop-up)
-		// when there are literally zero enemy units remaining.
-		const shouldMopUp = totalEnemiesCount === 0;
-		if (shouldMopUp && !u._mopUpModeActive) {
-			u._mopUpModeActive = true;
-			u._cityObjective = null;
-			u._cityObjectiveTick = -999;
-			u._assignedPlanSignature = null;
-			u._transportPlanSignature = null;
-			u._planWaypointSignature = null;
-			u._planWaypointIndex = 0;
-			u.navalAssigned = false;
-			u.supplyAssigned = false;
-			u.coastalAssigned = false;
-			u.isTransport = false;
-			u.frontSlot = null;
-		} else if (!shouldMopUp && u._mopUpModeActive) {
-			u._mopUpModeActive = false;
-			u.mopUpTarget = null;
-			u.mopUpTargetId = 0;
-			u.lastMopUpId = null;
-			u.targetSearchCooldown = 0;
-		}
-
-		// Target Caching: Only re-search for mop-up targets every few ticks to save CPU
-		if (u.targetSearchCooldown > 0) {
-			u.targetSearchCooldown--;
-		}
-
-		// Frontline Pressure: If unit is too close to a moving/losing border, push it back
-		const borderBuffer = -0.05; // Tightened buffer to prevent endless retreating / stuttering
-		const currentIdx = gridIdxNow;
-		const currentOwnerId = currentIdx !== -1 ? worldControlMap[currentIdx] : 0;
-		const currentOwnerSideIdx = countryToSideMap.get(currentOwnerId);
-
-		// Tactical Control: If we significantly occupy the land, it's not "enemy land" for movement purposes
-		// Broadened "friendly" land check to make units wait further back from the actual border
-		const isEffectivelyMyLand =
-			isMyTerritory(gridIdxNow, u.sideIndex) &&
-			myInfluenceAt(gridIdxNow, u.sideIndex) > 0.35;
-		const _isOnEnemyLand =
-			!isEffectivelyMyLand &&
-			currentOwnerSideIdx !== undefined &&
-			areSidesHostile(sideIndex, currentOwnerSideIdx);
-
-		// Mega and Super units are immune to the automatic pushback; they ARE the pushback.
-		// BUG FIX: Units were being "pushed back" and taking skirmish damage even when attacking into enemy land.
-		// Pushback now only triggers if the unit is on friendly/sovereign territory that is being overrun by enemies.
-		const ownerIdAtUnit = currentIdx !== -1 ? worldControlMap[currentIdx] : 0;
-		const ownerSideIdx = countryToSideMap.get(ownerIdAtUnit);
-		const onFriendlySovereignLand =
-			ownerSideIdx !== undefined && ownerSideIdx === sideIndex;
-
-		const isTooNearBorder =
-			!isAtSea &&
-			!isMega &&
-			!isSuper &&
-			onFriendlySovereignLand &&
-			currentIdx !== -1 &&
-			landMask[currentIdx] === 2 &&
-			myInfluenceAt(currentIdx, u.sideIndex) < borderBuffer &&
-			localEnemyCount > 0;
-
-		// Direction toward nearby frontline (used to pull units to the border instead of roaming)
-		const borderDir = getBorderDirection(u);
-
-		if (isTooNearBorder && !isAtSea) {
-			// Frontline Skirmish Damage: only when losing control badly (< -0.3)
-			if (currentControl < -0.3) {
-				const skirmishDamage =
-					CONFIG.COMBAT_DAMAGE * 0.15 * (1.0 + Math.abs(currentControl) * 2);
-				recordDamage(u, skirmishDamage * damageTakenMult);
-			}
-
-			// Find direction of safety (deeper into friendly territory) by sampling nearby grid
-			let bestLat = 0,
-				bestLng = 0,
-				bestVal = -Infinity;
-			const sDist = 0.6;
-			const samples = [
-				[0, sDist],
-				[0, -sDist],
-				[sDist, 0],
-				[-sDist, 0],
-				[sDist * 0.7, sDist * 0.7],
-				[-sDist * 0.7, -sDist * 0.7],
-				[sDist * 0.7, -sDist * 0.7],
-				[-sDist * 0.7, sDist * 0.7],
-			];
-
-			samples.forEach(([dlng, dlat]) => {
-				const sampleLat = u.lat + dlat;
-				const sampleLng = u.lng + dlng;
-				const sIdx = getGridIndex(sampleLat, sampleLng);
-				const isSampleLand = sIdx !== -1 && landMask[sIdx] > 0;
-
-				let score = myInfluenceAt(sIdx, u.sideIndex);
-
-				const sampleOwnerId = sIdx !== -1 ? worldControlMap[sIdx] : 0;
-				const isSampleAlly = sideList.some((c) => c.id === sampleOwnerId);
-
-				if (!isSampleLand) {
-					score = -999;
-				} else if (sIdx !== -1 && isNeutralCountry(sIdx)) {
-					score = -2500;
-				} else if (!isSampleAlly) {
-					score = -800;
-				}
-
-				if (score > bestVal) {
-					bestVal = score;
-					bestLat = dlat;
-					bestLng = dlng;
-				}
-			});
-
-			if (bestVal !== -Infinity) {
-				const mag = Math.sqrt(bestLat * bestLat + bestLng * bestLng);
-				if (mag > 0) {
-					if (!retreatVector) retreatVector = { lat: 0, lng: 0 };
-					retreatVector.lat += (bestLat / mag) * 1.2;
-					retreatVector.lng += (bestLng / mag) * 1.2;
-				}
-			}
-		}
-
-		const _u3c = _detailedPerfEnabled ? performance.now() : 0;
-		if (_detailedPerfEnabled) window.__perf.unitFrontlinePress += _u3c - _u3b;
-		if (
-			u._strategicTargetGeneration !== _strategicTargetGeneration ||
-			u._strategicBeneficiaryId !== u.beneficiaryId
-		) {
-			clearUnitStrategicTargets(u);
-		}
-		const staggerStrategicTargets = simSpeed >= 3 && units.length >= 800;
-		const strategicCohort =
-			Math.floor(Math.abs(u.id * 1_000_000)) % STRATEGIC_COHORT_COUNT;
-		const canRefreshStrategicTarget =
-			!staggerStrategicTargets ||
-			strategicCohort === _simTickCount % STRATEGIC_COHORT_COUNT;
-		if (u.mopUpTarget) {
-			const mopUpIdx = getGridIndex(u.mopUpTarget.lat, u.mopUpTarget.lng);
-			const mopUpOccupier = mopUpIdx === -1 ? -1 : dominantSideMap[mopUpIdx];
-			if (
-				mopUpIdx === -1 ||
-				mopUpOccupier === u.sideIndex ||
-				(mopUpOccupier >= 0 && !areSidesHostile(u.sideIndex, mopUpOccupier))
-			) {
-				u.mopUpTarget = null;
-				u.mopUpTargetId = 0;
-				u.targetSearchCooldown = 0;
-			}
-		}
-
-		if (shouldMopUp) {
-			// Mop-up mode: Enemy has no units or target is far and collapsed nations exist
-			let enemyId = -1;
-
-			if (u._mopUpAssignedCountryId > 0) {
-				enemyId = u._mopUpAssignedCountryId;
-			}
-
-			// If supporting an ally and no enemies nearby, move towards their frontlines
-			// Only actually go to the ally if that ally is losing land (has occupation)
-			let activeSupportTarget = null;
-			if (u.beneficiaryId !== u.sovereignId) {
-				const ally = sideList.find((c) => c.id === u.beneficiaryId);
-				const allyStats = countryStats.get(u.beneficiaryId);
-				const allyInitial = ally?.initialCells || 1;
-				// Only support allies that are at least 5% occupied to prevent unnecessary wandering
-				if (ally && allyStats && allyStats.controlled < allyInitial * 0.95) {
-					activeSupportTarget = ally;
-				} else {
-					// Force redirect back to sovereign/enemy goals if ally is safe
-					u.beneficiaryId = u.sovereignId;
-					clearUnitStrategicTargets(u);
-				}
-			}
-
-			const needsNewTarget =
-				!u.mopUpTarget ||
-				u.targetSearchCooldown <= 0 ||
-				u.mopUpTargetId !==
-					(activeSupportTarget ? activeSupportTarget.id : enemyId);
-
-			if (needsNewTarget && canRefreshStrategicTarget) {
-				const targetId = activeSupportTarget ? activeSupportTarget.id : enemyId;
-				u.lastMopUpId = targetId;
-				const cellCache = _mopUpOwnedCellCache;
-				const cachedCells = cellCache.get(targetId)?.cells;
-				const bestCellIdx = selectNearestMopUpCell(cachedCells, {
-					unitLat: u.lat,
-					unitLng: u.lng,
-					gridWidth,
-					gridRes: CONFIG.GRID_RES,
-					isEligible: (cellIndex) => {
-						if (landMask[cellIndex] !== 2) return false;
-						if (worldControlMap[cellIndex] !== targetId) {
-							return false;
-						}
-						const occupierSide = dominantSideMap[cellIndex];
-						return (
-							occupierSide !== u.sideIndex &&
-							(occupierSide < 0 || areSidesHostile(u.sideIndex, occupierSide))
-						);
-					},
-				});
-
-				if (bestCellIdx !== -1) {
-					const y = Math.floor(bestCellIdx / gridWidth);
-					const x = bestCellIdx % gridWidth;
-					u.mopUpTarget = {
-						lat: y * CONFIG.GRID_RES - 90 + CONFIG.GRID_RES * 0.5,
-						lng: x * CONFIG.GRID_RES - 180 + CONFIG.GRID_RES * 0.5,
-					};
-					u.mopUpTargetId = targetId;
-					u.targetSearchCooldown = 15 + Math.floor(Math.random() * 20);
-				} else {
-					u.mopUpTarget = null;
-					u.mopUpTargetId = 0;
-					u.targetSearchCooldown = 1;
-				}
-			}
-			target = u.mopUpTarget;
-		}
-		const _u3MopUpDone = _detailedPerfEnabled ? performance.now() : 0;
-		if (_detailedPerfEnabled) {
-			window.__perf.unitMopUpTargetSearch += _u3MopUpDone - _u3c;
-		}
-
-		// Nearby enemy-unit targets always win. City objectives are cached strategic
-		// guidance and only refresh on this unit's cohort at high load.
-		const hasDirectEnemyTarget = target && target.health !== undefined;
-		if (!operationalFastLane && u._cityObjective) {
-			const objective = u._cityObjective;
-			const objectiveSide = countryToSideMap.get(objective.ownerId);
-			const objectiveIdx = objective.gridIndex;
-			if (
-				objectiveSide === undefined ||
-				!areSidesHostile(sideIndex, objectiveSide) ||
-				objectiveIdx < 0 ||
-				(dominantSideMap[objectiveIdx] === sideIndex &&
-					myInfluenceAt(objectiveIdx, sideIndex) >= 0.35)
-			) {
-				u._cityObjective = null;
-				u._cityObjectiveTick = -999;
-			}
-		}
-		const cityCandidates = enemyCityCandidatesBySide[sideIndex] || [];
-		if (
-			!shouldMopUp &&
-			!operationalFastLane &&
-			!hasDirectEnemyTarget &&
-			aiProfile.targetCityWeight > 0 &&
-			cityCandidates.length > 0 &&
-			canRefreshStrategicTarget &&
-			(!u._cityObjective ||
-				_simTickCount - (u._cityObjectiveTick || -999) >=
-					CITY_OBJECTIVE_REFRESH_INTERVAL)
-		) {
-			const rankedCities = [];
-			for (const city of cityCandidates) {
-				let deltaLng = city.lng - u.lng;
-				if (deltaLng > 180) deltaLng -= 360;
-				else if (deltaLng < -180) deltaLng += 360;
-				const distSq = (u.lat - city.lat) ** 2 + deltaLng ** 2;
-				const cityIdx = getGridIndex(city.lat, city.lng);
-				const contested = myInfluenceAt(cityIdx, u.sideIndex) < 0.35;
-				let score = -(distSq * 0.6);
-				if (contested) score += 120;
-				if (city.isCapital) score += 260;
-				rankedCities.push({ city, cityIdx, deltaLng, distSq, score });
-			}
-			rankedCities.sort((a, b) => b.score - a.score);
-			let bestCityEntry = null;
-			for (
-				let candidateIndex = 0;
-				candidateIndex < Math.min(CITY_WATER_CHECK_LIMIT, rankedCities.length);
-				candidateIndex++
-			) {
-				const entry = rankedCities[candidateIndex];
-				let blockedByWater = false;
-				if (!isAtSea && entry.distSq > 4) {
-					const lineLength = Math.sqrt(entry.distSq);
-					const steps = Math.min(12, Math.ceil(lineLength / 0.4));
-					let waterSamples = 0;
-					for (let sampleIndex = 1; sampleIndex < steps; sampleIndex++) {
-						const progress = sampleIndex / steps;
-						const waterIdx = getGridIndex(
-							u.lat + (entry.city.lat - u.lat) * progress,
-							u.lng + entry.deltaLng * progress,
-						);
-						if (waterIdx !== -1 && landMask[waterIdx] === 0) waterSamples++;
-					}
-					blockedByWater = waterSamples > steps * 0.3;
-				}
-				if (!blockedByWater) {
-					bestCityEntry = entry;
-					break;
-				}
-			}
-			u._cityObjective = bestCityEntry
-				? {
-						lat: bestCityEntry.city.lat,
-						lng: bestCityEntry.city.lng,
-						gridIndex: bestCityEntry.cityIdx,
-						ownerId:
-							bestCityEntry.city.sovereignId || bestCityEntry.city.ownerId || 0,
-					}
-				: null;
-			u._cityObjectiveTick = _simTickCount;
-		}
-		if (!operationalFastLane && !hasDirectEnemyTarget && u._cityObjective) {
-			const cityObjective = u._cityObjective;
-			if (target && target.lat !== undefined && target.lng !== undefined) {
-				const weight = aiProfile.targetCityWeight;
-				target = {
-					lat: target.lat * (1 - weight) + cityObjective.lat * weight,
-					lng: target.lng * (1 - weight) + cityObjective.lng * weight,
-				};
-			} else {
-				target = { lat: cityObjective.lat, lng: cityObjective.lng };
-			}
-		}
-		const _u3CityDone = _detailedPerfEnabled ? performance.now() : 0;
-		if (_detailedPerfEnabled) {
-			window.__perf.unitCityObjective += _u3CityDone - _u3MopUpDone;
-		}
-
-		const _u3GarrisonStart = _detailedPerfEnabled ? performance.now() : 0;
-
-		const _u3d = _detailedPerfEnabled ? performance.now() : 0;
-		if (_detailedPerfEnabled) {
-			window.__perf.unitGarrisonTarget += _u3d - _u3GarrisonStart;
-			window.__perf.unitMopUpSearch += _u3d - _u3c;
-		}
-		if (gameMode === "CONQUEST" && u._taskForceOrder?.target) {
-			target = u._taskForceOrder.target;
-		}
-
-		// CITY-FOCUS COMBAT MODE:
-		let _u4;
-		if (target) {
-			// Spatial Jitter: Add a small, unit-specific offset to the target destination
-			// to prevent multiple units from converging on the exact same coordinate.
-			const jitterScale = 0.08;
-			const jitterLat = target.lat + Math.sin(u.id * 100) * jitterScale;
-			const jitterLng = target.lng + Math.cos(u.id * 100) * jitterScale;
-
-			const dLat = jitterLat - u.lat;
-			let dLng = jitterLng - u.lng;
-
-			// GLOBAL WRAP: Shortest path around the world
-			if (dLng > 180) dLng -= 360;
-			else if (dLng < -180) dLng += 360;
-
-			const dist = Math.sqrt(dLat * dLat + dLng * dLng);
-
-			const isEngaged =
-				u.lastCombatTick && simFrameCount - u.lastCombatTick < 15;
-
-			if (simFrameCount > 100 && simFrameCount < 500 && _dbgLogCount++ < 200) {
-				const hasHealth = target && typeof target.health !== "undefined";
-				console.warn(
-					"[GATE-DBG] dist gate:",
-					"side",
-					u.sideIndex,
-					"dist=",
-					dist.toFixed(4),
-					"dist>0.05=",
-					dist > 0.05,
-					"isEngaged=",
-					isEngaged,
-					"hasTarget=",
-					!!target,
-					"targetHasHealth=",
-					hasHealth,
-					"localEnemyCount=",
-					localEnemyCount,
-					"going=",
-					dist > 0.05 ? "MOVE" : hasHealth ? "COMBAT" : "ELSE",
-				);
-			}
-
-			// ── unitLoop sub-timer checkpoint: end retreatMopUp, start combatMove ──
-			_u4 = _detailedPerfEnabled ? performance.now() : 0;
-			if (_detailedPerfEnabled) window.__perf.unitRetreatMopUp += _u4 - _u3;
-
-			if (dist > 0.05) {
-				// Movement logic
-				const baseSpeed = isAtSea ? CONFIG.UNIT_NAVAL_SPEED : CONFIG.UNIT_SPEED;
-
-				// Roaming Prevention: Removed exploratory wiggle to force a focused linear push
-				const landSpeedBuff =
-					!isAtSea &&
-					isMyTerritory(gridIdxNow, u.sideIndex) &&
-					myInfluenceAt(gridIdxNow, u.sideIndex) > 0.5
-						? 1.8
-						: 1.2;
-				const speedMult = landSpeedBuff * speedBuffMult * aiProfile.speedMult;
-
-				moveDirLat = dLat / dist;
-				moveDirLng = dLng / dist;
-
-				// ── War Plan Movement: override direction based on active plan ──
-				planSpeedMult = 1.0;
-				planDirLat = 0;
-				planDirLng = 0;
-				isPlanUnit = false;
-				let activePlan = _warPlan[u.sideIndex];
-				const plan1 = activePlan;
-				const plan1Signature = plan1?.signature || null;
-				let activePlanSignature = plan1Signature;
-				// Land slot 2: keep sticky plan ownership first, otherwise pick the
-				// closer offensive plan if one exists.
-				const slot2Plan = _warPlan[u.sideIndex + sides.length];
-				const slot2Signature = slot2Plan?.signature || null;
-				if (slot2Plan && slot2Plan.type !== "DEFEND") {
-					if (u._assignedPlanSignature === slot2Signature) {
-						activePlan = slot2Plan;
-						activePlanSignature = slot2Signature;
-					} else if (u._assignedPlanSignature === plan1Signature) {
-						activePlan = plan1;
-						activePlanSignature = plan1Signature;
-					} else {
-						if (u._assignedPlanSignature) u._assignedPlanSignature = null;
-						const getPlanAnchor = (plan) =>
-							plan?.frontIntel?.weakPoint ||
-							plan?.arrowPoints?.[0] ||
-							plan?.target;
-						const p1Anchor = getPlanAnchor(activePlan);
-						const p2Anchor = getPlanAnchor(slot2Plan);
-						const d1 = p1Anchor
-							? geoDistSq(u.lat, u.lng, p1Anchor.lat, p1Anchor.lng)
-							: Infinity;
-						const d2 = p2Anchor
-							? geoDistSq(u.lat, u.lng, p2Anchor.lat, p2Anchor.lng)
-							: Infinity;
-						if (d2 < d1) {
-							activePlan = slot2Plan;
-							activePlanSignature = slot2Signature;
-						}
-					}
-				} else if (
-					u._assignedPlanSignature &&
-					u._assignedPlanSignature !== plan1Signature
-				) {
-					u._assignedPlanSignature = null;
-				}
-				const isCommanderCityPlan =
-					!!activeOperationRuntime && activePlan?.type === "DEFEND_CITY";
-				const navalPlan = _navalPlan[u.sideIndex];
-				const supplyPlan = _navalSupplyPlan[u.sideIndex];
-
-				// Naval plan assignment: if this unit is close to staging coast and
-				// the naval plan needs units, recruit it
-				let isNavalUnit = false;
-
-				if (
-					navalPlan &&
-					navalPlan.type === "NAVAL_INVASION" &&
-					!hasOperationalAssignment &&
-					!shouldMopUp &&
-					!retreatVector &&
-					!isEngaged &&
-					!u.garrisonAssigned &&
-					(navalPlan.activeUnitCount || 0) < (navalPlan.maxAssignedUnits || 0)
-				) {
-					if (u.navalAssigned) {
-						isNavalUnit = true;
-					} else {
-						const sdLat = navalPlan.stagingPoint.lat - u.lat;
-						let sdLng = navalPlan.stagingPoint.lng - u.lng;
-						if (sdLng > 180) sdLng -= 360;
-						else if (sdLng < -180) sdLng += 360;
-						const sdSq = sdLat * sdLat + sdLng * sdLng;
-						if (sdSq < 4.0) {
-							// Within ~2 degrees of staging coast AND on friendly territory
-							const uGI = _unitGridIdx.get(u);
-							if (uGI === -1 || dominantSideMap[uGI] !== u.sideIndex) continue;
-							u.navalAssigned = true;
-							isNavalUnit = true;
-						}
-					}
-				}
-
-				if (
-					isNavalUnit &&
-					navalPlan &&
-					(navalPlan.activeUnitCount || 0) < (navalPlan.maxAssignedUnits || 0)
-				) {
-					isPlanUnit = true;
-					navalPlan.activeUnitCount = (navalPlan.activeUnitCount || 0) + 1;
-					u.isTransport = true;
-
-					if (navalPlan.phase === "GATHERING") {
-						// Move toward staging point on friendly coast
-						const sdLat = navalPlan.stagingPoint.lat - u.lat;
-						let sdLng = navalPlan.stagingPoint.lng - u.lng;
-						if (sdLng > 180) sdLng -= 360;
-						else if (sdLng < -180) sdLng += 360;
-						const sd = Math.sqrt(sdLat * sdLat + sdLng * sdLng);
-						if (sd > 0.01) {
-							planDirLat = sdLat / sd;
-							planDirLng = sdLng / sd;
-						}
-						planSpeedMult = 2.0;
-					} else if (navalPlan.phase === "EMBARKATION") {
-						// Move toward nearest water tile
-						if (!isAtSea) {
-							// Find nearest water cell
-							let bestWDist = Infinity;
-							let bestWLat = 0;
-							let bestWLng = 0;
-							const r = Math.floor((u.lat + 90) / CONFIG.GRID_RES);
-							const c = Math.floor((u.lng + 180) / CONFIG.GRID_RES);
-							for (let dr = -3; dr <= 3; dr++) {
-								for (let dc = -3; dc <= 3; dc++) {
-									const nr = r + dr;
-									const nc = c + dc;
-									if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth)
-										continue;
-									const ni = nr * gridWidth + nc;
-									if (landMask[ni] !== 0) continue;
-									const wlat = nr * CONFIG.GRID_RES - 90;
-									const wlng = nc * CONFIG.GRID_RES - 180;
-									let ddLng = wlng - u.lng;
-									if (ddLng > 180) ddLng -= 360;
-									else if (ddLng < -180) ddLng += 360;
-									const dd = (u.lat - wlat) ** 2 + ddLng ** 2;
-									if (dd < bestWDist) {
-										bestWDist = dd;
-										bestWLat = wlat;
-										bestWLng = wlng;
-									}
-								}
-							}
-							if (bestWDist < Infinity) {
-								const dd = Math.sqrt(bestWDist);
-								planDirLat = (bestWLat - u.lat) / dd;
-								let ddLng = bestWLng - u.lng;
-								if (ddLng > 180) ddLng -= 360;
-								else if (ddLng < -180) ddLng += 360;
-								planDirLng = ddLng / dd;
-							}
-						}
-						planSpeedMult = 2.0;
-					} else if (navalPlan.phase === "TRANSIT") {
-						// Sail toward target coast with mild land avoidance
-						const tdLat = navalPlan.target.lat - u.lat;
-						let tdLng = navalPlan.target.lng - u.lng;
-						if (tdLng > 180) tdLng -= 360;
-						else if (tdLng < -180) tdLng += 360;
-						const td = Math.sqrt(tdLat * tdLat + tdLng * tdLng);
-						if (td > 0.01) {
-							planDirLat = tdLat / td;
-							planDirLng = tdLng / td;
-							const lookDist = CONFIG.UNIT_NAVAL_SPEED * 2;
-							const checkLat = u.lat + planDirLat * lookDist;
-							const checkLng = u.lng + planDirLng * lookDist;
-							const checkIdx = getGridIndex(checkLat, checkLng);
-							if (checkIdx !== -1 && landMask[checkIdx] > 0) {
-								let bestDLat = planDirLat;
-								let bestDLng = planDirLng;
-								let bestScore = -Infinity;
-								for (const ang of [-30, 30, -60, 60]) {
-									const rad = (ang * Math.PI) / 180;
-									const nx =
-										planDirLat * Math.cos(rad) - planDirLng * Math.sin(rad);
-									const ny =
-										planDirLat * Math.sin(rad) + planDirLng * Math.cos(rad);
-									let wc = 0;
-									for (let s = 1; s <= 3; s++) {
-										const si = getGridIndex(
-											u.lat + nx * lookDist * s,
-											u.lng + ny * lookDist * s,
-										);
-										if (si === -1 || landMask[si] === 0) wc++;
-									}
-									const dotProduct = nx * planDirLat + ny * planDirLng;
-									const score = wc * 2 + dotProduct * 3;
-									if (wc > 0 && score > bestScore) {
-										bestScore = score;
-										bestDLat = nx;
-										bestDLng = ny;
-									}
-								}
-								planDirLat = bestDLat;
-								planDirLng = bestDLng;
-								const mag = Math.sqrt(
-									planDirLat * planDirLat + planDirLng * planDirLng,
-								);
-								if (mag > 0) {
-									planDirLat /= mag;
-									planDirLng /= mag;
-								}
-							}
-						}
-						planSpeedMult = 2.5;
-					} else if (navalPlan.phase === "LANDING") {
-						// Push inland from landing point
-						u.isTransport = false;
-						const tdLat = navalPlan.target.lat - u.lat;
-						let tdLng = navalPlan.target.lng - u.lng;
-						if (tdLng > 180) tdLng -= 360;
-						else if (tdLng < -180) tdLng += 360;
-						const td = Math.sqrt(tdLat * tdLat + tdLng * tdLng);
-						if (td > 0.01) {
-							planDirLat = tdLat / td;
-							planDirLng = tdLng / td;
-						} else {
-							// At beachhead: keep advancing inland along approach path
-							planDirLat = Math.sign(tdLat) || 0;
-							planDirLng = Math.sign(tdLng) || 0;
-							const uGI = _unitGridIdx.get(u) ?? -1;
-							if (uGI !== -1 && landMask[uGI] !== 0) {
-								u.navalAssigned = false;
-								u._landedAt = simFrameCount;
-							}
-						}
-						planSpeedMult = 1.5;
-					}
-					navalPlan.progress = isAtSea
-						? 0.5
-						: navalPlan.phase === "LANDING"
-							? 0.8
-							: 0.3;
-					moveDirLat = 0;
-					moveDirLng = 0;
-				} else if (
-					supplyPlan &&
-					supplyPlan.type === "NAVAL_SUPPLY" &&
-					!hasOperationalAssignment &&
-					!shouldMopUp &&
-					!retreatVector &&
-					!isEngaged &&
-					!u.garrisonAssigned &&
-					!u.navalAssigned &&
-					((supplyPlan.activeUnitCount || 0) <
-						(supplyPlan.maxAssignedUnits || 0) ||
-						(navalPlan && navalPlan.phase === "LANDING"))
-				) {
-					// Supply plan assignment
-					let isSupplyUnit = false;
-					if (u.supplyAssigned) {
-						isSupplyUnit = true;
-					} else {
-						const sdLat = supplyPlan.stagingPoint.lat - u.lat;
-						let sdLng = supplyPlan.stagingPoint.lng - u.lng;
-						if (sdLng > 180) sdLng -= 360;
-						else if (sdLng < -180) sdLng += 360;
-						const sdSq = sdLat * sdLat + sdLng * sdLng;
-						if (sdSq < 64.0) {
-							u.supplyAssigned = true;
-							isSupplyUnit = true;
-						}
-					}
-
-					if (isSupplyUnit) {
-						isPlanUnit = true;
-						supplyPlan.activeUnitCount = (supplyPlan.activeUnitCount || 0) + 1;
-						u.isTransport = true;
-
-						if (supplyPlan.phase === "GATHERING") {
-							const sdLat = supplyPlan.stagingPoint.lat - u.lat;
-							let sdLng = supplyPlan.stagingPoint.lng - u.lng;
-							if (sdLng > 180) sdLng -= 360;
-							else if (sdLng < -180) sdLng += 360;
-							const sd = Math.sqrt(sdLat * sdLat + sdLng * sdLng);
-							if (sd > 0.01) {
-								planDirLat = sdLat / sd;
-								planDirLng = sdLng / sd;
-							}
-							planSpeedMult = 2.0;
-						} else if (supplyPlan.phase === "EMBARKATION" && !isAtSea) {
-							let bestWDist = Infinity;
-							let bestWLat = 0;
-							let bestWLng = 0;
-							const r = Math.floor((u.lat + 90) / CONFIG.GRID_RES);
-							const c = Math.floor((u.lng + 180) / CONFIG.GRID_RES);
-							for (let dr = -3; dr <= 3; dr++) {
-								for (let dc = -3; dc <= 3; dc++) {
-									const nr = r + dr;
-									const nc = c + dc;
-									if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth)
-										continue;
-									const ni = nr * gridWidth + nc;
-									if (landMask[ni] !== 0) continue;
-									const wlat = nr * CONFIG.GRID_RES - 90;
-									const wlng = nc * CONFIG.GRID_RES - 180;
-									let ddLng = wlng - u.lng;
-									if (ddLng > 180) ddLng -= 360;
-									else if (ddLng < -180) ddLng += 360;
-									const dd = (u.lat - wlat) ** 2 + ddLng ** 2;
-									if (dd < bestWDist) {
-										bestWDist = dd;
-										bestWLat = wlat;
-										bestWLng = wlng;
-									}
-								}
-							}
-							if (bestWDist < Infinity) {
-								const dd = Math.sqrt(bestWDist);
-								planDirLat = (bestWLat - u.lat) / dd;
-								let ddLng = bestWLng - u.lng;
-								if (ddLng > 180) ddLng -= 360;
-								else if (ddLng < -180) ddLng += 360;
-								planDirLng = ddLng / dd;
-							}
-							planSpeedMult = 2.0;
-						} else if (supplyPlan.phase === "TRANSIT") {
-							const tdLat = supplyPlan.target.lat - u.lat;
-							let tdLng = supplyPlan.target.lng - u.lng;
-							if (tdLng > 180) tdLng -= 360;
-							else if (tdLng < -180) tdLng += 360;
-							const td = Math.sqrt(tdLat * tdLat + tdLng * tdLng);
-							if (td > 0.01) {
-								planDirLat = tdLat / td;
-								planDirLng = tdLng / td;
-								const lookDist = CONFIG.UNIT_NAVAL_SPEED * 2;
-								const checkLat = u.lat + planDirLat * lookDist;
-								const checkLng = u.lng + planDirLng * lookDist;
-								const checkIdx = getGridIndex(checkLat, checkLng);
-								if (checkIdx !== -1 && landMask[checkIdx] > 0) {
-									let bestDLat = planDirLat;
-									let bestDLng = planDirLng;
-									let bestScore = -Infinity;
-									for (const ang of [-30, 30, -60, 60]) {
-										const rad = (ang * Math.PI) / 180;
-										const nx =
-											planDirLat * Math.cos(rad) - planDirLng * Math.sin(rad);
-										const ny =
-											planDirLat * Math.sin(rad) + planDirLng * Math.cos(rad);
-										let wc = 0;
-										for (let s = 1; s <= 3; s++) {
-											const si = getGridIndex(
-												u.lat + nx * lookDist * s,
-												u.lng + ny * lookDist * s,
-											);
-											if (si === -1 || landMask[si] === 0) wc++;
-										}
-										const dotProduct = nx * planDirLat + ny * planDirLng;
-										const score = wc * 2 + dotProduct * 3;
-										if (wc > 0 && score > bestScore) {
-											bestScore = score;
-											bestDLat = nx;
-											bestDLng = ny;
-										}
-									}
-									planDirLat = bestDLat;
-									planDirLng = bestDLng;
-									const mag = Math.sqrt(
-										planDirLat * planDirLat + planDirLng * planDirLng,
-									);
-									if (mag > 0) {
-										planDirLat /= mag;
-										planDirLng /= mag;
-									}
-								}
-							}
-							planSpeedMult = 2.5;
-						} else if (supplyPlan.phase === "DELIVERED") {
-							u.isTransport = false;
-							const tdLat = supplyPlan.target.lat - u.lat;
-							let tdLng = supplyPlan.target.lng - u.lng;
-							if (tdLng > 180) tdLng -= 360;
-							else if (tdLng < -180) tdLng += 360;
-							const td = Math.sqrt(tdLat * tdLat + tdLng * tdLng);
-							if (td > 0.01) {
-								planDirLat = tdLat / td;
-								planDirLng = tdLng / td;
-							}
-							planSpeedMult = 1.5;
-						}
-						moveDirLat = 0;
-						moveDirLng = 0;
-					} else {
-						// Not a supply unit — clear supply flag
-						u.supplyAssigned = false;
-					}
-					// Defender reaction: move toward enemy landing if assigned (independent of supply)
-					if (
-						!isPlanUnit &&
-						u._defenderReactTarget &&
-						!shouldMopUp &&
-						!retreatVector &&
-						!isEngaged
-					) {
-						isPlanUnit = true;
-						const rdLat = u._defenderReactTarget.lat - u.lat;
-						let rdLng = u._defenderReactTarget.lng - u.lng;
-						if (rdLng > 180) rdLng -= 360;
-						else if (rdLng < -180) rdLng += 360;
-						const rd = Math.sqrt(rdLat * rdLat + rdLng * rdLng);
-						if (rd < 1.0) {
-							u._defenderReactTarget = null;
-						} else {
-							planDirLat = rdLat / rd;
-							planDirLng = rdLng / rd;
-							planSpeedMult = 2.0;
-						}
-						moveDirLat = 0;
-						moveDirLng = 0;
-					}
-				} else {
-					u.navalAssigned = false;
-					u.isTransport = false;
-
-					// TRANSPORT plan: fast-move stranded units toward frontline
-					const transportPlan = _transportPlan[u.sideIndex];
-					const transportSignature = transportPlan?.signature || null;
-					if (
-						u._transportPlanSignature &&
-						u._transportPlanSignature !== transportSignature
-					) {
-						u._transportPlanSignature = null;
-					}
-					if (
-						transportPlan &&
-						!hasOperationalAssignment &&
-						!shouldMopUp &&
-						!retreatVector &&
-						!isEngaged &&
-						localEnemyCount < 2 &&
-						transportPlan.target
-					) {
-						const tdLat = transportPlan.target.lat - u.lat;
-						let tdLng = transportPlan.target.lng - u.lng;
-						if (tdLng > 180) tdLng -= 360;
-						else if (tdLng < -180) tdLng += 360;
-						const tdSq = tdLat * tdLat + tdLng * tdLng;
-						const assignedToTransport =
-							u._transportPlanSignature === transportSignature;
-						const transportLimit = Math.max(
-							1,
-							transportPlan.maxAssignedUnits || 5,
-						);
-						const transportFull =
-							!assignedToTransport &&
-							(transportPlan.activeUnitCount || 0) >= transportLimit;
-						// Exit transport when within 1.5 degrees of frontline
-						if (tdSq <= 2.25) {
-							u._transportPlanSignature = null;
-						} else if (!transportFull) {
-							isPlanUnit = true;
-							u._transportPlanSignature = transportSignature;
-							transportPlan.activeUnitCount =
-								(transportPlan.activeUnitCount || 0) + 1;
-							u.isTransport = true;
-							const td = Math.sqrt(tdSq);
-							planDirLat = tdLat / td;
-							planDirLng = tdLng / td;
-							planSpeedMult = 6.0;
-							moveDirLat = 0;
-							moveDirLng = 0;
-						}
-					}
-
-					// DEFEND plan and land plan execution — skip if unit is in transport mode
-					if (!u.isTransport) {
-						const taskForceOrder =
-							gameMode === "CONQUEST" ? u._taskForceOrder : null;
-						if (taskForceOrder?.target && !shouldMopUp) {
-							isPlanUnit = true;
-							activePlan = null;
-							activePlanSignature = null;
-							u._assignedPlanSignature = null;
-							const orderLat = taskForceOrder.target.lat - u.lat;
-							let orderLng = taskForceOrder.target.lng - u.lng;
-							if (orderLng > 180) orderLng -= 360;
-							else if (orderLng < -180) orderLng += 360;
-							const orderDistance = Math.sqrt(
-								orderLat * orderLat + orderLng * orderLng,
-							);
-							if (orderDistance > 0.08) {
-								planDirLat = orderLat / orderDistance;
-								planDirLng = orderLng / orderDistance;
-							} else {
-								planDirLat = 0;
-								planDirLng = 0;
-							}
-							planSpeedMult = taskForceOrder.speed || 1;
-							moveDirLat = 0;
-							moveDirLng = 0;
-						} else {
-							// Commander city defense: assign a bounded group to a ring of
-							// friendly points around the selected city and hold once in place.
-							if (
-								isCommanderCityPlan &&
-								!isEngaged &&
-								!shouldMopUp &&
-								!retreatVector
-							) {
-								const commanderMovement = getCommanderCityDefenseMovement(
-									u,
-									activePlan,
-									activePlanSignature,
-								);
-								if (commanderMovement) {
-									isPlanUnit = true;
-									planDirLat = commanderMovement.lat;
-									planDirLng = commanderMovement.lng;
-									planSpeedMult = commanderMovement.speed;
-									moveDirLat = 0;
-									moveDirLng = 0;
-								}
-							}
-
-							// DEFEND plan: hold the frontline, do not advance
-							if (
-								activePlan &&
-								activePlan.type === "DEFEND" &&
-								!isEngaged &&
-								!shouldMopUp &&
-								!retreatVector
-							) {
-								isPlanUnit = true;
-								activePlan.activeUnitCount =
-									(activePlan.activeUnitCount || 0) + 1;
-								// Check if unit is behind or at the frontline (on our side)
-								const unitIdx = gridIdxNow;
-								const onOurSide =
-									unitIdx !== -1 && dominantSideMap[unitIdx] === u.sideIndex;
-								const nearFrontline =
-									borderDir &&
-									Math.sqrt(
-										borderDir.lat * borderDir.lat +
-											borderDir.lng * borderDir.lng,
-									) > 0;
-								if (onOurSide && nearFrontline) {
-									// Hold position near the frontline, don't advance
-									moveDirLat = 0;
-									moveDirLng = 0;
-								} else if (!onOurSide) {
-									// Unit drifted past the frontline — pull it back
-									// Move toward nearest friendly territory
-									let bestFRDist = Infinity;
-									let bestFRLat = 0;
-									let bestFRLng = 0;
-									const r = Math.floor((u.lat + 90) / CONFIG.GRID_RES);
-									const c = Math.floor((u.lng + 180) / CONFIG.GRID_RES);
-									for (let dr = -5; dr <= 5; dr++) {
-										for (let dc = -5; dc <= 5; dc++) {
-											const nr = r + dr;
-											const nc = c + dc;
-											if (
-												nr < 0 ||
-												nr >= gridHeight ||
-												nc < 0 ||
-												nc >= gridWidth
-											)
-												continue;
-											const ni = nr * gridWidth + nc;
-											if (dominantSideMap[ni] !== u.sideIndex) continue;
-											const flat = nr * CONFIG.GRID_RES - 90;
-											const flng = nc * CONFIG.GRID_RES - 180;
-											let fdLng = flng - u.lng;
-											if (fdLng > 180) fdLng -= 360;
-											else if (fdLng < -180) fdLng += 360;
-											const fd = (u.lat - flat) ** 2 + fdLng ** 2;
-											if (fd < bestFRDist) {
-												bestFRDist = fd;
-												bestFRLat = flat;
-												bestFRLng = flng;
-											}
-										}
-									}
-									if (bestFRDist < Infinity) {
-										const d = Math.sqrt(bestFRDist);
-										moveDirLat = (bestFRLat - u.lat) / d;
-										let fdLng = bestFRLng - u.lng;
-										if (fdLng > 180) fdLng -= 360;
-										else if (fdLng < -180) fdLng += 360;
-										moveDirLng = fdLng / d;
-									}
-								}
-							}
-
-							// Defender reaction: move toward enemy landing if assigned
-							if (
-								u._defenderReactTarget &&
-								!shouldMopUp &&
-								!retreatVector &&
-								!isEngaged
-							) {
-								isPlanUnit = true;
-								const rdLat = u._defenderReactTarget.lat - u.lat;
-								let rdLng = u._defenderReactTarget.lng - u.lng;
-								if (rdLng > 180) rdLng -= 360;
-								else if (rdLng < -180) rdLng += 360;
-								const rd = Math.sqrt(rdLat * rdLat + rdLng * rdLng);
-								if (rd < 1.0) {
-									u._defenderReactTarget = null;
-								} else {
-									planDirLat = rdLat / rd;
-									planDirLng = rdLng / rd;
-									planSpeedMult = 2.0;
-								}
-								moveDirLat = 0;
-								moveDirLng = 0;
-							}
-
-							// Only apply plan when safe: no nearby enemies, not engaged, not retreating
-							if (
-								!shouldMopUp &&
-								!retreatVector &&
-								!isEngaged &&
-								(localEnemyCount < 2 || pocketContained) &&
-								activePlan &&
-								activePlan.type !== "DEFEND" &&
-								!isCommanderCityPlan
-							) {
-								const planLimit = Math.max(1, activePlan.maxAssignedUnits || 5);
-								const currentPlanSignature =
-									activePlan.signature || activePlanSignature;
-								const assignedToPlan =
-									u._assignedPlanSignature === currentPlanSignature;
-								const planFull =
-									!assignedToPlan &&
-									(activePlan.activeUnitCount || 0) >= planLimit;
-								const planAnchor =
-									activePlan.frontIntel?.weakPoint ||
-									activePlan.arrowPoints?.[0] ||
-									activePlan.target;
-								const planAnchorDistSq = planAnchor
-									? geoDistSq(u.lat, u.lng, planAnchor.lat, planAnchor.lng)
-									: 0;
-								const planTheaterRadiusSq =
-									activePlan.type === "PUSH_FRONT" ? 36.0 : 25.0;
-								const needsSeedUnits =
-									(activePlan.activeUnitCount || 0) <
-									Math.ceil(planLimit * 0.15);
-								const inPlanTheater =
-									assignedToPlan ||
-									!planAnchor ||
-									planAnchorDistSq <= planTheaterRadiusSq ||
-									(needsSeedUnits && planAnchorDistSq <= 100.0);
-								if (!planFull && inPlanTheater) {
-									isPlanUnit = true;
-									u._assignedPlanSignature = currentPlanSignature;
-									if (u._planWaypointSignature !== currentPlanSignature) {
-										u._planWaypointSignature = currentPlanSignature;
-										u._planWaypointIndex = 0;
-									}
-									if (activePlan.activeUnitCount !== undefined) {
-										activePlan.activeUnitCount++;
-									}
-
-									if (
-										activePlan.phase === "PREPARATION" &&
-										activePlan.stagingCells?.length > 0
-									) {
-										// Rally to staging cells at 2× speed
-										const staging = activePlan.stagingCells;
-										const sc =
-											staging[
-												Math.floor(Math.abs(u.id * 1000000) % staging.length)
-											];
-										if (sc) {
-											const pdLat = sc.lat - u.lat;
-											let pdLng = sc.lng - u.lng;
-											if (pdLng > 180) pdLng -= 360;
-											else if (pdLng < -180) pdLng += 360;
-											const pd = Math.sqrt(pdLat * pdLat + pdLng * pdLng);
-											if (pd > 0.01) {
-												planDirLat = pdLat / pd;
-												planDirLng = pdLng / pd;
-											}
-											planSpeedMult = 2.0;
-										}
-										// Zero out target direction so plan dominates; skip combat engagement
-										moveDirLat = 0;
-										moveDirLng = 0;
-									} else if (
-										activePlan.phase === "EXECUTION" &&
-										activePlan.target
-									) {
-										// Waypoint routing: steer toward friendly waypoints around neutral blocks
-										let useWaypoint = false;
-										if (
-											activePlan._waypoints &&
-											activePlan._waypoints.length > 0
-										) {
-											const wpIndex = Math.min(
-												u._planWaypointIndex || 0,
-												activePlan._waypoints.length,
-											);
-											const wp = activePlan._waypoints[wpIndex];
-											if (wp) {
-												const wLat = wp.lat - u.lat;
-												let wLng = wp.lng - u.lng;
-												if (wLng > 180) wLng -= 360;
-												else if (wLng < -180) wLng += 360;
-												const wDistSq = wLat * wLat + wLng * wLng;
-												if (wDistSq < 1.0) {
-													u._planWaypointIndex = wpIndex + 1;
-												} else {
-													const wDist = Math.sqrt(wDistSq);
-													planDirLat = wLat / wDist;
-													planDirLng = wLng / wDist;
-													planSpeedMult = 2.0;
-													useWaypoint = true;
-												}
-											}
-										}
-										if (!useWaypoint) {
-											const pdLat = activePlan.target.lat - u.lat;
-											let pdLng = activePlan.target.lng - u.lng;
-											if (pdLng > 180) pdLng -= 360;
-											else if (pdLng < -180) pdLng += 360;
-											const pd = Math.sqrt(pdLat * pdLat + pdLng * pdLng);
-
-											if (activePlan.type === "ENCIRCLE") {
-												const unitSeed = Math.floor(Math.abs(u.id * 1_000_000));
-												const role = unitSeed % 3;
-												if (role === 0) {
-													// Pin: hold position, minimal advance
-													if (pd > 0.01) {
-														planDirLat = pdLat / pd;
-														planDirLng = pdLng / pd;
-													}
-													planSpeedMult = 0.4;
-												} else {
-													// Flank through a fixed waypoint. Continuously rotating the
-													// target vector makes units orbit the pocket instead of closing it.
-													const approach =
-														activePlan.stagingPoint ||
-														activePlan.arrowPoints?.[0];
-													let approachLat =
-														activePlan.target.lat - (approach?.lat ?? u.lat);
-													let approachLng =
-														activePlan.target.lng - (approach?.lng ?? u.lng);
-													if (approachLng > 180) approachLng -= 360;
-													else if (approachLng < -180) approachLng += 360;
-													let approachDist = Math.sqrt(
-														approachLat * approachLat +
-															approachLng * approachLng,
-													);
-													if (approachDist <= 0.01 && pd > 0.01) {
-														if (
-															Number.isFinite(
-																activePlan._encircleApproachLat,
-															) &&
-															Number.isFinite(activePlan._encircleApproachLng)
-														) {
-															approachLat = activePlan._encircleApproachLat;
-															approachLng = activePlan._encircleApproachLng;
-															approachDist = 1;
-														} else {
-															approachLat = pdLat / pd;
-															approachLng = pdLng / pd;
-															approachDist = 1;
-															activePlan._encircleApproachLat = approachLat;
-															activePlan._encircleApproachLng = approachLng;
-														}
-													}
-													if (approachDist > 0.01) {
-														const forwardLat = approachLat / approachDist;
-														const forwardLng = approachLng / approachDist;
-														const flankSide = role === 1 ? -1 : 1;
-														const lane = (Math.floor(unitSeed / 3) % 7) - 3;
-														const flankRadius = 0.8 + lane * 0.06;
-														const flankLat =
-															activePlan.target.lat -
-															forwardLng * flankSide * flankRadius +
-															forwardLat * 0.2;
-														const flankLng =
-															activePlan.target.lng +
-															forwardLat * flankSide * flankRadius +
-															forwardLng * 0.2;
-														const fdLat = flankLat - u.lat;
-														let fdLng = flankLng - u.lng;
-														if (fdLng > 180) fdLng -= 360;
-														else if (fdLng < -180) fdLng += 360;
-														const flankDist = Math.sqrt(
-															fdLat * fdLat + fdLng * fdLng,
-														);
-														if (flankDist > 0.3) {
-															planDirLat = fdLat / flankDist;
-															planDirLng = fdLng / flankDist;
-														} else if (pd > 0.01) {
-															planDirLat = pdLat / pd;
-															planDirLng = pdLng / pd;
-														}
-													}
-													planSpeedMult = 2.0;
-												}
-											} else {
-												// CAPTURE_CITY / PUSH_FRONT: breakthrough push with spearhead variation
-												if (pd > 0.01) {
-													planDirLat = pdLat / pd;
-													planDirLng = pdLng / pd;
-												}
-												const spearhead =
-													0.8 + (Math.sin(u.id * 777) * 0.5 + 0.5) * 0.8;
-												planSpeedMult = 2.0 * spearhead;
-											}
-											activePlan.progress = Math.min(
-												1.0,
-												Math.max(0, 1.0 - pd / 5.0),
-											);
-											// Zero out target direction so plan dominates; units follow the plan
-											moveDirLat = 0;
-											moveDirLng = 0;
-										}
-									} else if (
-										activePlan.phase === "CONSOLIDATION" &&
-										activePlan.target
-									) {
-										// Spread outward from captured objective toward new frontline
-										let bestDist = Infinity;
-										let bestLat = 0,
-											bestLng = 0;
-										for (const fk of Object.keys(_frontlinePolys || {})) {
-											const [fa, fb] = fk.split("_").map(Number);
-											if (fa !== u.sideIndex && fb !== u.sideIndex) continue;
-											const poly = _frontlinePolys[fk];
-											if (!poly) continue;
-											const idx = Math.floor(
-												Math.abs(u.id * 777 + simFrameCount) % poly.length,
-											);
-											const fc = poly[idx];
-											let fLng = fc.lng - u.lng;
-											if (fLng > 180) fLng -= 360;
-											else if (fLng < -180) fLng += 360;
-											const dSq = (fc.lat - u.lat) ** 2 + fLng ** 2;
-											if (dSq < bestDist) {
-												bestDist = dSq;
-												bestLat = fc.lat;
-												bestLng = fc.lng;
-											}
-										}
-										if (bestDist < Infinity && bestDist > 0.0001) {
-											const d = Math.sqrt(bestDist);
-											planDirLat = (bestLat - u.lat) / d;
-											planDirLng = (bestLng - u.lng) / d;
-											planSpeedMult = 1.5;
-										}
-										// During consolidation, zero out target direction so plan dominates
-										moveDirLat = 0;
-										moveDirLng = 0;
-									}
-								}
-							}
-						}
-					} // end else (non-naval land plan)
-				} // end if (!u.isTransport)
-
-				// Blend plan direction into movement
-				if (isPlanUnit && (planDirLat !== 0 || planDirLng !== 0)) {
-					const operationalOrderActive =
-						gameMode === "CONQUEST" && !!u._taskForceUid;
-					const planBlend = operationalOrderActive
-						? isEngaged || localEnemyCount > 0
-							? 0.55
-							: 0.96
-						: isEngaged || localEnemyCount > 0
-							? 0.3
-							: aiProfile.frontlineBlend > 0
-								? 0.85
-								: 0.65;
-					moveDirLat = moveDirLat * (1 - planBlend) + planDirLat * planBlend;
-					moveDirLng = moveDirLng * (1 - planBlend) + planDirLng * planBlend;
-					const magP = Math.sqrt(
-						moveDirLat * moveDirLat + moveDirLng * moveDirLng,
-					);
-					if (magP > 0) {
-						moveDirLat /= magP;
-						moveDirLng /= magP;
-					}
-				}
-
-				// When enemies are nearby, push toward local enemy centroid
-				if (
-					localEnemyCount > 0 &&
-					!isAtSea &&
-					(enemyCentroidLat !== 0 || enemyCentroidLng !== 0)
-				) {
-					enemyCentroidLat /= localEnemyCount;
-					enemyCentroidLng /= localEnemyCount;
-					const cLat = enemyCentroidLat - u.lat;
-					let cLng = enemyCentroidLng - u.lng;
-					if (cLng > 180) cLng -= 360;
-					else if (cLng < -180) cLng += 360;
-					const cDist = Math.sqrt(cLat * cLat + cLng * cLng);
-					if (cDist > 0.0001) {
-						const combatWeight = isPlanUnit ? 0.35 : 0.7;
-						moveDirLat =
-							(cLat / cDist) * combatWeight + moveDirLat * (1 - combatWeight);
-						moveDirLng =
-							(cLng / cDist) * combatWeight + moveDirLng * (1 - combatWeight);
-						const magC = Math.sqrt(
-							moveDirLat * moveDirLat + moveDirLng * moveDirLng,
-						);
-						if (magC > 0) {
-							moveDirLat /= magC;
-							moveDirLng /= magC;
-						}
-					}
-				}
-
-				// Front-slot positioning: pull toward assigned frontline slot
-				// Disabled during staging phases and for DEFEND plans (they hold the line)
-				if (
-					u.frontSlot &&
-					!isPlanUnit &&
-					!shouldMopUp &&
-					!retreatVector &&
-					!isEngaged &&
-					(!activePlan ||
-						(activePlan.phase !== "PREPARATION" &&
-							activePlan.phase !== "CONSOLIDATION")) &&
-					activePlan?.type !== "DEFEND"
-				) {
-					const sdLat = u.frontSlot.targetLat - u.lat;
-					let sdLng = u.frontSlot.targetLng - u.lng;
-					if (sdLng > 180) sdLng -= 360;
-					else if (sdLng < -180) sdLng += 360;
-					const sdDist = Math.sqrt(sdLat * sdLat + sdLng * sdLng);
-					if (sdDist > 0.01) {
-						const slotStrength = Math.min(0.6, dist * 2);
-						moveDirLat =
-							moveDirLat * (1 - slotStrength) + (sdLat / sdDist) * slotStrength;
-						moveDirLng =
-							moveDirLng * (1 - slotStrength) + (sdLng / sdDist) * slotStrength;
-						const magSlot = Math.sqrt(
-							moveDirLat * moveDirLat + moveDirLng * moveDirLng,
-						);
-						if (magSlot > 0) {
-							moveDirLat /= magSlot;
-							moveDirLng /= magSlot;
-						}
-					}
-				}
-
-				// Pull towards nearby frontline — disabled when plan is driving the unit
-				if (
-					borderDir &&
-					!isAtSea &&
-					!isPlanUnit &&
-					!shouldMopUp &&
-					(!activePlan ||
-						(activePlan.phase !== "PREPARATION" &&
-							activePlan.phase !== "CONSOLIDATION"))
-				) {
-					// Force units to prioritize the frontline even more heavily to prevent the "interior roaming" seen in clusters.
-					const blendStrength = aiProfile.frontlineBlend;
-					moveDirLat =
-						moveDirLat * (1 - blendStrength) + borderDir.lat * blendStrength;
-					moveDirLng =
-						moveDirLng * (1 - blendStrength) + borderDir.lng * blendStrength;
-					const magBorder = Math.sqrt(
-						moveDirLat * moveDirLat + moveDirLng * moveDirLng,
-					);
-					if (magBorder > 0) {
-						moveDirLat /= magBorder;
-						moveDirLng /= magBorder;
-					}
-				}
-
-				// Overwhelming force: all units rush the frontline when 10x advantage
-				if (
-					_overwhelmingForce[sideIndex] &&
-					(!isPlanUnit || gameMode !== "CONQUEST") &&
-					borderDir &&
-					!isAtSea
-				) {
-					moveDirLat = borderDir.lat;
-					moveDirLng = borderDir.lng;
-					isPlanUnit = false;
-				}
-
-				// Apply tactical retreat/border pushback
-				let activeRetreat = false;
-				if (retreatVector) {
-					const rMag = Math.sqrt(
-						retreatVector.lat ** 2 + retreatVector.lng ** 2,
-					);
-					if (rMag > 0) {
-						activeRetreat = true;
-						const rDirLat = retreatVector.lat / rMag;
-						const rDirLng = retreatVector.lng / rMag;
-
-						// Blend target direction with retreat direction
-						// Reduced retreat strength so units don't "dodge" and sprint away entirely,
-						// allowing them to keep some forward pressure while backing off.
-						const inHostileLand = isEnemyTerritory(gridIdxNow, u.sideIndex);
-						const retreatStrength = inHostileLand ? 0.4 : 0.25;
-
-						moveDirLat =
-							moveDirLat * (1 - retreatStrength) + rDirLat * retreatStrength;
-						moveDirLng =
-							moveDirLng * (1 - retreatStrength) + rDirLng * retreatStrength;
-
-						const finalMag = Math.sqrt(moveDirLat ** 2 + moveDirLng ** 2);
-						if (finalMag > 0) {
-							moveDirLat /= finalMag;
-							moveDirLng /= finalMag;
-						}
-					}
-				}
-
-				// Hive Cohesion & Alignment: Units stick with their squad and move in unison
-				if (groupCentroid && !isAtSea && !activeRetreat) {
-					// 1. Cohesion: Pull towards squad center
-					const dCentLat = groupCentroid.lat - u.lat;
-					const dCentLng = groupCentroid.lng - u.lng;
-					const dCentDist = Math.sqrt(
-						dCentLat * dCentLat + dCentLng * dCentLng,
-					);
-					if (dCentDist > 0.1) {
-						const cohesionStr = isPlanUnit ? 0.025 : 0.06;
-						moveDirLat += (dCentLat / dCentDist) * cohesionStr;
-						moveDirLng += (dCentLng / dCentDist) * cohesionStr;
-					}
-
-					// 2. Alignment: Match squad's average heading
-					if (
-						Math.abs(groupCentroid.vLat) > 0.01 ||
-						Math.abs(groupCentroid.vLng) > 0.01
-					) {
-						const alignStr = isPlanUnit ? 0.1 : 0.25;
-						moveDirLat += groupCentroid.vLat * alignStr;
-						moveDirLng += groupCentroid.vLng * alignStr;
-					}
-
-					const newMag = Math.sqrt(
-						moveDirLat * moveDirLat + moveDirLng * moveDirLng,
-					);
-					if (newMag > 0) {
-						moveDirLat /= newMag;
-						moveDirLng /= newMag;
-					}
-				}
-
-				// Apply allied repulsion to ensure units spread out to borders
-				// Suppression check: Repulsion is disabled during active retreats to prioritize survival
-				if (u.repulsionVector && !activeRetreat) {
-					const rMag = Math.sqrt(
-						u.repulsionVector.lat ** 2 + u.repulsionVector.lng ** 2,
-					);
-					if (rMag > 0) {
-						// Less aggressive repulsion so units keep their forward momentum and don't scatter sideways
-						const repulsionStrength = isPlanUnit ? 0.25 : 0.4;
-						moveDirLat =
-							moveDirLat * (1 - repulsionStrength) +
-							(u.repulsionVector.lat / rMag) * repulsionStrength;
-						moveDirLng =
-							moveDirLng * (1 - repulsionStrength) +
-							(u.repulsionVector.lng / rMag) * repulsionStrength;
-						const finalMag = Math.sqrt(moveDirLat ** 2 + moveDirLng ** 2);
-						if (finalMag > 0) {
-							moveDirLat /= finalMag;
-							moveDirLng /= finalMag;
-						}
-					}
-					u.repulsionVector = null;
-				}
-
-				// Guided Pathfinding: Priority-based Corridor Seeking
-				// Actively detours around neutral nations (like Czechoslovakia) to find internal routes.
-				const isProtectedSupport = (idx) => {
-					if (idx === -1 || landMask[idx] === 0) return false;
-					const cellOwnerId = worldControlMap[idx];
-					const ownerSideIdx = countryToSideMap.get(cellOwnerId);
-					if (ownerSideIdx === undefined) return false;
-					const isEnemySupport =
-						areSidesHostile(sideIndex, ownerSideIdx) &&
-						role === "OFFENSE" &&
-						sides[ownerSideIdx].find((c) => c.id === cellOwnerId)?.role ===
-							"SUPPORT";
-					if (isEnemySupport) {
-						return myInfluenceAt(idx, u.sideIndex) <= 0.1;
-					}
-					return false;
-				};
-
-				// OPT-3: Only re-evaluate the neutral boundary check when the unit has
-				// moved far enough from the last check position (>= 0.5 grid cells).
-				// The expensive 24–48 angle sweep is skipped on intermediate ticks.
-				const NEUTRAL_CHECK_DIST_SQ = (CONFIG.GRID_RES * 0.5) ** 2;
-				const lastNeutralLat = u._neutralCheckLat;
-				const lastNeutralLng = u._neutralCheckLng;
-				const movedEnoughForNeutralCheck =
-					lastNeutralLat === undefined ||
-					(u.lat - lastNeutralLat) ** 2 + (u.lng - lastNeutralLng) ** 2 >=
-						NEUTRAL_CHECK_DIST_SQ;
-
-				// Only treat enemy SUPPORT nations as blocked for pathfinding; pure neutral countries are pass‑through.
-				const isInsideNeutralProtected = isProtectedSupport(currentIdx);
-				// Dynamic lookahead: units stuck inside or near neutral territory look further to find a valid corridor.
-				const lookAheadDist = isNeutralCountry(currentIdx)
-					? 3.0
-					: isNeutralCountry(
-								getGridIndex(
-									u.lat + moveDirLat * 0.5,
-									u.lng + moveDirLng * 0.5,
-								),
-							)
-						? 2.0
-						: 1.5;
-
-				const lookIdx = getGridIndex(
-					u.lat + moveDirLat * lookAheadDist,
-					u.lng + moveDirLng * lookAheadDist,
-				);
-
-				const lookAheadIsNeutral = lookIdx !== -1 && isNeutralCountry(lookIdx);
-
-				if (
-					(isProtectedSupport(lookIdx) ||
-						isInsideNeutralProtected ||
-						lookAheadIsNeutral) &&
-					movedEnoughForNeutralCheck
-				) {
-					// Record position so we don't re-sweep until the unit moves again
-					u._neutralCheckLat = u.lat;
-					u._neutralCheckLng = u.lng;
-
-					// Impending neutral border or already inside. Try to "pathfind" a local corridor that stays off neutral land.
-					let bestLat = moveDirLat;
-					let bestLng = moveDirLng;
-					let foundFriendly = false;
-
-					// Local corridor search: sweep angles and check both mid‑point and end‑point cells
-					// so we don't just step over a single neutral cell but actually route around it.
-					const sweepSteps = 24;
-					const sweepAngle = Math.PI; // 180° left/right around current heading
-					const corridorLook = lookAheadDist;
-					const midFactor = 0.5;
-
-					for (let j = 1; j <= sweepSteps; j++) {
-						const angleOff = (sweepAngle / sweepSteps) * j;
-
-						for (let sign = -1; sign <= 1; sign += 2) {
-							const a = angleOff * sign;
-							const curCos = Math.cos(a);
-							const curSin = Math.sin(a);
-
-							// Candidate direction
-							const candLat = moveDirLat * curCos - moveDirLng * curSin;
-							const candLng = moveDirLat * curSin + moveDirLng * curCos;
-
-							// Sample mid‑point along this direction
-							const midLat = u.lat + candLat * corridorLook * midFactor;
-							const midLng = u.lng + candLng * corridorLook * midFactor;
-							const midIdx = getGridIndex(midLat, midLng);
-
-							// Sample end‑point along this direction
-							const endLat = u.lat + candLat * corridorLook;
-							const endLng = u.lng + candLng * corridorLook;
-							const endIdx = getGridIndex(endLat, endLng);
-
-							const midBlocked =
-								midIdx !== -1 &&
-								(isNeutralCountry(midIdx) || isProtectedSupport(midIdx));
-							const endBlocked =
-								endIdx !== -1 &&
-								(isNeutralCountry(endIdx) || isProtectedSupport(endIdx));
-
-							// We only accept directions where both mid and end are non‑neutral/non‑protected land.
-							if (
-								endIdx !== -1 &&
-								landMask[endIdx] > 0 &&
-								!midBlocked &&
-								!endBlocked
-							) {
-								bestLat = candLat;
-								bestLng = candLng;
-								foundFriendly = true;
-								break;
-							}
-						}
-						if (foundFriendly) break;
-					}
-
-					if (!foundFriendly) {
-						// Second pass: search a slightly larger ring to get around wider neutral "blocks"
-						const farLook = corridorLook * 2.0;
-						for (let j = 1; j <= sweepSteps && !foundFriendly; j++) {
-							const angleOff = (sweepAngle / sweepSteps) * j;
-
-							for (let sign = -1; sign <= 1; sign += 2) {
-								const a = angleOff * sign;
-								const curCos = Math.cos(a);
-								const curSin = Math.sin(a);
-
-								const candLat = moveDirLat * curCos - moveDirLng * curSin;
-								const candLng = moveDirLat * curSin + moveDirLng * curCos;
-
-								const midLat = u.lat + candLat * farLook * midFactor;
-								const midLng = u.lng + candLng * farLook * midFactor;
-								const midIdx = getGridIndex(midLat, midLng);
-
-								const endLat = u.lat + candLat * farLook;
-								const endLng = u.lng + candLng * farLook;
-								const endIdx = getGridIndex(endLat, endLng);
-
-								const midBlocked =
-									midIdx !== -1 &&
-									(isNeutralCountry(midIdx) || isProtectedSupport(midIdx));
-								const endBlocked =
-									endIdx !== -1 &&
-									(isNeutralCountry(endIdx) || isProtectedSupport(endIdx));
-
-								if (
-									endIdx !== -1 &&
-									landMask[endIdx] > 0 &&
-									!midBlocked &&
-									!endBlocked
-								) {
-									bestLat = candLat;
-									bestLng = candLng;
-									foundFriendly = true;
-									break;
-								}
-							}
-						}
-					}
-
-					if (foundFriendly) {
-						const mag = Math.sqrt(bestLat ** 2 + bestLng ** 2);
-						if (mag > 0) {
-							moveDirLat = bestLat / mag;
-							moveDirLng = bestLng / mag;
-						}
-						// Cache the resolved direction so intermediate ticks reuse it
-						u._neutralDirLat = moveDirLat;
-						u._neutralDirLng = moveDirLng;
-						u._neutralBlocked = false;
-					} else {
-						// No safe corridor that avoids neutral/protected land – try a desperation retreat
-						// away from enemies and blocking terrain, even if imperfect.
-						const desperationLat = moveDirLat * 0.3;
-						const desperationLng = moveDirLng * 0.3;
-						// Add jitter to avoid all units trying the same blocked path
-						moveDirLat = desperationLat + (Math.random() - 0.5) * 0.4;
-						moveDirLng = desperationLng + (Math.random() - 0.5) * 0.4;
-						const dMag = Math.sqrt(moveDirLat ** 2 + moveDirLng ** 2);
-						if (dMag > 0) {
-							moveDirLat /= dMag;
-							moveDirLng /= dMag;
-						}
-						u._neutralDirLng = 0;
-						u._neutralBlocked = true;
-					}
-				} else if (
-					(isProtectedSupport(lookIdx) ||
-						isInsideNeutralProtected ||
-						lookAheadIsNeutral) &&
-					!movedEnoughForNeutralCheck
-				) {
-					// Reuse cached corridor result from last sweep
-					if (u._neutralBlocked) {
-						moveDirLat = 0;
-						moveDirLng = 0;
-					} else if (u._neutralDirLat !== undefined) {
-						moveDirLat = u._neutralDirLat;
-						moveDirLng = u._neutralDirLng;
-					}
-				} else {
-					// No longer near neutral — clear cached state so next encounter is fresh
-					u._neutralCheckLat = undefined;
-					u._neutralDirLat = undefined;
-					u._neutralDirLng = undefined;
-					u._neutralBlocked = undefined;
-				}
-
-				// Neutral / protected territory: heavy penalty to discourage traversal.
-				// Units should path around neutral countries, not through them.
-				let neutralPenalty = 1.0;
-				let touchingNeutralForNaval = false;
-
-				const currentlyInNeutral =
-					isNeutralCountry(currentIdx) || isProtectedSupport(currentIdx);
-
-				if (currentlyInNeutral) {
-					if (!Number.isNaN(u.health)) {
-						const neutralTickDamage =
-							CONFIG.ATTRITION_DAMAGE * 2.0 * damageTakenMult;
-						recordDamage(u, neutralTickDamage);
-					}
-					neutralPenalty = 0.15;
-				} else if (isAtSea) {
-					// For naval units, treat upcoming neutral coastline as contact for minor attrition
-					const coastLookDist = 0.4;
-					const coastIdx = getGridIndex(
-						u.lat + moveDirLat * coastLookDist,
-						u.lng + moveDirLng * coastLookDist,
-					);
-					if (isNeutral(coastIdx) || isProtectedSupport(coastIdx)) {
-						touchingNeutralForNaval = true;
-						// Ships skimming neutral coasts also move a bit faster along them
-						neutralPenalty = 1.1;
-					}
-				}
-
-				// Naval neutral-contact damage: greatly reduced, just a tiny scrape while near neutral coasts
-				if (isAtSea && touchingNeutralForNaval && !Number.isNaN(u.health)) {
-					const neutralHitDamage =
-						CONFIG.ATTRITION_DAMAGE * 0.1 * damageTakenMult;
-					recordDamage(u, neutralHitDamage);
-				}
-
-				// Massive speed boost when actively retreating to avoid being swallowed by fast borders
-				// BUT trapped/encircled units cannot retreat efficiently
-				let retreatBoost = activeRetreat ? 5.5 : 1.0;
-				if (isEncircled) retreatBoost *= 0.25;
-
-				// --- FORCED PUSH COORDINATION (Victory-Driven) ---
-				// Disabled when a war/naval plan is driving the unit
-				let pushReadiness = 1.0;
-				const isAtFrontline =
-					!isAtSea && !isEffectivelyMyLand && !isTooNearBorder;
-				const warWeariness = Math.min(0.85, simFrameCount / 15000);
-
-				if (
-					!isPlanUnit &&
-					isAtFrontline &&
-					!isMega &&
-					!isSuper &&
-					!activeRetreat
-				) {
-					const victoryRatio = sideVictoryRatios[sideIndex] || 0;
-
-					if (countryObj?.isSurging) {
-						const spearheadAggression =
-							0.5 + (Math.sin(u.id * 777) * 0.5 + 0.5);
-						const momentumScale = Math.min(1.8, victoryRatio * 2.5);
-						pushReadiness = 4.2 * momentumScale * spearheadAggression;
-						pushReadiness *= 1.0 - warWeariness * 0.5;
-						if (u.victoryBoostTicks > 0) pushReadiness *= 1.4;
-					} else {
-						pushReadiness = 0.7 * (1.0 - warWeariness);
-					}
-
-					if (countryObj && !countryObj.isSaturated) {
-						pushReadiness = 0.3;
-					}
-				}
-
-				let moveDist =
-					baseSpeed *
-					speedMult *
-					planSpeedMult *
-					neutralPenalty *
-					retreatBoost *
-					pushReadiness *
-					0.8; // Reduced movement speed
-
-				// Safety: Prevent NaN from propagating if moveDir calculation fails
-				if (
-					!Number.isNaN(moveDirLat) &&
-					!Number.isNaN(moveDirLng) &&
-					!Number.isNaN(moveDist)
-				) {
-					// Naval block: non-transport units cannot enter water tiles
-					let coastBlocked = false;
-					if (!u.isTransport) {
-						const newLat = u.lat + moveDirLat * moveDist;
-						const newLng = u.lng + moveDirLng * moveDist;
-						const destIdx = getGridIndex(newLat, newLng);
-						if (destIdx !== -1 && landMask[destIdx] === 0) {
-							if (!isAtSea) {
-								// Would enter water — try coast deflection before stopping
-								coastBlocked = true;
-								let deflected = false;
-								const lookDist = moveDist * 3;
-								for (const ang of [-90, 90, -45, 45, -135, 135, -30, 30]) {
-									const rad = (ang * Math.PI) / 180;
-									const candLat =
-										moveDirLat * Math.cos(rad) - moveDirLng * Math.sin(rad);
-									const candLng =
-										moveDirLat * Math.sin(rad) + moveDirLng * Math.cos(rad);
-									let landCount = 0;
-									for (let s = 1; s <= 3; s++) {
-										const ci = getGridIndex(
-											u.lat + candLat * lookDist * s,
-											u.lng + candLng * lookDist * s,
-										);
-										if (ci !== -1 && landMask[ci] > 0) landCount++;
-									}
-									if (landCount >= 2) {
-										const mag = Math.sqrt(
-											candLat * candLat + candLng * candLng,
-										);
-										if (mag > 0) {
-											moveDirLat = candLat / mag;
-											moveDirLng = candLng / mag;
-										}
-										// Re-check: does the deflected step land on land?
-										const deflDestIdx = getGridIndex(
-											u.lat + moveDirLat * moveDist,
-											u.lng + moveDirLng * moveDist,
-										);
-										if (deflDestIdx !== -1 && landMask[deflDestIdx] === 0) {
-											moveDist *= 0.5;
-											window.__perf.coastDeflectHalved++;
-										}
-										deflected = true;
-										break;
-									}
-								}
-								if (!deflected) {
-									moveDirLat = 0;
-									moveDirLng = 0;
-									moveDist = 0;
-								}
-							}
-						}
-					}
-
-					// Coast stuck detection: abandon target after 60 ticks of coast deflection
-					if (coastBlocked) {
-						u._coastStuckTicks = (u._coastStuckTicks || 0) + 1;
-						if (u._coastStuckTicks > 60) {
-							target = null;
-							u._cachedTarget = null;
-							u._coastStuckTicks = 0;
-							window.__perf.coastStuckAbandoned =
-								(window.__perf.coastStuckAbandoned || 0) + 1;
-						}
-					} else {
-						u._coastStuckTicks = 0;
-					}
-
-					u.lat += moveDirLat * moveDist;
-					u.lng += moveDirLng * moveDist;
-					u.dirLat = moveDirLat; // Store trajectory for renderer
-					u.dirLng = moveDirLng;
-
-					// Geographic clamping/wrapping to prevent units from flying off the map
-					u.lat = Math.max(-89.9, Math.min(89.9, u.lat));
-					// Wrap longitude [-180, 180]
-					if (u.lng > 180) u.lng -= 360;
-					if (u.lng < -180) u.lng += 360;
-				}
-			} else if (target && typeof target.health !== "undefined") {
-				// Combat logic
-				u.lastCombatTick = simFrameCount;
-				target.lastCombatTick = simFrameCount;
-
-				// Strategic Depth: Units defending their own de jure (historical) territory get a defense boost.
-				let defenseBonus = 1.0;
-				const currentIdx = gridIdxNow;
-				const isDeJureLand =
-					currentIdx !== -1 && deJureMap[currentIdx] === u.sovereignId;
-
-				if (!isAtSea) {
-					if (isDeJureLand) defenseBonus *= 0.65; // 35% reduction in historical land
-					if (
-						worldControlMap[gridIdxNow] === u.sovereignId &&
-						Math.abs(currentControl) < 0.2
-					) {
-						defenseBonus *= 0.85; // Additional stack for unoccupied frontline
-					}
-
-					// City Fortification: Units near friendly cities are much harder to destroy
-					let nearbyCity = null;
-					const _myCities = _theaterCitiesBySovereign.get(u.sovereignId);
-					if (_myCities) {
-						for (let ci = 0; ci < _myCities.length; ci++) {
-							const c = _myCities[ci];
-							if ((u.lat - c.lat) ** 2 + (u.lng - c.lng) ** 2 < 0.04) {
-								nearbyCity = c;
-								break;
-							}
-						}
-					}
-					if (nearbyCity) {
-						defenseBonus *= 0.45; // Significant defense boost in urban centers
-					}
-				}
-
-				// War of Attrition: In long wars, units defending "dig in", taking less damage
-				// but making it harder for the attacker to break through without high losses.
-				const longWarDefense = simFrameCount > 6000 ? 0.75 : 1.0;
-
-				const tDmg =
-					CONFIG.COMBAT_DAMAGE *
-					damageDealtMult *
-					0.7 *
-					(u.kind === "army" ? Math.max(0, getLiveFormationStrength(u)) : 1);
-				const uDmg =
-					CONFIG.COMBAT_DAMAGE *
-					0.8 *
-					damageTakenMult *
-					defenseBonus *
-					longWarDefense *
-					(target.kind === "army"
-						? Math.max(0, getLiveFormationStrength(target))
-						: 1);
-
-				if (
-					simFrameCount > 100 &&
-					simFrameCount < 500 &&
-					_dbgLogCount++ < 200
-				) {
-					console.warn(
-						"[CMBT-DBG] combat:",
-						"side",
-						u.sideIndex,
-						"vs",
-						target.sideIndex,
-						"tDmg=",
-						tDmg.toFixed(3),
-						"uDmg=",
-						uDmg.toFixed(3),
-						"targetHealth=",
-						target.health?.toFixed(2),
-						"myHealth=",
-						u.health?.toFixed(2),
-						"dmgDealtMult=",
-						damageDealtMult.toFixed(3),
-						"dmgTakenMult=",
-						damageTakenMult.toFixed(3),
-						"defBonus=",
-						defenseBonus.toFixed(3),
-						"longWarDef=",
-						longWarDefense.toFixed(3),
-						"dist=",
-						dist.toFixed(4),
-					);
-				}
-
-				// Casualties increase while battling (direct engagement)
-				recordDamage(target, tDmg, u);
-				recordDamage(u, uDmg, target);
-
-				// Positional knockback: both units are pushed by the force of the engagement.
-				// Direction is along the line between them; distance is small and scaled by relative damage.
-				const dLat = target.lat - u.lat;
-				let dLng = target.lng - u.lng;
-				if (dLng > 180) dLng -= 360;
-				else if (dLng < -180) dLng += 360;
-				const distSq = dLat * dLat + dLng * dLng;
-				if (distSq > 0) {
-					const dist = Math.sqrt(distSq) || 1e-6;
-					const nx = dLng / dist;
-					const ny = dLat / dist;
-
-					// Base push scaled by movement speed so it feels consistent with unit motion
-					const basePush =
-						(isAtSea ? CONFIG.UNIT_NAVAL_SPEED : CONFIG.UNIT_SPEED) * 1.2;
-					// Relative damage factor: more damage dealt -> stronger push on the target
-					const totalDmg = tDmg + uDmg || 1e-6;
-					const targetFactor = Math.min(1.5, (tDmg / totalDmg) * 1.5);
-					const selfFactor = Math.min(1.0, (uDmg / totalDmg) * 1.0);
-
-					// Push target away from attacker
-					const targetPushLat = ny * basePush * targetFactor;
-					const targetPushLng = nx * basePush * targetFactor;
-					// Push attacker slightly backwards as recoil
-					const selfPushLat = -ny * basePush * 0.5 * selfFactor;
-					const selfPushLng = -nx * basePush * 0.5 * selfFactor;
-
-					// Apply knockback, keeping within latitude limits and wrapping longitude
-					const applyPush = (unitObj, dLatMove, dLngMove) => {
-						let newLat = unitObj.lat + dLatMove;
-						let newLng = unitObj.lng + dLngMove;
-						newLat = Math.max(-89.9, Math.min(89.9, newLat));
-						if (newLng > 180) newLng -= 360;
-						else if (newLng < -180) newLng += 360;
-						// Water guard: don't push land units into water
-						const pushIdx = getGridIndex(newLat, newLng);
-						if (pushIdx !== -1 && landMask[pushIdx] === 0 && !unitObj.isAtSea) {
-							window.__perf.knockbackBlocked++;
-							return;
-						}
-						unitObj.lat = newLat;
-						unitObj.lng = newLng;
-					};
-
-					if (
-						Number.isFinite(targetPushLat) &&
-						Number.isFinite(targetPushLng)
-					) {
-						applyPush(target, targetPushLat, targetPushLng);
-					}
-					if (Number.isFinite(selfPushLat) && Number.isFinite(selfPushLng)) {
-						applyPush(u, selfPushLat, selfPushLng);
-					}
-				}
-
-				if (target.health <= 0) {
-					u.victoryBoostTicks = 180; // Reduced momentum duration
-				}
-			}
-		} else {
-			if (simFrameCount > 100 && simFrameCount < 500 && _dbgLogCount++ < 200) {
-				console.warn(
-					"[ELSE-DBG] fell to empty else:",
-					"side",
-					u.sideIndex,
-					"hasTarget=",
-					!!target,
-					"targetType=",
-					target
-						? typeof target.health !== "undefined"
-							? "unit"
-							: "coord"
-						: "null",
-				);
-			}
-			u.lastCombatTick = 0;
-		}
-
-		if (u.health <= 0) {
-			// Units are already being counted for casualties per-hit during simulation.
-			// This just cleans them up when they reach 0 health.
-
-			units.splice(i, 1);
-		}
-
-		// ── unitLoop sub-timer: end combatMove ──
-		if (_detailedPerfEnabled && _u4 !== undefined)
-			window.__perf.unitCombatMove += performance.now() - _u4;
-	}
-
-	// A side can keep fighting at zero reserve, but it cannot recruit new formations.
-	window.__perf.unitLoop += performance.now() - _t3;
-	const _t4 = performance.now();
-	// 4. Individual Capitulation & Treaty Logic
-	const timeSinceTreaty = Date.now() - lastTreatyTime;
-
-	// Capitulation is evaluated only when a complete dirty-tile census commits, so
-	// every country observes one coherent territory snapshot.
-	if (territoryCensusFresh) {
-		for (let sIdx = 0; sIdx < sides.length; sIdx++) {
-			const side = sides[sIdx];
-			const hasActiveHostility = sides.some(
-				(other, otherIdx) =>
-					otherIdx !== sIdx &&
-					other?.length > 0 &&
-					areSidesHostile(sIdx, otherIdx),
-			);
-			if (!hasActiveHostility) continue;
-			for (let i = side.length - 1; i >= 0; i--) {
-				const country = side[i];
-				const stats = countryStats.get(country.id);
-				if (!stats) continue;
-				const decision = evaluateCountryCapitulation({
-					hasFreshTerritoryData: true,
-					unitCount: stats.units,
-					ownedCells: stats.owned,
-					controlledCells: stats.controlled,
-					initialCells: country.initialCells,
-				});
-				if (!decision.capitulate) continue;
-
-				console.warn("[MW] CAPITULATION:", country.name, {
-					reason: decision.reason,
-					units: stats.units,
-					controlledPercent: Number(decision.controlPercent.toFixed(2)),
-					owned: stats.owned,
-					initialCells: country.initialCells,
-					threshold: decision.threshold ?? 0,
-				});
-				if (capitulateCountry(country, sIdx)) {
-					// Exit tick early to re-evaluate state with updated sides and units.
-					return false;
-				}
-			}
-		}
-	}
-
-	// Determine which sides still contain participating countries.
-	const activeSideSet = new Set();
-	sides.forEach((side, idx) => {
-		if (side.length > 0) activeSideSet.add(idx);
-	});
-
-	if (gameState === "SIMULATING") {
-		const activeHostilePairs = getActiveHostilePairs();
-		const resolution = evaluateGlobalConflict(
-			Array.from(activeSideSet),
-			activeHostilePairs,
-		);
-		if (resolution) {
-			applyTreaty(resolution.type, resolution.winnerSideIdx);
-			return true;
-		}
-	}
-
-	let sideTerritoryCounts = _cachedSideTerritoryCounts;
-	if (shouldCountLand) {
-		// The last atomically committed ledger generation is coherent. Avoid the
-		// former multi-million-cell scan on every 200-tick report boundary.
-		sideTerritoryCounts = _cachedSideTerritoryCounts;
-	}
-	const totalTerritory = sideTerritoryCounts.reduce((a, b) => a + b, 0);
-	const side0Pct =
-		totalTerritory > 0 ? (sideTerritoryCounts[0] / totalTerritory) * 100 : 50;
-
-	// Territory-based capitulation — only fire when BOTH sides still have units
-	// and allow grace period after recent capitulation to prevent cascade
-	const side0HasUnits = sides[0]?.some((c) =>
-		units.some((u) => u.sovereignId === c.id),
-	);
-	const side1HasUnits =
-		sides.length > 1 &&
-		sides[1] &&
-		sides[1].some((c) => units.some((u) => u.sovereignId === c.id));
-	const recentCapitulation = _simTickCount - _lastCapitulationTick < 600;
-
-	const primarySidesHostile = sides.length === 2 && areSidesHostile(0, 1);
-	if (
-		primarySidesHostile &&
-		!recentCapitulation &&
-		side0Pct >= 99.9 &&
-		side0HasUnits &&
-		side1HasUnits
-	) {
-		applyTreaty("FULL_CAPITULATION", 0);
-		return true;
-	} else if (
-		primarySidesHostile &&
-		!recentCapitulation &&
-		side0Pct <= 0.1 &&
-		side0HasUnits &&
-		side1HasUnits
-	) {
-		applyTreaty("FULL_CAPITULATION", sides.length > 1 ? 1 : 0);
-		return true;
-	} else if (timeSinceTreaty > 6000 && treatyAlert.style.display === "none") {
-		if (!peaceTreatiesDisabled) {
-			const getSidePressure = (sIdx) => {
-				let total = 0;
-				let count = 0;
-				const side = sides[sIdx];
-				if (!side) return 0;
-				side.forEach((c) => {
-					total += aiCountryState.get(c.id)?.peacePressure || 0;
-					count++;
-				});
-				return count > 0 ? total / count : 0;
-			};
-			const pressures = sides.map((_, idx) => getSidePressure(idx));
-			const maxPressure = Math.max(...pressures.filter((p) => p > 0));
-			const proposalChance =
-				AI_DESPERATION.PEACE_PRESSURE_PROPOSAL_BASE *
-				(1 +
-					Math.min(
-						AI_DESPERATION.PEACE_PRESSURE_PROPOSAL_MULT_MAX,
-						maxPressure * 5,
-					));
-
-			if (Math.random() < proposalChance) {
-				const proposerSideIdx = Math.floor(Math.random() * sides.length);
-				if (sides[proposerSideIdx] && sides[proposerSideIdx].length > 0) {
-					const receiverSideIdx = sides.findIndex(
-						(s, i) =>
-							i !== proposerSideIdx &&
-							s.length > 0 &&
-							areSidesHostile(proposerSideIdx, i),
-					);
-					if (receiverSideIdx !== -1) {
-						const receiverLand =
-							totalTerritory > 0
-								? (sideTerritoryCounts[receiverSideIdx] / totalTerritory) * 100
-								: 50;
-						const proposerPressure = pressures[proposerSideIdx];
-						const receiverPressure = pressures[receiverSideIdx];
-						let acceptChance = Math.max(0.1, (100 - receiverLand) / 100);
-						acceptChance += receiverPressure * 0.25;
-						acceptChance -=
-							Math.max(0, proposerPressure - receiverPressure) * 0.12;
-						acceptChance = Math.max(0.05, Math.min(0.95, acceptChance));
-						showTreatyOffer(
-							proposerSideIdx,
-							Math.random() < acceptChance,
-							proposerSideIdx,
-						);
-					}
-				}
-			}
-		}
-	}
-
-	if (units.length === 0 && gameState === "SIMULATING") {
-		applyTreaty("WHITE_PEACE");
-		return true;
-	}
-
-	// 5. Update Bombs & Explosions
-	if (bombsDisabled) {
-		bombs = [];
-	}
-	for (let i = bombs.length - 1; i >= 0; i--) {
-		const b = bombs[i];
-		// Slower step for smoother movement, accelerating slightly on descent
-		const step =
-			0.0055 * (b.state === "falling" ? 1 + (b.progress - 0.5) * 2.5 : 1);
-		b.progress += step;
-
-		if (b.state === "rising" && b.progress >= 0.5) {
-			b.state = "falling";
-		}
-
-		const t = b.progress;
-		const latBase = b.startLat + (b.targetLat - b.startLat) * t;
-		const lngBase = b.startLng + (b.targetLng - b.startLng) * t;
-
-		const alt = Math.sin(Math.PI * t) * b.peakAlt;
-		b.currentLat = latBase + alt;
-		b.currentLng = lngBase;
-
-		// Predict next position for rotation calculation
-		const nextT = Math.min(1.0, t + 0.005);
-		const nextLatBase = b.startLat + (b.targetLat - b.startLat) * nextT;
-		const nextLngBase = b.startLng + (b.targetLng - b.startLng) * nextT;
-		const nextAlt = Math.sin(Math.PI * nextT) * b.peakAlt;
-		b.nextLat = nextLatBase + nextAlt;
-		b.nextLng = nextLngBase;
-
-		// Trail logic
-		b.trail.push({ lat: b.currentLat, lng: b.currentLng });
-		if (b.trail.length > 40) b.trail.shift();
-
-		if (b.progress >= 1.0) {
-			// Impact!
-			playExplosionSound();
-			explosions.push({
-				lat: b.targetLat,
-				lng: b.targetLng,
-				life: 30,
-				maxRadius: 20,
-			});
-
-			// Damage units in radius instead of instantly killing them
-			const killRadiusSq = 0.5 * 0.5;
-			const killRadius = Math.sqrt(killRadiusSq);
-			for (let j = 0; j < units.length; j++) {
-				const victim = units[j];
-				if (!areSidesHostile(b.sideIndex, victim.sideIndex)) continue;
-				const dSq =
-					(victim.lat - b.targetLat) ** 2 + (victim.lng - b.targetLng) ** 2;
-				if (dSq < killRadiusSq) {
-					const dist = Math.sqrt(dSq);
-					const falloff = 1 - dist / killRadius; // 1 at center, 0 at edge
-					// Base missile damage scaled by distance; strong but non‑lethal except near center
-					const baseDamage = CONFIG.COMBAT_DAMAGE * 4;
-					const damage = baseDamage * Math.max(0.2, falloff); // ensure a minimum chunk
-					recordDamage(victim, damage);
-					// Do NOT splice here; units will be removed later when their health <= 0
-				}
-			}
-			bombs.splice(i, 1);
-		}
-	}
-
-	// AI Bomb Launching (Restored and buffed frequency)
-	const simYear = gameTimeDate ? gameTimeDate.year : 2024;
-	// Enforce 1942 technology gate for missiles/bombs
-	const canFireMissiles = !gameTimeEnabled || simYear >= 1942;
-
-	if (!bombsDisabled && canFireMissiles) {
-		const activeSideList = sides
-			.map((s, idx) => ({ s, idx }))
-			.filter((x) => x.s.length > 0);
-
-		if (activeSideList.length >= 2) {
-			if (bases.length > 0 && Math.random() < 0.01) {
-				const launcherEntry =
-					activeSideList[Math.floor(Math.random() * activeSideList.length)];
-				const launcherSideIdx = launcherEntry.idx;
-				const enemyEntries = activeSideList.filter((x) =>
-					areSidesHostile(launcherSideIdx, x.idx),
-				);
-				if (enemyEntries.length > 0) {
-					const targetEntry =
-						enemyEntries[Math.floor(Math.random() * enemyEntries.length)];
-					const targetSideIdx = targetEntry.idx;
-					const myBases = bases.filter((b) => b.sideIndex === launcherSideIdx);
-					const enemyUnits = _tickUnitsBySide[targetSideIdx] || [];
-					if (myBases.length > 0 && enemyUnits.length > 0) {
-						const launcher =
-							myBases[Math.floor(Math.random() * myBases.length)];
-						const target =
-							enemyUnits[Math.floor(Math.random() * enemyUnits.length)];
-						launchBomb(
-							launcher.lat,
-							launcher.lng,
-							target.lat,
-							target.lng,
-							launcherSideIdx,
-						);
-					}
-				}
-			}
-		}
-	}
-
-	for (let i = explosions.length - 1; i >= 0; i--) {
-		explosions[i].life--;
-		if (explosions[i].life <= 0) explosions.splice(i, 1);
-	}
-
-	// Cache unit counts / soldier estimates once per tick instead of re-scanning
-	// the full units[] array every visual frame in updateLoop().
-	const numSides = sides.length;
-	const unitCounts = new Array(numSides).fill(0);
-	const soldierEsts = new Array(numSides).fill(0);
-	for (let i = 0; i < units.length; i++) {
-		const u = units[i];
-		const si = u.sideIndex;
-		if (si >= 0 && si < numSides) {
-			unitCounts[si]++;
-			soldierEsts[si] += getLiveFormationPersonnel(u);
-		}
-	}
-	_cachedSideUnitCounts = unitCounts;
-	_cachedSideSoldierEsts = soldierEsts;
-
-	window.__perf.post += performance.now() - _t4;
-	const _tickMs = performance.now() - _t0;
-	window.__perf.tickTotal += _tickMs;
-	if (_tickMs > window.__perf.maxTick) window.__perf.maxTick = _tickMs;
-	recordPerfMeasure("Simulation Tick", _t0, _tickMs, {
-		tick: window.__perf.ticks,
-		units: units.length,
-	});
-
-	// ── Per-tick perf history ring buffer ──
-	if (!_perfEnabled) return false;
-	const _tickEntry = {
-		tick: window.__perf.ticks,
-		ms: _tickMs,
-		units: units.length,
-		cats: {},
-		reassess: {},
-		tactical: {},
-		water: {},
-	};
-	for (const k of _perfKeys)
-		_tickEntry.cats[k] = (window.__perf[k] || 0) - _perfSnap[k];
-	for (const k of [
-		"proposalRuns",
-		"proposalFailed",
-		"reassess_noPlan",
-		"reassess_interval",
-		"reassess_forced",
-		"reassess_territory",
-		"reassess_posture",
-		"reassess_ratio",
-	])
-		_tickEntry.reassess[k] = (window.__perf[k] || 0) - (_perfSnap[k] || 0);
-	for (const k of [
-		"coastDeflectHalved",
-		"knockbackBlocked",
-		"waterPathPenalized",
-		"coastStuckAbandoned",
-	])
-		_tickEntry.water[k] = (window.__perf[k] || 0) - (_perfSnap[k] || 0);
-	for (const k of [
-		"tacticalFriendlyCandidatePairs",
-		"tacticalEnemyCandidateVisits",
-		"tacticalAcceptedPairs",
-		"tacticalFriendlyPairs",
-		"tacticalHostileCellVisits",
-		"tacticalCacheHits",
-		"tacticalCacheMisses",
-		"tacticalGhostInvalidations",
-		"tacticalFastLaneUnits",
-	]) {
-		_tickEntry.tactical[k] = (window.__perf[k] || 0) - (_perfSnap[k] || 0);
-	}
-	_tickEntry.tactical.maxBucketOccupancy =
-		window.__perf.tacticalMaxBucketOccupancy || 0;
-	_tickEntry.tactical.cellCount = window.__perf.tacticalCellCount || 0;
-	_tickEntry.tactical.insertedUnits = window.__perf.tacticalInsertedUnits || 0;
-	if (!window.__perf._history) window.__perf._history = [];
-	window.__perf._history.push(_tickEntry);
-	if (window.__perf._history.length > PERF_TICK_HISTORY_LIMIT) {
-		window.__perf._history.shift();
-	}
-
-	return false;
-}
-
-function percentile(sortedValues, ratio) {
-	if (!sortedValues.length) return 0;
-	const idx = Math.min(
-		sortedValues.length - 1,
-		Math.floor(sortedValues.length * ratio),
-	);
-	return sortedValues[idx] || 0;
-}
-
-function summarizeSamples(samples) {
-	if (!samples.length) {
-		return { count: 0, min: 0, p50: 0, p95: 0, p99: 0, max: 0, avg: 0 };
-	}
-	const sorted = [...samples].sort((a, b) => a - b);
-	const total = samples.reduce((sum, value) => sum + value, 0);
-	return {
-		count: samples.length,
-		min: sorted[0],
-		p50: percentile(sorted, 0.5),
-		p95: percentile(sorted, 0.95),
-		p99: percentile(sorted, 0.99),
-		max: sorted[sorted.length - 1],
-		avg: total / samples.length,
-	};
-}
-
-function getRenderSkipCadence() {
-	if (simSpeed >= 5) return "1 / 5 frames rendered";
-	if (simSpeed >= 3) return "1 / 4 frames rendered";
-	if (simSpeed >= 2) return "1 / 2 frames rendered";
-	return "every frame";
-}
-
-function getPerfConfigSnapshot() {
-	return {
-		build: document.title || null,
-		gridRes: CONFIG.GRID_RES,
-		mapResolution: mapResSelect?.value || null,
-		maxUnitsPerSide: CONFIG.MAX_UNITS_PER_SIDE,
-		simSpeed,
-		viewMode,
-		unitCount: units.length,
-		sideCount: sides.length,
-		renderSkipCadence: getRenderSkipCadence(),
-		staleTargetScanInterval:
-			simSpeed >= 3
-				? CONFIG.STALE_TARGET_SCAN_INTERVAL_FAST
-				: CONFIG.STALE_TARGET_SCAN_INTERVAL,
-		staleTargetMaxCacheDistSq:
-			simSpeed >= 3
-				? CONFIG.STALE_TARGET_MAX_CACHE_DIST_SQ_FAST
-				: CONFIG.STALE_TARGET_MAX_CACHE_DIST_SQ,
-		frontlineFieldUpdateInterval: FRONTLINE_FIELD_UPDATE_INTERVAL,
-		frontlinePolyUpdateInterval: FRONTLINE_POLY_UPDATE_INTERVAL,
-		operationalAi: gameMode === "CONQUEST",
-		traceMarksEnabled: window.__perf?._traceMarksEnabled === true,
-	};
-}
-
-function getPerfEnvironmentSnapshot() {
-	return {
-		userAgent: navigator.userAgent,
-		hardwareConcurrency: navigator.hardwareConcurrency || null,
-		deviceMemoryGiB: navigator.deviceMemory || null,
-		devicePixelRatio: window.devicePixelRatio || 1,
-		viewport: {
-			width: window.innerWidth,
-			height: window.innerHeight,
-		},
-		crossOriginIsolated: window.crossOriginIsolated === true,
-	};
-}
-
-function recordPerfFrame(entry) {
-	if (
-		!window.__perf ||
-		(window.__perf._mode === "off" && !_isBenchmarking && !entry.benchmark)
-	) {
-		return;
-	}
-	if (!window.__perf._frameHistory) window.__perf._frameHistory = [];
-	window.__perf._frameHistory.push(entry);
-	if (window.__perf._frameHistory.length > PERF_FRAME_HISTORY_LIMIT) {
-		window.__perf._frameHistory.shift();
-	}
-	if (entry.ms < 100) return;
-
-	const history = window.__perf._history || [];
-	const relatedTicks = history.filter(
-		(tick) => tick.tick >= entry.tickStart && tick.tick <= entry.tickEnd,
-	);
-	const categoryTotals = {};
-	for (const tick of relatedTicks) {
-		for (const [name, ms] of Object.entries(tick.cats || {})) {
-			categoryTotals[name] = (categoryTotals[name] || 0) + ms;
-		}
-	}
-	const topCategories = Object.entries(categoryTotals)
-		.filter(([name]) => !PERF_EXCLUSIVE_PHASES.includes(name))
-		.map(([name, ms]) => ({ name, ms }))
-		.sort((left, right) => right.ms - left.ms)
-		.slice(0, 5);
-	const tickMs = relatedTicks.reduce((sum, tick) => sum + tick.ms, 0);
-	const reason =
-		entry.ms >= 350 ? ">=350ms" : entry.ms >= 250 ? ">=250ms" : ">=100ms";
-	if (!window.__perf._frameSpikes) window.__perf._frameSpikes = [];
-	window.__perf._frameSpikes.push({
-		...entry,
-		reason,
-		ticks: {
-			start: entry.tickStart,
-			end: entry.tickEnd,
-			count: relatedTicks.length,
-			totalMs: tickMs,
-			topCategories,
-		},
-	});
-	if (window.__perf._frameSpikes.length > PERF_SPIKE_HISTORY_LIMIT) {
-		window.__perf._frameSpikes.shift();
-	}
-}
-
-function getPerfReportData() {
-	if (window.__perf?._trackingPaused && window.__perf._frozenReport) {
-		return window.__perf._frozenReport;
-	}
-	const h = window.__perf?._history || [];
-	const frameEntries = window.__perf?._frameHistory || [];
-	const benchmark = window.__perf?._lastBenchmark || null;
-	if (!h.length && !frameEntries.length && !benchmark) {
-		return {
-			ok: false,
-			message:
-				"no perf history yet — call window.perfEnable() and let the sim run",
-			instrumentation: window.__perf?._mode || "off",
-			benchmark: window.__perf?._lastBenchmark || null,
-			config: getPerfConfigSnapshot(),
-		};
-	}
-	const n = h.length;
-	const tickSummary = summarizeSamples(h.map((e) => e.ms));
-
-	// Unit stats
-	const unitCounts = h.map((e) => e.units || 0);
-	const avgUnits = n > 0 ? unitCounts.reduce((s, v) => s + v, 0) / n : 0;
-	const maxUnits = unitCounts.length ? Math.max(...unitCounts) : 0;
-	const taskForceCounts = frameEntries.map((entry) => entry.taskForces || 0);
-	const averageTaskForces = taskForceCounts.length
-		? taskForceCounts.reduce((sum, value) => sum + value, 0) /
-			taskForceCounts.length
-		: 0;
-
-	// Per-category averages, percentiles, and max
-	const catKeys = Object.keys(h[0]?.cats || {});
-	const catSamples = {};
-	for (const k of catKeys) catSamples[k] = [];
-	for (const e of h) {
-		for (const k of catKeys) {
-			catSamples[k].push(e.cats[k] || 0);
-		}
-	}
-	const categories = {};
-	for (const k of catKeys) categories[k] = summarizeSamples(catSamples[k]);
-	const phases = {};
-	for (const key of PERF_EXCLUSIVE_PHASES) {
-		phases[key] = categories[key] || summarizeSamples([]);
-	}
-	const phaseTotals = h.map((entry) =>
-		PERF_EXCLUSIVE_PHASES.reduce(
-			(sum, key) => sum + Math.max(0, entry.cats?.[key] || 0),
-			0,
-		),
-	);
-	const unattributedTick = h.map((entry, index) =>
-		Math.max(0, entry.ms - phaseTotals[index]),
-	);
-	phases.unattributed = summarizeSamples(unattributedTick);
-
-	// Reassessment totals from history
-	const reassessKeys = [
-		"proposalRuns",
-		"proposalFailed",
-		"reassess_noPlan",
-		"reassess_interval",
-		"reassess_forced",
-		"reassess_territory",
-		"reassess_posture",
-		"reassess_ratio",
-	];
-	const reassessTotals = {};
-	for (const k of reassessKeys) reassessTotals[k] = 0;
-	for (const e of h) {
-		if (e.reassess) {
-			for (const k of reassessKeys) reassessTotals[k] += e.reassess[k] || 0;
-		}
-	}
-
-	// Delta since last report (per-tick average change)
-	const categoryAvgs = {};
-	for (const [k, stats] of Object.entries(categories))
-		categoryAvgs[k] = stats.avg;
-	const prevAvgs = window.__perf._lastReportAvgs;
-	const delta = {};
-	if (prevAvgs) {
-		for (const k of catKeys)
-			delta[k] = (categoryAvgs[k] || 0) - (prevAvgs[k] || 0);
-	}
-
-	// Water avoidance debug counters from history
-	const waterKeys = [
-		"coastDeflectHalved",
-		"knockbackBlocked",
-		"waterPathPenalized",
-		"coastStuckAbandoned",
-	];
-	const waterTotals = {};
-	for (const k of waterKeys) waterTotals[k] = 0;
-	for (const e of h) {
-		if (e.water) {
-			for (const k of waterKeys) waterTotals[k] += e.water[k] || 0;
-		}
-	}
-	const waterTotal = Object.values(waterTotals).reduce((s, v) => s + v, 0);
-	const tacticalCounterKeys = [
-		"tacticalFriendlyCandidatePairs",
-		"tacticalEnemyCandidateVisits",
-		"tacticalAcceptedPairs",
-		"tacticalFriendlyPairs",
-		"tacticalHostileCellVisits",
-		"tacticalCacheHits",
-		"tacticalCacheMisses",
-		"tacticalGhostInvalidations",
-		"tacticalFastLaneUnits",
-	];
-	const tacticalTotals = Object.fromEntries(
-		tacticalCounterKeys.map((key) => [key, 0]),
-	);
-	for (const entry of h) {
-		for (const key of tacticalCounterKeys) {
-			tacticalTotals[key] += entry.tactical?.[key] || 0;
-		}
-	}
-	const tacticalUnitTicks = h.reduce(
-		(total, entry) => total + Math.max(0, entry.units || 0),
-		0,
-	);
-	const tacticalMaxBucketOccupancy = h.length
-		? Math.max(...h.map((entry) => entry.tactical?.maxBucketOccupancy || 0))
-		: 0;
-	const tacticalAverageCellCount = n
-		? h.reduce((total, entry) => total + (entry.tactical?.cellCount || 0), 0) /
-			n
-		: 0;
-	const tacticalAverageInsertedUnits = n
-		? h.reduce(
-				(total, entry) => total + (entry.tactical?.insertedUnits || 0),
-				0,
-			) / n
-		: 0;
-	const tacticalCacheQueries =
-		tacticalTotals.tacticalCacheHits + tacticalTotals.tacticalCacheMisses;
-	const tactical = {
-		sampleTicks: n,
-		unitTicks: tacticalUnitTicks,
-		friendlyCandidatePairs: tacticalTotals.tacticalFriendlyCandidatePairs,
-		enemyCandidateVisits: tacticalTotals.tacticalEnemyCandidateVisits,
-		acceptedPairs: tacticalTotals.tacticalAcceptedPairs,
-		friendlyPairs: tacticalTotals.tacticalFriendlyPairs,
-		hostileCellVisits: tacticalTotals.tacticalHostileCellVisits,
-		cacheHits: tacticalTotals.tacticalCacheHits,
-		cacheMisses: tacticalTotals.tacticalCacheMisses,
-		ghostInvalidations: tacticalTotals.tacticalGhostInvalidations,
-		fastLaneUnits: tacticalTotals.tacticalFastLaneUnits,
-		friendlyCandidatePairsPerTick:
-			n > 0 ? tacticalTotals.tacticalFriendlyCandidatePairs / n : 0,
-		enemyCandidateVisitsPerUnitTick:
-			tacticalUnitTicks > 0
-				? tacticalTotals.tacticalEnemyCandidateVisits / tacticalUnitTicks
-				: 0,
-		acceptedPairsPerTick: n > 0 ? tacticalTotals.tacticalAcceptedPairs / n : 0,
-		friendlyPairsPerTick: n > 0 ? tacticalTotals.tacticalFriendlyPairs / n : 0,
-		hostileCellVisitsPerTick:
-			n > 0 ? tacticalTotals.tacticalHostileCellVisits / n : 0,
-		acceptanceRate:
-			tacticalTotals.tacticalFriendlyCandidatePairs > 0
-				? tacticalTotals.tacticalAcceptedPairs /
-					tacticalTotals.tacticalFriendlyCandidatePairs
-				: 0,
-		cacheHitRate:
-			tacticalCacheQueries > 0
-				? tacticalTotals.tacticalCacheHits / tacticalCacheQueries
-				: 0,
-		cacheMissesPerUnitTick:
-			tacticalUnitTicks > 0
-				? tacticalTotals.tacticalCacheMisses / tacticalUnitTicks
-				: 0,
-		ghostInvalidationsPerUnitTick:
-			tacticalUnitTicks > 0
-				? tacticalTotals.tacticalGhostInvalidations / tacticalUnitTicks
-				: 0,
-		fastLaneShare:
-			tacticalUnitTicks > 0
-				? tacticalTotals.tacticalFastLaneUnits / tacticalUnitTicks
-				: 0,
-		maxBucketOccupancy: tacticalMaxBucketOccupancy,
-		averageCellCount: tacticalAverageCellCount,
-		averageInsertedUnits: tacticalAverageInsertedUnits,
-		// Compatibility aliases used by reports written before the counters split.
-		candidateVisits:
-			tacticalTotals.tacticalFriendlyCandidatePairs +
-			tacticalTotals.tacticalEnemyCandidateVisits,
-		cellCount: tacticalAverageCellCount,
-		insertedUnits: tacticalAverageInsertedUnits,
-	};
-
-	const frameSummary = summarizeSamples(frameEntries.map((e) => e.ms));
-	const renderSummary = summarizeSamples(
-		frameEntries.filter((e) => e.rendered).map((e) => e.renderMs || 0),
-	);
-	const frameStages = {
-		mainWork: summarizeSamples(
-			frameEntries.map((entry) => entry.mainWorkMs || 0),
-		),
-		simulation: summarizeSamples(
-			frameEntries.map((entry) => entry.simulationMs || 0),
-		),
-		hud: summarizeSamples(frameEntries.map((entry) => entry.hudMs || 0)),
-		render: summarizeSamples(frameEntries.map((entry) => entry.renderMs || 0)),
-		otherMain: summarizeSamples(
-			frameEntries.map((entry) => entry.otherMainMs || 0),
-		),
-		browserWait: summarizeSamples(
-			frameEntries.map((entry) => entry.browserWaitMs || 0),
-		),
-	};
-	const longTasks = window.__perf._longTasks || [];
-	const longTaskSummary = summarizeSamples(
-		longTasks.map((entry) => entry.duration || 0),
-	);
-	const memorySamples = window.__perf._memorySamples || [];
-	const firstMemory = memorySamples[0]?.usedBytes || null;
-	const lastMemory = memorySamples.at(-1)?.usedBytes || null;
-	const scheduler = window.__perf._scheduler || {};
-	const avgAccumulator =
-		scheduler.frames > 0 ? scheduler.accumulatorSum / scheduler.frames : 0;
-	const verdict = benchmark
-		? {
-				target: "avg FPS >=25, max frame <350ms",
-				avgFpsPass: benchmark.avgFps >= 25,
-				maxFramePass: benchmark.maxFrameMs < 350,
-				pass: benchmark.avgFps >= 25 && benchmark.maxFrameMs < 350,
-				topLikelyCause:
-					benchmark.maxFrameMs >= 350
-						? "long frame spike"
-						: benchmark.avgFps < 25
-							? "sustained frame cost"
-							: "within target",
-			}
-		: null;
-	const rankedPhases = Object.entries(phases)
-		.filter(([key]) => key !== "unattributed")
-		.sort((left, right) => right[1].avg - left[1].avg);
-	const rankedDetails = Object.entries(categories)
-		.filter(([key]) => !PERF_EXCLUSIVE_PHASES.includes(key))
-		.sort((left, right) => right[1].avg - left[1].avg);
-	const rankedFrameStages = ["simulation", "hud", "render", "otherMain"]
-		.map((key) => [key, frameStages[key]])
-		.sort((left, right) => right[1].avg - left[1].avg);
-	const recommendations = [];
-	const topFrameStage = rankedFrameStages[0]?.[0] || null;
-	const topPhase = rankedPhases[0]?.[0] || null;
-	const topDetail = rankedDetails[0]?.[0] || null;
-	if (topFrameStage === "simulation") {
-		recommendations.push(
-			`Simulation dominates main-thread work; start with ${topPhase || "the hottest tick phase"}${topDetail ? `, especially ${topDetail}` : ""}.`,
-		);
-	} else if (topFrameStage === "render") {
-		recommendations.push(
-			"Canvas rendering dominates measured work; profile renderer draw loops, map invalidation, and label/unit culling.",
-		);
-	} else if (topFrameStage === "hud") {
-		recommendations.push(
-			"DOM/HUD updates dominate measured work; reduce update frequency and avoid rebuilding unchanged War Desk or casualty nodes.",
-		);
-	}
-	const operationalAiAverage = categories.operationalTaskForces?.avg || 0;
-	if (operationalAiAverage > tickSummary.avg * 0.1) {
-		recommendations.push(
-			"Operational AI exceeds 10% of tick time; inspect contact refresh breadth and task-force reassessment frequency.",
-		);
-	}
-	if ((scheduler.cappedSubTicks || 0) > 0) {
-		recommendations.push(
-			"The scheduler is capping requested subticks; improve simulation throughput before increasing render frequency.",
-		);
-	}
-	if (longTaskSummary.max >= 100) {
-		recommendations.push(
-			"Long main-thread tasks are causing visible stalls; inspect the recorded spike frames and correlate them with territory phases or worker applies.",
-		);
-	}
-
-	return {
-		ok: true,
-		instrumentation: window.__perf._mode || "off",
-		ticks: {
-			count: n,
-			avgMs: tickSummary.avg,
-			minMs: tickSummary.min,
-			p50Ms: tickSummary.p50,
-			p95Ms: tickSummary.p95,
-			p99Ms: tickSummary.p99,
-			maxMs: tickSummary.max,
-			approxFps: tickSummary.avg > 0 ? 1000 / tickSummary.avg : null,
-		},
-		frames: {
-			...frameSummary,
-			avgFps: frameSummary.avg > 0 ? 1000 / frameSummary.avg : null,
-			renderedFrameRenderMs: renderSummary,
-			spikes: window.__perf._frameSpikes || [],
-		},
-		frameStages,
-		units: {
-			avg: avgUnits,
-			max: maxUnits,
-			current: units.length,
-		},
-		taskForces: {
-			avg: averageTaskForces,
-			max: taskForceCounts.length ? Math.max(...taskForceCounts) : 0,
-			current: Array.from(_aiTaskForcesBySide.values()).reduce(
-				(sum, taskForces) => sum + taskForces.length,
-				0,
-			),
-		},
-		categories,
-		phases,
-		categoryDeltaSinceLastReport: delta,
-		reassess: reassessTotals,
-		water: {
-			total: waterTotal,
-			...waterTotals,
-		},
-		tactical,
-		frontlineWorker: {
-			dispatches: window.__perf.frontlineWorkerDispatches || 0,
-			completed: window.__perf.frontlineWorkerCompleted || 0,
-			coalesced: window.__perf.frontlineWorkerCoalesced || 0,
-			errors: window.__perf.frontlineWorkerErrors || 0,
-			staleResults: window.__perf.frontlineWorkerStaleResults || 0,
-			busy: _workerBusy,
-			pending: _frontlineWorkerPending,
-			pendingField: _frontlineWorkerPendingField,
-			pendingLayout: _frontlineWorkerPendingLayout,
-			lastDurationMs: window.__perf.frontlineWorkerLastDurationMs || 0,
-			maxDurationMs: window.__perf.frontlineWorkerMaxDurationMs || 0,
-			lastFieldDurationMs:
-				window.__perf.frontlineWorkerFieldLastDurationMs || 0,
-			maxFieldDurationMs: window.__perf.frontlineWorkerFieldMaxDurationMs || 0,
-			layoutDispatches: window.__perf.frontlineWorkerLayoutDispatches || 0,
-			layoutCompleted: window.__perf.frontlineWorkerLayoutCompleted || 0,
-			layoutCoalesced: window.__perf.frontlineWorkerLayoutCoalesced || 0,
-			layoutErrors: window.__perf.frontlineWorkerLayoutErrors || 0,
-			lastLayoutDurationMs:
-				window.__perf.frontlineWorkerLayoutLastDurationMs || 0,
-			maxLayoutDurationMs:
-				window.__perf.frontlineWorkerLayoutMaxDurationMs || 0,
-		},
-		scheduler: {
-			frames: scheduler.frames || 0,
-			renderedFrames: scheduler.renderedFrames || 0,
-			skippedRenderFrames: scheduler.skippedRenderFrames || 0,
-			requestedSubTicks: scheduler.requestedSubTicks || 0,
-			executedSubTicks: scheduler.executedSubTicks || 0,
-			cappedSubTickFrames: scheduler.cappedSubTickFrames || 0,
-			cappedSubTicks: scheduler.cappedSubTicks || 0,
-			avgAccumulator,
-			maxAccumulator: scheduler.maxAccumulator || 0,
-		},
-		benchmark,
-		verdict,
-		config: getPerfConfigSnapshot(),
-		environment: getPerfEnvironmentSnapshot(),
-		browser: {
-			longTasks: {
-				...longTaskSummary,
-				entries: longTasks.slice(-20),
-			},
-			memory: {
-				supported: memorySamples.length > 0,
-				samples: memorySamples.length,
-				firstUsedBytes: firstMemory,
-				lastUsedBytes: lastMemory,
-				deltaBytes:
-					firstMemory !== null && lastMemory !== null
-						? lastMemory - firstMemory
-						: null,
-				peakUsedBytes: memorySamples.length
-					? Math.max(...memorySamples.map((entry) => entry.usedBytes))
-					: null,
-			},
-		},
-		analysis: {
-			topFrameStage,
-			topPhase,
-			topDetail,
-			operationalAiAverageMs: operationalAiAverage,
-			recommendations,
-		},
-	};
-}
-
-function formatMs(value) {
-	return Number.isFinite(value) ? value.toFixed(1) : "—";
-}
-
-function formatPerfReport(data) {
-	if (!data.ok) return data.message;
-	const tickFps =
-		data.ticks.approxFps && Number.isFinite(data.ticks.approxFps)
-			? data.ticks.approxFps.toFixed(0)
-			: "—";
-	const lines = [];
-	lines.push(
-		`=== PERF REPORT (${data.ticks.count} ticks, ${data.instrumentation} instrumentation, avg ${formatMs(data.ticks.avgMs)}ms, ~${tickFps} tick/s) ===`,
-	);
-	if (data.benchmark) {
-		const v = data.verdict;
-		lines.push(
-			`  benchmark: ${v.pass ? "PASS" : "FAIL"} avgFPS ${data.benchmark.avgFps.toFixed(0)} (${v.avgFpsPass ? "pass" : "fail"}) | maxFrame ${formatMs(data.benchmark.maxFrameMs)}ms (${v.maxFramePass ? "pass" : "fail"})`,
-		);
-		lines.push(`  target: ${v.target} | likely cause: ${v.topLikelyCause}`);
-	}
-	lines.push(
-		`  ticks: min ${formatMs(data.ticks.minMs)}ms | p50 ${formatMs(data.ticks.p50Ms)}ms | p95 ${formatMs(data.ticks.p95Ms)}ms | p99 ${formatMs(data.ticks.p99Ms)}ms | max ${formatMs(data.ticks.maxMs)}ms`,
-	);
-	if (data.frames.count > 0) {
-		lines.push(
-			`  frames: avg ${formatMs(data.frames.avg)}ms (${data.frames.avgFps.toFixed(0)} FPS) | p95 ${formatMs(data.frames.p95)}ms | p99 ${formatMs(data.frames.p99)}ms | max ${formatMs(data.frames.max)}ms | spikes ${data.frames.spikes.length}`,
-		);
-		lines.push(
-			`  render: avg ${formatMs(data.frames.renderedFrameRenderMs.avg)}ms/rendered frame | p95 ${formatMs(data.frames.renderedFrameRenderMs.p95)}ms | max ${formatMs(data.frames.renderedFrameRenderMs.max)}ms`,
-		);
-		lines.push(
-			`  frame work: main ${formatMs(data.frameStages.mainWork.avg)}ms | sim ${formatMs(data.frameStages.simulation.avg)}ms | HUD ${formatMs(data.frameStages.hud.avg)}ms | render ${formatMs(data.frameStages.render.avg)}ms | other ${formatMs(data.frameStages.otherMain.avg)}ms | browser wait ${formatMs(data.frameStages.browserWait.avg)}ms`,
-		);
-	}
-	lines.push(
-		`  units: avg ${data.units.avg.toFixed(0)} | max ${data.units.max} | current ${data.units.current} | task forces avg ${data.taskForces.avg.toFixed(1)} max ${data.taskForces.max}`,
-	);
-	lines.push(
-		`  scheduler: rendered ${data.scheduler.renderedFrames}/${data.scheduler.frames} frames | subticks ${data.scheduler.executedSubTicks}/${data.scheduler.requestedSubTicks} | cappedFrames ${data.scheduler.cappedSubTickFrames} | cappedSubticks ${data.scheduler.cappedSubTicks}`,
-	);
-	const tacticalCacheRate = ((data.tactical?.cacheHitRate || 0) * 100).toFixed(
-		1,
-	);
-	lines.push(
-		`  tactical grid: ${formatMs(data.tactical?.averageCellCount || 0)} cells/tick | max bucket ${data.tactical?.maxBucketOccupancy || 0} | enemy candidates ${formatMs(data.tactical?.enemyCandidateVisitsPerUnitTick || 0)}/unit-tick | friendly pairs ${formatMs(data.tactical?.acceptedPairsPerTick || 0)}/tick | cache ${tacticalCacheRate}% | fast lane ${((data.tactical?.fastLaneShare || 0) * 100).toFixed(1)}% | ghosts ${formatMs(data.tactical?.ghostInvalidationsPerUnitTick || 0)}/unit-tick`,
-	);
-	lines.push(
-		`  frontline worker: ${data.frontlineWorker.completed}/${data.frontlineWorker.dispatches} done | layout ${data.frontlineWorker.layoutCompleted}/${data.frontlineWorker.layoutDispatches} (${formatMs(data.frontlineWorker.lastLayoutDurationMs)}ms, max ${formatMs(data.frontlineWorker.maxLayoutDurationMs)}ms) | errors ${data.frontlineWorker.errors}/${data.frontlineWorker.layoutErrors} | stale ${data.frontlineWorker.staleResults} | ${data.frontlineWorker.busy ? "busy" : "idle"}${data.frontlineWorker.pending ? `, pending${data.frontlineWorker.pendingField ? " field" : ""}${data.frontlineWorker.pendingLayout ? " layout" : ""}` : ""}`,
-	);
-	lines.push(
-		`  config: simSpeed ${data.config.simSpeed}x | view ${data.config.viewMode} | grid ${data.config.gridRes} | map ${data.config.mapResolution || "n/a"} | render ${data.config.renderSkipCadence}`,
-	);
-	lines.push("  ─────────────────────────────────────────────");
-	lines.push("  exclusive tick phases (these add up to tick time):");
-	for (const key of [...PERF_EXCLUSIVE_PHASES, "unattributed"]) {
-		const stats = data.phases[key];
-		if (!stats || stats.avg < 0.01) continue;
-		const rawPct = data.ticks.avgMs > 0 ? stats.avg / data.ticks.avgMs : 0;
-		const pct = Number.isFinite(rawPct) ? (rawPct * 100).toFixed(0) : "—";
-		lines.push(
-			`    ${key.padEnd(16)} ${formatMs(stats.avg).padStart(6)}ms (${pct.padStart(2)}%) p95:${formatMs(stats.p95).padStart(5)}ms p99:${formatMs(stats.p99).padStart(5)}ms max:${formatMs(stats.max).padStart(5)}ms`,
-		);
-	}
-	lines.push("  nested hot operations (diagnostic; do not add percentages):");
-
-	const sorted = Object.entries(data.categories)
-		.filter(([key]) => !PERF_EXCLUSIVE_PHASES.includes(key))
-		.sort((a, b) => b[1].avg - a[1].avg);
-	for (const [k, stats] of sorted) {
-		if (stats.avg < 0.05 || Number.isNaN(stats.avg)) continue;
-		const delta = data.categoryDeltaSinceLastReport[k];
-		const deltaStr =
-			typeof delta === "number"
-				? `  Δ${delta >= 0 ? "+" : ""}${delta.toFixed(2)}ms`
-				: "";
-		lines.push(
-			`    ${k.padEnd(24)} ${stats.avg.toFixed(1).padStart(6)}ms p95:${formatMs(stats.p95).padStart(5)}ms p99:${formatMs(stats.p99).padStart(5)}ms max:${formatMs(stats.max).padStart(5)}ms${deltaStr}`,
-		);
-	}
-
-	lines.push("  ─────────────────────────────────────────────");
-	lines.push(
-		`  reassess: ${data.reassess.proposalRuns} runs | forced: ${data.reassess.reassess_forced} | failed: ${data.reassess.proposalFailed}`,
-	);
-	lines.push(
-		`    noPlan:${data.reassess.reassess_noPlan}  interval:${data.reassess.reassess_interval}  forced:${data.reassess.reassess_forced}  territory:${data.reassess.reassess_territory}  posture:${data.reassess.reassess_posture}  ratio:${data.reassess.reassess_ratio}`,
-	);
-	if (data.water.total > 0) {
-		lines.push(`  water avoidance: ${data.water.total} events`);
-		lines.push(
-			`    pathPenalized:${data.water.waterPathPenalized}  coastDeflectHalved:${data.water.coastDeflectHalved}  knockbackBlocked:${data.water.knockbackBlocked}  coastStuckAbandoned:${data.water.coastStuckAbandoned}`,
-		);
-	}
-	if (data.frames.spikes.length > 0) {
-		lines.push("  ─────────────────────────────────────────────");
-		lines.push("  recent frame spikes:");
-		data.frames.spikes.slice(-5).forEach((spike) => {
-			const topCat = spike.ticks?.topCategories?.[0];
-			const catText = topCat
-				? ` | ${spike.ticks.count} ticks (${formatMs(spike.ticks.totalMs)}ms), hot: ${topCat.name} ${formatMs(topCat.ms)}ms`
-				: "";
-			lines.push(
-				`    ${formatMs(spike.ms)}ms at frame ${spike.frame} (${spike.reason}) | work ${formatMs(spike.mainWorkMs)}ms, sim ${formatMs(spike.simulationMs)}ms, HUD ${formatMs(spike.hudMs)}ms, render ${formatMs(spike.renderMs)}ms${catText}`,
-			);
-		});
-	}
-	if (data.browser.longTasks.count > 0 || data.browser.memory.supported) {
-		lines.push("  ─────────────────────────────────────────────");
-		lines.push(
-			`  browser: long tasks ${data.browser.longTasks.count} (p95 ${formatMs(data.browser.longTasks.p95)}ms, max ${formatMs(data.browser.longTasks.max)}ms) | heap ${data.browser.memory.supported ? `${(data.browser.memory.lastUsedBytes / 1048576).toFixed(1)} MiB (${data.browser.memory.deltaBytes >= 0 ? "+" : ""}${(data.browser.memory.deltaBytes / 1048576).toFixed(1)} MiB)` : "unavailable"}`,
-		);
-	}
-	if (data.analysis.recommendations.length > 0) {
-		lines.push("  ─────────────────────────────────────────────");
-		lines.push(
-			`  diagnosis: frame=${data.analysis.topFrameStage || "n/a"} | phase=${data.analysis.topPhase || "n/a"} | nested=${data.analysis.topDetail || "n/a"}`,
-		);
-		for (const recommendation of data.analysis.recommendations) {
-			lines.push(`    → ${recommendation}`);
-		}
-	}
-	return lines.join("\n");
-}
-
-function formatPerfSuite(summary) {
-	if (!summary?.cases?.length) return "No completed performance-suite runs.";
-	const lines = [
-		`=== PERF SUITE ${summary.id} · ${summary.aggregate.runCount} runs ===`,
-	];
-	for (const entry of summary.cases) {
-		lines.push(
-			`${entry.id}: ${entry.medianAvgFps.toFixed(1)} FPS | frame p95 ${formatMs(entry.medianP95FrameMs)}ms p99 ${formatMs(entry.medianP99FrameMs)}ms worst ${formatMs(entry.worstFrameMs)}ms | tick ${formatMs(entry.medianTickMs)}ms | unit loop ${formatMs(entry.medianUnitLoopMs)}ms | operational AI ${formatMs(entry.medianOperationalAiMs)}ms`,
-		);
-	}
-	return lines.join("\n");
-}
-
-function formatPerfComparison(comparison) {
-	if (!comparison?.ok) return "No matching performance cases to compare.";
-	const lines = [
-		`=== PERF COMPARISON: ${comparison.verdict} (threshold ${comparison.thresholdPercent}%) ===`,
-	];
-	for (const entry of comparison.cases) {
-		lines.push(`  ${entry.id}${entry.compatible ? "" : " · INCOMPARABLE"}`);
-		if (!entry.compatible) {
-			for (const mismatch of entry.configMismatches) {
-				lines.push(
-					`    config ${mismatch.key}: baseline=${mismatch.baseline} current=${mismatch.current}`,
-				);
-			}
-			continue;
-		}
-		for (const [key, metric] of Object.entries(entry.metrics)) {
-			if (metric.changePercent === null) continue;
-			lines.push(
-				`    ${key}: ${metric.changePercent >= 0 ? "+" : ""}${metric.changePercent.toFixed(1)}% · ${metric.verdict}`,
-			);
-		}
-	}
-	return lines.join("\n");
-}
-
-async function runPerfSuite(options = {}) {
-	const repetitions = Math.max(1, Math.floor(Number(options.repetitions) || 3));
-	const requestedCases = options.cases || [
-		{ id: "100v100", maxUnitsPerSide: 100 },
-		{ id: "250v250", maxUnitsPerSide: 250 },
-		{ id: "500v500", maxUnitsPerSide: 500 },
-	];
-	const cases = normalizePerfSuiteCases(requestedCases, {
-		maxUnitsPerSide: options.maxUnitsPerSide || 250,
-		durationMs: options.durationMs || 15_000,
-		warmupMs: options.warmupMs ?? 3000,
-		perfMode: options.perfMode || "detailed",
-		speedIndex: options.speedIndex ?? SPEED_STEPS.length - 1,
-		viewMode: options.viewMode || "POLITICAL",
-		traceMarks: options.traceMarks === true,
-	});
-	const runs = [];
-	for (const suiteCase of cases) {
-		for (let repetition = 1; repetition <= repetitions; repetition++) {
-			console.info(
-				`[MW PERF] ${suiteCase.id} · run ${repetition}/${repetitions} · warm-up ${(suiteCase.warmupMs / 1000).toFixed(1)}s · measure ${(suiteCase.durationMs / 1000).toFixed(1)}s`,
-			);
-			const report = await startBenchmark({
-				...suiteCase,
-				caseId: suiteCase.id,
-			});
-			runs.push({
-				caseId: suiteCase.id,
-				repetition,
-				config: suiteCase,
-				report,
-			});
-		}
-	}
-	_lastPerfSuiteRuns = runs;
-	_lastPerfSuite = summarizePerfSuiteRuns(runs, {
-		id: options.id,
-		build: document.title,
-		environment: getPerfEnvironmentSnapshot(),
-		repetitions,
-	});
-	console.info(formatPerfSuite(_lastPerfSuite));
-	return _lastPerfSuite;
-}
-
-function loadPerfBaseline(name = "default") {
-	try {
-		const raw = localStorage.getItem(perfBaselineStorageKey(name));
-		return raw ? JSON.parse(raw) : null;
-	} catch (_error) {
-		return null;
-	}
-}
-
 // ── Perf Report: type window.perfReport() in console ──
 window.startBenchmark = startBenchmark;
-window.perfEnable = (mode = "basic") => {
-	const normalizedMode = mode === "detailed" ? "detailed" : "basic";
-	if (!window.__perf) window.__perf = createPerfState(normalizedMode);
-	window.__perf._mode = normalizedMode;
-	window.__perf._enabled = true;
-	window.__perf._trackingPaused = false;
-	window.__perf._measurementStart = performance.now();
-	ensurePerfLongTaskObserver();
-	return `perf tracking enabled (${normalizedMode}) — let the sim run, then call window.perfReport()`;
-};
-window.perfDisable = () => {
-	if (window.__perf) {
-		window.__perf._mode = "off";
-		window.__perf._enabled = false;
-	}
-	return "perf tracking disabled";
-};
-window.perfReset = (mode = window.__perf?._mode || "off") => {
-	const normalizedMode =
-		mode === "detailed" ? "detailed" : mode === "basic" ? "basic" : "off";
-	window.__perf = createPerfState(normalizedMode);
-	_perfSamples = [];
-	_perfFrameTimeSum = 0;
-	_perfFrameCount = 0;
-	_perfLastTime = 0;
-	_perfPendingFrameEntry = null;
-	return `perf counters reset (${normalizedMode})`;
-};
-window.perfReportJson = () => {
-	const data = getPerfReportData();
-	if (data.ok) {
-		const avgs = {};
-		for (const [k, stats] of Object.entries(data.categories)) {
-			avgs[k] = stats.avg;
-		}
-		window.__perf._lastReportAvgs = avgs;
-	}
-	return data;
-};
-window.perfReport = () => {
-	const data = getPerfReportData();
-	if (data.ok) {
-		const avgs = {};
-		for (const [k, stats] of Object.entries(data.categories)) {
-			avgs[k] = stats.avg;
-		}
-		window.__perf._lastReportAvgs = avgs;
-	}
-	return formatPerfReport(data);
-};
-window.perfTraceEnable = (mode = "detailed") => {
-	if (!window.__perf || window.__perf._mode === "off") window.perfReset(mode);
-	performance.clearMeasures();
-	_perfTraceMeasureCount = 0;
-	window.__perf._traceMarksEnabled = true;
-	return "DevTools trace markers enabled. Record a Performance trace, then run the simulation.";
-};
-window.perfTraceDisable = () => {
-	if (window.__perf) window.__perf._traceMarksEnabled = false;
-	return "DevTools trace markers disabled.";
-};
-window.perfTraceClear = () => {
-	performance.clearMeasures();
-	_perfTraceMeasureCount = 0;
-	return "Modern Wars trace markers cleared.";
-};
-window.perfRunQuick = (options = {}) =>
-	runPerfSuite({
-		...options,
-		id: options.id || "quick",
-		repetitions: options.repetitions || 1,
-		durationMs: options.durationMs || 10_000,
-		warmupMs: options.warmupMs ?? 2000,
-		perfMode: options.perfMode || "detailed",
-		cases: options.cases || [
-			{
-				id:
-					options.caseId ||
-					`${options.maxUnitsPerSide || 250}v${options.maxUnitsPerSide || 250}`,
-				maxUnitsPerSide: options.maxUnitsPerSide || 250,
-			},
-		],
-	});
-window.perfRunSuite = runPerfSuite;
-window.perfSuiteReport = () => formatPerfSuite(_lastPerfSuite);
-window.perfSuiteJson = () => ({
-	summary: _lastPerfSuite,
-	runs: _lastPerfSuiteRuns,
-});
-window.perfSaveBaseline = (name = "default", suite = _lastPerfSuite) => {
-	if (!suite?.cases?.length) {
-		throw new Error(
-			"Run perfRunQuick() or perfRunSuite() before saving a baseline.",
-		);
-	}
-	localStorage.setItem(perfBaselineStorageKey(name), JSON.stringify(suite));
-	return `Saved performance baseline '${name}' (${suite.aggregate.runCount} runs).`;
-};
-window.perfLoadBaseline = loadPerfBaseline;
-window.perfCompareBaseline = (
-	name = "default",
-	suite = _lastPerfSuite,
-	thresholdPercent = 5,
-) => {
-	const baseline = loadPerfBaseline(name);
-	if (!baseline)
-		throw new Error(`Performance baseline '${name}' was not found.`);
-	if (!suite) throw new Error("Run a performance suite before comparing it.");
-	const comparison = comparePerfSuites(suite, baseline, thresholdPercent);
-	console.info(formatPerfComparison(comparison));
-	return comparison;
-};
-window.perfClearBaseline = (name = "default") =>
-	localStorage.removeItem(perfBaselineStorageKey(name));
+developer_controls.bindPerfEnableHandler();
+developer_controls.bindPerfDisableHandler();
+developer_controls.bindPerfResetHandler();
+developer_controls.bindPerfReportJsonHandler();
+developer_controls.bindPerfReportHandler();
+developer_controls.bindPerfTraceEnableHandler();
+developer_controls.bindPerfTraceDisableHandler();
+developer_controls.bindPerfTraceClearHandler();
+developer_controls.bindPerfRunQuickHandler();
+developer_controls.bindPerfRunSuiteHandler();
+developer_controls.bindPerfSuiteReportHandler();
+developer_controls.bindPerfSuiteJsonHandler();
+developer_controls.bindPerfSaveBaselineHandler();
+developer_controls.bindPerfLoadBaselineHandler();
+developer_controls.bindPerfCompareBaselineHandler();
+developer_controls.bindPerfClearBaselineHandler();
 window.aiDebugReport = (sideIdx = null) => {
 	if (sideIdx == null) return _aiDebugPlans;
-	return _aiDebugPlans[sideIdx] || null;
+	return _aiDebugPlans[sideIdx];
 };
-
-function finalizePendingPerfFrame(frameDurationMs) {
-	const entry = _perfPendingFrameEntry;
-	if (!entry) return;
-	entry.ms = frameDurationMs;
-	entry.browserWaitMs = Math.max(0, frameDurationMs - entry.mainWorkMs);
-	if (entry.benchmark) _perfSamples.push(frameDurationMs);
-	recordPerfFrame(entry);
-	_perfPendingFrameEntry = null;
-}
-
-function queuePerfFrame(entry, frameStartedAt) {
-	if (!entry) return;
-	entry.mainWorkMs = performance.now() - frameStartedAt;
-	entry.otherMainMs = Math.max(
-		0,
-		entry.mainWorkMs - entry.simulationMs - entry.hudMs - entry.renderMs,
-	);
-	entry.tickEnd = window.__perf?.ticks || entry.tickStart - 1;
-	entry.tickCount = Math.max(0, entry.tickEnd - entry.tickStart + 1);
-	recordPerfMeasure("Frame · Main Work", frameStartedAt, entry.mainWorkMs, {
-		frame: entry.frame,
-		rendered: entry.rendered,
-		ticks: entry.tickCount,
-	});
-	recordPerfMeasure(
-		"Frame · Simulation",
-		entry.simulationStart,
-		entry.simulationMs,
-	);
-	recordPerfMeasure("Frame · HUD", entry.hudStart, entry.hudMs);
-	recordPerfMeasure("Frame · Render", entry.renderStart, entry.renderMs);
-	_perfPendingFrameEntry = entry;
-	recordPerfMemorySample();
-}
 
 export function updateLoop(now) {
 	const shouldSimulate =
@@ -20660,745 +6818,20 @@ export function showTreatyOffer(proposerSideIdx, willAccept) {
 	);
 }
 
-export function capitulateCountry(country, sideIndex) {
-	const side = sides[sideIndex];
-	if (!side) return false;
-
-	// Build owner -> side index map once for this operation
-	const ownerToSideMap = new Map();
-	sides.forEach((s, idx) => {
-		s.forEach((c) => {
-			ownerToSideMap.set(c.id, idx);
-		});
-	});
-
-	const hostileAttackerIds = new Set();
-	for (let otherSideIdx = 0; otherSideIdx < sides.length; otherSideIdx++) {
-		if (!areSidesHostile(sideIndex, otherSideIdx)) continue;
-		for (const attacker of sides[otherSideIdx] || []) {
-			hostileAttackerIds.add(attacker.id);
-		}
-	}
-	if (hostileAttackerIds.size === 0) {
-		console.error("[MW] CAPITULATION ABORTED: no active hostile recipient", {
-			countryId: country.id,
-			countryName: country.name,
-		});
-		return false;
-	}
-
-	const attackerMap = casualtyByAttacker.get(country.id) || new Map();
-	const activeAttackerEntries = Array.from(hostileAttackerIds, (countryId) => ({
-		countryId,
-		casualties: Math.max(0, attackerMap.get(countryId) || 0),
-	}));
-	let selectedAttackers = selectEligibleCasualtyAttackers(
-		activeAttackerEntries,
-	);
-
-	// Snapshot the victim's owned land, find its de-jure center, and count which
-	// active enemies already physically control its de-jure territory.
-	const victimTerritorySnapshot = [];
-	const victimOwnedCells = [];
-	const physicalControlCounts = new Map();
-	let victimLatSum = 0;
-	let victimLngSum = 0;
-	let victimCoreCount = 0;
-	let totalUnoccupied = 0;
-	for (let i = 0; i < worldControlMap.length; i++) {
-		if (deJureMap[i] === country.id && landMask[i] > 0) {
-			const y = Math.floor(i / gridWidth);
-			const x = i % gridWidth;
-			victimLatSum += y * CONFIG.GRID_RES - 90;
-			victimLngSum += x * CONFIG.GRID_RES - 180;
-			victimCoreCount++;
-			const controllerId = primaryOccupierMap[i] || worldControlMap[i];
-			if (hostileAttackerIds.has(controllerId)) {
-				physicalControlCounts.set(
-					controllerId,
-					(physicalControlCounts.get(controllerId) || 0) + 1,
-				);
-			}
-		}
-		if (worldControlMap[i] === country.id && landMask[i] > 0) {
-			const y = Math.floor(i / gridWidth);
-			const x = i % gridWidth;
-			victimTerritorySnapshot.push([x, y]);
-			victimOwnedCells.push(i);
-			if (!hostileAttackerIds.has(primaryOccupierMap[i])) totalUnoccupied++;
-		}
-	}
-
-	if (selectedAttackers.length === 0) {
-		const physicalController = selectOccupationController(
-			Array.from(physicalControlCounts, ([countryId, controlledCells]) => ({
-				countryId,
-				controlledCells,
-				casualties: attackerMap.get(countryId) || 0,
-			})),
-		);
-		if (physicalController) {
-			selectedAttackers = [
-				{
-					countryId: physicalController.countryId,
-					casualties: physicalController.casualties,
-					share: 1,
-				},
-			];
-		} else {
-			const center = {
-				lat: victimCoreCount > 0 ? victimLatSum / victimCoreCount : 0,
-				lng: victimCoreCount > 0 ? victimLngSum / victimCoreCount : 0,
-			};
-			let nearest = null;
-			let nearestDist = Infinity;
-			for (const unit of units) {
-				if (!hostileAttackerIds.has(unit.sovereignId) || unit.health <= 0)
-					continue;
-				let dLng = unit.lng - center.lng;
-				if (dLng > 180) dLng -= 360;
-				else if (dLng < -180) dLng += 360;
-				const dSq = (unit.lat - center.lat) ** 2 + dLng ** 2;
-				if (
-					dSq < nearestDist ||
-					(dSq === nearestDist &&
-						unit.sovereignId < (nearest?.countryId || Infinity))
-				) {
-					nearestDist = dSq;
-					nearest = {
-						countryId: unit.sovereignId,
-						casualties: attackerMap.get(unit.sovereignId) || 0,
-						share: 1,
-					};
-				}
-			}
-			if (nearest) selectedAttackers = [nearest];
-		}
-	}
-
-	if (selectedAttackers.length === 0) {
-		console.error("[MW] CAPITULATION ABORTED: no deterministic recipient", {
-			countryId: country.id,
-			countryName: country.name,
-			hostileAttackerIds: Array.from(hostileAttackerIds),
-		});
-		return false;
-	}
-
-	const quotaEntries = allocateLargestRemainderQuotas(
-		selectedAttackers.map((entry) => ({
-			...entry,
-			weight: entry.casualties || entry.share || 1,
-		})),
-		totalUnoccupied,
-	);
-	const qualifyingAttackers = quotaEntries.map((entry) => ({
-		sovereignId: entry.countryId,
-		loss: entry.casualties || 0,
-		share: entry.share || 0,
-		quota: entry.quota,
-	}));
-	const qualifyingIds = new Set(
-		qualifyingAttackers.map((entry) => entry.sovereignId),
-	);
-
-	// Compute attacker centroids in one map pass.
-	const attackerCentroids = new Map();
-	for (const attacker of qualifyingAttackers) {
-		attackerCentroids.set(attacker.sovereignId, {
-			latSum: 0,
-			lngSum: 0,
-			count: 0,
-		});
-	}
-	for (let i = 0; i < worldControlMap.length; i++) {
-		const ownerId = worldControlMap[i];
-		if (!qualifyingIds.has(ownerId)) continue;
-		const centroid = attackerCentroids.get(ownerId);
-		const y = Math.floor(i / gridWidth);
-		const x = i % gridWidth;
-		centroid.latSum += y * CONFIG.GRID_RES - 90;
-		centroid.lngSum += x * CONFIG.GRID_RES - 180;
-		centroid.count++;
-	}
-	for (const [attackerId, centroid] of attackerCentroids) {
-		if (centroid.count > 0) {
-			attackerCentroids.set(attackerId, {
-				lat: centroid.latSum / centroid.count,
-				lng: centroid.lngSum / centroid.count,
-			});
-		} else {
-			attackerCentroids.set(attackerId, {
-				lat: victimCoreCount > 0 ? victimLatSum / victimCoreCount : 0,
-				lng: victimCoreCount > 0 ? victimLngSum / victimCoreCount : 0,
-			});
-		}
-	}
-
-	const attackerTileCounts = new Map();
-	const attackerQuotas = new Map();
-	for (const attacker of qualifyingAttackers) {
-		attackerTileCounts.set(attacker.sovereignId, 0);
-		attackerQuotas.set(attacker.sovereignId, attacker.quota);
-	}
-	const assignments = new Map();
-	for (const idx of victimOwnedCells) {
-		const occupierId = primaryOccupierMap[idx];
-		if (hostileAttackerIds.has(occupierId)) {
-			assignments.set(idx, occupierId);
-			continue;
-		}
-		const y = Math.floor(idx / gridWidth);
-		const x = idx % gridWidth;
-		const tileLat = y * CONFIG.GRID_RES - 90;
-		const tileLng = x * CONFIG.GRID_RES - 180;
-		let bestAttacker = 0;
-		let bestDist = Infinity;
-		for (const attacker of qualifyingAttackers) {
-			const quota = attackerQuotas.get(attacker.sovereignId) || 0;
-			const used = attackerTileCounts.get(attacker.sovereignId) || 0;
-			if (used >= quota) continue;
-			const centroid = attackerCentroids.get(attacker.sovereignId);
-			let dLng = tileLng - centroid.lng;
-			if (dLng > 180) dLng -= 360;
-			else if (dLng < -180) dLng += 360;
-			const dSq = (tileLat - centroid.lat) ** 2 + dLng ** 2;
-			if (
-				dSq < bestDist ||
-				(dSq === bestDist && attacker.sovereignId < bestAttacker)
-			) {
-				bestDist = dSq;
-				bestAttacker = attacker.sovereignId;
-			}
-		}
-		if (bestAttacker <= 0) {
-			console.error("[MW] CAPITULATION ABORTED: incomplete land quotas", {
-				countryId: country.id,
-				cellIndex: idx,
-				totalUnoccupied,
-			});
-			return false;
-		}
-		assignments.set(idx, bestAttacker);
-		attackerTileCounts.set(
-			bestAttacker,
-			(attackerTileCounts.get(bestAttacker) || 0) + 1,
-		);
-	}
-
-	for (const [idx, recipientId] of assignments) {
-		worldControlMap[idx] = recipientId;
-		primaryOccupierMap[idx] = recipientId;
-	}
-	const affectedIndices = victimOwnedCells;
-
-	const finalControlCounts = new Map();
-	for (let i = 0; i < deJureMap.length; i++) {
-		if (deJureMap[i] !== country.id || landMask[i] === 0) continue;
-		const controllerId = worldControlMap[i];
-		if (!hostileAttackerIds.has(controllerId)) continue;
-		finalControlCounts.set(
-			controllerId,
-			(finalControlCounts.get(controllerId) || 0) + 1,
-		);
-	}
-	const primaryController = selectOccupationController(
-		Array.from(hostileAttackerIds, (countryId) => ({
-			countryId,
-			controlledCells: finalControlCounts.get(countryId) || 0,
-			casualties: attackerMap.get(countryId) || 0,
-		})),
-	);
-	const primaryAnnexerId =
-		primaryController?.countryId || qualifyingAttackers[0]?.sovereignId || 0;
-	if (primaryAnnexerId <= 0) {
-		console.error("[MW] CAPITULATION ABORTED: no occupation controller", {
-			countryId: country.id,
-		});
-		return false;
-	}
-
-	_lastCapitulationTick = _simTickCount;
-	statusText.innerText = `${country.name} HAS CAPITULATED`;
-	treatyMsg.innerText = "NATION ANNEXED";
-	document.getElementById("treaty-status").innerText =
-		`${country.name} territory has been seized.`;
-	treatyAlert.style.display = "block";
-	scheduleWarLifecycleCallback(() => {
-		if (gameState === "SIMULATING") treatyAlert.style.display = "none";
-	}, 4000);
-
-	// Re-evaluate warzone status for newly annexed tiles so winners can keep pushing
-	affectedIndices.forEach((idx) => {
-		const ownerId = worldControlMap[idx];
-		if (ownerId <= 0) {
-			landMask[idx] = 1;
-			for (let s = 0; s < sideInfluenceMaps.length; s++)
-				sideInfluenceMaps[s][idx] = 0;
-			syncOccupationFromSideInfluence(idx);
-			primaryOccupierMap[idx] = 0;
-			return;
-		}
-
-		const ownerSideIdx = ownerToSideMap.get(ownerId);
-		if (
-			ownerSideIdx !== undefined &&
-			ownerSideIdx < sideInfluenceMaps.length &&
-			sides[ownerSideIdx].length > 0
-		) {
-			landMask[idx] = 2;
-			for (let s = 0; s < sideInfluenceMaps.length; s++)
-				sideInfluenceMaps[s][idx] = 0;
-			sideInfluenceMaps[ownerSideIdx][idx] = 1.0;
-			syncOccupationFromSideInfluence(idx);
-			primaryOccupierMap[idx] = ownerId;
-		} else {
-			// Keep warzone if the cell still has occupation from a combatant side
-			const hasOccupation = dominantSideMap[idx] !== -1;
-			landMask[idx] = hasOccupation ? 2 : 1;
-			if (!hasOccupation) {
-				for (let s = 0; s < sideInfluenceMaps.length; s++)
-					sideInfluenceMaps[s][idx] = 0;
-				syncOccupationFromSideInfluence(idx);
-			}
-			primaryOccupierMap[idx] = 0;
-		}
-	});
-
-	// RELEASABLE TRANSFER: Transfer any releasables owned by the capitulating country to the primary annexer
-	countryMetadata.forEach((m) => {
-		if (m && m.releasableBy === country.id) {
-			m.releasableBy = primaryAnnexerId;
-		}
-	});
-
-	// Make the capitulated country itself a releasable of the annexer and remember its old territory
-	if (primaryAnnexerId > 0) {
-		const victimMeta = countryMetadata[country.id - 1];
-		if (victimMeta) {
-			victimMeta.releasableBy = primaryAnnexerId;
-
-			// Prefer the precise snapshot we made before any transfer; if empty, fall back to deJure cores
-			if (victimTerritorySnapshot.length > 0) {
-				victimMeta.savedCells = victimTerritorySnapshot;
-			} else {
-				const cells = [];
-				for (let i = 0; i < deJureMap.length; i++) {
-					if (deJureMap[i] === country.id) {
-						const y = Math.floor(i / gridWidth);
-						const x = i % gridWidth;
-						cells.push([x, y]);
-					}
-				}
-				victimMeta.savedCells = cells;
-			}
-		}
-	}
-
-	releaseCountryPersonnelFromSide(country.id, sideIndex);
-
-	// Remove the country from its alliance list
-	const cIdx = side.indexOf(country);
-	if (cIdx > -1) side.splice(cIdx, 1);
-
-	// Clear targets for any units that were focusing on this specific country's theater
-	units.forEach((u) => {
-		if (u.lastMopUpId === country.id) {
-			u.mopUpTarget = null;
-			u.lastMopUpId = null;
-			u.targetSearchCooldown = 0;
-		}
-	});
-
-	// Filter out all units belonging to the capitulated nation
-	units = units.filter((u) => u.sovereignId !== country.id);
-
-	// Sync provinces to new ownership
-	generateProvinces();
-
-	// Invalidate caches so the frontline field and adjacency reflect new borders
-	adjacencyCache = null;
-	invalidateFrontlineField();
-	_frontlinePolys = {};
-	_neutralBorderPolys = {};
-	_frontlinePolyTick = -999;
-
-	// Refresh UI
-	recalculateAllBounds();
-	updateSidesUI();
-	reconcileOperationalAiLifecycle("capitulation");
-	influenceLayer.render();
-	return true;
+export function capitulateCountry(...args) {
+	return lifecycle.capitulateCountry(...args);
 }
 
-export function applyTreaty(
-	type,
-	winnerPoleOverride = null,
-	_endingReasonOverride = null,
-) {
-	if (
-		gameMode === "OPERATION" &&
-		activeOperationDefinition &&
-		activeOperationRuntime
-	) {
-		const playerWon =
-			type.includes("FULL_CAPITULATION") &&
-			winnerPoleOverride === activeOperationDefinition.playerSideIdx;
-		finishOperation(playerWon ? "EARLY_VICTORY" : "DEFEAT");
-		return;
-	}
-	if (gameState === "WAR_OVER") return;
-	invalidateWarLifecycleTimers();
-	gameState = "WAR_OVER";
-	playPeaceSound();
-
-	// Stop recording if active
-	if (mediaRecorder && mediaRecorder.state !== "inactive") {
-		mediaRecorder.onstop = () => {
-			const blob = new Blob(recordedChunks, { type: "video/webm" });
-			const url = URL.createObjectURL(blob);
-			const a = document.createElement("a");
-			a.href = url;
-			a.download = `ModernWars_${Date.now()}.webm`;
-			document.body.appendChild(a);
-			a.click();
-			document.body.removeChild(a);
-			window.URL.revokeObjectURL(url);
-			recordedChunks = [];
-		};
-		mediaRecorder.stop();
-	}
-
-	// Freeze time system at war end and reflect final date in the setup inputs
-	if (gameTimeDate && timeYearInput && timeMonthInput && timeDayInput) {
-		gameTimeEnabled = false;
-		gameTimeAccumulatorMs = 0;
-		timeYearInput.value = gameTimeDate.year;
-		timeMonthInput.value = gameTimeDate.month;
-		timeDayInput.value = gameTimeDate.day;
-		if (gameDateDisplay) {
-			gameDateDisplay.textContent = formatGameDate();
-			gameDateDisplay.style.display = "block";
-		}
-	}
-
-	const sideTerritory = new Array(sides.length).fill(0);
-	for (let i = 0; i < dominantSideMap.length; i++) {
-		if (landMask[i] === 2) {
-			const ds = dominantSideMap[i];
-			if (ds >= 0 && ds < sides.length) sideTerritory[ds]++;
-		}
-	}
-
-	let winnerSideIdx = sideTerritory.indexOf(Math.max(...sideTerritory));
-	if (typeof winnerPoleOverride === "number" && winnerPoleOverride >= 0)
-		winnerSideIdx = winnerPoleOverride;
-
-	let winnerName = "The Winner";
-	const sideUnitCounts = sides.map((s, i) => ({
-		idx: i,
-		units: units.filter((u) => u.sideIndex === i).length,
-		side: s,
-	}));
-
-	casualtyPanel.style.display = "none";
-
-	const strongestWinner = sideUnitCounts
-		.filter((s) => s.idx === winnerSideIdx)
-		.sort((a, b) => b.units - a.units)[0];
-	winnerName = strongestWinner?.side[0]
-		? strongestWinner.side.length > 1
-			? `${strongestWinner.side[0].name} Allies`
-			: strongestWinner.side[0].name
-		: document.querySelector(`[data-sidename="${winnerSideIdx}"]`)?.innerText ||
-			`Side ${String.fromCharCode(65 + winnerSideIdx)}`;
-
-	const isTotalCapitulation =
-		type.includes("FULL_CAPITULATION") || type === "ANNEXATION";
-	const isNegotiatedPeace = type === "PEACE_TREATY";
-
-	if (isTotalCapitulation) {
-		const loserNames = sides
-			.filter((s, i) => areSidesHostile(winnerSideIdx, i) && s.length > 0)
-			.map((s) => s[0]?.name || "Unknown")
-			.join(", ");
-		statusText.innerText = `Victory! ${winnerName} prevails${loserNames ? ` — ${loserNames} defeated` : ""}`;
-		treatyMsg.innerText = "TOTAL ANNEXATION";
-		document.getElementById("treaty-status").innerText =
-			"The conflict has concluded";
-		treatyAlert.style.display = "block";
-	} else if (isNegotiatedPeace) {
-		statusText.innerText = "Peace Treaty Signed";
-		treatyMsg.innerText = "BORDERS REDRAWN";
-		document.getElementById("treaty-status").innerText =
-			"Territorial adjustments finalized";
-		treatyAlert.style.display = "block";
-	} else {
-		statusText.innerText = "White Peace Signed";
-	}
-
-	const countryToSideMap = new Map();
-	sides.forEach((side, idx) => {
-		side.forEach((c) => {
-			countryToSideMap.set(c.id, idx);
-		});
-	});
-
-	const treatyTransfers = [];
-	for (let i = 0; i < worldControlMap.length; i++) {
-		if (landMask[i] === 2) {
-			const originalOwner = worldControlMap[i];
-			const occupierId = primaryOccupierMap[i];
-			const ds = dominantSideMap[i];
-			const occupierSideIdx = countryToSideMap.get(occupierId);
-			const ownerSideIdx = countryToSideMap.get(originalOwner);
-
-			let cellNewOwner = originalOwner;
-			if (
-				ds >= 0 &&
-				ownerSideIdx !== undefined &&
-				areSidesHostile(ownerSideIdx, ds)
-			) {
-				cellNewOwner =
-					occupierSideIdx !== undefined && occupierSideIdx === ds
-						? occupierId
-						: sides[ds]?.[0]?.id || originalOwner;
-			}
-
-			if (cellNewOwner !== originalOwner && cellNewOwner > 0) {
-				worldControlMap[i] = cellNewOwner;
-			}
-
-			if (isTotalCapitulation) {
-				const currentOwner = worldControlMap[i];
-				const currentSideIdx = countryToSideMap.get(currentOwner);
-
-				let newOwnerId = 0;
-				if (
-					currentSideIdx !== undefined &&
-					areSidesHostile(winnerSideIdx, currentSideIdx)
-				) {
-					newOwnerId =
-						occupierSideIdx !== undefined && occupierSideIdx === winnerSideIdx
-							? occupierId
-							: sides[winnerSideIdx]?.[0]?.id || 0;
-				}
-
-				if (newOwnerId > 0) {
-					worldControlMap[i] = newOwnerId;
-				}
-			}
-			const deJureOwner = deJureMap[i];
-			const finalOwner = worldControlMap[i];
-			if (deJureOwner > 0 && finalOwner > 0 && deJureOwner !== finalOwner) {
-				treatyTransfers.push({
-					originalOwner: deJureOwner,
-					newOwner: finalOwner,
-				});
-			}
-
-			landMask[i] = 1;
-			clearCellInfluence(i);
-		}
-	}
-
-	// Re-sync province map to final treaty borders to remove ghost province lines
-	generateProvinces();
-
-	// High-Performance Organic Border Smoothing: Uses frequency array to avoid GC pressure
-	const smoothingPasses = 3;
-	const maxId = countryMetadata.reduce(
-		(max, m) => (m ? Math.max(max, m.id) : max),
-		0,
-	);
-	// Static buffers to avoid re-allocation in loops
-	const freq = new Uint16Array(maxId + 1);
-	const activeIds = new Uint32Array(9);
-
-	// Transfer Releasables: Move all releasables belonging to defeated countries to their new primary owners
-	const ownerTransferMap = selectMajorityOwnerTransfers(treatyTransfers);
-	countryMetadata.forEach((m) => {
-		if (m?.releasableBy && ownerTransferMap.has(m.releasableBy)) {
-			m.releasableBy = ownerTransferMap.get(m.releasableBy);
-		}
-	});
-
-	for (let p = 0; p < smoothingPasses; p++) {
-		const tempMap = new Uint16Array(worldControlMap);
-		for (let y = 1; y < gridHeight - 1; y++) {
-			const rowIdx = y * gridWidth;
-			for (let x = 1; x < gridWidth - 1; x++) {
-				const idx = rowIdx + x;
-				if (landMask[idx] === 0) continue;
-
-				let activeCount = 0;
-				let maxFreq = 0;
-				let winner = worldControlMap[idx];
-
-				// Sample 3x3 neighborhood
-				for (let dy = -1; dy <= 1; dy++) {
-					const rOff = dy * gridWidth;
-					for (let dx = -1; dx <= 1; dx++) {
-						const owner = worldControlMap[idx + rOff + dx];
-						if (owner > 0) {
-							if (freq[owner] === 0) activeIds[activeCount++] = owner;
-							freq[owner]++;
-							if (freq[owner] > maxFreq) {
-								maxFreq = freq[owner];
-								winner = owner;
-							}
-						}
-					}
-				}
-
-				// Apply majority rule
-				if (maxFreq >= 6) tempMap[idx] = winner;
-
-				// Cleanup frequency array for next pixel
-				for (let i = 0; i < activeCount; i++) freq[activeIds[i]] = 0;
-			}
-		}
-		worldControlMap.set(tempMap);
-	}
-	adjacencyCache = null;
-
-	recalculateAllBounds();
-	influenceLayer.render();
-	animationFrameId = null;
-	stopWarAmbiance();
-	treatyAlert.style.display = "none";
-
-	updateWarOverview(true);
-	scheduleWarLifecycleCallback(reopenConflictSetupAfterWar, 1500);
+export function applyTreaty(...args) {
+	return lifecycle.applyTreaty(...args);
 }
 
-export function resetToSelection() {
-	invalidateWarLifecycleTimers();
-	countryLabelAnchors.clear();
-	stopWarAmbiance();
-	// Stop in‑game time progression but keep the last war date visible in the setup
-	gameTimeEnabled = false;
-	gameTimeAccumulatorMs = 0;
-	if (gameTimeDate && timeYearInput && timeMonthInput && timeDayInput) {
-		timeYearInput.value = gameTimeDate.year;
-		timeMonthInput.value = gameTimeDate.month;
-		timeDayInput.value = gameTimeDate.day;
-		if (gameDateDisplay) {
-			gameDateDisplay.textContent = formatGameDate();
-			gameDateDisplay.style.display = "block";
-		}
-	}
-
-	// If in God Mode, we reset the underlying state that will be restored on exit
-	if (godModeActive) {
-		preGodModeState = "SELECTING_P1";
-	}
-
-	if (gameMode === "EDITOR" || gameMode === "EDITOR_TEST") {
-		if (gameMode === "EDITOR_TEST") {
-			gameMode = "EDITOR";
-			editorToolbox.style.display = "flex";
-		}
-		if (!godModeActive) {
-			gameState = "EDITOR_ACTIVE";
-			statusText.innerText = "Map Editor (Alpha)";
-		}
-		setupPanel.style.display = "none";
-		statsPanel.style.display = "none";
-		resetBtn.style.display = "block";
-		ffBtn.style.display = "none";
-		forcePeaceBtn.style.display = "none";
-		unitCountsDiv.style.display = "none";
-		updateRestartVisibility();
-		influenceLayer.render();
-		if (!godModeActive) return;
-	}
-	gameState = "SELECTING_P1";
-	sides = [[], []];
-	_attackers = sides[0];
-	_defenders = sides[1];
-	activeSideIndex = 0;
-	ffaMode = false;
-	updateFfaSetupUi();
-	units = [];
-	unitSpatialHash.clear();
-	for (let si = 0; si < unitHashBySide.length; si++) unitHashBySide[si].clear();
-	activeBattles = [];
-	_battleHash.clear();
-	bombs = [];
-	explosions = [];
-	bases = [];
-	resetOperationalAiRuntime();
-	document.body.classList.remove("conflict-active");
-	document.getElementById("war-desk").style.display = "none";
-	_warOverviewSides = [];
-	_warOverviewLastUpdate = -Infinity;
-	resetSideHostilities();
-	setSpeed(0);
-	frameAccumulator = 0;
-
-	statusText.innerText = "Select First Country";
-	setupPanel.style.display = "block";
-	setupOptions.style.display = "none";
-
-	updateSidesUI();
-
-	statsPanel.style.display = "none";
-	document.getElementById("game-status").style.display = "flex"; // Restore if cinematic
-	casualtyPanel.style.display = "none";
-	resetBtn.style.display = currentScenarioContext ? "block" : "none";
-	restartScenarioBtn.style.display = "block";
-	document.getElementById("speed-controls").style.display = "none";
-	godModeBtn.style.display =
-		gameMode === "CONQUEST" || godModeActive ? "block" : "none";
-	godBombBtn.style.display = "none";
-	godBombActive = false;
-	godBombSourceId = -1;
-	godBombBtn.innerText = "GOD BOMB: OFF";
-	godBombBtn.classList.remove("active");
-	forcePeaceBtn.style.display = "none";
-	unitCountsDiv.style.display = "none";
+export function resetToSelection(...args) {
+	return lifecycle.resetToSelection(...args);
 }
 
-export async function resetGame() {
-	invalidateWarLifecycleTimers();
-	cancelAnimationFrame(animationFrameId);
-
-	// Scenario-specific reset: Reload the original preset if available
-	if (currentScenarioContext?.blobUrl) {
-		loadingStatus.innerText = "Reloading Scenario Assets...";
-		loadingOverlay.style.display = "flex";
-		try {
-			if (currentScenarioContext.compiledUrl) {
-				await performPresetLoad(currentScenarioContext.compiledUrl, gameMode, {
-					jsonFallbackUrl: currentScenarioContext.blobUrl,
-					prederivedEarth: true,
-				});
-				loadingOverlay.style.display = "none";
-				return;
-			}
-			const response = await fetch(currentScenarioContext.blobUrl);
-			if (!response.ok) throw new Error("Reload failed");
-			const blob = await response.blob();
-			await performPresetLoad(blob, gameMode);
-			loadingOverlay.style.display = "none";
-			return;
-		} catch (e) {
-			console.error("Satellite Reset Failed:", e);
-			loadingOverlay.style.display = "none";
-		}
-	}
-
-	worldControlMap.fill(0);
-	occupationMap.fill(0);
-	resetSideInfluenceMaps();
-	landMask.fill(0);
-	resetToSelection();
-	updateRestartVisibility();
-	// Re-initialize landmask from features
-	const mapRes = document.getElementById("map-res-select").value;
-	const geoUrl = `${CONFIG.GEOJSON_BASE}${mapRes}/cultural/ne_${mapRes}_admin_0_countries.json`;
-	loadCountries(geoUrl, gameMode === "EDITOR");
+export async function resetGame(...args) {
+	return lifecycle.resetGame(...args);
 }
 
 /**
@@ -21427,200 +6860,21 @@ export function findCityAtLatLng(latlng) {
 	return best;
 }
 
-map.on("click", (e) => {
-	const originalEvent = e.originalEvent || e;
-	if (
-		gameMode === "CONQUEST" &&
-		gameState === "SIMULATING" &&
-		showWarPlans &&
-		window.innerWidth < 480
-	) {
-		const snapshot = getAiOperationsSnapshot();
-		let nearestTaskForce = null;
-		let nearestDistanceSq = Infinity;
-		for (const taskForce of snapshot?.taskForces || []) {
-			const point = taskForce.objective || taskForce.assemblyArea;
-			if (!point) continue;
-			const distanceSq = geoDistSq(
-				e.latlng.lat,
-				e.latlng.lng,
-				point.lat,
-				point.lng,
-			);
-			if (distanceSq < nearestDistanceSq) {
-				nearestDistanceSq = distanceSq;
-				nearestTaskForce = taskForce;
-			}
-		}
-		if (nearestTaskForce && nearestDistanceSq <= 16) {
-			window.__mwAiOperationReveal = {
-				uid: nearestTaskForce.uid || nearestTaskForce.id,
-				sideUid: snapshot.sideUid,
-			};
-			if (influenceLayer) influenceLayer.render();
-			return;
-		}
-	}
+map_input.bindMapClick();
 
-	// City move / create modes take priority
-	if (
-		(gameMode === "EDITOR" || godModeActive) &&
-		cityEditMode === "MOVE" &&
-		editingCityId > 0
-	) {
-		const city = cities.find((c) => c.id === editingCityId);
-		if (city) {
-			city.lat = e.latlng.lat;
-			city.lng = e.latlng.lng;
-			invalidateTerritoryLedgerCities();
-			statusText.innerText = `Moved ${city.name} to new position`;
-			cityEditMode = null;
-			cityInspector.style.display = "block";
-			influenceLayer.render();
-			return;
-		}
-		cityEditMode = null;
-	}
+map_input.bindMapCoordinatesMousemove();
 
-	if ((gameMode === "EDITOR" || godModeActive) && cityEditMode === "CREATE") {
-		const newId =
-			(cities.length ? Math.max(...cities.map((c) => c.id || 0)) : 0) + 1;
-		const idx = getGridIndex(e.latlng.lat, e.latlng.lng);
-		const ownerId = idx !== -1 ? worldControlMap[idx] : null;
-		const newCity = {
-			id: newId,
-			name: "New City",
-			lat: e.latlng.lat,
-			lng: e.latlng.lng,
-			pop: 0,
-			isCapital: false,
-			ownerId: ownerId,
-			isCustom: true,
-		};
-		cities.push(newCity);
-		activeTheaterCities = cities;
-		invalidateTerritoryLedgerCities();
-		statusText.innerText =
-			"New city created. Use the City Inspector to name and assign it.";
-		cityEditMode = null;
-		openCityInspector(newId);
-		influenceLayer.render();
-		return;
-	}
+menu_controls.bindViewModeBtnClick();
 
-	// City click detection (editor / god mode)
-	if (gameMode === "EDITOR" || godModeActive) {
-		const city = findCityAtLatLng(e.latlng);
-		if (city) {
-			openCityInspector(city.id);
-			return;
-		}
-	}
-	// Outside editor/god mode, city clicks do nothing (no popup)
+menu_controls.bindAllianceViewCheckboxChange();
 
-	handleCountryClick(null, null, e.latlng, originalEvent);
-});
+menu_controls.bindBattlesToggleBtnClick();
 
-map.on("mousemove", (e) => {
-	coordsDisplay.textContent = `${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`;
-});
+menu_controls.bindLabelsToggleBtnClick();
 
-viewModeBtn.addEventListener("click", () => {
-	// Cycle between POLITICAL <-> FLAG; alliance overlay is controlled separately by its own toggle
-	if (viewMode === "POLITICAL") {
-		viewMode = "FLAG";
-		viewModeBtn.innerText = "FLAG VIEW";
-		viewModeBtn.style.background = "#8e44ad";
-	} else {
-		viewMode = "POLITICAL";
-		viewModeBtn.innerText = "POLITICAL";
-		viewModeBtn.style.background = "#3498db";
-	}
+menu_controls.bindCitiesToggleBtnClick();
 
-	// When switching view modes mid‑war, force a fresh recompute of country
-	// bounds and occupation visuals so frontlines don't appear to vanish.
-	if (
-		gameState === "SIMULATING" ||
-		(godModeActive && preGodModeState === "SIMULATING")
-	) {
-		if (typeof recalculateAllBounds === "function") {
-			recalculateAllBounds();
-		}
-	}
-
-	if (influenceLayer && typeof influenceLayer._update === "function") {
-		influenceLayer._forceRender = true;
-		influenceLayer._update();
-	} else if (influenceLayer) {
-		influenceLayer.render();
-	}
-});
-
-if (allianceViewCheckbox) {
-	allianceViewCheckbox.checked = allianceViewEnabled;
-	allianceViewCheckbox.addEventListener("change", (e) => {
-		allianceViewEnabled = e.target.checked;
-		if (arrowsToggleBtn) {
-			arrowsToggleBtn.classList.toggle("active", allianceViewEnabled);
-		}
-		if (influenceLayer) {
-			influenceLayer._forceRender = true;
-			if (typeof influenceLayer._update === "function")
-				influenceLayer._update();
-			else influenceLayer.render();
-		}
-	});
-}
-
-if (battlesToggleBtn) {
-	battlesToggleBtn.addEventListener("click", () => {
-		showBattleIndicators = !showBattleIndicators;
-		battlesToggleBtn.classList.toggle("active", showBattleIndicators);
-		influenceLayer.render();
-	});
-}
-
-if (labelsToggleBtn) {
-	labelsToggleBtn.classList.toggle("active", showCountryLabels);
-	labelsToggleBtn.addEventListener("click", () => {
-		showCountryLabels = !showCountryLabels;
-		// Clear cached anchors whenever label mode changes so they can be re-anchored once
-		countryLabelAnchors.clear();
-		labelsToggleBtn.classList.toggle("active", showCountryLabels);
-		// Force a full redraw so labels respond instantly, even outside active wars
-		if (influenceLayer) {
-			influenceLayer._forceRender = true;
-			if (typeof influenceLayer._update === "function") {
-				influenceLayer._update();
-			} else {
-				influenceLayer.render();
-			}
-		}
-	});
-}
-
-if (citiesToggleBtn) {
-	citiesToggleBtn.classList.toggle("active", showNonCapitalCities);
-	citiesToggleBtn.addEventListener("click", () => {
-		showNonCapitalCities = !showNonCapitalCities;
-		citiesToggleBtn.classList.toggle("active", showNonCapitalCities);
-		if (influenceLayer) influenceLayer.render();
-	});
-}
-
-if (warplansToggleBtn) {
-	warplansToggleBtn.classList.toggle("active", showWarPlans);
-	warplansToggleBtn.addEventListener("click", () => {
-		showWarPlans = !showWarPlans;
-		warplansToggleBtn.classList.toggle("active", showWarPlans);
-		const preferenceCheckbox = document.getElementById(
-			"show-warplans-checkbox",
-		);
-		if (preferenceCheckbox) preferenceCheckbox.checked = showWarPlans;
-		setCookie("mw_show_warplans", showWarPlans ? "true" : "false");
-		if (influenceLayer) influenceLayer.render();
-	});
-}
+menu_controls.bindWarplansToggleBtnClick();
 
 // UI settings tab wiring
 const showWarplansCheckbox = document.getElementById("show-warplans-checkbox");
@@ -21654,508 +6908,49 @@ if (getCookie("mw_show_alliance") === "true") {
 	if (showAllianceCheckbox) showAllianceCheckbox.checked = true;
 }
 
-if (showWarplansCheckbox) {
-	showWarplansCheckbox.checked = showWarPlans;
-	showWarplansCheckbox.addEventListener("change", (e) => {
-		showWarPlans = e.target.checked;
-		if (warplansToggleBtn)
-			warplansToggleBtn.classList.toggle("active", showWarPlans);
-		setCookie("mw_show_warplans", e.target.checked ? "true" : "false");
-		if (influenceLayer) influenceLayer.render();
-	});
-}
-if (showLabelsCheckbox) {
-	showLabelsCheckbox.checked = showCountryLabels;
-	showLabelsCheckbox.addEventListener("change", (e) => {
-		showCountryLabels = e.target.checked;
-		countryLabelAnchors.clear();
-		if (labelsToggleBtn)
-			labelsToggleBtn.classList.toggle("active", showCountryLabels);
-		setCookie("mw_show_labels", e.target.checked ? "true" : "false");
-		if (influenceLayer) {
-			influenceLayer._forceRender = true;
-			if (typeof influenceLayer._update === "function")
-				influenceLayer._update();
-			else influenceLayer.render();
-		}
-	});
-}
-if (showCitiesCheckbox) {
-	showCitiesCheckbox.checked = showNonCapitalCities;
-	showCitiesCheckbox.addEventListener("change", (e) => {
-		showNonCapitalCities = e.target.checked;
-		if (citiesToggleBtn)
-			citiesToggleBtn.classList.toggle("active", showNonCapitalCities);
-		setCookie("mw_show_cities", e.target.checked ? "true" : "false");
-		if (influenceLayer) influenceLayer.render();
-	});
-}
-if (showBattlesCheckbox) {
-	showBattlesCheckbox.checked = showBattleIndicators;
-	showBattlesCheckbox.addEventListener("change", (e) => {
-		showBattleIndicators = e.target.checked;
-		if (battlesToggleBtn)
-			battlesToggleBtn.classList.toggle("active", showBattleIndicators);
-		setCookie("mw_show_battles", e.target.checked ? "true" : "false");
-		if (influenceLayer) influenceLayer.render();
-	});
-}
-if (showAllianceCheckbox) {
-	showAllianceCheckbox.checked = allianceViewEnabled;
-	showAllianceCheckbox.addEventListener("change", (e) => {
-		allianceViewEnabled = e.target.checked;
-		if (allianceViewCheckbox)
-			allianceViewCheckbox.checked = allianceViewEnabled;
-		setCookie("mw_show_alliance", e.target.checked ? "true" : "false");
-		if (influenceLayer) influenceLayer.render();
-	});
-}
+menu_controls.bindShowWarplansCheckboxChange();
+menu_controls.bindShowLabelsCheckboxChange();
+menu_controls.bindShowCitiesCheckboxChange();
+menu_controls.bindShowBattlesCheckboxChange();
+menu_controls.bindShowAllianceCheckboxChange();
 
 // Sync mountain toggles
-if (noPeaceCheckbox) {
-	noPeaceCheckbox.addEventListener("change", () => {
-		peaceTreatiesDisabled = noPeaceCheckbox.checked;
-	});
-}
+menu_controls.bindNoPeaceCheckboxChange();
 
 // Secret Sounds checkbox
 const useSecretSoundsCheckbox = document.getElementById(
 	"use-secret-sounds-checkbox",
 );
 
-if (useSecretSoundsCheckbox) {
-	useSecretSoundsCheckbox.checked = useSecretSounds;
-	useSecretSoundsCheckbox.addEventListener("change", (e) => {
-		useSecretSounds = e.target.checked;
-		setCookie("mw_secret_sounds", e.target.checked ? "true" : "false");
-	});
-}
+menu_controls.bindUseSecretSoundsCheckboxChange();
 
-setupDisableMountainsCheckbox.addEventListener("change", async (e) => {
-	const disabled = e.target.checked;
-	mountainsEnabled = !disabled;
-	mainDisableMountainsCheckbox.checked = disabled;
-	// Persist immediately
-	setCookie("mw_disable_mountains", disabled ? "true" : "false");
+menu_controls.bindSetupDisableMountainsCheckboxChange();
 
-	if (mountainsEnabled && terrainMask.every((v) => v === 0)) {
-		const currentMapRes = document.getElementById("map-res-select").value;
-		await loadTerrain(currentMapRes);
-	}
-	influenceLayer.render();
-});
+menu_controls.bindMainDisableMountainsCheckboxChange();
 
-mainDisableMountainsCheckbox.addEventListener("change", (e) => {
-	setupDisableMountainsCheckbox.checked = e.target.checked;
-	mountainsEnabled = !e.target.checked;
-	// Persist immediately
-	setCookie("mw_disable_mountains", e.target.checked ? "true" : "false");
-	influenceLayer.render();
-});
-
-restartScenarioBtn.addEventListener("click", resetGame);
+menu_controls.bindRestartScenarioBtnClick();
 
 // QUICK RESTART: instant in‑memory reset back to scenario start without loading overlay
 
-resetBtn.addEventListener("click", resetGame);
+menu_controls.bindResetBtnClick();
 // In‑game MENU button: return to main menu without full page reload
 
-editorUpdateBtn.addEventListener("click", async () => {
-	if (!activeScenarioId) return;
-	if (
-		!confirm(
-			"Update existing scenario? This will overwrite the map file and thumbnail on the Hub.",
-		)
-	)
-		return;
+editor_file_controls.bindEditorUpdateBtnClick();
 
-	setLoadingThematic(false);
-	loadingStatus.innerText = "Updating Scenario...";
-	loadingOverlay.style.display = "flex";
+sandbox_controls.bindGodBombBtnClick();
 
-	try {
-		// 1. Generate updated preview
-		let previewUrl = null;
-		if (influenceLayer?._container) {
-			influenceLayer._isCapturing = true;
-			influenceLayer.render();
-			const canvas = influenceLayer._container;
-			const previewBlob = await new Promise((resolve) =>
-				canvas.toBlob(resolve, "image/jpeg", 0.8),
-			);
-			influenceLayer._isCapturing = false;
-			influenceLayer.render();
-			if (previewBlob) {
-				const previewFile = new File([previewBlob], "update_preview.jpg", {
-					type: "image/jpeg",
-				});
-				previewUrl = await websim.upload(previewFile);
-			}
-		}
+menu_controls.bindForcePeaceBtnClick();
 
-		// 2. Generate updated preset data
-		const currentName = statusText.innerText
-			.replace("REMIXING: ", "")
-			.replace("Map Editor (Alpha)", "Updated Scenario");
-		const saveData = generatePresetData(currentName);
-		const blob = new Blob([JSON.stringify(saveData)], {
-			type: "application/json",
-		});
-		const file = new File([blob], "updated_scenario.json", {
-			type: "application/json",
-		});
-		const blobUrl = await websim.upload(file);
-
-		// 3. Update existing record
-		await room.collection("scenario_v1").update(activeScenarioId, {
-			previewUrl: previewUrl,
-			blobUrl: blobUrl,
-		});
-
-		loadingOverlay.style.display = "none";
-		alert("Scenario updated successfully!");
-	} catch (e) {
-		console.error(e);
-		alert("Update failed. You can only update scenarios you created.");
-		loadingOverlay.style.display = "none";
-	}
-});
-
-godBombBtn.addEventListener("click", () => {
-	godBombActive = !godBombActive;
-	godBombBtn.innerText = godBombActive ? "GOD BOMB: ON" : "GOD BOMB: OFF";
-	godBombBtn.classList.toggle("active", godBombActive);
-
-	if (godBombActive) {
-		godBombSourceId = -1;
-		statusText.innerText = "GOD BOMB ACTIVE: Click a country to set as sender";
-		map.getContainer().classList.add("painting-cursor");
-		countryInspector.style.display = "none";
-	} else {
-		godBombSourceId = -1;
-		statusText.innerText = godModeActive
-			? "GOD MODE: Map Editing Active"
-			: "Simulation Continued";
-		map.getContainer().classList.remove("painting-cursor");
-	}
-});
-
-forcePeaceBtn.addEventListener("click", () => {
-	if (gameState === "SIMULATING") {
-		gameState = "PEACE_SELECT_1";
-		statusText.innerText = "DIPLOMACY: Click nation to withdraw from war";
-		peaceSelection1 = null;
-	} else if (gameState === "PEACE_SELECT_1" || gameState === "PEACE_SELECT_2") {
-		// Double click/cancel to just do a global peace
-		if (confirm("Sign global white peace for all remaining combatants?")) {
-			applyTreaty("PEACE_TREATY");
-		} else {
-			gameState = "SIMULATING";
-			statusText.innerText = "Conflict Continued";
-			requestAnimationFrame(updateLoop);
-		}
-	}
-});
-
-export function unilateralExitConflict(country, sideIdx) {
-	if (sideIdx === -1) return;
-	releaseCountryPersonnelFromSide(country.id, sideIdx);
-
-	for (let i = 0; i < worldControlMap.length; i++) {
-		if (landMask[i] !== 2) continue;
-
-		const ownerId = worldControlMap[i];
-		const occupierId = primaryOccupierMap[i];
-
-		if (occupierId === country.id) {
-			if (dominantSideMap[i] === sideIdx) {
-				worldControlMap[i] = country.id;
-			}
-			landMask[i] = 1;
-			clearCellInfluence(i);
-			primaryOccupierMap[i] = 0;
-		} else if (ownerId === country.id) {
-			if (dominantSideMap[i] !== -1 && dominantSideMap[i] !== sideIdx) {
-				worldControlMap[i] = occupierId > 0 ? occupierId : ownerId;
-			}
-			landMask[i] = 1;
-			clearCellInfluence(i);
-			primaryOccupierMap[i] = 0;
-		}
-	}
-
-	// Remove from sides
-	const side = sides[sideIdx];
-	const idx = side.findIndex((c) => c.id === country.id);
-	if (idx > -1) side.splice(idx, 1);
-
-	// Purge units
-	units = units.filter((u) => u.sovereignId !== country.id);
-	units.forEach((u) => {
-		if (u.beneficiaryId === country.id) u.beneficiaryId = u.sovereignId;
-	});
-
-	// Global cleanup for neutral land that might be stuck in war state
-	const combatantIds = new Set(sides.flat().map((c) => c.id));
-	for (let i = 0; i < worldControlMap.length; i++) {
-		if (
-			landMask[i] === 2 &&
-			!combatantIds.has(worldControlMap[i]) &&
-			Math.abs(occupationMap[i]) < 0.01
-		) {
-			landMask[i] = 1;
-			clearCellInfluence(i);
-			primaryOccupierMap[i] = 0;
-		}
-	}
-
-	generateProvinces();
-	recalculateAllBounds();
-	updateSidesUI();
-	influenceLayer.render();
-
-	playPeaceSound();
-	statusText.innerText = `${country.name} has exited the conflict and annexed occupied land.`;
-
-	const activePoles = new Set();
-	sides.forEach((s, idx) => {
-		if (s.length > 0) activePoles.add(idx);
-	});
-	reconcileOperationalAiLifecycle("country-withdrew");
-
-	if (activePoles.size < 2) {
-		applyTreaty("PEACE_TREATY");
-	}
+export function unilateralExitConflict(...args) {
+	return lifecycle.unilateralExitConflict(...args);
 }
 
-export function _signSelectiveSideExit(sideIdx) {
-	const side = sides[sideIdx];
-	if (!side || side.length === 0) return;
-
-	_lastCapitulationTick = _simTickCount;
-	const exitingIds = new Set(side.map((c) => c.id));
-	// The formations and reserves leave the active war, while initial strength
-	sideSoldiers[sideIdx] = 0;
-	sideRecruitableManpower[sideIdx] = 0;
-
-	// Clean up territory controlled by exiting side
-	for (let i = 0; i < worldControlMap.length; i++) {
-		if (landMask[i] !== 2) continue;
-		const ownerId = worldControlMap[i];
-		const occupierId = primaryOccupierMap[i];
-		const ds = dominantSideMap[i];
-
-		if (exitingIds.has(ownerId)) {
-			if (ds !== -1 && ds !== sideIdx) {
-				worldControlMap[i] =
-					occupierId > 0 && !exitingIds.has(occupierId)
-						? occupierId
-						: occupierId > 0
-							? occupierId
-							: ownerId;
-			}
-			landMask[i] = 1;
-			clearCellInfluence(i);
-			primaryOccupierMap[i] = 0;
-		} else if (exitingIds.has(occupierId)) {
-			if (ds === sideIdx) {
-				worldControlMap[i] = ownerId;
-				landMask[i] = 1;
-				clearCellInfluence(i);
-			} else {
-				clearCellInfluence(i);
-			}
-			primaryOccupierMap[i] = 0;
-		}
-	}
-
-	// Remove all countries from this side
-	sides[sideIdx] = [];
-
-	// Clear all war plans for the exiting side
-	clearSideLandPlanSlots(sideIdx);
-	if (sideIdx < _navalPlan.length) _navalPlan[sideIdx] = null;
-	if (sideIdx < _navalSupplyPlan.length) _navalSupplyPlan[sideIdx] = null;
-	if (sideIdx < _transportPlan.length) _transportPlan[sideIdx] = null;
-	if (sideIdx < _planReassessNeeded.length)
-		_planReassessNeeded[sideIdx] = false;
-
-	// Purge units belonging to exiting nations
-	units = units.filter((u) => !exitingIds.has(u.sovereignId));
-	units.forEach((u) => {
-		if (exitingIds.has(u.beneficiaryId)) u.beneficiaryId = u.sovereignId;
-	});
-
-	// Check if war is over
-	const activePoles = new Set();
-	sides.forEach((s, idx) => {
-		if (s.length > 0) activePoles.add(idx);
-	});
-	reconcileOperationalAiLifecycle("side-withdrew");
-
-	if (activePoles.size < 2) {
-		applyTreaty("PEACE_TREATY");
-	} else {
-		playPeaceSound();
-		gameState = "SIMULATING";
-		statusText.innerText = "Separate peace signed. Conflict continues.";
-		cancelAnimationFrame(animationFrameId);
-		requestAnimationFrame(updateLoop);
-	}
+export function _signSelectiveSideExit(...args) {
+	return lifecycle._signSelectiveSideExit(...args);
 }
 
-export function _signSelectivePeace(exiter, target) {
-	let exiterSideIdx = -1;
-	let targetSideIdx = -1;
-
-	sides.forEach((s, i) => {
-		if (s.some((c) => c.id === exiter.id)) exiterSideIdx = i;
-		if (s.some((c) => c.id === target.id)) targetSideIdx = i;
-	});
-
-	if (
-		exiterSideIdx === -1 ||
-		targetSideIdx === -1 ||
-		exiterSideIdx === targetSideIdx
-	) {
-		alert("Diplomatic error: Negotiating nations must be on opposing sides.");
-		gameState = "SIMULATING";
-		statusText.innerText = "Conflict Continued";
-		requestAnimationFrame(updateLoop);
-		return;
-	}
-	releaseCountryPersonnelFromSide(target.id, targetSideIdx);
-
-	// The 'target' (second nation clicked) is the one exiting the specific conflict engagement
-	for (let i = 0; i < worldControlMap.length; i++) {
-		if (landMask[i] !== 2) continue;
-
-		const ownerId = worldControlMap[i];
-		const occupierId = primaryOccupierMap[i];
-		const ds = dominantSideMap[i];
-
-		if (ownerId === target.id) {
-			if (ds !== -1 && ds !== targetSideIdx) {
-				// Annexation: Give land to the specific occupier
-				worldControlMap[i] = occupierId > 0 ? occupierId : exiter.id;
-				landMask[i] = 1;
-				clearCellInfluence(i);
-				primaryOccupierMap[i] = 0;
-			}
-		}
-		// B) If the target (leaving nation) is occupying someone else's land, it gets annexed by the target
-		else if (occupierId === target.id) {
-			if (ds === targetSideIdx) {
-				worldControlMap[i] = target.id;
-				landMask[i] = 1;
-				clearCellInfluence(i);
-			} else {
-				clearCellInfluence(i);
-			}
-			primaryOccupierMap[i] = 0;
-		}
-	}
-
-	// 2. Remove the target country from its alliance list
-	const targetSide = sides[targetSideIdx];
-	const idx = targetSide.findIndex((c) => c.id === target.id);
-	if (idx > -1) targetSide.splice(idx, 1);
-
-	// 3. Purge units belonging to the target nation
-	units = units.filter((u) => u.sovereignId !== target.id);
-
-	// Reset beneficiary IDs for units that were supporting the leaving nation
-	units.forEach((u) => {
-		if (u.beneficiaryId === target.id) u.beneficiaryId = u.sovereignId;
-	});
-
-	// 4. Final Sweep: Stabilize land owned by nations no longer in the war
-	const combatantIds = new Set(sides.flat().map((c) => c.id));
-	for (let i = 0; i < worldControlMap.length; i++) {
-		if (landMask[i] === 2) {
-			const ownerId = worldControlMap[i];
-			// If owner is not a combatant AND no one else is currently occupying it, stabilize it
-			if (!combatantIds.has(ownerId) && Math.abs(occupationMap[i]) < 0.01) {
-				landMask[i] = 1;
-				clearCellInfluence(i);
-				primaryOccupierMap[i] = 0;
-			}
-		}
-	}
-
-	// 5. Separate Peace Smoothing Pass - Optimized to avoid GC thrashing
-	const smoothingPasses = 2;
-	for (let p = 0; p < smoothingPasses; p++) {
-		const tempMap = new Uint16Array(worldControlMap);
-		const uniqueIds = new Int32Array(9);
-		const idCounts = new Int32Array(9);
-
-		for (let y = 1; y < gridHeight - 1; y++) {
-			const rowIdx = y * gridWidth;
-			for (let x = 1; x < gridWidth - 1; x++) {
-				const i = rowIdx + x;
-				if (landMask[i] !== 1) continue;
-
-				uniqueIds.fill(0);
-				idCounts.fill(0);
-				let numUnique = 0;
-
-				for (let dy = -1; dy <= 1; dy++) {
-					for (let dx = -1; dx <= 1; dx++) {
-						const nId = worldControlMap[i + dy * gridWidth + dx];
-						if (nId > 0) {
-							let found = false;
-							for (let k = 0; k < numUnique; k++) {
-								if (uniqueIds[k] === nId) {
-									idCounts[k]++;
-									found = true;
-									break;
-								}
-							}
-							if (!found && numUnique < 9) {
-								uniqueIds[numUnique] = nId;
-								idCounts[numUnique] = 1;
-								numUnique++;
-							}
-						}
-					}
-				}
-
-				let bestId = worldControlMap[i];
-				let maxC = 0;
-				for (let k = 0; k < numUnique; k++) {
-					if (idCounts[k] > maxC) {
-						maxC = idCounts[k];
-						bestId = uniqueIds[k];
-					}
-				}
-				if (maxC >= 5) tempMap[i] = bestId;
-			}
-		}
-		worldControlMap.set(tempMap);
-	}
-
-	// 6. Update UI and check for total conflict end
-	generateProvinces();
-	recalculateAllBounds();
-	updateSidesUI();
-	influenceLayer.render();
-
-	const activePoles = new Set();
-	sides.forEach((side, idx) => {
-		if (side.length > 0) activePoles.add(idx);
-	});
-	reconcileOperationalAiLifecycle("separate-peace");
-
-	if (activePoles.size < 2) {
-		applyTreaty("PEACE_TREATY");
-	} else {
-		playPeaceSound();
-		gameState = "SIMULATING";
-		statusText.innerText = `${target.name} signed separate peace. Conflict continues.`;
-		cancelAnimationFrame(animationFrameId);
-		requestAnimationFrame(updateLoop);
-	}
+export function _signSelectivePeace(...args) {
+	return lifecycle._signSelectivePeace(...args);
 }
 
 export const SPEED_STEPS = [1, 2, 3];
@@ -22173,45 +6968,10 @@ export function togglePause() {
 			: getTranslation("STABLE");
 }
 
-pauseBtn.addEventListener("click", togglePause);
+menu_controls.bindPauseBtnClick();
 
 // Keybinds
-document.addEventListener("keydown", (e) => {
-	// Don't trigger if user is typing in an input or textarea
-	if (["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
-
-	if (e.code === "Space") {
-		if (gameState === "SIMULATING") {
-			e.preventDefault();
-			togglePause();
-		}
-	}
-
-	if (e.key === "Delete" || e.key === "Backspace") {
-		if ((gameMode === "EDITOR" || godModeActive) && editingCountryId > 0) {
-			e.preventDefault();
-			unclaimSelectedCountry();
-		}
-	}
-
-	// Z key: instantly zoom out to a global view of the entire world
-	if (e.key === "z" || e.key === "Z") {
-		e.preventDefault();
-		// Fit the whole world into view with a small padding for aesthetics
-		map.fitWorld({ animate: true, padding: [20, 20] });
-	}
-
-	if (e.key === "Escape") {
-		if (gameState === "PEACE_SELECT_1" || gameState === "PEACE_SELECT_2") {
-			e.preventDefault();
-			gameState = "SIMULATING";
-			statusText.innerText = "Conflict Continued";
-			requestAnimationFrame(updateLoop);
-		} else if (countryInspector.style.display === "block") {
-			closeInspectorBtn.click();
-		}
-	}
-});
+simulation_controls.bindDocumentKeydown();
 
 export function unclaimSelectedCountry() {
 	if (editingCountryId <= 0) return;
@@ -22259,701 +7019,51 @@ export function setSpeed(index) {
 	frameAccumulator = 0;
 }
 
-ffBtn.addEventListener("click", () => {
-	const nextIndex = (currentSpeedIndex + 1) % SPEED_STEPS.length;
-	setSpeed(nextIndex);
-});
+menu_controls.bindFfBtnClick();
 
-speedDownBtn.addEventListener("click", () => {
-	setSpeed(currentSpeedIndex - 1);
-});
+menu_controls.bindSpeedDownBtnClick();
 
-speedUpBtn.addEventListener("click", () => {
-	setSpeed(currentSpeedIndex + 1);
-});
+menu_controls.bindSpeedUpBtnClick();
 
-if (customTrackInput) {
-	customTrackInput.addEventListener("change", async (e) => {
-		const file = e.target.files[0];
-		if (!file) return;
+menu_controls.bindCustomTrackInputChange();
 
-		loadingStatus.innerText = "Uploading Soundtrack...";
-		loadingOverlay.style.display = "flex";
+menu_controls.bindClearCustomTrackBtnClick();
 
-		try {
-			const url = await websim.upload(file);
-			customTrackUrl = url;
-			setCookie("mw_custom_track", url);
+menu_controls.bindTabScenariosBtnClick();
+menu_controls.bindTabCountriesBtnClick();
+menu_controls.bindTabFlagsBtnClick();
 
-			// Restart music with new track
-			if (bgMusicSource) {
-				bgMusicSource.stop();
-				bgMusicSource = null;
-			}
-			initAudio();
-			loadingOverlay.style.display = "none";
-			alert("Custom soundtrack applied and saved!");
-		} catch (err) {
-			console.error(err);
-			alert("Failed to upload soundtrack.");
-			loadingOverlay.style.display = "none";
-		}
-	});
-}
+community_controls.bindDeleteScenarioHandler();
 
-if (clearCustomTrackBtn) {
-	clearCustomTrackBtn.addEventListener("click", () => {
-		customTrackUrl = null;
-		setCookie("mw_custom_track", "");
-		if (customTrackInput) customTrackInput.value = "";
-
-		if (bgMusicSource) {
-			bgMusicSource.stop();
-			bgMusicSource = null;
-		}
-		initAudio();
-		alert("Soundtrack reset to original.");
-	});
-}
-
-export async function initMultiplayer() {
-	if (room) return;
-	if (typeof WebsimSocket === "undefined") {
-		console.warn(
-			"Multiplayer disabled: WebsimSocket is unavailable in local server mode.",
-		);
-		return;
-	}
-	room = new WebsimSocket();
-	await room.initialize();
-
-	try {
-		const currentUser = await window.websim.getCurrentUser();
-		currentUsername = currentUser?.username || null;
-	} catch (e) {
-		console.warn("Failed to get current user for comments", e);
-		currentUsername = null;
-	}
-
-	// Subscribe to persistent scenario records
-	room.collection("scenario_v1").subscribe((scenarios) => {
-		if (scenarioHubModal.style.display === "flex") {
-			renderHub(scenarios);
-		}
-	});
-
-	// Subscribe to persistent country records
-	room.collection("country_library_v1").subscribe((countries) => {
-		if (scenarioHubModal.style.display === "flex") {
-			renderCountryLibrary(countries);
-		}
-	});
-
-	// Subscribe to persistent flag records
-	room.collection("flag_library_v1").subscribe((flags) => {
-		if (scenarioHubModal.style.display === "flex") {
-			renderFlagLibrary(flags);
-		}
-	});
-
-	// Subscribe to comments so hub cards show live comment counts
-	room.collection("hub_comment_v1").subscribe(() => {
-		// Only bother re-rendering when the hub is visible
-		if (scenarioHubModal.style.display === "flex") {
-			const scenarios = room.collection("scenario_v1").getList();
-			renderHub(scenarios || []);
-		}
-	});
-}
-
-tabScenariosBtn.onclick = () => switchHubTab("scenarios");
-tabCountriesBtn.onclick = () => switchHubTab("countries");
-tabFlagsBtn.onclick = () => switchHubTab("flags");
-
-window.deleteScenario = async (id) => {
-	if (!confirm("Are you sure you want to delete this scenario?")) return;
-	try {
-		await room.collection("scenario_v1").delete(id);
-	} catch (e) {
-		console.error(e);
-		alert("Failed to delete scenario. You can only delete your own posts.");
-	}
-};
-
-export function renderCountryLibrary(countries) {
-	hubCountryCache = {};
-	if (countries.length === 0) {
-		libraryList.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: #666; padding: 40px;">Library is empty. Contribute your nations!</div>`;
-		return;
-	}
-
-	const myUsername = currentUsername;
-	const canImport = gameMode === "EDITOR" || godModeActive;
-
-	libraryList.innerHTML = countries
-		.map((c) => {
-			hubCountryCache[c.id] = c;
-			const safeId = escapeHtml(c.id);
-			const safePreviewUrl = escapeHtml(
-				c.previewUrl ||
-					"https://images.websim.ai/v1/projects/placeholder/landscape",
-			);
-			const safeFlagUrl = c.flagUrl ? escapeHtml(c.flagUrl) : "";
-			const safeName = escapeHtml(c.name);
-			const safeUsername = escapeHtml(c.username);
-			const safeDescription = escapeHtml(
-				c.description || "No description provided.",
-			);
-			const safeColor = escapeHtml(c.color || "#fff");
-			return `
-        <div class="hub-item" data-item-type="country" data-item-id="${safeId}">
-            <div style="height: 120px; position: relative; display: flex; align-items: center; justify-content: center; background: #000; border-bottom: 1px solid rgba(255,255,255,0.1); overflow: hidden;">
-                 <img src="${safePreviewUrl}" style="width: 100%; height: 100%; object-fit: cover; opacity: 0.6;">
-                 <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(circle, transparent 30%, #000 100%);"></div>
-                 <div style="position: absolute; display: flex; align-items: center; justify-content: center; z-index: 2;">
-                    ${safeFlagUrl ? `<img src="${safeFlagUrl}" style="max-height: 40px; max-width: 60px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2);">` : '<span style="font-size: 30px;">🏳️</span>'}
-                 </div>
-                 <div style="position: absolute; bottom: 5px; left: 5px; right: 5px; height: 3px; background: ${safeColor}; border-radius: 2px;"></div>
-            </div>
-            <div class="hub-content">
-                <div class="hub-info">
-                    <div class="hub-name">${safeName}</div>
-                    <div class="hub-meta">
-                        <img src="https://images.websim.com/avatar/${safeUsername}" class="hub-author-img">
-                        <span>${safeUsername}</span>
-                    </div>
-                </div>
-                <div class="hub-description">${safeDescription}</div>
-                <div class="hub-actions" style="margin-top: auto; display: flex; justify-content: space-between; align-items: center;">
-                    <div style="display: flex; gap: 5px;" class="hub-actions-buttons">
-                        ${canImport ? `<button class="mini-btn" style="background: #27ae60; padding: 6px 12px;" data-import-country-id="${safeId}">IMPORT</button>` : ""}
-                        ${
-													c.username === myUsername
-														? `<button class="mini-btn" style="background: #c0392b; padding: 6px 12px;" data-delete-country-id="${safeId}">DEL</button>`
-														: ""
-												}
-                    </div>
-                    <span style="font-size: 12px; color: #555;">${new Date(c.created_at).toLocaleDateString()}</span>
-                </div>
-            </div>
-        </div>
-    `;
-		})
-		.join("");
-
-	libraryList.querySelectorAll(".hub-item").forEach((card) => {
-		if (card.dataset.boundClick) return;
-		card.dataset.boundClick = "1";
-		card.addEventListener("click", (ev) => {
-			if (
-				ev.target.closest(".hub-actions-buttons") ||
-				ev.target.closest("button")
-			)
-				return;
-			const id = card.getAttribute("data-item-id");
-			if (!id) return;
-			const item = hubCountryCache[id];
-			if (!item) return;
-			openItemModal("country", item);
-		});
-	});
-	libraryList.querySelectorAll("[data-import-country-id]").forEach((btn) => {
-		btn.addEventListener("click", (ev) => {
-			ev.stopPropagation();
-			window.importFromLibrary(btn.dataset.importCountryId);
-		});
-	});
-	libraryList.querySelectorAll("[data-delete-country-id]").forEach((btn) => {
-		btn.addEventListener("click", (ev) => {
-			ev.stopPropagation();
-			window.deleteCountry(btn.dataset.deleteCountryId);
-		});
-	});
-}
-
-export function renderFlagLibrary(flags) {
-	hubFlagCache = {};
-	if (flags.length === 0) {
-		flagLibraryList.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: #666; padding: 40px;">No custom flags shared yet. Be the first!</div>`;
-		return;
-	}
-
-	const myUsername = currentUsername;
-	const canImport = gameMode === "EDITOR" || godModeActive;
-
-	flagLibraryList.innerHTML = flags
-		.map((f) => {
-			hubFlagCache[f.id] = f;
-			const safeId = escapeHtml(f.id);
-			const safeFlagUrl = escapeHtml(f.flagUrl);
-			const safeName = escapeHtml(f.name);
-			const safeUsername = escapeHtml(f.username);
-			const safeDescription = escapeHtml(f.description || "No description.");
-			return `
-        <div class="hub-item" data-item-type="flag" data-item-id="${safeId}">
-            <div style="height: 100px; display: flex; align-items: center; justify-content: center; background: #000; border-bottom: 1px solid rgba(255,255,255,0.1); padding: 15px;">
-                 <img src="${safeFlagUrl}" style="max-height: 100%; max-width: 100%; box-shadow: 0 4px 15px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2);">
-            </div>
-            <div class="hub-content">
-                <div class="hub-info">
-                    <div class="hub-name">${safeName}</div>
-                    <div class="hub-meta">
-                        <img src="https://images.websim.com/avatar/${safeUsername}" class="hub-author-img">
-                        <span>${safeUsername}</span>
-                    </div>
-                </div>
-                <div class="hub-description">${safeDescription}</div>
-                <div class="hub-actions" style="margin-top: auto; display: flex; justify-content: space-between; align-items: center;">
-                    <div style="display: flex; gap: 5px;" class="hub-actions-buttons">
-                        ${canImport ? `<button class="mini-btn" style="background: #2e86de; padding: 6px 12px;" data-import-flag-id="${safeId}">USE</button>` : ""}
-                        ${
-													f.username === myUsername
-														? `<button class="mini-btn" style="background: #c0392b; padding: 6px 12px;" data-delete-flag-id="${safeId}">DEL</button>`
-														: ""
-												}
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-		})
-		.join("");
-
-	flagLibraryList.querySelectorAll(".hub-item").forEach((card) => {
-		if (card.dataset.boundClick) return;
-		card.dataset.boundClick = "1";
-		card.addEventListener("click", (ev) => {
-			if (
-				ev.target.closest(".hub-actions-buttons") ||
-				ev.target.closest("button")
-			)
-				return;
-			const id = card.getAttribute("data-item-id");
-			if (!id) return;
-			const item = hubFlagCache[id];
-			if (!item) return;
-			openItemModal("flag", item);
-		});
-	});
-	flagLibraryList.querySelectorAll("[data-import-flag-id]").forEach((btn) => {
-		btn.addEventListener("click", (ev) => {
-			ev.stopPropagation();
-			window.importFlagFromLibrary(btn.dataset.importFlagId);
-		});
-	});
-	flagLibraryList.querySelectorAll("[data-delete-flag-id]").forEach((btn) => {
-		btn.addEventListener("click", (ev) => {
-			ev.stopPropagation();
-			window.deleteFlag(btn.dataset.deleteFlagId);
-		});
-	});
-}
-
-window.deleteFlag = async (id) => {
-	if (!confirm("Remove this flag from the library?")) return;
-	try {
-		await room.collection("flag_library_v1").delete(id);
-	} catch (e) {
-		console.error(e);
-		alert("Delete failed.");
-	}
-};
+community_controls.bindDeleteFlagHandler();
 
 /**
  * GLOBAL EXPORTS FOR HUB INTERACTION
  */
-window.importFlagFromLibrary = async (id) => {
-	// Robust lookup to ensure we have the data
-	const list = room.collection("flag_library_v1").getList();
-	const flagData = list.find((f) => f.id === id);
-
-	if (!flagData || editingCountryId <= 0) {
-		if (editingCountryId <= 0) {
-			alert(
-				"SATELLITE INTERFACE: You must select a nation on the map first to designate a target for the new national identity.",
-			);
-		} else {
-			alert(
-				"SATELLITE ERROR: Could not retrieve flag data from the hub archives.",
-			);
-		}
-		return;
-	}
-
-	const meta = countryMetadata[editingCountryId - 1];
-	if (meta) {
-		updateCountryFlag(editingCountryId, flagData.flagUrl);
-		closeHub();
-		// Visual confirmation
-		statusText.innerText = `IDENTIFIED: ${meta.name} now using community flag '${flagData.name}'`;
-	}
-};
+community_controls.bindImportFlagFromLibraryHandler();
 
 export function saveCountryLocally(countryId) {
 	const meta = countryMetadata[countryId - 1];
 	if (!meta) return;
-
-	const countryData = {
-		id: meta.id,
-		name: meta.name,
-		color: meta.color,
-		flagUrl: meta.flagUrl,
-		isCustom: meta.isCustom,
-		role: meta.role || "OFFENSE",
-		overlordId: meta.overlordId || null,
-	};
-
-	const cells = [];
-	for (let i = 0; i < worldControlMap.length; i++) {
-		if (worldControlMap[i] === countryId) {
-			const y = Math.floor(i / gridWidth);
-			const x = i % gridWidth;
-			cells.push([x, y]);
-		}
-	}
-
-	// Cache cells on metadata so releasables and multi-export can reuse them
+	const cells = collectCountryCells(worldControlMap, gridWidth, [
+		countryId,
+	]).get(countryId);
 	meta.savedCells = cells;
-
-	const presetData = {
-		name: `${meta.name}_country`,
-		metadata: countryData,
-		cells: cells,
-		gridRes: CONFIG.GRID_RES,
-		version: "1.0",
-	};
-
-	const blob = new Blob([JSON.stringify(presetData)], {
-		type: "application/json",
-	});
-	const url = URL.createObjectURL(blob);
-	const a = document.createElement("a");
-	a.href = url;
-	a.download = `${meta.name.replace(/\s+/g, "_")}_country.json`;
-	a.click();
-	URL.revokeObjectURL(url);
-
+	const data = createCountryExport(meta, cells, CONFIG.GRID_RES);
+	downloadBlob(
+		new Blob([JSON.stringify(data)], { type: "application/json" }),
+		`${meta.name.replace(/\s+/g, "_")}_country.json`,
+	);
 	statusText.innerText = `SAVED: ${meta.name} exported locally`;
 }
 
-export function loadCountryFromPC() {
-	const input = document.createElement("input");
-	input.type = "file";
-	input.accept = ".json";
-	input.onchange = async (e) => {
-		const file = e.target.files[0];
-		if (!file) return;
+community_controls.bindDeleteCountryHandler();
 
-		loadingStatus.innerText = "Loading Country Data...";
-		loadingOverlay.style.display = "flex";
+community_controls.bindImportFromLibraryHandler();
 
-		try {
-			const text = await file.text();
-			const data = JSON.parse(text);
+community_controls.bindPlayFromHubHandler();
 
-			if (!data.metadata || !data.cells) {
-				throw new Error("Invalid country file structure");
-			}
-
-			const currentRes = CONFIG.GRID_RES;
-			const sourceRes = data.gridRes || currentRes;
-
-			// Find next available country ID
-			const maxId = countryMetadata.reduce(
-				(max, m) => (m ? Math.max(max, m.id) : max),
-				0,
-			);
-			const newId = maxId + 1;
-
-			// Create metadata entry
-			const meta = {
-				id: newId,
-				name: data.metadata.name || "Imported Nation",
-				color: data.metadata.color || "rgba(150, 150, 150, 0.5)",
-				rgba: parseColorToRGBA(
-					data.metadata.color || "rgba(150, 150, 150, 0.5)",
-				),
-				isCustom: true,
-				flagUrl: data.metadata.flagUrl || null,
-				role: data.metadata.role || "OFFENSE",
-				overlordId: data.metadata.overlordId || null,
-				bounds: {
-					minX: Infinity,
-					maxX: -Infinity,
-					minY: Infinity,
-					maxY: -Infinity,
-				},
-			};
-
-			if (meta.flagUrl) {
-				meta.tempFlag = new Image();
-				meta.tempFlag.crossOrigin = "anonymous";
-				meta.tempFlag.src = meta.flagUrl;
-			}
-
-			countryMetadata[newId - 1] = meta;
-
-			// Place cells on map with resolution conversion if needed
-			for (const [sx, sy] of data.cells) {
-				if (sourceRes === currentRes) {
-					const idx = sy * gridWidth + sx;
-					if (idx < worldControlMap.length) {
-						worldControlMap[idx] = newId;
-						provinceMap[idx] = getProvinceId(sx, sy, newId);
-						if (landMask[idx] === 0) landMask[idx] = 1;
-
-						// Update bounds
-						meta.bounds.minX = Math.min(meta.bounds.minX, sx);
-						meta.bounds.maxX = Math.max(meta.bounds.maxX, sx);
-						meta.bounds.minY = Math.min(meta.bounds.minY, sy);
-						meta.bounds.maxY = Math.max(meta.bounds.maxY, sy);
-					}
-				} else {
-					// Convert coordinates
-					const baseLat = sy * sourceRes - 90;
-					const baseLng = sx * sourceRes - 180;
-
-					if (sourceRes > currentRes) {
-						for (
-							let lat = baseLat;
-							lat < baseLat + sourceRes;
-							lat += currentRes
-						) {
-							for (
-								let lng = baseLng;
-								lng < baseLng + sourceRes;
-								lng += currentRes
-							) {
-								const tIdx = getGridIndex(
-									lat + currentRes / 2,
-									lng + currentRes / 2,
-								);
-								if (tIdx !== -1) {
-									worldControlMap[tIdx] = newId;
-									provinceMap[tIdx] = getProvinceId(
-										Math.floor((lng + currentRes / 2 + 180) / currentRes),
-										Math.floor((lat + currentRes / 2 + 90) / currentRes),
-										newId,
-									);
-									if (landMask[tIdx] === 0) landMask[tIdx] = 1;
-								}
-							}
-						}
-					} else {
-						const tIdx = getGridIndex(
-							baseLat + sourceRes / 2,
-							baseLng + sourceRes / 2,
-						);
-						if (tIdx !== -1) {
-							worldControlMap[tIdx] = newId;
-							const tx = Math.floor(
-								(baseLng + sourceRes / 2 + 180) / currentRes,
-							);
-							const ty = Math.floor(
-								(baseLat + sourceRes / 2 + 90) / currentRes,
-							);
-							provinceMap[tIdx] = getProvinceId(tx, ty, newId);
-							if (landMask[tIdx] === 0) landMask[tIdx] = 1;
-
-							// Update bounds
-							meta.bounds.minX = Math.min(meta.bounds.minX, tx);
-							meta.bounds.maxX = Math.max(meta.bounds.maxX, tx);
-							meta.bounds.minY = Math.min(meta.bounds.minY, ty);
-							meta.bounds.maxY = Math.max(meta.bounds.maxY, ty);
-						}
-					}
-				}
-			}
-
-			loadingOverlay.style.display = "none";
-
-			// Check if bounds were updated, if not set reasonable defaults
-			if (meta.bounds.minX === Infinity) {
-				meta.bounds = {
-					minX: 0,
-					maxX: gridWidth - 1,
-					minY: 0,
-					maxY: gridHeight - 1,
-				};
-			}
-
-			openInspector(newId);
-			statusText.innerText = `IMPORTED: ${meta.name} from local file`;
-			influenceLayer.render();
-		} catch (err) {
-			console.error("Country import error:", err);
-			alert(`Failed to import country: ${err.message}`);
-			loadingOverlay.style.display = "none";
-		}
-	};
-	input.click();
-}
-
-window.deleteCountry = async (id) => {
-	if (
-		!confirm("Are you sure you want to delete this country from the library?")
-	)
-		return;
-	try {
-		await room.collection("country_library_v1").delete(id);
-	} catch (e) {
-		console.error(e);
-		alert("Failed to delete.");
-	}
-};
-
-window.importFromLibrary = async (id) => {
-	const list = room.collection("country_library_v1").getList();
-	const countryData = list.find((c) => c.id === id);
-	if (!countryData) return;
-
-	loadingStatus.innerText = `Importing ${countryData.name}...`;
-	loadingOverlay.style.display = "flex";
-	closeHub();
-
-	// Allow UI to update
-	await new Promise((r) => setTimeout(r, 100));
-
-	try {
-		const newId = countryMetadata.length + 1;
-		const newMeta = {
-			id: newId,
-			name: countryData.name,
-			color: countryData.color,
-			rgba: parseColorToRGBA(countryData.color),
-			isCustom: true,
-			flagUrl: countryData.flagUrl,
-		};
-		countryMetadata.push(newMeta);
-
-		// Fetch cells from URL if they aren't in the record (new format to avoid 250KB limit)
-		let cells = countryData.cells;
-		if (!cells && countryData.cellsUrl) {
-			try {
-				const resp = await fetch(countryData.cellsUrl);
-				cells = await resp.json();
-			} catch (e) {
-				console.error("Failed to fetch country cells", e);
-				alert("Error importing country geography.");
-				loadingOverlay.style.display = "none";
-				return;
-			}
-		}
-
-		if (!cells) {
-			alert("This country has no geography data.");
-			loadingOverlay.style.display = "none";
-			return;
-		}
-
-		// Map relative cells to current grid
-		const sourceRes = countryData.gridRes || CONFIG.GRID_RES;
-		const targetRes = CONFIG.GRID_RES;
-
-		cells.forEach(([cx, cy]) => {
-			// Robust conversion: Fill all target cells that overlap with the source cell
-			const baseLat = cy * sourceRes - 90;
-			const baseLng = cx * sourceRes - 180;
-
-			const xStart = Math.floor((baseLng + 180) / targetRes);
-			const xEnd = Math.floor((baseLng + sourceRes + 180 - 0.0001) / targetRes);
-			const yStart = Math.floor((baseLat + 90) / targetRes);
-			const yEnd = Math.floor((baseLat + sourceRes + 90 - 0.0001) / targetRes);
-
-			for (let ty = yStart; ty <= yEnd; ty++) {
-				if (ty < 0 || ty >= gridHeight) continue;
-				const rowOffset = ty * gridWidth;
-				for (let tx = xStart; tx <= xEnd; tx++) {
-					if (tx < 0 || tx >= gridWidth) continue;
-					const tIdx = rowOffset + tx;
-					worldControlMap[tIdx] = newId;
-					if (landMask[tIdx] === 0) landMask[tIdx] = 1;
-				}
-			}
-		});
-
-		recalculateAllBounds();
-		loadingOverlay.style.display = "none";
-		influenceLayer.render();
-		alert(`${countryData.name} imported successfully!`);
-	} catch (e) {
-		console.error(e);
-		alert("Import failed.");
-		loadingOverlay.style.display = "none";
-	}
-};
-
-window.playFromHub = async (url, id, name, ownerUsername) => {
-	primeAudio();
-	setLoadingThematic(true);
-	loadingStatus.innerText = "Downloading Scenario...";
-	loadingOverlay.style.display = "flex";
-	scenarioHubModal.style.display = "none";
-
-	const currentUser = await window.websim.getCurrentUser();
-	const myUsername = currentUser.username;
-
-	try {
-		const response = await fetch(url);
-		if (!response.ok) throw new Error("Failed to fetch");
-		const blob = await response.blob();
-
-		currentScenarioContext = { id, name, ownerUsername, blobUrl: url };
-		activeScenarioId = ownerUsername === myUsername ? id : null;
-
-		await performPresetLoad(blob, "CONQUEST");
-		initAudio();
-
-		if (activeScenarioId) {
-			editorUpdateBtn.style.display = "block";
-		} else {
-			editorUpdateBtn.style.display = "none";
-		}
-	} catch (e) {
-		console.error(e);
-		alert("Failed to download scenario.");
-		loadingOverlay.style.display = "none";
-	}
-};
-
-window.remixFromHub = async (url, sourceId, sourceName, ownerUsername) => {
-	primeAudio();
-	setLoadingThematic(true);
-	loadingStatus.innerText = "Downloading for Remix...";
-	loadingOverlay.style.display = "flex";
-	scenarioHubModal.style.display = "none";
-
-	const currentUser = await window.websim.getCurrentUser();
-	const myUsername = currentUser.username;
-
-	try {
-		const response = await fetch(url);
-		if (!response.ok) throw new Error("Failed to fetch");
-		const blob = await response.blob();
-		await performPresetLoad(blob, "EDITOR");
-		initAudio();
-
-		currentScenarioContext = {
-			id: sourceId,
-			name: sourceName,
-			ownerUsername,
-			blobUrl: url,
-		};
-		statusText.innerText = `REMIXING: ${sourceName}`;
-
-		// If we remix our OWN work, allow updating it
-		activeScenarioId = ownerUsername === myUsername ? sourceId : null;
-		if (activeScenarioId) {
-			editorUpdateBtn.style.display = "block";
-		} else {
-			editorUpdateBtn.style.display = "none";
-		}
-	} catch (e) {
-		console.error(e);
-		alert("Failed to download scenario for remix.");
-		loadingOverlay.style.display = "none";
-	}
-};
+community_controls.bindRemixFromHubHandler();
 
 /**
  * PRELOAD CORE VISUAL ASSETS
@@ -23032,207 +7142,23 @@ export function initializeEngine(refreshLoadedGeography = true) {
 	}
 }
 
-musicVolumeSlider.addEventListener("input", (e) => {
-	const vol = parseFloat(e.target.value);
-	musicVolVal.innerText = `${Math.round(vol * 100)}%`;
-	if (bgMusicGain && !isMuted) {
-		bgMusicGain.gain.setTargetAtTime(vol, audioCtx.currentTime, 0.05);
-	}
-	setCookie("mw_music_vol", vol);
+wireAudioControls({
+	musicVolumeSlider,
+	musicVolVal,
+	muteBtn,
+	isSimulating: () => gameState === "SIMULATING",
 });
 
-muteBtn.addEventListener("click", () => {
-	isMuted = !isMuted;
-	muteBtn.innerText = isMuted ? "Sound: off" : "Sound: on";
-	muteBtn.setAttribute("aria-pressed", String(isMuted));
+menu_controls.bindPresetLowBtnClick();
 
-	if (!audioCtx) return;
+menu_controls.bindPresetDefaultBtnClick();
 
-	if (isMuted) {
-		if (bgMusicGain)
-			bgMusicGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.1);
-		if (warAmbianceGain)
-			warAmbianceGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.1);
-	} else {
-		const savedVol = getCookie("mw_music_vol");
-		const musicVol = savedVol !== "" ? parseFloat(savedVol) : 0.15;
-		if (bgMusicGain)
-			bgMusicGain.gain.setTargetAtTime(musicVol, audioCtx.currentTime, 0.1);
-		if (warAmbianceGain && gameState === "SIMULATING") {
-			warAmbianceGain.gain.setTargetAtTime(0.05, audioCtx.currentTime, 0.1);
-		}
-	}
-});
-
-presetLowBtn.addEventListener("click", () => {
-	mapResSelect.value = "110m";
-	gridResSelect.value = "0.15";
-	unitLimitSelect.value = "100";
-
-	// Switch to Simplified mode without gradients for low performance
-	setImageryProvider("wargames");
-	if (disableCountryGradientCheckbox) {
-		disableCountryGradientCheckbox.checked = true;
-		disableCountryGradient = true;
-	}
-
-	document.getElementById("disable-mountains-checkbox").checked = true;
-	setupDisableMountainsCheckbox.checked = true;
-	mountainsEnabled = false;
-
-	// Visual feedback
-	presetLowBtn.style.boxShadow = "0 0 15px rgba(192, 57, 43, 0.5)";
-	presetDefaultBtn.style.boxShadow = "none";
-});
-
-presetDefaultBtn.addEventListener("click", () => {
-	mapResSelect.value = "110m";
-	gridResSelect.value = "0.1";
-	unitLimitSelect.value = "250";
-
-	// Reset to Google Earth with gradients for default
-	setImageryProvider("google");
-	if (disableCountryGradientCheckbox) {
-		disableCountryGradientCheckbox.checked = false;
-		disableCountryGradient = false;
-	}
-
-	document.getElementById("disable-mountains-checkbox").checked = false;
-	setupDisableMountainsCheckbox.checked = false;
-	mountainsEnabled = true;
-
-	// Visual feedback
-	presetDefaultBtn.style.boxShadow = "0 0 15px rgba(46, 134, 222, 0.5)";
-	presetLowBtn.style.boxShadow = "none";
-});
-
-launchBtn.addEventListener("click", () => {
-	primeAudio();
-	initializeEngine();
-
-	if (saveSkipCheckbox.checked) {
-		setCookie("mw_skip_settings", "true");
-		setCookie("mw_map_res", mapResSelect.value);
-		setCookie("mw_grid_res", gridResSelect.value);
-		setCookie("mw_unit_limit", unitLimitSelect.value);
-		setCookie(
-			"mw_disable_mountains",
-			document.getElementById("disable-mountains-checkbox").checked
-				? "true"
-				: "false",
-		);
-		setCookie(
-			"mw_disable_units_visually",
-			document.getElementById("disable-units-visually-checkbox").checked
-				? "true"
-				: "false",
-		);
-		setCookie(
-			"mw_disable_country_gradient",
-			disableCountryGradientCheckbox.checked ? "true" : "false",
-		);
-		if (disableInvisibleBuffsCheckbox) {
-			setCookie(
-				"mw_disable_invis_buffs",
-				disableInvisibleBuffsCheckbox.checked ? "true" : "false",
-			);
-		}
-		if (disableAutoFullscreenCheckbox) {
-			setCookie(
-				"mw_disable_fullscreen",
-				disableAutoFullscreenCheckbox.checked ? "true" : "false",
-			);
-		}
-		if (useSystemFontCheckbox) {
-			setCookie(
-				"mw_use_system_font",
-				useSystemFontCheckbox.checked ? "true" : "false",
-			);
-		}
-	} else {
-		setCookie("mw_skip_settings", "false");
-	}
-
-	settingsOverlay.style.display = "none";
-	if (gameState === "MAIN_MENU") {
-		mainMenu.style.display = "flex";
-	} else {
-		mapUi.style.display = "flex";
-		mapUi.style.display = "flex";
-		if (currentScenarioContext && gameMode === "EDITOR") {
-			statusText.innerText = `REMIXING: ${currentScenarioContext.name}`;
-		} else if (currentScenarioContext && gameMode === "CONQUEST") {
-			statusText.innerText = `PLAYING: ${currentScenarioContext.name}`;
-		}
-	}
-	launchBtn.innerText = "Save settings"; // Change for subsequent opens
-});
+menu_controls.bindLaunchBtnClick();
 
 // Auto-load settings on boot
 export function checkAutoLaunch() {
-	if (getCookie("mw_skip_settings") === "true") {
-		mapResSelect.value = getCookie("mw_map_res") || "110m";
-		gridResSelect.value = getCookie("mw_grid_res") || "0.15";
-		unitLimitSelect.value = getCookie("mw_unit_limit") || "250";
-		const mtSaved = getCookie("mw_disable_mountains");
-		if (mtSaved === "true") {
-			document.getElementById("disable-mountains-checkbox").checked = true;
-			setupDisableMountainsCheckbox.checked = true;
-			mountainsEnabled = false;
-		} else {
-			document.getElementById("disable-mountains-checkbox").checked = false;
-			setupDisableMountainsCheckbox.checked = false;
-			mountainsEnabled = true;
-		}
+	if (getCookie("mw_skip_settings") === "true") settingsController.restore();
 
-		const unitsVisSaved = getCookie("mw_disable_units_visually");
-		if (unitsVisSaved === "true") {
-			document.getElementById("disable-units-visually-checkbox").checked = true;
-			showUnitsVisually = false;
-		} else {
-			document.getElementById("disable-units-visually-checkbox").checked =
-				false;
-			showUnitsVisually = true;
-		}
-
-		if (getCookie("mw_hide_curved_labels") === "true") {
-			document.getElementById("hide-curved-labels-checkbox").checked = true;
-			hideCurvedLabels = true;
-		}
-
-		const gradSaved = getCookie("mw_disable_country_gradient");
-		if (gradSaved === "true") {
-			disableCountryGradientCheckbox.checked = true;
-			disableCountryGradient = true;
-		} else {
-			disableCountryGradientCheckbox.checked = false;
-			disableCountryGradient = false;
-		}
-
-		const invisSaved = getCookie("mw_disable_invis_buffs");
-		if (disableInvisibleBuffsCheckbox) {
-			disableInvisibleBuffsCheckbox.checked = invisSaved === "true";
-		}
-		invisibleBuffsEnabled = invisSaved !== "true";
-
-		const fullscreenSaved = getCookie("mw_disable_fullscreen");
-		if (disableAutoFullscreenCheckbox) {
-			disableAutoFullscreenCheckbox.checked = fullscreenSaved === "true";
-		}
-		disableFullscreen = fullscreenSaved === "true";
-
-		const systemFontSaved = getCookie("mw_use_system_font");
-		if (useSystemFontCheckbox) {
-			useSystemFontCheckbox.checked = systemFontSaved === "true";
-			if (systemFontSaved === "true") {
-				document.body.classList.add("use-system-font");
-			} else {
-				document.body.classList.remove("use-system-font");
-			}
-		}
-
-		saveSkipCheckbox.checked = true;
-	}
 	initializeEngine();
 	settingsOverlay.style.display = "none";
 	mainMenu.style.display = "flex";
@@ -23241,53 +7167,20 @@ export function checkAutoLaunch() {
 }
 
 // Settings Tab Logic
-document.querySelectorAll(".settings-tab-btn").forEach((btn) => {
-	btn.addEventListener("click", () => {
-		const tab = btn.dataset.tab;
-		// Buttons UI
-		document.querySelectorAll(".settings-tab-btn").forEach((b) => {
-			b.classList.remove("active");
-		});
-		btn.classList.add("active");
-		// Panes UI
-		document.querySelectorAll(".settings-tab-pane").forEach((pane) => {
-			pane.style.display = "none";
-		});
-		const target = document.getElementById(`settings-tab-${tab}`);
-		if (target) target.style.display = "block";
-	});
-});
-
-if (disableCountryGradientCheckbox) {
-	disableCountryGradientCheckbox.addEventListener("change", (e) => {
-		setCookie(
-			"mw_disable_country_gradient",
-			e.target.checked ? "true" : "false",
-		);
-	});
-}
-if (hideCurvedLabelsCheckbox) {
-	hideCurvedLabelsCheckbox.addEventListener("change", (e) => {
-		hideCurvedLabels = e.target.checked;
-		setCookie("mw_hide_curved_labels", e.target.checked ? "true" : "false");
-	});
-}
+menu_controls.bindSettingsTabBtnClick();
 
 // Global invisible buffs toggle wiring
-if (disableInvisibleBuffsCheckbox) {
-	// Initialize from current global state
+if (disableInvisibleBuffsCheckbox)
 	disableInvisibleBuffsCheckbox.checked = !invisibleBuffsEnabled;
-	disableInvisibleBuffsCheckbox.addEventListener("change", (e) => {
-		// When checked, invisible buffs are turned off
-		invisibleBuffsEnabled = !e.target.checked;
-		setCookie("mw_disable_invis_buffs", e.target.checked ? "true" : "false");
-		// Force a re-render so combat previews / UI respond immediately
-		influenceLayer.render();
-	});
-}
 
 checkAutoLaunch();
 // Initial language application must happen after all DOM is ready and checkAutoLaunch is done
+configureLanguageUi({
+	statusText: () => statusText,
+	countryMetadata: () => countryMetadata,
+	refreshSides: updateSidesUI,
+});
+menu_controls.bindLanguageSelectChange();
 applyLanguage();
 updateRestartVisibility();
 
@@ -23296,115 +7189,25 @@ if (editorToolbox) {
 	updateEditorToolPage(1);
 }
 
-mainSettingsBtn.addEventListener("click", () => {
-	settingsOverlay.style.display = "flex";
-	mainMenu.style.display = "none";
-});
+menu_controls.bindMainSettingsBtnClick();
 
-if (benchmarkBtn) {
-	benchmarkBtn.addEventListener("click", () => {
-		mainMenu.style.display = "none";
-		settingsOverlay.style.display = "none";
-		startBenchmark().catch((error) => {
-			console.error("[MW PERF] Benchmark failed:", error);
-			alert(`Benchmark failed: ${error.message}`);
-		});
-	});
-}
+menu_controls.bindBenchmarkBtnClick();
 
-if (benchmarkDismissBtn) {
-	benchmarkDismissBtn.addEventListener("click", () => {
-		if (benchmarkResults) benchmarkResults.style.display = "none";
-		isPaused = false;
-	});
-}
+menu_controls.bindBenchmarkDismissBtnClick();
 
-document.getElementById("help-btn")?.addEventListener("click", () => {
-	startTutorial(conquestTutorialSteps, "mw_tutorial_finished");
-});
+menu_controls.bindHelpBtnClick();
 
-document
-	.getElementById("fullscreen-btn")
-	?.addEventListener("click", async () => {
-		try {
-			if (document.fullscreenElement) await document.exitFullscreen();
-			else await document.documentElement.requestFullscreen();
-		} catch (error) {
-			console.warn("Fullscreen unavailable", error);
-		}
-	});
-document.getElementById("hud-menu")?.addEventListener("click", (event) => {
-	if (event.target.closest("button")) event.currentTarget.open = false;
-});
+menu_controls.bindFullscreenBtnClick();
+menu_controls.bindHudMenuClick();
 
-ingameSettingsBtn.addEventListener("click", () => {
-	settingsOverlay.style.display = "flex";
-	mapUi.style.display = "none";
-});
+menu_controls.bindIngameSettingsBtnClick();
 
 export const closeSettingsBtn = document.getElementById("close-settings-btn");
-if (closeSettingsBtn) {
-	closeSettingsBtn.addEventListener("click", () => {
-		settingsOverlay.style.display = "none";
-		if (gameState === "MAIN_MENU") {
-			mainMenu.style.display = "flex";
-		} else {
-			mapUi.style.display = "flex";
-		}
-	});
-}
+menu_controls.bindCloseSettingsBtnClick();
 
-playModeBtn.addEventListener("click", () => {
-	const navMain = document.getElementById("nav-links-container");
-	const selector = document.getElementById("menu-scenario-selector");
-	navMain.style.display = "none";
-	selector.style.display = "flex";
-	selectScenario("scroller-choice-modern", () => choiceModernDay.click());
-});
+menu_controls.bindPlayModeBtnClick();
 
-commanderModeBtn.addEventListener("click", () => {
-	commanderBriefingOverlay.style.display = "flex";
-});
-
-commanderBriefingBackBtn.addEventListener("click", () => {
-	commanderBriefingOverlay.style.display = "none";
-});
-
-commanderDeployBtn.addEventListener("click", () => {
-	startOperation(EASTERN_FRONT_OPERATION.id).catch(() => {});
-});
-
-commanderApplyOrdersBtn.addEventListener("click", () => {
-	setCommanderDirective({
-		stance: commanderStanceSelect.value,
-		targetCity: commanderCitySelect.value,
-		reserve: Number(commanderReserveSelect.value),
-	});
-});
-
-commanderReplayBtn.addEventListener("click", () => {
-	startOperation(EASTERN_FRONT_OPERATION.id).catch(() => {});
-});
-
-commanderMenuBtn.addEventListener("click", () => {
-	mainMenuBtn.click();
-});
-
-document.getElementById("back-to-nav-btn").addEventListener("click", () => {
-	const navMain = document.getElementById("nav-links-container");
-	const selector = document.getElementById("menu-scenario-selector");
-
-	selector.style.opacity = "0";
-	selector.style.transform = "translateX(50px)";
-
-	setTimeout(() => {
-		selector.style.display = "none";
-		selector.style.opacity = "1";
-		selector.style.transform = "none";
-		navMain.style.display = "flex";
-		setTimeout(() => navMain.classList.remove("hidden"), 10);
-	}, 400);
-});
+menu_controls.bindBackToNavBtnClick();
 
 /**
  * DYNAMIC MENU BACKGROUND SYSTEM
@@ -23413,56 +7216,26 @@ document.getElementById("back-to-nav-btn").addEventListener("click", () => {
 export let queuedScenarioAction = null;
 export const enterScenarioBtn = document.getElementById("enter-scenario-btn");
 
-enterScenarioBtn.onclick = () => {
-	if (queuedScenarioAction) {
-		queuedScenarioAction();
-	}
-};
+menu_controls.bindEnterScenarioBtnClick();
 
 // Wire Scroller Cards
-document.getElementById("scroller-choice-modern").onclick = () =>
-	selectScenario("scroller-choice-modern", () => choiceModernDay.click());
-document.getElementById("scroller-choice-1936").onclick = () =>
-	selectScenario("scroller-choice-1936", () => choice1936Scenario.click());
-document.getElementById("scroller-choice-1914").onclick = () =>
-	selectScenario("scroller-choice-1914", () => choiceWW1Scenario.click());
+menu_controls.bindScrollerChoiceModernClick();
+menu_controls.bindScrollerChoice1936Click();
+menu_controls.bindScrollerChoice1914Click();
 
-choiceModernDay.onclick = async () => {
-	// Smooth transition from Selector to Loading within the menu
-	const selector = document.getElementById("menu-scenario-selector");
-	if (selector) {
-		selector.style.opacity = "0";
-		selector.style.transform = "translateX(50px)";
-		selector.style.transition = "all 0.4s ease";
-	}
-
-	primeAudio();
-	setLoadingThematic(true);
-	loadingStatus.innerText = "Loading Modern World Theater...";
-	loadingOverlay.style.display = "flex";
-
-	try {
-		const url = "assets/maps/world map 2022.json";
-		const compiledUrl = COMPILED_SCENARIO_URLS.modern;
-
-		currentScenarioContext = {
-			id: "world_map_2022",
-			name: "Modern Day",
-			ownerUsername: "System",
-			blobUrl: url,
-			compiledUrl,
-		};
+const scenarioMenuDependencies = {
+	primeAudio,
+	setLoadingThematic,
+	loadingStatus,
+	loadingOverlay,
+	mainMenu,
+	initAudio,
+	loadPreset: performPresetLoad,
+	setContext: (context) => {
+		currentScenarioContext = context;
 		activeScenarioId = null;
-
-		await performPresetLoad(compiledUrl, "CONQUEST", {
-			jsonFallbackUrl: url,
-			prederivedEarth: true,
-		});
-		initAudio();
-		mainMenu.style.display = "none";
-	} catch (e) {
-		console.error(e);
-		// Fallback to old method if preset fails
+	},
+	modernFallback: async () => {
 		gameMode = "CONQUEST";
 		gameState = "SELECTING_P1";
 		const mapRes = document.getElementById("map-res-select").value;
@@ -23470,2262 +7243,143 @@ choiceModernDay.onclick = async () => {
 		mainMenu.style.display = "none";
 		await loadCountries(geoUrl, false);
 		initAudio();
-	}
+	},
 };
+menu_controls.bindChoiceModernDayClick();
 
-choice1936Scenario.onclick = async () => {
-	const selector = document.getElementById("menu-scenario-selector");
-	if (selector) {
-		selector.style.opacity = "0";
-		selector.style.transform = "translateX(50px)";
-		selector.style.transition = "all 0.4s ease";
-	}
-	primeAudio();
-	setLoadingThematic(true);
-	loadingStatus.innerText = "Loading WW2 Peru Update...";
-	loadingOverlay.style.display = "flex";
+menu_controls.bindChoice1936ScenarioClick();
 
-	try {
-		const url = "assets/maps/WW2 Peru Update.json";
-		const compiledUrl = COMPILED_SCENARIO_URLS.ww2;
+menu_controls.bindChoiceWW1ScenarioClick();
 
-		currentScenarioContext = {
-			id: "ww2_peru_update",
-			name: "WW2 Peru Update",
-			ownerUsername: "System",
-			blobUrl: url,
-			compiledUrl,
-		};
-		activeScenarioId = null;
-
-		await performPresetLoad(compiledUrl, "CONQUEST", {
-			jsonFallbackUrl: url,
-			prederivedEarth: true,
-		});
-		initAudio();
-		mainMenu.style.display = "none";
-	} catch (e) {
-		console.error(e);
-		alert("Failed to load WW2 Peru Update scenario.");
-		loadingOverlay.style.display = "none";
-	}
-};
-
-choiceWW1Scenario.onclick = async () => {
-	const selector = document.getElementById("menu-scenario-selector");
-	if (selector) {
-		selector.style.opacity = "0";
-		selector.style.transform = "translateX(50px)";
-		selector.style.transition = "all 0.4s ease";
-	}
-	primeAudio();
-	setLoadingThematic(true);
-	loadingStatus.innerText = "Loading 1914 Theater...";
-	loadingOverlay.style.display = "flex";
-
-	try {
-		const url = "assets/maps/world_war_1__1914_.json";
-		const compiledUrl = COMPILED_SCENARIO_URLS.ww1;
-
-		currentScenarioContext = {
-			id: "ww1_1914",
-			name: "1914 Scenario",
-			ownerUsername: "System",
-			blobUrl: url,
-			compiledUrl,
-		};
-		activeScenarioId = null;
-
-		await performPresetLoad(compiledUrl, "CONQUEST", {
-			jsonFallbackUrl: url,
-			prederivedEarth: true,
-		});
-		initAudio();
-		mainMenu.style.display = "none";
-	} catch (e) {
-		console.error(e);
-		alert("Failed to load 1914 scenario.");
-		loadingOverlay.style.display = "none";
-	}
-};
-
-cancelConquestChoice.onclick = () => {
-	conquestChoiceModal.style.display = "none";
-};
+menu_controls.bindCancelConquestChoiceClick();
 
 /**
  * EDITOR LOGIC
  */
-export function openReleaseModal(releaserId, sideIdx) {
-	const releasables = countryMetadata.filter(
-		(m) => m && m.releasableBy === releaserId,
-	);
-	if (releasables.length === 0) return;
 
-	releasableListContainer.innerHTML = releasables
-		.map((m) => {
-			if (!Number.isFinite(m.id)) return "";
-			const safeId = Number(m.id);
-			const safeName = escapeHtml(m.name);
-			const safeFlagUrl = escapeHtml(m.flagUrl || "");
-			return `
-        <button class="menu-card" style="padding: 10px; width: 100%; text-align: left;" data-release-nation-id="${safeId}" data-release-releaser-id="${releaserId}" data-release-side-idx="${sideIdx}">
-            <img src="${safeFlagUrl}" style="width: 30px; height: 18px; object-fit: cover; border: 1px solid #444; margin-right: 10px;">
-            <div class="card-body">
-                <span class="btn-text" style="font-size: 12px;">${safeName}</span>
-            </div>
-        </button>
-    `;
-		})
-		.join("");
-	releasableListContainer
-		.querySelectorAll("[data-release-nation-id]")
-		.forEach((btn) => {
-			btn.addEventListener("click", () => {
-				const nationId = Number(btn.dataset.releaseNationId);
-				const relId = Number(btn.dataset.releaseReleaserId);
-				const sIdx = Number(btn.dataset.releaseSideIdx);
-				window.releaseNation(nationId, relId, sIdx);
-			});
-		});
+menu_controls.bindCloseReleaseModalBtnClick();
 
-	releaseModal.style.display = "flex";
-}
+country_actions.bindReleaseNationHandler();
 
-closeReleaseModalBtn.onclick = () => {
-	releaseModal.style.display = "none";
-};
+map_input.bindMapMousedown();
 
-window.releaseNation = async (nationId, releaserId, sideIdx) => {
-	const meta = countryMetadata[nationId - 1];
-	if (!meta) return;
+map_input.bindMapPaintMousemove();
 
-	// Clear releasable flag so this entry doesn’t show again until re‑set
-	meta.releasableBy = null;
+map_input.bindMapMouseup();
 
-	const isWar = gameState === "SIMULATING";
+editor_tool_controls.bindEditorCreateBtnClick();
 
-	loadingStatus.innerText = `RESTORING NATION: ${meta.name}...`;
-	loadingOverlay.style.display = "flex";
-	await new Promise((r) => setTimeout(r, 50));
+menu_controls.bindCancelCreateBtnClick();
 
-	// Decide which cell list to use for restoration:
-	// 1) explicit savedCells from when it was marked releasable
-	// 2) deJure cores
-	// 3) rasterized from GeoJSON feature (slowest; last resort)
-	let cellList =
-		Array.isArray(meta.savedCells) && meta.savedCells.length
-			? meta.savedCells
-			: null;
+inspector_controls.bindConfirmCreateBtnClick();
 
-	if (!cellList && deJureMap) {
-		const cells = [];
-		for (let i = 0; i < deJureMap.length; i++) {
-			if (deJureMap[i] === nationId) {
-				const y = Math.floor(i / gridWidth);
-				const x = i % gridWidth;
-				cells.push([x, y]);
-			}
-		}
-		if (cells.length) cellList = cells;
-	}
+inspector_controls.bindInspectNameInputInput();
 
-	if (!cellList && meta.feature) {
-		const bounds = L.geoJSON(meta.feature).getBounds();
-		const res = CONFIG.GRID_RES;
-		const sLat = Math.max(0, Math.floor((bounds.getSouth() + 90) / res));
-		const eLat = Math.min(
-			gridHeight - 1,
-			Math.ceil((bounds.getNorth() + 90) / res),
-		);
-		const sLng = Math.max(0, Math.floor((bounds.getWest() + 180) / res));
-		const eLng = Math.min(
-			gridWidth - 1,
-			Math.ceil((bounds.getEast() + 180) / res),
-		);
-		const cells = [];
-		for (let y = sLat; y <= eLat; y++) {
-			for (let x = sLng; x <= eLng; x++) {
-				const lat = y * res - 90 + res * 0.5;
-				const lng = x * res - 180 + res * 0.5;
-				if (isPointInFeature(lat, lng, meta.feature)) {
-					cells.push([x, y]);
-				}
-			}
-		}
-		if (cells.length) cellList = cells;
-	}
+inspector_controls.bindInspectHubFlagBtnClick();
 
-	let restoredAny = false;
-	// If this nation came from a preset with savedCells, we can safely override any current owner on those cells.
-	const hasExplicitSavedCells =
-		Array.isArray(meta.savedCells) && meta.savedCells.length > 0;
+inspector_controls.bindInspectFetchFlagBtnClick();
 
-	if (cellList?.length) {
-		for (let i = 0; i < cellList.length; i++) {
-			const [x, y] = cellList[i];
-			const idx = y * gridWidth + x;
-			if (idx < 0 || idx >= worldControlMap.length) continue;
+inspector_controls.bindInspectFlagInputChange();
 
-			const currentOwner = worldControlMap[idx];
+inspector_controls.bindInspectColorPickerInput();
 
-			// Only restrict to releaser/neutral when we don't have an explicit savedCells mask.
-			if (!hasExplicitSavedCells) {
-				if (
-					currentOwner !== releaserId &&
-					currentOwner !== 0 &&
-					currentOwner !== nationId
-				) {
-					continue;
-				}
-			}
+editor_file_controls.bindShareCountryBtnClick();
 
-			worldControlMap[idx] = nationId;
-			deJureMap[idx] = nationId;
-			provinceMap[idx] = getProvinceId(x, y, nationId);
+editor_file_controls.bindShareFlagBtnClick();
 
-			if (isWar && sideIdx !== -1) {
-				landMask[idx] = 2;
-				for (let s = 0; s < sideInfluenceMaps.length; s++)
-					sideInfluenceMaps[s][idx] = 0;
-				if (sideIdx < sideInfluenceMaps.length)
-					sideInfluenceMaps[sideIdx][idx] = 1.0;
-				syncOccupationFromSideInfluence(idx);
-				primaryOccupierMap[idx] = nationId;
-			} else {
-				if (landMask[idx] === 0) landMask[idx] = 1;
-				clearCellInfluence(idx);
-				primaryOccupierMap[idx] = 0;
-			}
+editor_file_controls.bindCancelShareFlagBtnClick();
 
-			restoredAny = true;
-		}
-	}
+editor_file_controls.bindConfirmShareFlagBtnClick();
 
-	if (!restoredAny) {
-		loadingOverlay.style.display = "none";
-		releaseModal.style.display = "none";
-		statusText.innerText = `No valid territory found to release for ${meta.name}.`;
-		influenceLayer.render();
-		return;
-	}
+editor_file_controls.bindCancelShareCountryBtnClick();
 
-	// If in setup or mid‑war, make sure this nation actually participates on the chosen side
-	const newCountry = {
-		id: nationId,
-		name: meta.name,
-		color: meta.color,
-		role: "OFFENSE",
-		strategy: "BALANCED",
-		buffState: "none",
-		overlordId: meta.overlordId || null,
-		flag: meta.tempFlag || null,
-	};
+editor_file_controls.bindConfirmShareCountryBtnClick();
 
-	if (!newCountry.flag && meta.flagUrl) {
-		newCountry.flag = new Image();
-		newCountry.flag.crossOrigin = "anonymous";
-		newCountry.flag.src = meta.flagUrl;
-		meta.tempFlag = newCountry.flag;
-	}
+inspector_controls.bindInspectPaintBtnClick();
 
-	if (sideIdx !== -1) {
-		if (gameState === "SIMULATING") {
-			activateCountryMidWar(newCountry, sideIdx);
-		} else {
-			if (!sides[sideIdx]) sides[sideIdx] = [];
-			if (!sides[sideIdx].some((c) => c.id === nationId)) {
-				sides[sideIdx].push(newCountry);
-			}
-		}
-	}
+inspector_controls.bindInspectAnnexClickBtnClick();
 
-	loadingOverlay.style.display = "none";
-	releaseModal.style.display = "none";
-	recalculateAllBounds();
-	updateSidesUI();
-	influenceLayer.render();
-	statusText.innerText = `${meta.name} has been released!`;
-};
+editor_tool_controls.bindEditorPaintBtnClick();
 
-export function _setAsReleasable(releasableId, releaserId) {
-	const rMeta = countryMetadata[releasableId - 1];
-	const hostMeta = countryMetadata[releaserId - 1];
-	if (!rMeta || !hostMeta) return;
+editor_tool_controls.bindEditorFillBtnClick();
 
-	rMeta.releasableBy = releaserId;
+editor_tool_controls.bindEditorUnclaimBtnClick();
 
-	// Capture territory snapshot for future restoration.
-	// IMPORTANT: Only touch cells that are currently owned by the releasable.
-	// This makes it visually look like the host fully annexed the releasable,
-	// and we restore exactly these cells on release.
-	const cells = [];
-	for (let i = 0; i < worldControlMap.length; i++) {
-		if (worldControlMap[i] === releasableId) {
-			const y = Math.floor(i / gridWidth);
-			const x = i % gridWidth;
-			cells.push([x, y]);
-			// Hand this land to the host nation for now so it looks annexed
-			worldControlMap[i] = releaserId;
-		}
-	}
-	rMeta.savedCells = cells;
+editor_tool_controls.bindEditorTerrainBtnClick();
 
-	// Remove from active sides
-	sides.forEach((side) => {
-		const idx = side.findIndex((c) => c.id === releasableId);
-		if (idx > -1) side.splice(idx, 1);
-	});
+editor_tool_controls.bindEditorPlaceDivisionBtnClick();
 
-	statusText.innerText = `${rMeta.name} is now a releasable of ${hostMeta.name}`;
-	countryInspector.style.display = "none";
-	recalculateAllBounds();
-	updateSidesUI();
-	influenceLayer.render();
-}
+menu_controls.bindBrushSizeSliderInput();
 
-export function _setVassalage(vassalId, overlordId) {
-	const vassalMeta = countryMetadata[vassalId - 1];
-	if (!vassalMeta) return;
-
-	// Preserve the original flag the first time this country becomes a puppet
-	if (!vassalMeta.baseFlagUrl) {
-		vassalMeta.baseFlagUrl = vassalMeta.flagUrl || null;
-	}
-
-	vassalMeta.overlordId = overlordId;
-
-	// Propagate to sides if active
-	sides
-		.flat()
-		.filter(Boolean)
-		.forEach((c) => {
-			if (c.id === vassalId) c.overlordId = overlordId;
-		});
-
-	const overlordMeta = countryMetadata[overlordId - 1];
-	statusText.innerText = `${vassalMeta.name} is now a vassal of ${overlordMeta ? overlordMeta.name : "Unknown"}`;
-
-	// Generate a dynamic half-and-half puppet flag for vassals created after game start
-	// (existing historical puppets keep their original flags unless re-vassalized through this function).
-	generatePuppetFlag(vassalId, overlordId);
-
-	openInspector(vassalId);
-	influenceLayer.render();
-}
-
-export function recruitNewSideMidWar(id) {
-	// Create a new independent side and declare war on ALL existing sides
-	if (sides.length >= MAX_SIDES) return;
-
-	const meta = countryMetadata[id - 1];
-	if (!meta) return;
-
-	const newSideIdx = sides.length;
-
-	// Remove from any existing side first (shouldn't happen for neutrals, but safety)
-	sides.forEach((side) => {
-		const idx = side.findIndex((c) => c.id === id);
-		if (idx > -1) side.splice(idx, 1);
-	});
-
-	const newCountry = {
-		id: id,
-		name: meta.name,
-		color: meta.color,
-		role: "OFFENSE",
-		strategy: "BALANCED",
-		buffState: meta.buffState || "none",
-		overlordId: meta.overlordId || null,
-	};
-
-	rebaseSecondaryWarPlanSlotsForSideAppend(sides.length);
-	sides.push([newCountry]);
-	ensureSideIdentities();
-	for (let otherIdx = 0; otherIdx < newSideIdx; otherIdx++) {
-		if (!sides[otherIdx]?.length) continue;
-		hostileSidePairs.add(sidePairKey(sideUids[newSideIdx], sideUids[otherIdx]));
-	}
-	rebuildHostilityMatrix();
-	activeSideIndex = newSideIdx;
-	activateCountryMidWar(newCountry, newSideIdx);
-	reconcileOperationalAiLifecycle("new-side-joined");
-
-	updateSidesUI();
-	influenceLayer.render();
-
-	const sideLabel = String.fromCharCode(65 + newSideIdx);
-	statusText.innerText = `${newCountry.name} HAS JOINED AS SIDE ${sideLabel} — WAR ON ALL`;
-	playWarStartSound();
-}
-
-export function recruitNeutralMidWar(id, sideIdx) {
-	const meta = countryMetadata[id - 1];
-	if (!meta) return;
-	const oldSideIdx = findCountrySideIndex(id);
-	if (oldSideIdx === sideIdx) return;
-	prepareEmptySideForNewMembership(sideIdx);
-
-	if (oldSideIdx >= 0) {
-		const country = sides[oldSideIdx].find((candidate) => candidate.id === id);
-
-		const transfer = releaseCountryPersonnelFromSide(id, oldSideIdx, {
-			transferHistory: true,
-		}) || {
-			surviving: 0,
-			initial: 0,
-			recruitable: 0,
-			casualties: 0,
-		};
-
-		const oldCountryIndex = sides[oldSideIdx].findIndex(
-			(candidate) => candidate.id === id,
-		);
-		if (oldCountryIndex >= 0) sides[oldSideIdx].splice(oldCountryIndex, 1);
-		if (!sides[sideIdx]) sides[sideIdx] = [];
-		if (country && !sides[sideIdx].some((candidate) => candidate.id === id)) {
-			sides[sideIdx].push(country);
-		}
-		sideSoldiers[sideIdx] += transfer.surviving;
-		sideRecruitableManpower[sideIdx] += transfer.recruitable;
-		initialSideSoldiers[sideIdx] += transfer.initial;
-		sideCasualties[sideIdx] += transfer.casualties;
-		const historicalCombatant = initialCombatants.find(
-			(entry) => entry.id === id,
-		);
-		if (historicalCombatant) historicalCombatant.sideIndex = sideIdx;
-
-		for (const unit of units) {
-			if (unit.sovereignId !== id) continue;
-			unit.sideIndex = sideIdx;
-			clearUnitCommandAssignments(unit);
-			unit._cachedTarget = null;
-			unit._cachedScanKx = -999;
-			unit._cachedScanKy = -999;
-		}
-		for (let index = 0; index < worldControlMap.length; index++) {
-			if (
-				dominantSideMap[index] !== oldSideIdx ||
-				(worldControlMap[index] !== id && primaryOccupierMap[index] !== id)
-			)
-				continue;
-			const previousInfluence = sideInfluenceMaps[oldSideIdx]?.[index] || 0;
-			if (sideInfluenceMaps[oldSideIdx]) {
-				sideInfluenceMaps[oldSideIdx][index] = 0;
-			}
-			if (sideInfluenceMaps[sideIdx]) {
-				sideInfluenceMaps[sideIdx][index] = Math.max(
-					sideInfluenceMaps[sideIdx][index],
-					previousInfluence,
-					1,
-				);
-			}
-			syncOccupationFromSideInfluence(index);
-		}
-		unitSpatialHash.clear();
-		for (const sideHash of unitHashBySide) sideHash.clear();
-		adjacencyCache = null;
-		rebuildHostilityMatrix();
-		invalidateFrontlineField();
-		recalculateAllBounds();
-		updateSidesUI();
-		influenceLayer.render();
-		reconcileOperationalAiLifecycle("country-changed-side");
-		statusText.innerText = `${country?.name || meta.name} HAS SWITCHED TO ${getSideDisplayName(sideIdx)}`;
-		playWarStartSound();
-		return;
-	}
-
-	const newCountry = {
-		id: id,
-		name: meta.name,
-		color: meta.color,
-		role: "OFFENSE",
-		strategy: "BALANCED",
-		buffState: meta.buffState || "none",
-		overlordId: meta.overlordId || null,
-	};
-
-	if (!sides[sideIdx]) sides[sideIdx] = [];
-	sides[sideIdx].push(newCountry);
-	activateCountryMidWar(newCountry, sideIdx);
-	reconcileOperationalAiLifecycle("country-joined-side");
-
-	updateSidesUI();
-	influenceLayer.render();
-
-	const sideLabel = String.fromCharCode(65 + sideIdx);
-	statusText.innerText = `${newCountry.name} HAS DEPLOYED TO SIDE ${sideLabel}`;
-
-	// Play sound if possible
-	playWarStartSound();
-}
-
-export function openInspector(id) {
-	if (gameMode === "OPERATION") return;
-	editingCountryId = id;
-	const meta = countryMetadata[id - 1];
-	if (!meta) return;
-
-	const isWar = gameState === "SIMULATING";
-	const _isNeutral = !sides.flat().some((c) => c.id === id);
-
-	// Toggle editor-only fields, but keep the Combat Buff section visible even in war
-	const buffSection = document.getElementById("buff-editor-section");
-	document.querySelectorAll("#country-inspector .editor-only").forEach((el) => {
-		if (el === buffSection) return; // handle buff separately
-		el.style.display = isWar ? "none" : "block";
-	});
-	if (buffSection) {
-		buffSection.style.display = "block";
-	}
-
-	const vassalStatusDisplay = document.getElementById("vassal-status-display");
-	if (vassalStatusDisplay) {
-		if (meta.overlordId) {
-			vassalStatusDisplay.style.display = "block";
-			const oMeta = countryMetadata[meta.overlordId - 1];
-			document.getElementById("overlord-name-disp").innerText = oMeta
-				? oMeta.name
-				: "Unknown";
-		} else {
-			vassalStatusDisplay.style.display = "none";
-		}
-	}
-
-	const recruitmentDiv = document.getElementById("mid-war-recruitment");
-	const vassalizeBtn = document.getElementById("vassalize-btn");
-	const exitConflictBtn = document.getElementById("exit-conflict-btn");
-	if (recruitmentDiv) {
-		if (isWar) {
-			const currentSideIdx = sides.findIndex((s) => s.some((c) => c.id === id));
-			recruitmentDiv.style.display = "block";
-
-			if (exitConflictBtn) {
-				if (currentSideIdx !== -1) {
-					exitConflictBtn.style.display = "block";
-					exitConflictBtn.onclick = () => {
-						const country = sides[currentSideIdx].find((c) => c.id === id);
-						if (country) {
-							unilateralExitConflict(country, currentSideIdx);
-							countryInspector.style.display = "none";
-						}
-					};
-				} else {
-					exitConflictBtn.style.display = "none";
-				}
-			}
-			const btnContainer = document.getElementById("recruit-sides-btns");
-			btnContainer.innerHTML = "";
-
-			sides.forEach((_side, idx) => {
-				const isCurrentSide = currentSideIdx === idx;
-				const btn = document.createElement("button");
-				btn.className = "mini-btn";
-				const sideLabel = String.fromCharCode(65 + idx);
-				btn.innerText = isCurrentSide
-					? `ON SIDE ${sideLabel}`
-					: `JOIN SIDE ${sideLabel}`;
-				btn.style.background = sideColors[idx].replace(rgbaRe, "1)");
-				btn.style.padding = "8px 12px";
-				btn.style.fontSize = "10px";
-				btn.style.fontWeight = "900";
-				btn.style.opacity = isCurrentSide ? "0.4" : "1";
-				btn.disabled = isCurrentSide;
-
-				if (!isCurrentSide) {
-					btn.onclick = () => {
-						recruitNeutralMidWar(id, idx);
-						countryInspector.style.display = "none";
-					};
-				}
-				btnContainer.appendChild(btn);
-			});
-
-			// "Join New Side" — neutral country declares war on ALL sides as a new independent faction
-			if (currentSideIdx === -1 && _isNeutral && sides.length < MAX_SIDES) {
-				const newSideBtn = document.createElement("button");
-				newSideBtn.className = "mini-btn";
-				newSideBtn.innerText = "JOIN NEW SIDE";
-				newSideBtn.style.background = "#ff4500";
-				newSideBtn.style.padding = "8px 12px";
-				newSideBtn.style.fontSize = "10px";
-				newSideBtn.style.fontWeight = "900";
-				newSideBtn.style.width = "100%";
-				newSideBtn.style.marginTop = "4px";
-				newSideBtn.title =
-					"Declare war on ALL existing sides as an independent faction";
-				newSideBtn.onclick = () => {
-					recruitNewSideMidWar(id);
-					countryInspector.style.display = "none";
-				};
-				btnContainer.appendChild(newSideBtn);
-			}
-
-			// Vassalization Logic: Check if target can be vassalized
-			// Requires enough territory taken by a side
-			vassalizeBtn.style.display = "none";
-			const stats = latestCountryStats.get(id);
-			if (stats) {
-				const initial = meta.initialCells || stats.controlled + 100; // fallback if war just started
-				const controlPct = stats.controlled / initial;
-
-				// If more than 50% territory taken, show vassalize button for the leading side
-				if (controlPct < 0.5) {
-					vassalizeBtn.style.display = "block";
-					vassalizeBtn.onclick = () => {
-						// Find the side that occupies the most of this country
-						let bestSideIdx = 0;
-						const _maxOcc = 0;
-						const sideOccs = new Array(sides.length).fill(0);
-
-						// Sample grid to find dominant occupier
-						for (let i = 0; i < worldControlMap.length; i += 50) {
-							if (worldControlMap[i] === id && landMask[i] === 2) {
-								const occId = primaryOccupierMap[i];
-								const sIdx = sides.findIndex((s) =>
-									s.some((c) => c.id === occId),
-								);
-								if (sIdx !== -1) sideOccs[sIdx]++;
-							}
-						}
-						bestSideIdx = sideOccs.indexOf(Math.max(...sideOccs));
-						const overlord = sides[bestSideIdx][0];
-						if (overlord) {
-							meta.overlordId = overlord.id;
-							recruitNeutralMidWar(id, bestSideIdx);
-							countryInspector.style.display = "none";
-						}
-					};
-				}
-			}
-		} else {
-			recruitmentDiv.style.display = "none";
-		}
-	}
-
-	// Render current allies
-	if (allyList) {
-		const allies = Array.isArray(meta.allies) ? meta.allies : [];
-		if (!allies.length) {
-			allyList.innerHTML = `<span style="font-size: 12px; color: #666;">No allies set.</span>`;
-		} else {
-			const items = allies
-				.map((aid) => countryMetadata[aid - 1])
-				.filter(Boolean)
-				.map(
-					(m) =>
-						`<div style="font-size: 12px; color:#ccc; margin-bottom:2px;">• ${m.name}</div>`,
-				)
-				.join("");
-			allyList.innerHTML = items;
-		}
-	}
-
-	const releasables = countryMetadata.filter((m) => m && m.releasableBy === id);
-	const releaseContainer = document.getElementById(
-		"inspector-release-container",
-	);
-	const releaseBtn = document.getElementById("inspect-release-btn");
-	if (releaseContainer && releaseBtn) {
-		if (releasables.length > 0) {
-			releaseContainer.style.display = "block";
-			releaseBtn.onclick = () => {
-				const currentSideIdx = sides.findIndex((s) =>
-					s.some((c) => c.id === id),
-				);
-				openReleaseModal(id, currentSideIdx);
-			};
-		} else {
-			releaseContainer.style.display = "none";
-		}
-	}
-
-	const inspectorDisplayName = getTranslation(
-		meta.name || meta.feature?.properties?.NAME || "Unnamed Land",
-		getCookie("mw_lang") || "en",
-		"NATIONS",
-	);
-	inspectNameInput.value = inspectorDisplayName;
-	inspectNameInput.disabled = isWar;
-	inspectColorSwatch.style.backgroundColor = meta.color;
-
-	// Initialize Buff button state for this country (visible + hidden)
-	if (inspectBuffBtn) {
-		const currentBuff = meta.buffState || "none";
-		const currentHidden = meta.hiddenBuffState || "none";
-		const bMeta = BUFF_METADATA[currentBuff] || BUFF_METADATA.none;
-		const hMeta = BUFF_METADATA[currentHidden] || BUFF_METADATA.none;
-		const hiddenLabel =
-			currentHidden !== "none"
-				? `<div style="margin-top:4px; font-size: 12px; color:#f1c40f; text-transform:uppercase; letter-spacing:0.5px;">INVISIBLE BUFF: ${hMeta.label}</div>`
-				: "";
-		inspectBuffBtn.innerHTML = `
-            <span class="buff-arrow" data-dir="-1" style="font-size: 12px; margin-right:4px;">◀</span>
-            <span class="buff-label">BUFF: ${bMeta.label}</span>
-            <span class="buff-arrow" data-dir="1" style="font-size: 12px; margin-left:4px;">▶</span>
-            ${hiddenLabel}
-        `;
-		inspectBuffBtn.style.background = bMeta.color;
-		inspectBuffBtn.style.color = bMeta.textColor;
-	}
-
-	// Reset file input and update flag preview
-	inspectFlagInput.value = "";
-	if (meta.flagUrl) {
-		inspectFlagPreview.src = meta.flagUrl;
-		inspectFlagPreview.style.display = "block";
-	} else {
-		inspectFlagPreview.style.display = "none";
-	}
-
-	// Convert current color to Hex for the picker
-	const rgba = meta.rgba;
-	const toHex = (n) => n.toString(16).padStart(2, "0");
-	const hex = `#${toHex(rgba[0])}${toHex(rgba[1])}${toHex(rgba[2])}`;
-	inspectColorPicker.value = hex;
-
-	countryInspector.style.display = "block";
-	influenceLayer.render();
-}
-
-export function _placeDivisionAt(latlng, sovereignId) {
-	let sideIdx = sides.findIndex((s) => s.some((c) => c.id === sovereignId));
-
-	if (sideIdx === -1) {
-		if (gameState === "SIMULATING" || godModeActive) {
-			sideIdx = 0;
-			recruitNeutralMidWar(sovereignId, sideIdx);
-		} else {
-			statusText.innerText =
-				"Nation must be assigned to a side to place units.";
-			return;
-		}
-	}
-
-	const idx = getGridIndex(latlng.lat, latlng.lng);
-	const isMountainCell = idx !== -1 && terrainMask && terrainMask[idx] > 0.35;
-	const isAlpen = isMountainCell && Math.random() < 0.4;
-
-	const placedUnit = {
-		id: Math.random(),
-		kind: "army",
-		lat: latlng.lat,
-		lng: latlng.lng,
-		sideIndex: sideIdx,
-		sovereignId: sovereignId,
-		beneficiaryId: sovereignId,
-		isAlpenjager: !!isAlpen,
-		health: CONFIG.UNIT_HEALTH * (isAlpen ? CONFIG.ALPEN_HEALTH_MULT : 1),
-		lastAttack: 0,
-		deployTicks: 10,
-	};
-	setUnitFormationPersonnel(
-		placedUnit,
-		Math.max(
-			1,
-			Math.round(soldiersPerUnit[sideIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO),
-		),
-	);
-	units.push(placedUnit);
-
-	if (sideIdx >= 0 && sideIdx < MAX_SIDES) {
-		const representedPersonnel = getLiveFormationPersonnel(placedUnit);
-		const available = Math.max(0, sideRecruitableManpower[sideIdx] || 0);
-		const unfundedPersonnel = Math.max(0, representedPersonnel - available);
-		sideRecruitableManpower[sideIdx] = Math.max(
-			0,
-			available - representedPersonnel,
-		);
-		// God-mode placement may create a formation even when the reserve is empty.
-		if (unfundedPersonnel > 0) {
-			sideSoldiers[sideIdx] += unfundedPersonnel;
-			initialSideSoldiers[sideIdx] += unfundedPersonnel;
-		}
-	}
-
-	statusText.innerText = `MANUAL DEPLOYMENT: Division placed for ${countryMetadata[sovereignId - 1]?.name || "Nation"}`;
-	influenceLayer.render();
-}
-
-export async function _placeNewCountry(latlng) {
-	// Do not place new countries outside the world-size box
-	if (!isInsideWorldBoxLatLng(latlng.lat, latlng.lng)) return;
-	const idx = getGridIndex(latlng.lat, latlng.lng);
-	if (idx === -1) return;
-
-	const y = Math.floor(idx / gridWidth);
-	const x = idx % gridWidth;
-
-	const maxId = countryMetadata.reduce(
-		(max, m) => (m ? Math.max(max, m.id) : max),
-		0,
-	);
-	const id = maxId + 1;
-	const newMeta = {
-		id: id,
-		name: customCountryData.name,
-		color: customCountryData.color,
-		rgba: parseColorToRGBA(customCountryData.color),
-		isCustom: true,
-		flagUrl: customCountryData.flagUrl,
-		bounds: { minX: x, maxX: x, minY: y, maxY: y },
-	};
-
-	// Ensure the array has enough space if there were gaps
-	if (id > countryMetadata.length) {
-		countryMetadata.push(newMeta);
-	} else {
-		countryMetadata[id - 1] = newMeta;
-	}
-
-	// Assign initial point
-	worldControlMap[idx] = id;
-	deJureMap[idx] = id;
-	provinceMap[idx] = getProvinceId(x, y, id);
-	// Mandatory land conversion at capital point
-	landMask[idx] = 1;
-
-	gameState = "EDITOR_ACTIVE";
-	statusText.innerText = `Nation Established: ${newMeta.name}`;
-	map.getContainer().classList.remove("painting-cursor");
-
-	recalculateAllBounds();
-	openInspector(id);
-	influenceLayer.render();
-}
-
-export function _fillAt(latlng) {
-	const isUnclaiming = gameState === "EDITOR_UNCLAIMING";
-	if (!isUnclaiming && editingCountryId <= 0) return;
-	// Do not start fill outside the world-size box
-	if (!isInsideWorldBoxLatLng(latlng.lat, latlng.lng)) return;
-	const startIdx = getGridIndex(latlng.lat, latlng.lng);
-	if (startIdx === -1 || landMask[startIdx] === 0) return;
-
-	const targetId = worldControlMap[startIdx];
-	const replacementId = isUnclaiming ? 0 : editingCountryId;
-	if (!isUnclaiming && targetId === replacementId) return;
-
-	loadingStatus.innerText = isUnclaiming
-		? "Unclaiming Territory..."
-		: "Filling Region...";
-	loadingOverlay.style.display = "flex";
-
-	const res = CONFIG.GRID_RES;
-
-	// Use a small timeout to let the UI show the loader
-	setTimeout(() => {
-		const queue = [startIdx];
-		const visited = new Uint8Array(gridWidth * gridHeight);
-		visited[startIdx] = 1;
-
-		while (queue.length > 0) {
-			const idx = queue.pop();
-
-			const y = Math.floor(idx / gridWidth);
-			const x = idx % gridWidth;
-			const cellLat = (y + 0.5) * res - 90;
-			const cellLng = (x + 0.5) * res - 180;
-
-			// Never modify ownership outside the world-size box
-			if (!isInsideWorldBoxLatLng(cellLat, cellLng)) continue;
-
-			worldControlMap[idx] = replacementId;
-
-			// Re-sync province ID to the new country owner to prevent border-crossing provinces
-			provinceMap[idx] = getProvinceId(x, y, replacementId);
-
-			// Neighbors: N, S, E, W
-			const neighbors = [];
-			if (y > 0) neighbors.push(idx - gridWidth);
-			if (y < gridHeight - 1) neighbors.push(idx + gridWidth);
-			if (x > 0) neighbors.push(idx - 1);
-			if (x < gridWidth - 1) neighbors.push(idx + 1);
-
-			// Handle world wrapping for East/West if necessary (optional but good for world maps)
-			if (x === 0) neighbors.push(idx + (gridWidth - 1));
-			if (x === gridWidth - 1) neighbors.push(idx - (gridWidth - 1));
-
-			for (const nIdx of neighbors) {
-				if (
-					!visited[nIdx] &&
-					landMask[nIdx] > 0 &&
-					worldControlMap[nIdx] === targetId
-				) {
-					const ny = Math.floor(nIdx / gridWidth);
-					const nx = nIdx % gridWidth;
-					const nLat = (ny + 0.5) * res - 90;
-					const nLng = (nx + 0.5) * res - 180;
-
-					// Do not flood-fill outside the world-size box
-					if (!isInsideWorldBoxLatLng(nLat, nLng)) continue;
-
-					visited[nIdx] = 1;
-					queue.push(nIdx);
-				}
-			}
-		}
-
-		recalculateAllBounds();
-		loadingOverlay.style.display = "none";
-		influenceLayer.render();
-	}, 10);
-}
-
-map.on("mousedown", (e) => {
-	// If the user is interacting with reference image handles, do NOT start painting or terrain tools.
-	const targetEl = e.originalEvent?.target;
-	if (targetEl?.closest(".ref-handle, .ref-handle-center")) {
-		return;
-	}
-
-	if (gameState === "EDITOR_PAINTING_TERRAIN") {
-		// Before starting terrain paint, ensure we're in Simplified (wargames) mode unless this is a custom canvas.
-		const currentImagery = imagerySelect
-			? imagerySelect.value
-			: getCookie("mw_imagery") || "arcgis";
-
-		// Only prompt/switch if we're NOT already wargames and NOT on a blank/custom terrain map.
-		if (currentImagery !== "wargames" && !isCustomTerrain) {
-			if (
-				confirm(
-					"Satellite Directive: Terrain modification requires 'Simplified Mode' to correctly align geography. Switch now?",
-				)
-			) {
-				setImageryProvider("wargames", false);
-				if (disableCountryGradientCheckbox) {
-					disableCountryGradientCheckbox.checked = true;
-					disableCountryGradient = true;
-				}
-			}
-			// After switching (or cancelling), do not treat this same click as a paint event;
-			// the user can click again to start painting, which prevents stray lines.
-			return;
-		}
-	}
-
-	if (
-		gameState === "EDITOR_PAINTING" ||
-		gameState === "EDITOR_UNCLAIMING" ||
-		gameState === "EDITOR_PAINTING_TERRAIN"
-	) {
-		isPainting = true;
-		lastPaintLatLng = e.latlng;
-		map.dragging.disable();
-
-		// Set paint mask if Alt is held down
-		if (e.originalEvent?.altKey) {
-			const idx = getGridIndex(e.latlng.lat, e.latlng.lng);
-			if (idx !== -1) {
-				paintMaskId = worldControlMap[idx];
-			} else {
-				paintMaskId = -1;
-			}
-		} else {
-			paintMaskId = -1;
-		}
-
-		paintAt(e.latlng);
-	}
-});
-
-map.on("mousemove", (e) => {
-	coordsDisplay.textContent = `${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`;
-
-	// While dragging reference image handles, ignore painting logic entirely.
-	const targetEl = e.originalEvent?.target;
-	if (targetEl?.closest(".ref-handle, .ref-handle-center")) {
-		return;
-	}
-
-	if (
-		isPainting &&
-		(gameState === "EDITOR_PAINTING" ||
-			gameState === "EDITOR_UNCLAIMING" ||
-			gameState === "EDITOR_PAINTING_TERRAIN")
-	) {
-		if (lastPaintLatLng) {
-			// INTERPOLATION SYSTEM: "Raycast" between last and current mouse positions.
-			// This prevents gaps when dragging the brush faster than the frame rate.
-			const p1 = lastPaintLatLng;
-			const p2 = e.latlng;
-
-			let dLng = p2.lng - p1.lng;
-			if (dLng > 180) dLng -= 360;
-			if (dLng < -180) dLng += 360;
-			const dLat = p2.lat - p1.lat;
-
-			const dist = Math.sqrt(dLat * dLat + dLng * dLng);
-			const step = brushSize * 0.35; // Step every 35% of brush radius
-
-			if (dist > step) {
-				const numSteps = Math.ceil(dist / step);
-				let changedAny = false;
-				for (let i = 1; i <= numSteps; i++) {
-					const t = i / numSteps;
-					const interpLat = p1.lat + dLat * t;
-					let interpLng = p1.lng + dLng * t;
-					if (interpLng > 180) interpLng -= 360;
-					if (interpLng < -180) interpLng += 360;
-
-					if (applyPaintAt({ lat: interpLat, lng: interpLng })) {
-						changedAny = true;
-					}
-				}
-				if (changedAny) {
-					influenceLayer._forceRender = true;
-					influenceLayer.render();
-				}
-			} else {
-				paintAt(e.latlng);
-			}
-			lastPaintLatLng = e.latlng;
-		} else {
-			paintAt(e.latlng);
-			lastPaintLatLng = e.latlng;
-		}
-	}
-});
-
-map.on("mouseup", () => {
-	if (isPainting) {
-		// Update label positions and territory stats after a painting stroke finishes
-		recalculateAllBounds();
-		influenceLayer.render();
-	}
-	isPainting = false;
-	map.dragging.enable();
-});
-
-editorCreateBtn.addEventListener("click", () => {
-	createCountryModal.style.display = "flex";
-});
-
-cancelCreateBtn.addEventListener("click", () => {
-	createCountryModal.style.display = "none";
-});
-
-confirmCreateBtn.addEventListener("click", async () => {
-	const name = newCountryNameInput.value || "New Nation";
-	const color = newCountryColorInput.value;
-	const file = newCountryFlagInput.files[0];
-
-	customCountryData = {
-		name,
-		color: `${color.replace("#", "rgba(")})`, // basic hex to rgba converter simplified
-		flagUrl: null,
-	};
-
-	// Correct hex to rgba
-	const r = parseInt(color.slice(1, 3), 16);
-	const g = parseInt(color.slice(3, 5), 16);
-	const b = parseInt(color.slice(5, 7), 16);
-	customCountryData.color = `rgba(${r}, ${g}, ${b}, 0.5)`;
-	customCountryData.displayName = name;
-
-	if (file) {
-		try {
-			loadingStatus.innerText = "Uploading Flag...";
-			loadingOverlay.style.display = "flex";
-			customCountryData.flagUrl = await websim.upload(file);
-			loadingOverlay.style.display = "none";
-		} catch (e) {
-			console.error("Flag upload failed", e);
-		}
-	}
-
-	createCountryModal.style.display = "none";
-	gameState = "EDITOR_PLACING";
-	statusText.innerText = "Click on Map to Place Capital";
-	map.getContainer().classList.add("painting-cursor");
-});
-
-inspectNameInput.addEventListener("input", (e) => {
-	if (editingCountryId <= 0) return;
-	const meta = countryMetadata[editingCountryId - 1];
-	if (meta) {
-		meta.name = e.target.value;
-		// Propagate to live setup/simulation objects
-		sides.flat().forEach((c) => {
-			if (c.id === editingCountryId) c.name = meta.name;
-		});
-		updateSidesUI();
-		// Ensure labels recalculate their spine/position in real-time
-		recalculateAllBounds();
-		influenceLayer.render();
-	}
-});
-
-inspectHubFlagBtn.addEventListener("click", () => {
-	openHub("flags");
-});
-
-inspectFetchFlagBtn.addEventListener("click", async () => {
-	if (editingCountryId <= 0) return;
-	const name = inspectNameInput.value.trim();
-	if (!name) return;
-
-	let code = findCodeByName(name);
-
-	// Fallback to GeoJSON search if code mapping doesn't have it
-	if (!code && rawGeoJsonData) {
-		const feature = rawGeoJsonData.features.find((f) => {
-			const p = f.properties;
-			const possibleNames = [
-				p.NAME,
-				p.name,
-				p.admin,
-				p.NAME_LONG,
-				p.formal_en,
-				p.name_sort,
-			]
-				.filter(Boolean)
-				.map((n) => n.toLowerCase());
-			return possibleNames.includes(name.toLowerCase());
-		});
-
-		if (feature) {
-			const getFeatCode = (feat) => {
-				if (!feat?.properties) return null;
-				const p = feat.properties;
-				let c =
-					p.ISO_A2 ||
-					p.iso_a2 ||
-					p.ISO_A2_EH ||
-					p.iso_a2_eh ||
-					p.ADDR_A2 ||
-					null;
-				if (c === "-99") c = null;
-				return c ? c.toLowerCase() : null;
-			};
-			code = getFeatCode(feature);
-		}
-	}
-
-	if (!code) {
-		alert(
-			"Could not find a modern flag for '" +
-				name +
-				"'. Try the full English name.",
-		);
-		return;
-	}
-
-	const flagUrl = `https://flagcdn.com/w160/${code}.webp`;
-	updateCountryFlag(editingCountryId, flagUrl);
-});
-
-inspectFlagInput.addEventListener("change", async (e) => {
-	const file = e.target.files[0];
-	if (file && editingCountryId > 0) {
-		try {
-			loadingStatus.innerText = "Uploading Flag...";
-			loadingOverlay.style.display = "flex";
-			const url = await websim.upload(file);
-
-			updateCountryFlag(editingCountryId, url);
-			loadingOverlay.style.display = "none";
-		} catch (err) {
-			console.error(err);
-			loadingOverlay.style.display = "none";
-		}
-	}
-});
-
-inspectColorPicker.addEventListener("input", (e) => {
-	if (editingCountryId <= 0) return;
-	const newColorHex = e.target.value;
-	const r = parseInt(newColorHex.slice(1, 3), 16);
-	const g = parseInt(newColorHex.slice(3, 5), 16);
-	const b = parseInt(newColorHex.slice(5, 7), 16);
-
-	const meta = countryMetadata[editingCountryId - 1];
-	if (meta) {
-		meta.color = `rgba(${r}, ${g}, ${b}, 0.5)`;
-		meta.rgba = [r, g, b, 0.5];
-		inspectColorSwatch.style.backgroundColor = meta.color;
-		influenceLayer.render();
-	}
-});
-
-shareCountryBtn.addEventListener("click", () => {
-	if (editingCountryId <= 0) return;
-	const meta = countryMetadata[editingCountryId - 1];
-	if (!meta) return;
-
-	shareCountryNameInput.value = meta.name || "Custom Nation";
-	shareCountryDescInput.value = "";
-	shareCountryModal.style.display = "flex";
-});
-
-shareFlagBtn.addEventListener("click", () => {
-	if (editingCountryId <= 0) return;
-	const meta = countryMetadata[editingCountryId - 1];
-	if (!meta?.flagUrl) {
-		alert(
-			"This nation does not have a flag to share. Upload or fetch one first.",
-		);
-		return;
-	}
-
-	shareFlagNameInput.value = `${meta.name || "Custom"} Flag`;
-	shareFlagDescInput.value = "";
-	shareFlagModal.style.display = "flex";
-});
-
-cancelShareFlagBtn.onclick = () => {
-	shareFlagModal.style.display = "none";
-};
-
-confirmShareFlagBtn.onclick = async () => {
-	if (editingCountryId <= 0) return;
-	const meta = countryMetadata[editingCountryId - 1];
-	if (!meta?.flagUrl) return;
-
-	const publicName = shareFlagNameInput.value.trim() || "Custom Flag";
-	const description = shareFlagDescInput.value.trim();
-
-	shareFlagModal.style.display = "none";
-	loadingStatus.innerText = "Sharing Flag to Library...";
-	loadingOverlay.style.display = "flex";
-
-	try {
-		await room.collection("flag_library_v1").create({
-			name: publicName,
-			description: description,
-			flagUrl: meta.flagUrl,
-		});
-		loadingOverlay.style.display = "none";
-		alert("Flag successfully shared!");
-	} catch (e) {
-		console.error(e);
-		alert("Failed to share flag.");
-		loadingOverlay.style.display = "none";
-	}
-};
-
-cancelShareCountryBtn.onclick = () => {
-	shareCountryModal.style.display = "none";
-};
-
-confirmShareCountryBtn.onclick = async () => {
-	if (editingCountryId <= 0) return;
-	const meta = countryMetadata[editingCountryId - 1];
-	if (!meta) return;
-
-	const publicName =
-		shareCountryNameInput.value.trim() || meta.name || "Custom Nation";
-	const description = shareCountryDescInput.value.trim();
-
-	shareCountryModal.style.display = "none";
-	loadingStatus.innerText = `Saving ${publicName} to Library...`;
-	loadingOverlay.style.display = "flex";
-
-	try {
-		// 1. Generate Border Preview
-		let previewUrl = null;
-		if (influenceLayer?._container) {
-			influenceLayer._isCapturing = true;
-			influenceLayer.render();
-			const canvas = influenceLayer._container;
-			const previewBlob = await new Promise((resolve) =>
-				canvas.toBlob(resolve, "image/jpeg", 0.8),
-			);
-			influenceLayer._isCapturing = false;
-			influenceLayer.render();
-			if (previewBlob) {
-				const previewFile = new File([previewBlob], "country_preview.jpg", {
-					type: "image/jpeg",
-				});
-				previewUrl = await websim.upload(previewFile);
-			}
-		}
-
-		// 2. Collect all cells belonging to this country
-		const cells = [];
-		for (let i = 0; i < worldControlMap.length; i++) {
-			if (worldControlMap[i] === editingCountryId) {
-				const y = Math.floor(i / gridWidth);
-				const x = i % gridWidth;
-				cells.push([x, y]);
-			}
-		}
-
-		if (cells.length === 0) {
-			alert("Country has no territory to share!");
-			loadingOverlay.style.display = "none";
-			return;
-		}
-
-		// 3. Upload Cells Data as a file to bypass 250KB record limit
-		const cellsBlob = new Blob([JSON.stringify(cells)], {
-			type: "application/json",
-		});
-		const cellsFile = new File([cellsBlob], "country_cells.json", {
-			type: "application/json",
-		});
-		const cellsUrl = await websim.upload(cellsFile);
-
-		// 4. Create Persistent Record
-		await room.collection("country_library_v1").create({
-			name: publicName,
-			description: description,
-			previewUrl: previewUrl,
-			color: meta.color,
-			flagUrl: meta.flagUrl,
-			gridRes: CONFIG.GRID_RES,
-			cellsUrl: cellsUrl,
-		});
-
-		loadingOverlay.style.display = "none";
-		alert("Country added to Global Library!");
-	} catch (e) {
-		console.error(e);
-		alert("Failed to share country.");
-		loadingOverlay.style.display = "none";
-	}
-};
-
-inspectPaintBtn.addEventListener("click", () => {
-	gameState = "EDITOR_PAINTING";
-	statusText.innerText = "PAINTING BORDERS (Drag to draw)";
-	countryInspector.style.display = "none";
-	map.getContainer().classList.add("painting-cursor");
-	editorPaintBtn.style.display = "block";
-	editorFillBtn.style.display = "block";
-	editorUnclaimBtn.style.display = "block";
-	editorPaintBtn.classList.add("active");
-	brushControls.style.display = "flex";
-});
-
-inspectAnnexClickBtn.addEventListener("click", () => {
-	if (editingCountryId <= 0) return;
-	gameState = "EDITOR_ANNEXING";
-	statusText.innerText =
-		"ANNEX TOOL: Click any country on the map to absorb its land";
-	countryInspector.style.display = "none";
-	map.getContainer().classList.add("painting-cursor");
-});
-
-editorPaintBtn.addEventListener("click", () => {
-	if (gameState === "EDITOR_PAINTING") {
-		gameState = "EDITOR_ACTIVE";
-		statusText.innerText = "Map Editor (Alpha)";
-		editorPaintBtn.classList.remove("active");
-		map.getContainer().classList.remove("painting-cursor");
-		brushControls.style.display = "none";
-	} else if (editingCountryId > 0 || gameState === "EDITOR_UNCLAIMING") {
-		gameState = "EDITOR_PAINTING";
-		statusText.innerText = "PAINTING BORDERS (Drag to draw)";
-		editorPaintBtn.classList.add("active");
-		editorFillBtn.classList.remove("active");
-		editorUnclaimBtn.classList.remove("active");
-		map.getContainer().classList.add("painting-cursor");
-		brushControls.style.display = "flex";
-	}
-});
-
-editorFillBtn.addEventListener("click", () => {
-	if (
-		gameState === "EDITOR_FILLING" ||
-		gameState === "EDITOR_FILLING_TERRAIN"
-	) {
-		const wasTerrain = gameState === "EDITOR_FILLING_TERRAIN";
-		gameState = "EDITOR_ACTIVE";
-		statusText.innerText = "Map Editor (Alpha)";
-		editorFillBtn.classList.remove("active");
-		map.getContainer().classList.remove("painting-cursor");
-		// If we were filling terrain, return to the terrain menu state
-		if (wasTerrain) {
-			gameState = "EDITOR_PAINTING_TERRAIN";
-			editorTerrainBtn.classList.add("active");
-			statusText.innerText = "TERRAIN BRUSH (Paint land or carve oceans)";
-			map.getContainer().classList.add("painting-cursor");
-			brushControls.style.display = "flex";
-			terrainControls.style.display = "flex";
-		}
-	} else if (gameState === "EDITOR_PAINTING_TERRAIN") {
-		gameState = "EDITOR_FILLING_TERRAIN";
-		statusText.innerText = "FILL TERRAIN (Click a region)";
-		editorFillBtn.classList.add("active");
-		editorTerrainBtn.classList.remove("active");
-		brushControls.style.display = "none";
-		map.getContainer().classList.add("painting-cursor");
-	} else if (editingCountryId > 0 || gameState === "EDITOR_UNCLAIMING") {
-		gameState = "EDITOR_FILLING";
-		statusText.innerText = "FILL TOOL (Click a region)";
-		editorFillBtn.classList.add("active");
-		editorPaintBtn.classList.remove("active");
-		editorUnclaimBtn.classList.remove("active");
-		brushControls.style.display = "none";
-		map.getContainer().classList.add("painting-cursor");
-	}
-});
-
-editorUnclaimBtn.addEventListener("click", () => {
-	if (gameState === "EDITOR_UNCLAIMING") {
-		gameState = "EDITOR_ACTIVE";
-		statusText.innerText = "Map Editor (Alpha)";
-		editorUnclaimBtn.classList.remove("active");
-		map.getContainer().classList.remove("painting-cursor");
-		brushControls.style.display = "none";
-	} else {
-		gameState = "EDITOR_UNCLAIMING";
-		statusText.innerText = "UNCLAIM TOOL (Remove country ownership)";
-		editorUnclaimBtn.classList.add("active");
-		editorPaintBtn.classList.remove("active");
-		editorFillBtn.classList.remove("active");
-		editorTerrainBtn.classList.remove("active");
-		terrainControls.style.display = "none";
-		editorPlaceDivisionBtn.classList.remove("active");
-		map.getContainer().classList.add("painting-cursor");
-		brushControls.style.display = "flex";
-	}
-});
-
-editorTerrainBtn.addEventListener("click", () => {
-	if (gameState === "EDITOR_PAINTING_TERRAIN") {
-		gameState = "EDITOR_ACTIVE";
-		statusText.innerText = "Map Editor (Alpha)";
-		editorTerrainBtn.classList.remove("active");
-		map.getContainer().classList.remove("painting-cursor");
-		brushControls.style.display = "none";
-		terrainControls.style.display = "none";
-	} else {
-		gameState = "EDITOR_PAINTING_TERRAIN";
-		statusText.innerText = "TERRAIN BRUSH (Paint land or carve oceans)";
-		editorTerrainBtn.classList.add("active");
-		editorPaintBtn.classList.remove("active");
-		editorFillBtn.classList.remove("active");
-		editorUnclaimBtn.classList.remove("active");
-		editorPlaceDivisionBtn.classList.remove("active");
-		map.getContainer().classList.add("painting-cursor");
-		brushControls.style.display = "flex";
-		terrainControls.style.display = "flex";
-	}
-});
-
-editorPlaceDivisionBtn.addEventListener("click", () => {
-	if (gameState === "EDITOR_PLACING_DIVISION") {
-		gameState = "EDITOR_ACTIVE";
-		statusText.innerText = godModeActive
-			? "GOD MODE: Map Editing Active"
-			: "Map Editor (Alpha)";
-		editorPlaceDivisionBtn.classList.remove("active");
-		map.getContainer().classList.remove("painting-cursor");
-	} else {
-		gameState = "EDITOR_PLACING_DIVISION";
-		editingCountryId = -1; // Reset to force selecting a new country source
-		statusText.innerText =
-			"SELECT SOURCE: Click a nation to deploy its divisions";
-		editorPlaceDivisionBtn.classList.add("active");
-		editorPaintBtn.classList.remove("active");
-		editorFillBtn.classList.remove("active");
-		editorUnclaimBtn.classList.remove("active");
-		countryInspector.style.display = "none";
-		brushControls.style.display = "none";
-		map.getContainer().classList.add("painting-cursor");
-	}
-});
-
-brushSizeSlider.addEventListener("input", (e) => {
-	brushSize = parseFloat(e.target.value);
-	brushSizeVal.innerText = brushSize.toFixed(1);
-});
-
-export async function annexFeatureToCountry(feature, countryId) {
-	if (!feature || countryId <= 0) return;
-
-	loadingStatus.innerText = `Annexing ${feature.properties.NAME || feature.properties.name || "Region"}...`;
-	loadingOverlay.style.display = "flex";
-
-	// Brief timeout to let UI update
-	await new Promise((r) => setTimeout(r, 50));
-
-	const bounds = L.geoJSON(feature).getBounds();
-	const res = CONFIG.GRID_RES;
-	const sLat = Math.max(0, Math.floor((bounds.getSouth() + 90) / res));
-	const eLat = Math.min(
-		gridHeight - 1,
-		Math.ceil((bounds.getNorth() + 90) / res),
-	);
-	const sLng = Math.max(0, Math.floor((bounds.getWest() + 180) / res));
-	const eLng = Math.min(
-		gridWidth - 1,
-		Math.ceil((bounds.getEast() + 180) / res),
-	);
-
-	for (let y = sLat; y <= eLat; y++) {
-		for (let x = sLng; x <= eLng; x++) {
-			const lat = y * res - 90 + res * 0.5;
-			const lng = x * res - 180 + res * 0.5;
-			if (isPointInFeature(lat, lng, feature)) {
-				const idx = y * gridWidth + x;
-				// Add this land to the country's world control map
-				worldControlMap[idx] = countryId;
-				// Sync province ID immediately
-				provinceMap[idx] = getProvinceId(x, y, countryId);
-
-				const meta = countryMetadata[countryId - 1];
-				if (meta) {
-					if (!meta.bounds)
-						meta.bounds = { minX: x, maxX: x, minY: y, maxY: y };
-					meta.bounds.minX = Math.min(meta.bounds.minX, x);
-					meta.bounds.maxX = Math.max(meta.bounds.maxX, x);
-					meta.bounds.minY = Math.min(meta.bounds.minY, y);
-					meta.bounds.maxY = Math.max(meta.bounds.maxY, y);
-				}
-				// Ensure it's marked as land
-				if (landMask[idx] === 0) landMask[idx] = 1;
-			}
-		}
-	}
-
-	loadingOverlay.style.display = "none";
-	influenceLayer.render();
-}
-
-annexCountryBtn.addEventListener("click", async () => {
-	if (!rawGeoJsonData || editingCountryId <= 0) return;
-	const name = annexCountryInput.value.trim().toLowerCase();
-	if (!name) return;
-
-	const feature = rawGeoJsonData.features.find((f) => {
-		const fName = (
-			f.properties.NAME ||
-			f.properties.name ||
-			f.properties.admin ||
-			f.properties.NAME_LONG ||
-			""
-		).toLowerCase();
-		return fName === name;
-	});
-
-	if (!feature) {
-		alert(
-			"Country not found in modern reference data. Try names like 'Poland', 'Ukraine', or 'United States of America'.",
-		);
-		return;
-	}
-
-	await annexFeatureToCountry(feature, editingCountryId);
-	annexCountryInput.value = "";
-});
+inspector_controls.bindAnnexCountryBtnClick();
 
 // Ally controls
-if (addAllyBtn) {
-	addAllyBtn.addEventListener("click", () => {
-		if (editingCountryId <= 0) {
-			alert("Select a nation first in the inspector to add allies.");
-			return;
-		}
-		selectingAllyForId = editingCountryId;
-		gameState = "EDITOR_SELECTING_ALLY";
-		statusText.innerText =
-			"Alliance: click another country on the map to ally with.";
-		countryInspector.style.display = "none";
-		map.getContainer().classList.add("painting-cursor");
-	});
-}
+inspector_controls.bindAddAllyBtnClick();
 
-if (clearAlliesBtn) {
-	clearAlliesBtn.addEventListener("click", () => {
-		if (editingCountryId <= 0) return;
-		const meta = countryMetadata[editingCountryId - 1];
-		if (!meta?.allies || meta.allies.length === 0) return;
-		const allies = [...meta.allies];
-		allies.forEach((aid) => {
-			const aMeta = countryMetadata[aid - 1];
-			if (aMeta && Array.isArray(aMeta.allies)) {
-				aMeta.allies = aMeta.allies.filter((id) => id !== editingCountryId);
-			}
-		});
-		meta.allies = [];
-		markAllianceCacheDirty();
-		statusText.innerText = "All alliances for this nation have been cleared.";
-		openInspector(editingCountryId);
-		influenceLayer.render();
-	});
-}
+inspector_controls.bindClearAlliesBtnClick();
 
 // Alliance flag upload: sets a shared flag for the whole alliance group (used only in Alliance View / Flag View)
-if (allianceFlagInput) {
-	allianceFlagInput.addEventListener("change", async (e) => {
-		const file = e.target.files[0];
-		if (!file || editingCountryId <= 0) return;
-		try {
-			loadingStatus.innerText = "Uploading Alliance Flag...";
-			loadingOverlay.style.display = "flex";
-			const url = await websim.upload(file);
-			const rootId = getAllianceRootId(editingCountryId);
-			if (!rootId) {
-				loadingOverlay.style.display = "none";
-				alert("Could not resolve alliance group for this nation.");
-				return;
-			}
-			const rootMeta = countryMetadata[rootId - 1];
-			if (!rootMeta) {
-				loadingOverlay.style.display = "none";
-				alert("Alliance root metadata missing.");
-				return;
-			}
-			rootMeta.allianceFlagUrl = url;
-			rootMeta.allianceFlagTempFlag = new Image();
-			rootMeta.allianceFlagTempFlag.crossOrigin = "anonymous";
-			rootMeta.allianceFlagTempFlag.onload = () => {
-				loadingOverlay.style.display = "none";
-				influenceLayer.render();
-			};
-			rootMeta.allianceFlagTempFlag.src = url;
-			statusText.innerText = "Alliance flag set for this alliance group.";
-		} catch (err) {
-			console.error("Alliance flag upload failed", err);
-			loadingOverlay.style.display = "none";
-			alert("Failed to upload alliance flag.");
-		}
-	});
-}
+inspector_controls.bindAllianceFlagInputChange();
 
-document.getElementById("set-overlord-btn").onclick = () => {
-	if (editingCountryId <= 0) return;
-	selectingOverlordForId = editingCountryId;
-	gameState = "EDITOR_SELECTING_OVERLORD";
-	statusText.innerText = "Select Overlord Country (Click map)";
-	countryInspector.style.display = "none";
-	map.getContainer().classList.add("painting-cursor");
-};
+menu_controls.bindSetOverlordBtnClick();
 
-document.getElementById("set-releasable-btn").onclick = () => {
-	if (editingCountryId <= 0) return;
-	selectingOverlordForId = editingCountryId;
-	gameState = "EDITOR_SELECTING_RELEASER";
-	statusText.innerText = "Select Host Nation (Releaser) on map";
-	countryInspector.style.display = "none";
-	map.getContainer().classList.add("painting-cursor");
-};
+menu_controls.bindSetReleasableBtnClick();
 
-document.getElementById("clear-overlord-btn").onclick = () => {
-	if (editingCountryId <= 0) return;
-	const meta = countryMetadata[editingCountryId - 1];
-	if (meta) {
-		meta.overlordId = null;
-		sides.flat().forEach((c) => {
-			if (c.id === editingCountryId) c.overlordId = null;
-		});
+inspector_controls.bindClearOverlordBtnClick();
 
-		// If this country had an original flag before puppetization, restore it
-		if (meta.baseFlagUrl) {
-			updateCountryFlag(editingCountryId, meta.baseFlagUrl);
-		}
+inspector_controls.bindCloseInspectorBtnClick();
 
-		statusText.innerText = `Vassal status cleared for ${meta.name}`;
-		openInspector(editingCountryId);
-		influenceLayer.render();
-	}
-};
-
-closeInspectorBtn.addEventListener("click", () => {
-	countryInspector.style.display = "none";
-	editingCountryId = -1;
-	influenceLayer.render();
-});
-
-if (inspectBuffBtn) {
-	inspectBuffBtn.addEventListener("click", (event) => {
-		if (editingCountryId <= 0) return;
-		const meta = countryMetadata[editingCountryId - 1];
-		if (!meta) return;
-
-		// Determine direction: clicked arrow uses its data-dir, clicking center cycles forward
-		let dir = 1;
-		const target = event.target;
-		if (target?.classList.contains("buff-arrow")) {
-			const d = parseInt(target.getAttribute("data-dir"), 10);
-			if (d === -1 || d === 1) dir = d;
-		}
-
-		// ALT-click: adjust hidden (invisible) buff that overrides visible buff during play
-		if (event.altKey) {
-			const currentHidden = meta.hiddenBuffState || "none";
-			const nextHidden = cycleBuffState(currentHidden, dir);
-			meta.hiddenBuffState = nextHidden;
-
-			// Propagate hidden buff to any live side objects
-			sides.flat().forEach((c) => {
-				if (c && c.id === editingCountryId) {
-					c.hiddenBuffState = nextHidden;
-				}
-			});
-
-			statusText.innerText = `SECRET BUFF: ${meta.name} hidden buff set to ${BUFF_METADATA[nextHidden]?.label || nextHidden}`;
-			influenceLayer.render();
-			return;
-		}
-
-		// Normal click: adjust visible buff (what the player can see in UI)
-		const current = meta.buffState || "none";
-		const nextState = cycleBuffState(current, dir);
-		meta.buffState = nextState;
-
-		// Propagate visible buff to any live side objects so setup UI matches
-		sides.flat().forEach((c) => {
-			if (c && c.id === editingCountryId) {
-				c.buffState = nextState;
-			}
-		});
-
-		const bMeta = BUFF_METADATA[nextState] || BUFF_METADATA.none;
-		inspectBuffBtn.innerHTML = `
-            <span class="buff-arrow" data-dir="-1" style="font-size: 12px; margin-right:4px;">◀</span>
-            <span class="buff-label">BUFF: ${bMeta.label}</span>
-            <span class="buff-arrow" data-dir="1" style="font-size: 12px; margin-left:4px;">▶</span>
-        `;
-		inspectBuffBtn.style.background = bMeta.color;
-		inspectBuffBtn.style.color = bMeta.textColor;
-
-		// Refresh setup UI so side slots show the new visible buff
-		updateSidesUI();
-		influenceLayer.render();
-	});
-}
+inspector_controls.bindInspectBuffBtnClick();
 
 // City inspector logic
-export function refreshCityOwnerSelect(selectedOwnerId) {
-	if (!cityOwnerSelect) return;
-	cityOwnerSelect.innerHTML = '<option value="">(None)</option>';
-	countryMetadata.forEach((m) => {
-		if (!m) return;
-		const opt = document.createElement("option");
-		opt.value = m.id;
-		opt.textContent = m.name;
-		if (selectedOwnerId && selectedOwnerId === m.id) opt.selected = true;
-		cityOwnerSelect.appendChild(opt);
-	});
-}
 
-export function openCityInspector(cityId) {
-	const city = cities.find((c) => c.id === cityId);
-	if (!city) return;
-	editingCityId = cityId;
-	cityInspector.style.display = "block";
-	cityNameInput.value = city.name || "";
-	refreshCityOwnerSelect(city.ownerId || city.sovereignId || null);
-	cityCapitalCheckbox.checked = !!city.isCapital;
-}
+inspector_controls.bindCityNameInputInput();
 
-cityNameInput.addEventListener("input", (e) => {
-	if (editingCityId <= 0) return;
-	const city = cities.find((c) => c.id === editingCityId);
-	if (!city) return;
-	city.name = e.target.value;
-	influenceLayer.render();
-});
+inspector_controls.bindCityOwnerSelectChange();
 
-cityOwnerSelect.addEventListener("change", () => {
-	if (editingCityId <= 0) return;
-	const city = cities.find((c) => c.id === editingCityId);
-	if (!city) return;
-	const val = parseInt(cityOwnerSelect.value || "0", 10);
-	city.ownerId = val || null;
-	city.sovereignId = city.ownerId;
-	invalidateTerritoryLedgerCities();
-	influenceLayer.render();
-});
+inspector_controls.bindCityCapitalCheckboxChange();
 
-cityCapitalCheckbox.addEventListener("change", () => {
-	if (editingCityId <= 0) return;
-	const city = cities.find((c) => c.id === editingCityId);
-	if (!city) return;
-	const ownerId = city.ownerId || city.sovereignId;
-	city.isCapital = cityCapitalCheckbox.checked;
-	if (ownerId && city.isCapital) {
-		// Clear capital flag on other cities of this owner
-		cities.forEach((c) => {
-			if (c.id !== city.id && (c.ownerId || c.sovereignId) === ownerId) {
-				c.isCapital = false;
-			}
-		});
-	}
-	invalidateTerritoryLedgerCities();
-	influenceLayer.render();
-});
+inspector_controls.bindCityMoveBtnClick();
 
-cityMoveBtn.addEventListener("click", () => {
-	if (editingCityId <= 0) return;
-	statusText.innerText = "City Move: click on the map to set the new position.";
-	cityEditMode = "MOVE";
-	cityInspector.style.display = "none";
-});
+inspector_controls.bindCityDeleteBtnClick();
 
-cityDeleteBtn.addEventListener("click", () => {
-	if (editingCityId <= 0) return;
-	const city = cities.find((c) => c.id === editingCityId);
-	if (!city) return;
-	if (!confirm(`Delete city "${city.name}"?`)) return;
-	cities = cities.filter((c) => c.id !== editingCityId);
-	activeTheaterCities = activeTheaterCities.filter(
-		(c) => c.id !== editingCityId,
-	);
-	invalidateTerritoryLedgerCities();
-	editingCityId = -1;
-	cityInspector.style.display = "none";
-	influenceLayer.render();
-	statusText.innerText = "City deleted.";
-});
+inspector_controls.bindCityCloseBtnClick();
 
-cityCloseBtn.addEventListener("click", () => {
-	cityInspector.style.display = "none";
-	editingCityId = -1;
-});
+editor_tool_controls.bindEditorExitBtnClick();
 
-editorExitBtn.addEventListener("click", () => {
-	location.reload(); // Quick reset
-});
+editor_tool_controls.bindEditorMapSettingsBtnClick();
 
-if (editorMapSettingsBtn && mapSettingsModal) {
-	editorMapSettingsBtn.addEventListener("click", () => {
-		// Pre-fill fields from current state
-		mapSettingsNameInput.value = mapName || "";
-		mapSettingsWidthInput.value = worldWidthDeg || 360;
-		mapSettingsHeightInput.value = worldHeightDeg || 180;
-		mapSettingsMissilesCheckbox.checked = !!missilesEnabled;
-		mapSettingsModal.style.display = "flex";
-	});
-}
+menu_controls.bindMapSettingsCancelBtnClick();
 
-if (mapSettingsCancelBtn && mapSettingsModal) {
-	mapSettingsCancelBtn.addEventListener("click", () => {
-		mapSettingsModal.style.display = "none";
-	});
-}
-
-if (mapSettingsApplyBtn && mapSettingsModal) {
-	mapSettingsApplyBtn.addEventListener("click", () => {
-		const newName = mapSettingsNameInput.value.trim() || "Untitled Map";
-		const newW = parseFloat(mapSettingsWidthInput.value) || 360;
-		const newH = parseFloat(mapSettingsHeightInput.value) || 180;
-		const newMissilesEnabled = !!mapSettingsMissilesCheckbox.checked;
-
-		const sizeChanged = newW !== worldWidthDeg || newH !== worldHeightDeg;
-
-		mapName = newName;
-		missilesEnabled = newMissilesEnabled;
-
-		// If size changed, apply bounds and force Simplified mode if not already there
-		if (sizeChanged) {
-			const currentImagery = imagerySelect
-				? imagerySelect.value
-				: getCookie("mw_imagery") || "arcgis";
-			const allowSwitch = currentImagery !== "wargames";
-			applyWorldBounds(newW, newH, allowSwitch);
-		} else {
-			// Still enforce bounding box if it was never set
-			applyWorldBounds(newW, newH, false);
-		}
-
-		// Sync missiles toggle with simulation-level bombsDisabled and checkboxes
-		if (disableBombsCheckbox) {
-			disableBombsCheckbox.checked = !missilesEnabled;
-		}
-		bombsDisabled = disableBombsCheckbox?.checked || !missilesEnabled;
-
-		mapSettingsModal.style.display = "none";
-		statusText.innerText = `MAP SETTINGS UPDATED: ${mapName}`;
-		influenceLayer.render();
-	});
-}
+menu_controls.bindMapSettingsApplyBtnClick();
 
 /**
  * Editor tools paging: split the crowded toolbox into two pages.
  * Page 1: scenario-level tools; Page 2: country library / ZIP tools.
  */
-export function clearRefHandles() {
-	refHandles.forEach((h) => {
-		map.removeLayer(h);
-	});
-	refHandles = [];
-}
 
-export function updateRefHandles() {
-	clearRefHandles();
-	if (!referenceOverlay || !referenceImageUrl) return;
+editor_tool_controls.bindEditorToolPages();
 
-	const bounds = referenceOverlay.getBounds();
-	const nw = bounds.getNorthWest();
-	const ne = bounds.getNorthEast();
-	const sw = bounds.getSouthWest();
-	const se = bounds.getSouthEast();
-	const center = bounds.getCenter();
+editor_tool_controls.bindEditorTestBtnClick();
 
-	const handleIcon = L.divIcon({
-		className: "ref-handle",
-		html: '<div style="width:14px; height:14px; background:#27ae60; border:2px solid #fff; border-radius:50%; box-shadow:0 0 8px rgba(0,0,0,0.6);"></div>',
-		iconSize: [14, 14],
-		iconAnchor: [7, 7],
-	});
+editor_file_controls.bindEditorSaveBtnClick();
 
-	const centerHandleIcon = L.divIcon({
-		className: "ref-handle-center",
-		html: '<div style="width:20px; height:20px; background:#2e86de; border:2px solid #fff; border-radius:50%; box-shadow:0 0 10px rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; color:white; font-size:12px; font-weight:bold;">✥</div>',
-		iconSize: [20, 20],
-		iconAnchor: [10, 10],
-	});
+editor_file_controls.bindEditorLoadBtnClick();
 
-	// 1. Center Handle (Move)
-	const mCenter = L.marker(center, {
-		icon: centerHandleIcon,
-		draggable: true,
-	}).addTo(map);
-	mCenter.on("dragstart", () => {
-		// Disable map dragging while manipulating the reference image center handle
-		map.dragging.disable();
-	});
-	mCenter.on("drag", (e) => {
-		const newCenter = e.target.getLatLng();
-		const dLat = newCenter.lat - center.lat;
-		const dLng = newCenter.lng - center.lng;
-		const newBounds = [
-			[nw.lat + dLat, nw.lng + dLng],
-			[se.lat + dLat, se.lng + dLng],
-		];
-		referenceOverlay.setBounds(newBounds);
-	});
-	mCenter.on("dragend", (e) => {
-		map.dragging.enable();
-		updateRefHandles(e);
-	});
-	refHandles.push(mCenter);
+editor_tool_controls.bindEditorHubBtnClick();
 
-	// 2. Corner Handles (Resize)
-	const corners = [
-		{ pos: nw, name: "nw" },
-		{ pos: ne, name: "ne" },
-		{ pos: sw, name: "sw" },
-		{ pos: se, name: "se" },
-	];
+editor_tool_controls.bindEditorLibraryBtnClick();
 
-	corners.forEach((c) => {
-		const marker = L.marker(c.pos, { icon: handleIcon, draggable: true }).addTo(
-			map,
-		);
-		marker.on("dragstart", () => {
-			// Disable map dragging while resizing the reference image with a corner handle
-			map.dragging.disable();
-		});
-		marker.on("drag", (e) => {
-			const newPos = e.target.getLatLng();
-			let newBounds;
-			if (c.name === "nw") newBounds = L.latLngBounds(newPos, se);
-			else if (c.name === "ne") newBounds = L.latLngBounds(newPos, sw);
-			else if (c.name === "sw") newBounds = L.latLngBounds(newPos, ne);
-			else if (c.name === "se") newBounds = L.latLngBounds(newPos, nw);
+editor_tool_controls.bindEditorSaveCountryBtnClick();
 
-			if (newBounds) referenceOverlay.setBounds(newBounds);
-		});
-		marker.on("dragend", (e) => {
-			// Re-enable map dragging once the handle drag is finished
-			map.dragging.enable();
-			updateRefHandles(e);
-		});
-		refHandles.push(marker);
-	});
-}
+editor_tool_controls.bindEditorLoadCountryBtnClick();
 
-if (editorToolsPage1Btn) {
-	editorToolsPage1Btn.addEventListener("click", () => updateEditorToolPage(1));
-}
-if (editorToolsPage2Btn) {
-	editorToolsPage2Btn.addEventListener("click", () => updateEditorToolPage(2));
-}
-if (editorToolsPage3Btn) {
-	editorToolsPage3Btn.addEventListener("click", () => updateEditorToolPage(3));
-}
-if (editorToolsPage4Btn) {
-	editorToolsPage4Btn.addEventListener("click", () => updateEditorToolPage(4));
-}
-if (editorToolsPage5Btn) {
-	editorToolsPage5Btn.addEventListener("click", () => updateEditorToolPage(5));
-}
-
-editorTestBtn.addEventListener("click", () => {
-	if (countryMetadata.length < 2) {
-		alert("You need at least 2 nations to test a conflict.");
-		return;
-	}
-	gameMode = "EDITOR_TEST";
-	gameState = "SELECTING_P1";
-	statusText.innerText = "Test: Select First Country";
-	editorToolbox.style.display = "none";
-	setupPanel.style.display = "block";
-	setupOptions.style.display = "none";
-	resetBtn.style.display = "block";
-
-	// Clear selections
-	_attackers = [];
-	_defenders = [];
-
-	updateSidesUI();
-	influenceLayer.render();
-});
-
-editorSaveBtn.addEventListener("click", () => {
-	const presetName = prompt(
-		"Enter a name for this preset:",
-		"My Custom Scenario",
-	);
-	if (!presetName) return;
-
-	const saveData = generatePresetData(presetName);
-	const blob = new Blob([JSON.stringify(saveData)], {
-		type: "application/json",
-	});
-	const url = URL.createObjectURL(blob);
-	const a = document.createElement("a");
-	a.href = url;
-	a.download = `${presetName.replace(/\s+/g, "_")}_preset.json`;
-	a.click();
-	URL.revokeObjectURL(url);
-});
-
-export function resetConflictSetupState() {
-	invalidateWarLifecycleTimers();
-	sides = [[], []];
-	_attackers = sides[0];
-	_defenders = sides[1];
-	activeSideIndex = 0;
-	sideSoldiers.fill(0);
-	initialSideSoldiers.fill(0);
-	sideRecruitableManpower.fill(0);
-	soldiersPerUnit.fill(CONFIG.UNIT_TO_SOLDIER_RATIO);
-	sideCasualties.fill(0);
-	units = [];
-	bases = [];
-	bombs = [];
-	explosions = [];
-	activeBattles = [];
-	_battleHash.clear();
-	capitalLostCountries = new Set();
-	resetOperationalAiRuntime();
-	document.body.classList.remove("conflict-active");
-	document.getElementById("war-desk").style.display = "none";
-	_warOverviewSides = [];
-	_warOverviewLastUpdate = -Infinity;
-	resetSideHostilities();
-	countryCasualties.clear();
-	casualtyByAttacker.clear();
-	latestCountryStats.clear();
-	_mopUpOwnedCellCache.clear();
-	_mopUpDeJureCellCache.clear();
-	selectedCountryIds.clear();
-	editingCityId = -1;
-	paintMaskId = -1;
-	gameTimeEnabled = false;
-	gameTimeDate = null;
-	gameTimeAccumulatorMs = 0;
-	if (gameDateDisplay) {
-		gameDateDisplay.style.display = "none";
-	}
-	treatyAlert.style.display = "none";
-	statusText.innerText = getTranslation("SELECT_P1");
-	unitCountsDiv.style.display = "none";
-	statsPanel.style.display = "none";
-	casualtyPanel.style.display = "none";
-
-	document.getElementById("speed-controls").style.display = "none";
-	godModeBtn.style.display = gameMode === "CONQUEST" ? "block" : "none";
-	forcePeaceBtn.style.display = "none";
-	resetBtn.style.display = "block";
-	restartScenarioBtn.style.display = "block";
-	updateSidesUI();
-	updateRestartVisibility();
-}
-
-editorLoadBtn.addEventListener("click", () => {
-	initAudio();
-	const input = document.createElement("input");
-	input.type = "file";
-	input.accept = ".json";
-	input.onchange = (e) => {
-		currentScenarioContext = null;
-		setLoadingThematic(true);
-		performPresetLoad(e.target.files[0], "EDITOR");
-	};
-	input.click();
-});
-
-editorHubBtn.addEventListener("click", () => {
-	openHub("scenarios");
-});
-
-editorLibraryBtn.addEventListener("click", () => {
-	openHub("countries");
-});
-
-document
-	.getElementById("editor-save-country-btn")
-	.addEventListener("click", () => {
-		if (editingCountryId <= 0) return;
-		saveCountryLocally(editingCountryId);
-	});
-
-document
-	.getElementById("editor-load-country-btn")
-	.addEventListener("click", () => {
-		loadCountryFromPC();
-	});
-
-if (editorSaveMultiBtn) {
-	editorSaveMultiBtn.addEventListener("click", async () => {
-		if (selectedCountryIds.size === 0) {
-			alert(
-				"Ctrl+click countries on the map to select them, then use this button to export a ZIP.",
-			);
-			return;
-		}
-
-		const JSZip = await getJSZip();
-		const ids = Array.from(selectedCountryIds);
-		const zip = new JSZip();
-
-		// Ensure each selected country has up-to-date savedCells and metadata
-		ids.forEach((id) => {
-			const meta = countryMetadata[id - 1];
-			if (!meta) return;
-
-			// Build or refresh savedCells snapshot
-			const cells = [];
-			for (let i = 0; i < worldControlMap.length; i++) {
-				if (worldControlMap[i] === id) {
-					const y = Math.floor(i / gridWidth);
-					const x = i % gridWidth;
-					cells.push([x, y]);
-				}
-			}
-			meta.savedCells = cells;
-
-			const countryData = {
-				id: meta.id,
-				name: meta.name,
-				color: meta.color,
-				flagUrl: meta.flagUrl,
-				isCustom: meta.isCustom,
-				role: meta.role || "OFFENSE",
-				overlordId: meta.overlordId || null,
-			};
-
-			const presetData = {
-				name: `${meta.name}_country`,
-				metadata: countryData,
-				cells: cells,
-				gridRes: CONFIG.GRID_RES,
-				version: "1.0",
-			};
-
-			const safeName = (meta.name || `country_${id}`).replace(/[^\w-]+/g, "_");
-			zip.file(`${safeName}.json`, JSON.stringify(presetData, null, 2));
-		});
-
-		try {
-			const blob = await zip.generateAsync({ type: "blob" });
-			const url = URL.createObjectURL(blob);
-			const a = document.createElement("a");
-			a.href = url;
-			a.download = "selected_countries.zip";
-			document.body.appendChild(a);
-			a.click();
-			document.body.removeChild(a);
-			URL.revokeObjectURL(url);
-			statusText.innerText = `Exported ${ids.length} countr${ids.length === 1 ? "y" : "ies"} to selected_countries.zip`;
-		} catch (err) {
-			console.error("ZIP export failed:", err);
-			alert("Failed to generate ZIP. Check console for details.");
-		}
-	});
-}
+editor_file_controls.bindEditorSaveMultiBtnClick();
 
 /**
  * Save all countries with any territory in the scenario into a ZIP of per‑country JSONs.
  */
-if (editorSaveAllZipBtn) {
-	editorSaveAllZipBtn.addEventListener("click", async () => {
-		if (!countryMetadata || !worldControlMap) {
-			alert("No map is loaded yet.");
-			return;
-		}
-
-		const JSZip = await getJSZip();
-		const zip = new JSZip();
-
-		// Build a quick presence map (which ids actually have tiles)
-		const hasTiles = new Set();
-		for (let i = 0; i < worldControlMap.length; i++) {
-			const id = worldControlMap[i];
-			if (id > 0) hasTiles.add(id);
-		}
-
-		const candidates = countryMetadata.filter(
-			(m) => m?.id && hasTiles.has(m.id),
-		);
-		if (candidates.length === 0) {
-			alert("No countries with territory to export.");
-			return;
-		}
-
-		candidates.forEach((meta) => {
-			const cells = [];
-			for (let i = 0; i < worldControlMap.length; i++) {
-				if (worldControlMap[i] === meta.id) {
-					const y = Math.floor(i / gridWidth);
-					const x = i % gridWidth;
-					cells.push([x, y]);
-				}
-			}
-
-			const countryData = {
-				id: meta.id,
-				name: meta.name,
-				color: meta.color,
-				flagUrl: meta.flagUrl,
-				isCustom: meta.isCustom,
-				role: meta.role || "OFFENSE",
-				overlordId: meta.overlordId || null,
-			};
-
-			const presetData = {
-				name: `${meta.name}_country`,
-				metadata: countryData,
-				cells: cells,
-				gridRes: CONFIG.GRID_RES,
-				version: "1.0",
-			};
-
-			const safeName = (meta.name || `country_${meta.id}`).replace(
-				/[^\w-]+/g,
-				"_",
-			);
-			zip.file(`${safeName}.json`, JSON.stringify(presetData, null, 2));
-		});
-
-		try {
-			const blob = await zip.generateAsync({ type: "blob" });
-			const url = URL.createObjectURL(blob);
-			const a = document.createElement("a");
-			a.href = url;
-			a.download = "all_countries.zip";
-			document.body.appendChild(a);
-			a.click();
-			document.body.removeChild(a);
-			URL.revokeObjectURL(url);
-			statusText.innerText = `Exported ${candidates.length} countries to all_countries.zip`;
-		} catch (err) {
-			console.error("ZIP export (all countries) failed:", err);
-			alert(
-				"Failed to generate ZIP for all countries. Check console for details.",
-			);
-		}
-	});
-}
+editor_file_controls.bindEditorSaveAllZipBtnClick();
 
 /**
  * Load multiple country JSON files from a ZIP and merge them into the current scenario.
@@ -25733,187 +7387,25 @@ if (editorSaveAllZipBtn) {
 
 // -------- Overlay Tools Implementation --------
 
-document
-	.getElementById("custom-sat-input")
-	?.addEventListener("change", async (e) => {
-		const file = e.target.files[0];
-		if (!file) return;
-		loadingStatus.innerText = "Uploading Background Overlay...";
-		loadingOverlay.style.display = "flex";
-		try {
-			const url = await websim.upload(file);
-			customSatelliteUrl = url;
-			customSatelliteImg = new Image();
-			customSatelliteImg.crossOrigin = "anonymous";
-			customSatelliteImg.onload = () => {
-				loadingOverlay.style.display = "none";
-				influenceLayer.render();
-			};
-			customSatelliteImg.src = url;
-		} catch (err) {
-			console.error(err);
-			loadingOverlay.style.display = "none";
-		}
-	});
+reference_controls.bindCustomSatInputChange();
 
-document.getElementById("clear-sat-btn")?.addEventListener("click", () => {
-	customSatelliteUrl = null;
-	customSatelliteImg = null;
-	influenceLayer.render();
-});
+menu_controls.bindClearSatBtnClick();
 
-document.getElementById("upload-sat-btn")?.addEventListener("click", () => {
-	document.getElementById("custom-sat-input")?.click();
-});
-document.getElementById("upload-ref-btn")?.addEventListener("click", () => {
-	document.getElementById("ref-image-input")?.click();
-});
+reference_controls.bindUploadSatBtnClick();
+reference_controls.bindUploadRefBtnClick();
 
-document
-	.getElementById("ref-image-input")
-	?.addEventListener("change", async (e) => {
-		const file = e.target.files[0];
-		if (!file) return;
-		loadingStatus.innerText = "Processing Reference Image...";
-		loadingOverlay.style.display = "flex";
-		try {
-			const url = await websim.upload(file);
-			referenceImageUrl = url;
-			if (referenceOverlay) map.removeLayer(referenceOverlay);
+reference_controls.bindRefImageInputChange();
 
-			// Load image to get natural dimensions for aspect ratio preservation
-			const img = new Image();
-			img.onload = () => {
-				const aspect = img.width / img.height;
-				const center = map.getCenter();
-				const h = 20 * refScale;
-				const w = h * aspect;
-				const bounds = [
-					[center.lat - h, center.lng - w],
-					[center.lat + h, center.lng + w],
-				];
-
-				referenceOverlay = L.imageOverlay(url, bounds, {
-					opacity: refOpacity,
-					interactive: false,
-					pane: "refImagePane",
-				}).addTo(map);
-				updateRefHandles();
-				loadingOverlay.style.display = "none";
-			};
-			img.src = url;
-		} catch (err) {
-			console.error(err);
-			loadingOverlay.style.display = "none";
-		}
-	});
-
-document
-	.getElementById("ref-opacity-slider")
-	?.addEventListener("input", (e) => {
-		refOpacity = parseFloat(e.target.value);
-		if (referenceOverlay) referenceOverlay.setOpacity(refOpacity);
-		if (influenceLayer) {
-			influenceLayer._forceRender = true;
-			influenceLayer.render();
-		}
-	});
+reference_controls.bindRefOpacitySliderInput();
 
 export const refAboveCheckbox = document.getElementById("ref-above-checkbox");
-if (refAboveCheckbox) {
-	// Initialize checkbox from current state when opening editor
-	refAboveCheckbox.checked = !!refAboveTerrain;
-	refAboveCheckbox.addEventListener("change", (e) => {
-		refAboveTerrain = !!e.target.checked;
-		// No need to change Leaflet pane; we composite into the canvas.
-		if (influenceLayer) {
-			influenceLayer._forceRender = true;
-			influenceLayer.render();
-		}
-	});
-}
+reference_controls.bindRefAboveCheckboxChange();
 
-document.getElementById("ref-scale-slider")?.addEventListener("input", (e) => {
-	refScale = parseFloat(e.target.value);
-	if (referenceOverlay && referenceImageUrl) {
-		const center = referenceOverlay.getBounds().getCenter();
-		const w = 40 * refScale;
-		const h = 25 * refScale;
-		const newBounds = [
-			[center.lat - h, center.lng - w],
-			[center.lat + h, center.lng + w],
-		];
-		referenceOverlay.setBounds(newBounds);
-		updateRefHandles();
-	}
-});
+reference_controls.bindRefScaleSliderInput();
 
-document.getElementById("clear-ref-btn")?.addEventListener("click", () => {
-	if (referenceOverlay) map.removeLayer(referenceOverlay);
-	referenceOverlay = null;
-	referenceImageUrl = null;
-	clearRefHandles();
-});
+reference_controls.bindClearRefBtnClick();
 
-document
-	.getElementById("editor-download-map-btn")
-	?.addEventListener("click", () => {
-		if (!worldControlMap || !landMask) return;
-
-		statusText.innerText = "GENERATING GLOBAL MAP EXPORT...";
-
-		// GLOBAL EXPORT SYSTEM: Produces a 1:1 Plate Carree projection of the world grid.
-		// This allows the resulting PNG to be re-imported as a Custom Satellite background
-		// that aligns perfectly with the engine's geographical coordinate system.
-		const canvas = document.createElement("canvas");
-		canvas.width = gridWidth;
-		canvas.height = gridHeight;
-		const ctx = canvas.getContext("2d");
-		const imgData = ctx.createImageData(gridWidth, gridHeight);
-		const data = imgData.data;
-
-		for (let i = 0; i < worldControlMap.length; i++) {
-			const _sid = worldControlMap[i];
-			const lm = landMask[i];
-
-			// Base Palette (Matches 'wargames' mode)
-			let r = 5,
-				g = 52,
-				b = 72; // Deep Ocean Blue
-
-			if (lm > 0) {
-				// Country colors are excluded from the terrain layout export for a cleaner reference image
-				r = 20;
-				g = 38;
-				b = 20; // Dark Military Green (Neutral Land)
-			}
-
-			// Project grid cell index to image pixel coordinates (Flipping Y axis)
-			const gx = i % gridWidth;
-			const gy = Math.floor(i / gridWidth);
-			const ty = gridHeight - 1 - gy;
-			const pixelIdx = (ty * gridWidth + gx) * 4;
-
-			data[pixelIdx] = r;
-			data[pixelIdx + 1] = g;
-			data[pixelIdx + 2] = b;
-			data[pixelIdx + 3] = 255;
-		}
-
-		ctx.putImageData(imgData, 0, 0);
-
-		try {
-			const link = document.createElement("a");
-			const timestamp = Date.now();
-			link.download = `modern_wars_world_layout_${timestamp}.png`;
-			link.href = canvas.toDataURL("image/png");
-			link.click();
-			statusText.innerText = "GLOBAL MAP EXPORTED";
-		} catch (e) {
-			console.error("Export failed:", e);
-			alert("SATELLITE ERROR: Could not generate export file.");
-		}
-	});
+editor_file_controls.bindEditorDownloadMapBtnClick();
 
 // -------- Procedural Nation Generation (For empty presets) --------
 export const noNationsModal = document.getElementById("no-nations-modal");
@@ -25930,1385 +7422,87 @@ export const skipRandomGenBtn = document.getElementById("skip-random-gen-btn");
  * Procedurally populates all land cells on the map with a specified number of random nations.
  * Uses an interleaved BFS expansion to ensure organic, relatively balanced territory sizes.
  */
-export async function spawnRandomNationsAcrossMap(count) {
-	if (!worldControlMap || !landMask) return;
-
-	loadingStatus.innerText = "Generating Civilizations...";
-	loadingOverlay.style.display = "flex";
-
-	// 1. Identify all valid land indices
-	const landIndices = [];
-	for (let i = 0; i < landMask.length; i++) {
-		if (landMask[i] > 0) {
-			landIndices.push(i);
-			worldControlMap[i] = 0; // Ensure unowned start
-		}
-	}
-
-	if (landIndices.length === 0) {
-		loadingOverlay.style.display = "none";
-		alert(
-			"SATELLITE ERROR: No landmass identified to populate with civilizations.",
-		);
-		return;
-	}
-
-	const actualCount = Math.min(count, landIndices.length);
-	const queues = [];
-
-	// 2. Pick random seeds and initialize metadata
-	countryMetadata = [];
-	for (let i = 0; i < actualCount; i++) {
-		let randIdx;
-		let attempts = 0;
-		// Try to pick seeds that aren't already taken
-		do {
-			randIdx = landIndices[Math.floor(Math.random() * landIndices.length)];
-			attempts++;
-		} while (worldControlMap[randIdx] !== 0 && attempts < 100);
-
-		const id = i + 1;
-		worldControlMap[randIdx] = id;
-
-		const h = Math.floor(Math.random() * 360);
-		const s = 60 + Math.random() * 30;
-		const l = 40 + Math.random() * 20;
-		const color = `hsla(${h}, ${s}%, ${l}%, 0.5)`;
-
-		const prefixes = [
-			"United",
-			"New",
-			"Grand",
-			"Great",
-			"North",
-			"South",
-			"East",
-			"West",
-			"Holy",
-			"Royal",
-			"Federal",
-			"Imperial",
-			"Democratic",
-			"People's",
-			"Sovereign",
-		];
-		const roots = [
-			"Balt",
-			"Nord",
-			"Slav",
-			"Franc",
-			"Goth",
-			"Rhone",
-			"Iber",
-			"Sax",
-			"Slavia",
-			"Anglo",
-			"Lat",
-			"Turk",
-			"Persia",
-			"Indo",
-			"Sino",
-			"Nippon",
-			"Austral",
-			"Afro",
-			"Euro",
-			"Ameri",
-			"Veld",
-			"Arid",
-			"Boreal",
-			"Luso",
-			"Fenn",
-			"Celt",
-			"Gallic",
-			"Helvet",
-			"Austr",
-			"Magyar",
-			"Pannoni",
-			"Daci",
-			"Thrac",
-			"Levant",
-			"Mesopotam",
-		];
-		const suffixes = [
-			"ia",
-			"stan",
-			"land",
-			"ica",
-			"any",
-			"os",
-			"nia",
-			"ria",
-			"via",
-			"dia",
-			"zania",
-			"ga",
-			"tania",
-			"onia",
-			"esia",
-		];
-		const forms = [
-			"{Prefix} {Root}{Suffix}",
-			"Republic of {Root}{Suffix}",
-			"Kingdom of {Root}{Suffix}",
-			"{Root}{Suffix} Empire",
-			"Federation of {Prefix} {Root}{Suffix}",
-			"United {Root}{Suffix} States",
-			"{Root}{Suffix} Commonwealth",
-		];
-
-		const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
-		const root = roots[Math.floor(Math.random() * roots.length)];
-		const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
-		const form = forms[Math.floor(Math.random() * forms.length)];
-
-		const name = form
-			.replace("{Prefix}", prefix)
-			.replace("{Root}", root)
-			.replace("{Suffix}", suffix);
-
-		const newMeta = {
-			id: id,
-			name: name,
-			color: color,
-			rgba: parseColorToRGBA(color),
-			isCustom: true,
-			bounds: {
-				minX: Infinity,
-				maxX: -Infinity,
-				minY: Infinity,
-				maxY: -Infinity,
-			},
-		};
-		countryMetadata.push(newMeta);
-
-		queues.push([randIdx]);
-	}
-
-	// 3. Interleaved Expansion (BFS)
-	// We expand each nation one "step" at a time in a round-robin to prevent one nation
-	// from instantly claiming a giant continent while others are stuck.
-	let unclaimedLand = true;
-	let iterations = 0;
-
-	while (unclaimedLand) {
-		unclaimedLand = false;
-		iterations++;
-
-		if (iterations % 100 === 0) {
-			await new Promise((r) => setTimeout(r, 0));
-		}
-
-		for (let i = 0; i < actualCount; i++) {
-			const q = queues[i];
-			const id = i + 1;
-			const nextLevel = [];
-
-			while (q.length > 0) {
-				const curr = q.shift();
-				const x = curr % gridWidth;
-				const _y = Math.floor(curr / gridWidth);
-
-				const neighbors = [
-					curr + 1,
-					curr - 1,
-					curr + gridWidth,
-					curr - gridWidth,
-				];
-
-				for (const nIdx of neighbors) {
-					if (nIdx < 0 || nIdx >= worldControlMap.length) continue;
-					// Horizontal wrapping check
-					const nx = nIdx % gridWidth;
-					if (Math.abs(nx - x) > 1) continue;
-
-					if (landMask[nIdx] > 0 && worldControlMap[nIdx] === 0) {
-						worldControlMap[nIdx] = id;
-						nextLevel.push(nIdx);
-						unclaimedLand = true;
-					}
-				}
-
-				// Only process one "layer" per nation per round
-				if (q.length === 0) {
-					queues[i] = nextLevel;
-					break;
-				}
-			}
-		}
-	}
-
-	generateProvinces();
-	recalculateAllBounds();
-	loadingOverlay.style.display = "none";
-	influenceLayer.render();
-	statusText.innerText = `WORLD POPULATED: ${actualCount} nations established.`;
-}
 
 // -------- Import Country From Scenario (editor / godmode) --------
 
-export function populateImportCountrySelect() {
-	if (!importScenarioBuffer || !importCountryCardList || !importCountrySearch)
-		return;
-	const metaList = importScenarioBuffer.metadata || [];
-	if (!metaList.length) {
-		importCountryCardList.innerHTML = `
-            <div style="font-size: 12px; color:#777; text-align:center; padding:10px;">
-                No countries found in scenario
-            </div>
-        `;
-		importCountrySearch.disabled = true;
-		selectedImportCountryId = null;
-		importScenarioCountriesCache = [];
-		return;
-	}
+editor_tool_controls.bindEditorImportCountryBtnClick();
 
-	// Count tiles per country id in the source scenario for a useful size hint
-	const mapData = importScenarioBuffer.mapData || [];
-	const tileCounts = new Map();
-	mapData.forEach(([_idx, val]) => {
-		if (!val) return;
-		tileCounts.set(val, (tileCounts.get(val) || 0) + 1);
-	});
+menu_controls.bindImportCountryCancelBtnClick();
 
-	const sortedMeta = metaList
-		.filter((m) => m?.id)
-		.map((m) => {
-			const tiles = tileCounts.get(m.id) || 0;
-			// Try to find a flagUrl from metadata if present
-			const flagUrl = m.flagUrl || null;
-			return {
-				id: m.id,
-				name: m.name || `Country ${m.id}`,
-				tiles,
-				flagUrl,
-			};
-		})
-		.filter((m) => m.tiles > 0)
-		.sort((a, b) => b.tiles - a.tiles || a.name.localeCompare(b.name));
+editor_file_controls.bindImportScenarioSelectChange();
 
-	if (!sortedMeta.length) {
-		importCountryCardList.innerHTML = `
-            <div style="font-size: 12px; color:#777; text-align:center; padding:10px;">
-                No countries with territory found
-            </div>
-        `;
-		importCountrySearch.disabled = true;
-		selectedImportCountryId = null;
-		importScenarioCountriesCache = [];
-		return;
-	}
+editor_file_controls.bindImportScenarioFileInputChange();
 
-	importScenarioCountriesCache = sortedMeta;
-	selectedImportCountryId = null;
-	importCountrySearch.disabled = false;
-	importCountrySearch.value = "";
-	renderImportCountryCards("");
-}
+editor_file_controls.bindImportCountryConfirmBtnClick();
 
-export function openImportCountryModal() {
-	if (!importCountryModal) return;
-	if (!(gameMode === "EDITOR" || godModeActive)) {
-		alert("You can only import from scenario while in the editor or God Mode.");
-		return;
-	}
+editor_file_controls.bindEditorLoadZipBtnClick();
 
-	// If we already have a loaded source scenario, reuse it and its country list
-	if (importScenarioBuffer && importScenarioCountriesCache.length > 0) {
-		importCountryModal.style.display = "flex";
-		if (importScenarioSelect && lastImportScenarioKey) {
-			importScenarioSelect.value = lastImportScenarioKey;
-		}
-		if (importScenarioFileInput) {
-			importScenarioFileInput.style.display = "none";
-		}
-		if (importCountrySearch) {
-			// Keep any existing search text; just ensure the field is enabled
-			importCountrySearch.disabled = false;
-		}
-		// Re-render cards from cache (filtered by current search if any)
-		renderImportCountryCards(
-			importCountrySearch ? importCountrySearch.value : "",
-		);
-		return;
-	}
-
-	// Fresh open with no cached source scenario
-	importScenarioBuffer = null;
-	selectedImportCountryId = null;
-	importScenarioCountriesCache = [];
-	if (importScenarioSelect) importScenarioSelect.value = "";
-	if (importScenarioFileInput) {
-		importScenarioFileInput.value = "";
-		importScenarioFileInput.style.display = "none";
-	}
-	if (importCountrySearch) {
-		importCountrySearch.value = "";
-		importCountrySearch.disabled = true;
-	}
-	if (importCountryCardList) {
-		importCountryCardList.innerHTML = `
-            <div style="font-size: 12px; color:#777; text-align:center; padding:10px;">
-                Choose a source scenario first
-            </div>
-        `;
-	}
-	importCountryModal.style.display = "flex";
-}
-
-if (editorImportCountryBtn) {
-	editorImportCountryBtn.addEventListener("click", () => {
-		openImportCountryModal();
-	});
-}
-
-if (importCountryCancelBtn) {
-	importCountryCancelBtn.addEventListener("click", () => {
-		importCountryModal.style.display = "none";
-	});
-}
-
-if (importScenarioSelect) {
-	importScenarioSelect.addEventListener("change", async (e) => {
-		const val = e.target.value;
-		lastImportScenarioKey = val || null;
-		importScenarioBuffer = null;
-		selectedImportCountryId = null;
-		if (importCountrySearch) {
-			importCountrySearch.value = "";
-			importCountrySearch.disabled = true;
-		}
-		if (importCountryCardList) {
-			importCountryCardList.innerHTML = `
-                <div style="font-size: 12px; color:#777; text-align:center; padding:10px;">
-                    Loading…
-                </div>
-            `;
-		}
-
-		if (val === "file") {
-			if (importScenarioFileInput) {
-				importScenarioFileInput.style.display = "block";
-				importScenarioFileInput.click();
-			}
-			return;
-		} else {
-			if (importScenarioFileInput)
-				importScenarioFileInput.style.display = "none";
-		}
-
-		// Map built‑in keys to local preset JSONs
-		const keyToUrl = {
-			"builtin:modern_2022": "@2022 world invis.json",
-			"builtin:ww2_1936": "assets/maps/WW2 Peru Update.json",
-			"builtin:ww2_1942": "1942.json",
-			"builtin:ww1_1914": "assets/maps/world_war_1__1914_.json",
-			"builtin:coldwar_1974": "better_cold_war_preset.json",
-			"builtin:coldwar_1948": "1948 (1).json",
-			"builtin:france_states": "France_states_preset (2).json",
-			"builtin:england_states": "England_states_preset.json",
-		};
-		const url = keyToUrl[val];
-		if (!url) {
-			importScenarioSelect.innerHTML =
-				'<option value="">Unknown source selection</option>';
-			importScenarioSelect.disabled = true;
-			return;
-		}
-		await loadScenarioForCountryImportFromUrl(url);
-	});
-}
-
-if (importScenarioFileInput) {
-	importScenarioFileInput.addEventListener("change", async (e) => {
-		const file = e.target.files[0];
-		if (!file) return;
-		// Remember that we're using a file source so the select can reflect it
-		lastImportScenarioKey = "file";
-		await loadScenarioForCountryImportFromBlob(file);
-	});
-}
-
-if (importCountryConfirmBtn) {
-	importCountryConfirmBtn.addEventListener("click", () => {
-		if (!importScenarioBuffer) {
-			alert("Choose a source scenario first.");
-			return;
-		}
-		const cid = selectedImportCountryId || 0;
-		if (!cid) {
-			alert("Choose a country to import.");
-			return;
-		}
-		importSingleCountryFromScenario(importScenarioBuffer, cid);
-		importCountryModal.style.display = "none";
-	});
-}
-
-if (editorLoadZipBtn) {
-	editorLoadZipBtn.addEventListener("click", () => {
-		const input = document.createElement("input");
-		input.type = "file";
-		input.accept = ".zip";
-		input.onchange = async (e) => {
-			const file = e.target.files[0];
-			if (!file) return;
-
-			loadingStatus.innerText = "Importing countries from ZIP...";
-			loadingOverlay.style.display = "flex";
-
-			try {
-				const JSZip = await getJSZip();
-				const zip = await JSZip.loadAsync(file);
-				const files = Object.values(zip.files).filter(
-					(f) => !f.dir && f.name.toLowerCase().endsWith(".json"),
-				);
-				if (files.length === 0) {
-					alert("ZIP file does not contain any .json country files.");
-					loadingOverlay.style.display = "none";
-					return;
-				}
-
-				// Find current max id so we can assign new, non‑conflicting IDs
-				let maxId = countryMetadata.reduce(
-					(m, c) => (c?.id ? Math.max(m, c.id) : m),
-					0,
-				);
-
-				for (const zf of files) {
-					try {
-						const text = await zf.async("text");
-						const data = JSON.parse(text);
-
-						if (!data.metadata || !data.cells) continue;
-
-						maxId += 1;
-						const newId = maxId;
-
-						const sourceRes = data.gridRes || CONFIG.GRID_RES;
-						const meta = {
-							id: newId,
-							name: data.metadata.name || "Imported Nation",
-							color: data.metadata.color || "rgba(150,150,150,0.5)",
-							rgba: parseColorToRGBA(
-								data.metadata.color || "rgba(150,150,150,0.5)",
-							),
-							isCustom: true,
-							flagUrl: data.metadata.flagUrl || null,
-							role: data.metadata.role || "OFFENSE",
-							overlordId: data.metadata.overlordId || null,
-							bounds: {
-								minX: Infinity,
-								maxX: -Infinity,
-								minY: Infinity,
-								maxY: -Infinity,
-							},
-						};
-
-						if (meta.flagUrl) {
-							meta.tempFlag = new Image();
-							meta.tempFlag.crossOrigin = "anonymous";
-							meta.tempFlag.src = meta.flagUrl;
-						}
-
-						countryMetadata[newId - 1] = meta;
-
-						// Map cells to current grid
-						const currentRes = CONFIG.GRID_RES;
-						data.cells.forEach(([sx, sy]) => {
-							if (sourceRes === currentRes) {
-								const idx = sy * gridWidth + sx;
-								if (idx < worldControlMap.length && landMask[idx] > 0) {
-									worldControlMap[idx] = newId;
-									meta.bounds.minX = Math.min(meta.bounds.minX, sx);
-									meta.bounds.maxX = Math.max(meta.bounds.maxX, sx);
-									meta.bounds.minY = Math.min(meta.bounds.minY, sy);
-									meta.bounds.maxY = Math.max(meta.bounds.maxY, sy);
-								}
-							} else {
-								const baseLat = sy * sourceRes - 90;
-								const baseLng = sx * sourceRes - 180;
-								const tIdx = getGridIndex(
-									baseLat + sourceRes / 2,
-									baseLng + sourceRes / 2,
-								);
-								if (tIdx !== -1 && landMask[tIdx] > 0) {
-									const tx = Math.floor(
-										(baseLng + sourceRes / 2 + 180) / currentRes,
-									);
-									const ty = Math.floor(
-										(baseLat + sourceRes / 2 + 90) / currentRes,
-									);
-									worldControlMap[tIdx] = newId;
-									meta.bounds.minX = Math.min(meta.bounds.minX, tx);
-									meta.bounds.maxX = Math.max(meta.bounds.maxX, tx);
-									meta.bounds.minY = Math.min(meta.bounds.minY, ty);
-									meta.bounds.maxY = Math.max(meta.bounds.maxY, ty);
-								}
-							}
-						});
-					} catch (innerErr) {
-						console.warn("Failed to import one country from ZIP:", innerErr);
-					}
-				}
-
-				recalculateAllBounds();
-				loadingOverlay.style.display = "none";
-				influenceLayer.render();
-				statusText.innerText = "Imported countries from ZIP.";
-			} catch (err) {
-				console.error("ZIP import failed:", err);
-				alert("Failed to import ZIP of countries.");
-				loadingOverlay.style.display = "none";
-			}
-		};
-		input.click();
-	});
-}
-
-editorFlagLibraryBtn.addEventListener("click", () => {
-	openHub("flags");
-});
+editor_tool_controls.bindEditorFlagLibraryBtnClick();
 
 // City tools buttons
-if (editorCityNewBtn) {
-	editorCityNewBtn.addEventListener("click", () => {
-		if (!(gameMode === "EDITOR" || godModeActive)) return;
-		cityEditMode = "CREATE";
-		statusText.innerText = "City Tools: click on the map to create a new city.";
-		cityInspector.style.display = "none";
-	});
-}
+inspector_controls.bindEditorCityNewBtnClick();
 
-if (editorCityClearBtn) {
-	editorCityClearBtn.addEventListener("click", () => {
-		if (!(gameMode === "EDITOR" || godModeActive)) return;
+inspector_controls.bindEditorCityClearBtnClick();
 
-		// Robust multi-stage verification for critical deletion
-		const verify1 = confirm(
-			"SATELLITE WARNING: You are about to clear ALL cities from this scenario. This action is permanent. Proceed?",
-		);
-		if (!verify1) return;
+menu_controls.bindLeaderboardBtnClick();
 
-		const verify2 = confirm(
-			"FINAL CONFIRMATION: Are you absolutely sure you want to remove all urban centers?",
-		);
-		if (!verify2) return;
+menu_controls.bindCloseLeaderboardBtnClick();
 
-		cities = [];
-		activeTheaterCities = [];
-		invalidateTerritoryLedgerCities();
-		editingCityId = -1;
-		cityInspector.style.display = "none";
-		influenceLayer.render();
-		statusText.innerText = "CITIDEL WIPE COMPLETE: All urban centers removed.";
-		playClickSound();
-	});
-}
-
-if (leaderboardBtn) {
-	leaderboardBtn.addEventListener("click", () => {
-		openLeaderboard();
-	});
-}
-
-if (closeLeaderboardBtn) {
-	closeLeaderboardBtn.addEventListener("click", () => {
-		leaderboardOverlay.style.display = "none";
-	});
-}
-
-closeHubBtn.addEventListener("click", () => {
-	closeHub();
-});
+menu_controls.bindCloseHubBtnClick();
 
 // -------- Item details + comments modal logic --------
 
-export function renderCommentsList(comments) {
-	if (!itemCommentsList) return;
-	if (!comments || comments.length === 0) {
-		itemCommentsList.innerHTML = `<div style="padding:10px; font-size: 12px; color:#777; text-align:center;">No comments yet. Be the first to brief this item.</div>`;
-		return;
-	}
-
-	// Sort newest -> oldest from collection (already newest-first) but keep parent/replies grouped
-	const byParent = new Map();
-	comments.forEach((c) => {
-		const parentId = c.parent_id || null;
-		if (!byParent.has(parentId)) byParent.set(parentId, []);
-		byParent.get(parentId).push(c);
-	});
-
-	const renderThread = (parentId, depth = 0) => {
-		const arr = byParent.get(parentId) || [];
-		return arr
-			.map((c) => {
-				const created = new Date(c.created_at).toLocaleString();
-				const safeText = escapeHtml(c.text || "");
-				const safeUsername = escapeHtml(c.username);
-				const safeCommentId = escapeHtml(c.id);
-				const isMine = currentUsername && c.username === currentUsername;
-				return `
-                <div class="item-comment" data-comment-id="${safeCommentId}" style="padding:6px 8px; border-bottom:1px solid rgba(255,255,255,0.05); margin-left:${depth * 12}px;">
-                    <div style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
-                        <img src="https://images.websim.com/avatar/${safeUsername}" style="width:16px; height:16px; border-radius:50%; background:#000;">
-                        <span style="font-size: 12px; color:#ddd;">${safeUsername}</span>
-                        <span style="font-size: 12px; color:#555; margin-left:auto;">${created}</span>
-                    </div>
-                    <div class="item-comment-text" style="font-size:12px; color:#ccc; white-space:pre-wrap;">${safeText}</div>
-                    <div style="margin-top:4px; display:flex; gap:4px;">
-                        <button class="mini-btn item-reply-btn" style="padding:2px 6px; font-size: 12px;">Reply</button>
-                        ${
-													isMine
-														? `
-                            <button class="mini-btn item-edit-btn" style="padding:2px 6px; font-size: 12px;">Edit</button>
-                            <button class="mini-btn item-delete-btn" style="padding:2px 6px; font-size: 12px; background:#c0392b;">Delete</button>
-                        `
-														: ""
-												}
-                    </div>
-                </div>
-                ${renderThread(c.id, depth + 1)}
-            `;
-			})
-			.join("");
-	};
-
-	itemCommentsList.innerHTML = renderThread(null);
-
-	// Wire reply buttons
-	itemCommentsList.querySelectorAll(".item-reply-btn").forEach((btn) => {
-		btn.addEventListener("click", () => {
-			const commentEl = btn.closest(".item-comment");
-			if (!commentEl) return;
-			currentReplyParentId = commentEl.getAttribute("data-comment-id");
-			currentEditingCommentId = null;
-			itemReplyIndicator.style.display = "inline-block";
-			itemReplyIndicator.textContent = "Replying...";
-			itemCancelReplyBtn.style.display = "inline-block";
-			itemCommentSubmit.textContent = "Post";
-			itemCommentInput.focus();
-		});
-	});
-
-	// Wire edit buttons (only for own comments)
-	itemCommentsList.querySelectorAll(".item-edit-btn").forEach((btn) => {
-		btn.addEventListener("click", () => {
-			const commentEl = btn.closest(".item-comment");
-			if (!commentEl) return;
-			const id = commentEl.getAttribute("data-comment-id");
-			const comment = comments.find((c) => c.id === id);
-			if (!comment || comment.username !== currentUsername) return;
-			currentEditingCommentId = id;
-			currentReplyParentId = comment.parent_id || null;
-			const textEl = commentEl.querySelector(".item-comment-text");
-			const currentText = textEl ? textEl.textContent : comment.text || "";
-			itemCommentInput.value = currentText;
-			itemReplyIndicator.style.display = "inline-block";
-			itemReplyIndicator.textContent = "Editing...";
-			itemCancelReplyBtn.style.display = "inline-block";
-			itemCommentSubmit.textContent = "Save";
-			itemCommentInput.focus();
-		});
-	});
-
-	// Wire delete buttons (only for own comments)
-	itemCommentsList.querySelectorAll(".item-delete-btn").forEach((btn) => {
-		btn.addEventListener("click", () => {
-			const commentEl = btn.closest(".item-comment");
-			if (!commentEl) return;
-			const id = commentEl.getAttribute("data-comment-id");
-			const comment = comments.find((c) => c.id === id);
-			if (!comment || comment.username !== currentUsername) return;
-			if (!confirm("Delete this comment?")) return;
-			(async () => {
-				try {
-					await room.collection("hub_comment_v1").delete(id);
-				} catch (e) {
-					console.error("Failed to delete comment", e);
-					alert("Failed to delete comment.");
-				}
-			})();
-		});
-	});
-}
-
-export async function openItemModal(type, item) {
-	currentCommentItemType = type;
-	currentCommentItemId = item.id;
-	currentReplyParentId = null;
-	currentEditingCommentId = null;
-	if (commentsUnsubscribe) {
-		commentsUnsubscribe();
-		commentsUnsubscribe = null;
-	}
-
-	// Title / desc / preview
-	itemModalTitle.textContent = (item.name || "Item Details").toUpperCase();
-	const desc = item.description || item.desc || "";
-	itemModalDesc.textContent = desc;
-
-	const authorEl = document.getElementById("item-modal-author-name");
-	if (authorEl) {
-		authorEl.textContent = item.username || "Intel Report";
-	}
-
-	if (item.previewUrl || item.flagUrl) {
-		itemModalPreview.src = item.previewUrl || item.flagUrl;
-		itemModalPreview.style.display = "block";
-	} else {
-		itemModalPreview.style.display = "none";
-	}
-
-	// Configure big-card actions for all item types
-	if (itemModalActions) {
-		const canImport = gameMode === "EDITOR" || godModeActive;
-		const itemModalDeleteBtn = document.getElementById("item-modal-delete");
-		const isOwner = currentUsername && item.username === currentUsername;
-
-		if (itemModalDeleteBtn) {
-			itemModalDeleteBtn.style.display = isOwner ? "inline-flex" : "none";
-			itemModalDeleteBtn.onclick = () => {
-				if (type === "scenario") window.deleteScenario(item.id);
-				else if (type === "country") window.deleteCountry(item.id);
-				else if (type === "flag") window.deleteFlag(item.id);
-				itemCommentModal.style.display = "none";
-			};
-		}
-
-		if (type === "scenario") {
-			// Play / Remix a scenario
-			itemModalActions.style.display = "flex";
-			if (itemModalPlayBtn) {
-				itemModalPlayBtn.style.display = "inline-flex";
-				itemModalPlayBtn.textContent = "Play";
-				itemModalPlayBtn.onclick = () => {
-					if (window.playFromHub) {
-						window.playFromHub(
-							item.blobUrl,
-							item.id,
-							item.name || "",
-							item.username || "",
-						);
-						itemCommentModal.style.display = "none";
-						closeHub();
-					}
-				};
-			}
-			if (itemModalRemixBtn) {
-				itemModalRemixBtn.style.display = "inline-flex";
-				itemModalRemixBtn.textContent = "Remix";
-				itemModalRemixBtn.onclick = () => {
-					if (window.remixFromHub) {
-						window.remixFromHub(
-							item.blobUrl,
-							item.id,
-							item.name || "",
-							item.username || "",
-						);
-						itemCommentModal.style.display = "none";
-						closeHub();
-					}
-				};
-			}
-		} else if (type === "country") {
-			// Import a country into the current editor map
-			itemModalActions.style.display = canImport || isOwner ? "flex" : "none";
-			if (itemModalPlayBtn) {
-				itemModalPlayBtn.style.display = canImport ? "inline-flex" : "none";
-				itemModalPlayBtn.textContent = "Import";
-				itemModalPlayBtn.onclick = () => {
-					if (window.importFromLibrary) {
-						window.importFromLibrary(item.id);
-						itemCommentModal.style.display = "none";
-					}
-				};
-			}
-			if (itemModalRemixBtn) {
-				itemModalRemixBtn.style.display = "none";
-				itemModalRemixBtn.onclick = null;
-			}
-		} else if (type === "flag") {
-			// Use a flag from the library on the currently selected country
-			itemModalActions.style.display = canImport || isOwner ? "flex" : "none";
-			if (itemModalPlayBtn) {
-				itemModalPlayBtn.style.display = canImport ? "inline-flex" : "none";
-				itemModalPlayBtn.textContent = "Use Flag";
-				itemModalPlayBtn.onclick = () => {
-					if (window.importFlagFromLibrary) {
-						window.importFlagFromLibrary(item.id);
-						itemCommentModal.style.display = "none";
-					}
-				};
-			}
-			if (itemModalRemixBtn) {
-				itemModalRemixBtn.style.display = "none";
-				itemModalRemixBtn.onclick = null;
-			}
-		} else {
-			itemModalActions.style.display = isOwner ? "flex" : "none";
-			if (itemModalPlayBtn) itemModalPlayBtn.style.display = "none";
-			if (itemModalRemixBtn) itemModalRemixBtn.style.display = "none";
-		}
-	}
-
-	// Clear composer
-	itemCommentInput.value = "";
-	itemReplyIndicator.style.display = "none";
-	itemCancelReplyBtn.style.display = "none";
-	itemCommentSubmit.textContent = "Post";
-
-	// Subscribe to comments for this item (using records)
-	try {
-		const coll = room.collection("hub_comment_v1").filter({
-			item_type: type,
-			item_id: item.id,
-		});
-		commentsUnsubscribe = coll.subscribe((records) => {
-			renderCommentsList(records || []);
-		});
-		// Initial render
-		renderCommentsList(coll.getList());
-	} catch (e) {
-		console.warn("Comment subscription failed", e);
-		renderCommentsList([]);
-	}
-
-	itemCommentModal.style.display = "flex";
-}
-
 // -------- Global Chat Logic --------
 
-export function renderGlobalChatList(messages) {
-	if (!globalChatList) return;
-	if (!messages || messages.length === 0) {
-		globalChatList.innerHTML = `<div style="text-align:center; font-size: 12px; color:#666; padding:16px;">No messages yet. Say hello!</div>`;
-		return;
-	}
-	// oldest at top
-	const sorted = messages
-		.slice()
-		.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-	globalChatList.innerHTML = sorted
-		.map((m) => {
-			const created = new Date(m.created_at).toLocaleTimeString();
-			const safeText = escapeHtml(m.text || "");
-			const safeUsername = escapeHtml(m.username);
-			const isMine = currentUsername && m.username === currentUsername;
-			return `
-            <div style="margin-bottom:6px; font-size:12px; ${isMine ? "text-align:right;" : ""}">
-                <div style="display:flex; ${isMine ? "flex-direction:row-reverse;" : ""} align-items:center; gap:6px;">
-                    <img src="https://images.websim.com/avatar/${safeUsername}" style="width:16px; height:16px; border-radius:50%; background:#000;">
-                    <span style="font-size: 12px; color:#ddd;">${safeUsername}</span>
-                    <span style="font-size: 12px; color:#555;">${created}</span>
-                </div>
-                <div style="margin-top:2px; color:#ccc; white-space:pre-wrap;">${safeText}</div>
-            </div>
-        `;
-		})
-		.join("");
-	globalChatList.scrollTop = globalChatList.scrollHeight;
-}
+community_controls.bindGlobalChatCloseClick();
 
-export async function _openGlobalChat() {
-	if (!globalChatModal) return;
-	if (!room) {
-		try {
-			await initMultiplayer();
-		} catch (e) {
-			console.warn("Failed to init multiplayer for chat", e);
-		}
-	}
-	globalChatModal.style.display = "flex";
-	if (room && !globalChatUnsubscribe) {
-		const coll = room.collection("global_chat_v1");
-		globalChatUnsubscribe = coll.subscribe((records) => {
-			renderGlobalChatList(records || []);
-		});
-		renderGlobalChatList(coll.getList());
-	}
-}
+community_controls.bindGlobalChatSendClick();
 
-if (globalChatClose) {
-	globalChatClose.addEventListener("click", () => {
-		globalChatModal.style.display = "none";
-	});
-}
+community_controls.bindGlobalChatInputKeydown();
 
-if (globalChatSend) {
-	globalChatSend.addEventListener("click", async () => {
-		if (!room || !globalChatInput) return;
-		const text = globalChatInput.value.trim();
-		if (!text) return;
-		try {
-			await room.collection("global_chat_v1").create({
-				text,
-			});
-			globalChatInput.value = "";
-		} catch (e) {
-			console.error("Failed to send chat message", e);
-		}
-	});
-}
+community_controls.bindItemCommentSubmitClick();
 
-if (globalChatInput) {
-	globalChatInput.addEventListener("keydown", (e) => {
-		if (e.key === "Enter" && !e.shiftKey) {
-			e.preventDefault();
-			if (globalChatSend) globalChatSend.click();
-		}
-	});
-}
+community_controls.bindItemCancelReplyBtnClick();
 
-itemCommentSubmit.addEventListener("click", async () => {
-	if (!currentCommentItemType || !currentCommentItemId) return;
-	const text = itemCommentInput.value.trim();
-	if (!text) return;
-	try {
-		if (currentEditingCommentId) {
-			// Edit existing comment
-			await room.collection("hub_comment_v1").update(currentEditingCommentId, {
-				text,
-			});
-		} else {
-			// New comment or reply
-			await room.collection("hub_comment_v1").create({
-				item_type: currentCommentItemType,
-				item_id: currentCommentItemId,
-				parent_id: currentReplyParentId || null,
-				text,
-			});
-		}
-		itemCommentInput.value = "";
-		currentReplyParentId = null;
-		currentEditingCommentId = null;
-		itemReplyIndicator.style.display = "none";
-		itemCancelReplyBtn.style.display = "none";
-		itemCommentSubmit.textContent = "Post";
-	} catch (e) {
-		console.error("Failed to post comment", e);
-		alert("Failed to post comment. Try again.");
-	}
-});
+community_controls.bindCloseItemModalBtnClick();
 
-itemCancelReplyBtn.addEventListener("click", () => {
-	currentReplyParentId = null;
-	currentEditingCommentId = null;
-	itemReplyIndicator.style.display = "none";
-	itemCancelReplyBtn.style.display = "none";
-	itemCommentSubmit.textContent = "Post";
-});
+editor_file_controls.bindEditorShareBtnClick();
 
-closeItemModalBtn.addEventListener("click", () => {
-	itemCommentModal.style.display = "none";
-	if (commentsUnsubscribe) {
-		commentsUnsubscribe();
-		commentsUnsubscribe = null;
-	}
-});
+community_controls.bindCancelUploadBtnClick();
 
-editorShareBtn.addEventListener("click", () => {
-	if (countryMetadata.length < 2) {
-		alert("Your map must have at least 2 nations to be playable.");
-		return;
-	}
-	uploadNameInput.value = "";
-	uploadDescInput.value = "";
-	uploadDetailsModal.style.display = "flex";
-});
+community_controls.bindConfirmUploadBtnClick();
 
-cancelUploadBtn.addEventListener("click", () => {
-	uploadDetailsModal.style.display = "none";
-});
+editor_tool_controls.bindCancelEditorChoiceClick();
 
-confirmUploadBtn.addEventListener("click", async () => {
-	const name = uploadNameInput.value.trim() || "Untitled Scenario";
-	const desc = uploadDescInput.value.trim();
+editor_tool_controls.bindChoiceExternalEditorClick();
 
-	uploadDetailsModal.style.display = "none";
-	loadingStatus.innerText = "Uploading Scenario...";
-	loadingOverlay.style.display = "flex";
+editor_tool_controls.bindChoiceIngameEditorClick();
 
-	try {
-		// 1. Generate Preview Snapshot
-		let previewUrl = null;
-		if (influenceLayer?._container) {
-			influenceLayer._isCapturing = true;
-			influenceLayer.render();
-			const canvas = influenceLayer._container;
-			const previewBlob = await new Promise((resolve) =>
-				canvas.toBlob(resolve, "image/jpeg", 0.8),
-			);
-			influenceLayer._isCapturing = false;
-			influenceLayer.render();
-			if (previewBlob) {
-				const previewFile = new File([previewBlob], "preview.jpg", {
-					type: "image/jpeg",
-				});
-				previewUrl = await websim.upload(previewFile);
-			}
-		}
+editor_tool_controls.bindCancelSourceChoiceClick();
 
-		// 2. Generate and Upload JSON
-		const saveData = generatePresetData(name);
-		const blob = new Blob([JSON.stringify(saveData)], {
-			type: "application/json",
-		});
-		const file = new File([blob], "scenario.json", {
-			type: "application/json",
-		});
-		const blobUrl = await websim.upload(file);
+editor_tool_controls.bindChoiceSourceEarthClick();
 
-		// Determine if this is a remix
-		const _currentUser = await window.websim.getCurrentUser();
-		let remixedFromId = null;
-		let remixedFromName = null;
+editor_tool_controls.bindChoiceSourceBlankClick();
 
-		// If current scenario context exists, it's a remix
-		if (currentScenarioContext) {
-			remixedFromId = currentScenarioContext.id;
-			remixedFromName = currentScenarioContext.name;
-		}
+editor_tool_controls.bindCancelBlankSizeBtnClick();
 
-		// 3. Create Persistent Record
-		await room.collection("scenario_v1").create({
-			name: name,
-			description: desc,
-			previewUrl: previewUrl,
-			blobUrl: blobUrl,
-			remixed_from_id: remixedFromId,
-			remixed_from_name: remixedFromName,
-		});
+editor_tool_controls.bindConfirmBlankSizeBtnClick();
 
-		loadingOverlay.style.display = "none";
-		alert("Scenario uploaded successfully to the hub!");
-	} catch (e) {
-		console.error(e);
-		alert("Failed to upload scenario.");
-		loadingOverlay.style.display = "none";
-	}
-});
+menu_controls.bindMinimizeSetupBtnClick();
 
-cancelEditorChoice.onclick = () => {
-	editorChoiceModal.style.display = "none";
-};
+menu_controls.bindMinimizeStatsBtnClick();
 
-choiceExternalEditor.onclick = () => {
-	window.open(
-		"https://websim.com/@thepineguy/modern-wars-alternative-editor",
-		"_blank",
-	);
-	editorChoiceModal.style.display = "none";
-};
-
-choiceIngameEditor.onclick = () => {
-	editorChoiceModal.style.display = "none";
-	editorSourceModal.style.display = "flex";
-};
-
-cancelSourceChoice.onclick = () => {
-	editorSourceModal.style.display = "none";
-	editorChoiceModal.style.display = "flex";
-};
-
-choiceSourceEarth.onclick = async () => {
-	isCustomTerrain = false;
-	editorSourceModal.style.display = "none";
-	primeAudio();
-	gameMode = "EDITOR";
-	gameState = "EDITOR_ACTIVE";
-	currentScenarioContext = null;
-	activeScenarioId = null;
-	editorUpdateBtn.style.display = "none";
-	mainMenu.style.display = "none";
-	mapUi.style.display = "flex";
-	editorToolbox.style.display = "flex";
-
-	// Allocate every grid buffer through the canonical engine path. This also
-	// keeps biome and influence buffers synchronized after resolution changes.
-	initializeEngine(false);
-	statusText.innerText = "Map Editor (Alpha)";
-	setupPanel.style.display = "none";
-	resetBtn.style.display = "block";
-	editorUnclaimBtn.style.display = "block";
-
-	// Load real‑earth geography without establishing countries
-	const mapRes = document.getElementById("map-res-select").value;
-	const geoUrl = `${CONFIG.GEOJSON_BASE}${mapRes}/cultural/ne_${mapRes}_admin_0_countries.json`;
-	await loadCountries(geoUrl, true);
-	initAudio();
-
-	if (getCookie("mw_editor_tutorial_finished") !== "true") {
-		startTutorial(editorTutorialSteps, "mw_editor_tutorial_finished");
-	}
-
-	updateRestartVisibility();
-};
-
-choiceSourceBlank.onclick = () => {
-	document.getElementById("blank-size-modal").style.display = "flex";
-};
-
-document.getElementById("cancel-blank-size-btn").onclick = () => {
-	document.getElementById("blank-size-modal").style.display = "none";
-};
-
-document.getElementById("confirm-blank-size-btn").onclick = () => {
-	const w =
-		parseFloat(document.getElementById("blank-width-input").value) || 360;
-	const h =
-		parseFloat(document.getElementById("blank-height-input").value) || 180;
-
-	document.getElementById("blank-size-modal").style.display = "none";
-	isCustomTerrain = true;
-	editorSourceModal.style.display = "none";
-	initAudio();
-	gameMode = "EDITOR";
-	gameState = "EDITOR_ACTIVE";
-	currentScenarioContext = null;
-	activeScenarioId = null;
-	editorUpdateBtn.style.display = "none";
-	mainMenu.style.display = "none";
-	mapUi.style.display = "flex";
-	editorToolbox.style.display = "flex";
-
-	// Ensure grid is ready
-	if (!worldControlMap) {
-		initializeEngine();
-	}
-
-	// Initialize Blank Canvas State
-	worldControlMap.fill(0);
-	deJureMap.fill(0);
-	landMask.fill(0);
-	provinceMap.fill(0);
-	terrainMask.fill(0);
-	cities = [];
-	activeTheaterCities = [];
-	countryMetadata = [];
-
-	// Custom World Size Logic:
-	// If w or h are smaller than full world, we restrict the view and paintable area
-	if (w < 360 || h < 180) {
-		const halfW = w / 2;
-		const halfH = h / 2;
-		const bounds = [
-			[-halfH, -halfW],
-			[halfH, halfW],
-		];
-		map.setMaxBounds(bounds);
-		map.fitBounds(bounds);
-
-		// Block painting outside these bounds by keeping landMask at 0 (Ocean) for those cells
-		// Note: The paintAt logic already checks landMask[idx] > 0 for country painting.
-		// We'll also update terrain brush to respect these bounds if we really wanted to be strict.
-	} else {
-		map.setMaxBounds(null);
-	}
-
-	// Switch to Simplified View for better "blank canvas" painting feel (temporarily)
-	setImageryProvider("wargames", false);
-	if (disableCountryGradientCheckbox) {
-		disableCountryGradientCheckbox.checked = true;
-		disableCountryGradient = true;
-	}
-
-	statusText.innerText = "Blank Canvas: Draw Terrain";
-	setupPanel.style.display = "none";
-	resetBtn.style.display = "block";
-
-	// Instantly jump to Page 3 tools so they see the terrain brush
-	updateEditorToolPage(3);
-
-	influenceLayer.render();
-	updateRestartVisibility();
-};
-
-minimizeSetupBtn.onclick = (e) => {
-	e.stopPropagation();
-	const isMinimized = setupPanel.classList.toggle("minimized");
-	minimizeSetupBtn.innerText = isMinimized ? "+" : "−";
-};
-
-minimizeStatsBtn.onclick = (e) => {
-	e.stopPropagation();
-	const isMinimized = statsPanel.classList.toggle("minimized");
-	minimizeStatsBtn.innerText = isMinimized ? "+" : "−";
-};
-
-minimizeStatusBtn.onclick = (e) => {
-	e.stopPropagation();
-	const isMinimized = document
-		.getElementById("game-status")
-		.classList.toggle("minimized");
-	minimizeStatusBtn.innerText = isMinimized ? "+" : "−";
-};
+menu_controls.bindMinimizeStatusBtnClick();
 
 // Keep simulation running when tab is not focused (background ticking)
-document.addEventListener("visibilitychange", () => {
-	if (document.hidden) {
-		// Stop visual loop and start a lightweight background tick loop
-		if (animationFrameId !== null) {
-			cancelAnimationFrame(animationFrameId);
-			animationFrameId = null;
-		}
-		if (!backgroundTickId && gameState === "SIMULATING") {
-			backgroundTickId = setInterval(() => {
-				if (gameState !== "SIMULATING" || isPaused) return;
-				// Advance simulation based on simSpeed, but skip rendering/UI-heavy work
-				frameAccumulator += simSpeed;
-				while (frameAccumulator >= 1) {
-					const warEnded = performSimulationTick();
-					if (warEnded) {
-						frameAccumulator = 0;
-						break;
-					}
-					frameAccumulator -= 1;
-				}
-				// Advance in-game date based on background tick interval
-				tickGameTime(100);
-				simFrameCount++;
-			}, 100); // ~10 ticks per second while unfocused
-		}
-	} else {
-		// Back to foreground: stop background loop and resume visual loop
-		if (backgroundTickId) {
-			clearInterval(backgroundTickId);
-			backgroundTickId = null;
-		}
-		if (gameState === "SIMULATING") {
-			if (animationFrameId !== null) {
-				cancelAnimationFrame(animationFrameId);
-			}
-			animationFrameId = requestAnimationFrame(updateLoop);
-		}
-	}
-});
+simulation_controls.bindDocumentVisibilityChange();
 
-godModeBtn.addEventListener("click", () => {
-	if (!godModeActive) {
-		// Activate God Mode
-		godModeActive = true;
-		godBombActive = false;
-		if (godBombBtn) {
-			godBombBtn.innerText = "GOD BOMB: OFF";
-			godBombBtn.classList.remove("active");
-		}
-		preGodModeState = gameState;
-		gameState = "EDITOR_ACTIVE";
-
-		godModeBtn.innerText = getTranslation("GOD_ACTIVE");
-		godModeBtn.style.background = "#27ae60";
-
-		// Setup UI
-		editorToolbox.style.display = "flex";
-		setupPanel.style.display = "none";
-		statsPanel.style.display = "none";
-		// Allow sharing and saving any current map state from God Mode, including official presets
-		editorShareBtn.style.display = "block";
-		editorSaveBtn.style.display = "block";
-		editorHubBtn.style.display = "block";
-		editorLibraryBtn.style.display = "block";
-		shareFlagBtn.style.display = "block";
-		editorExitBtn.style.display = "none";
-		editorTestBtn.style.display = "none";
-		editorUpdateBtn.style.display = activeScenarioId ? "block" : "none";
-		editorUnclaimBtn.style.display = "block";
-
-		if (preGodModeState === "SIMULATING") {
-			godBombBtn.style.display = "block";
-		}
-
-		// Ensure alliance view toggle always remains visible while in God Mode
-		if (allianceViewCheckbox?.parentElement) {
-			allianceViewCheckbox.style.display = "inline-block";
-			allianceViewCheckbox.parentElement.style.display = "inline-flex";
-		}
-
-		statusText.innerText = currentScenarioContext
-			? `GOD MODE // REMIXING: ${currentScenarioContext.name}`
-			: "GOD MODE: Map Editing Active";
-		updateRestartVisibility();
-	} else {
-		// Deactivate God Mode
-		godModeActive = false;
-		godBombActive = false;
-		godBombSourceId = -1;
-
-		// Sanitize state: ensure that exiting from an active editor tool (like painting)
-		// doesn't leave the engine in an "EDITOR" state if we were previously in selection mode.
-		if (gameMode === "CONQUEST" && preGodModeState !== "SIMULATING") {
-			gameState = "SELECTING_P1";
-		} else {
-			gameState = preGodModeState;
-		}
-
-		godModeBtn.innerText = getTranslation("GOD_MODE");
-		godModeBtn.style.background = "#d35400";
-
-		// Hide editor UI & Reset Tool Classes to prevent sticky sub-states
-		editorToolbox.style.display = "none";
-		[
-			editorPaintBtn,
-			editorFillBtn,
-			editorUnclaimBtn,
-			editorTerrainBtn,
-			editorPlaceDivisionBtn,
-		].forEach((btn) => {
-			if (btn) btn.classList.remove("active");
-		});
-		if (brushControls) brushControls.style.display = "none";
-		if (terrainControls) terrainControls.style.display = "none";
-
-		godBombBtn.style.display = "none";
-		godBombBtn.innerText = "GOD BOMB: OFF";
-		godBombBtn.classList.remove("active");
-		countryInspector.style.display = "none";
-		shareFlagBtn.style.display = "none";
-		map.getContainer().classList.remove("painting-cursor");
-
-		// Make sure the alliance view checkbox + label are visible again when returning to normal play
-		if (allianceViewCheckbox?.parentElement) {
-			allianceViewCheckbox.style.display = "inline-block";
-			allianceViewCheckbox.parentElement.style.display = "inline-flex";
-		}
-
-		// Refresh simulation caches in case land changed
-		if (gameState === "SIMULATING") {
-			statsPanel.style.display = "block";
-			activeTheaterCities = cities.filter((c) => {
-				const idx = getGridIndex(c.lat, c.lng);
-				return idx !== -1 && landMask[idx] === 2;
-			});
-			// Ensure loop restarts if it was stopped
-			cancelAnimationFrame(animationFrameId);
-			requestAnimationFrame(updateLoop);
-		}
-
-		if (gameState.startsWith("SELECTING") || gameState === "WAR_OVER") {
-			if (gameState === "WAR_OVER") gameState = "SELECTING_P1";
-			setupPanel.style.display = "block";
-			statusText.innerText = currentScenarioContext
-				? `PLAYING: ${currentScenarioContext.name}`
-				: getTranslation("SELECT_P1");
-			updateSidesUI();
-		} else if (gameState === "SIMULATING") {
-			statsPanel.style.display = "block";
-			statusText.innerText = ffaMode
-				? "Free For All Active"
-				: "Global Conflict Active";
-		} else {
-			// Safety fallback: transition any orphaned state to setup mode
-			gameState = "SELECTING_P1";
-			setupPanel.style.display = "block";
-			statusText.innerText = getTranslation("SELECT_P1");
-			updateSidesUI();
-		}
-		updateRestartVisibility();
-	}
-});
+sandbox_controls.bindGodModeBtnClick();
 
 initWarOverview();
-startBtn.addEventListener("click", () => startWar());
-quickRestartBtn.addEventListener("click", () => {
-	resetGame();
-});
+menu_controls.bindStartBtnClick();
+menu_controls.bindQuickRestartBtnClick();
+
+function removeCountryFormations(...args) {
+	return lifecycle.removeCountryFormations(...args);
+}

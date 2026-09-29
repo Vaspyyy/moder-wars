@@ -3,6 +3,9 @@ import { readFileSync } from "node:fs";
 import vm from "node:vm";
 
 const main = readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
+const controls = readFileSync(new URL("../src/menu-controls.js", import.meta.url), "utf8");
+const setup = readFileSync(new URL("../src/conflict-setup.js", import.meta.url), "utf8");
+const audio = readFileSync(new URL("../src/audio.js", import.meta.url), "utf8");
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const start = main.indexOf("export function checkAutoLaunch()");
 const end = main.indexOf("// Settings Tab Logic", start);
@@ -14,7 +17,9 @@ for (const remember of [false, true]) {
 		return elements.get(id);
 	};
 	let initialized = 0;
+	let restored = 0;
 	const context = vm.createContext({
+		settingsController: { restore() { restored++; } },
 		getCookie: (key) => key === "mw_skip_settings" ? String(remember) : null,
 		document: { getElementById: element, body: { classList: { add() {}, remove() {} } } },
 		initializeEngine: () => { initialized++; },
@@ -27,17 +32,18 @@ for (const remember of [false, true]) {
 	vm.runInContext(boot, context);
 	context.checkAutoLaunch();
 	assert.equal(initialized, 1);
+	assert.equal(restored, remember ? 1 : 0, "remembered launch restores settings once");
 	assert.equal(context.settingsOverlay.style.display, "none", "first launch must not require settings");
 	assert.equal(context.mainMenu.style.display, "flex");
 	assert.equal(context.gameState, "MAIN_MENU");
 }
-assert.equal((main.match(/requestFullscreen\(/g) || []).length, 1, "only the explicit fullscreen action requests fullscreen");
-const clickHandler = main.slice(main.indexOf('// Global click listener'), main.indexOf('export let', main.indexOf('// Global click listener')));
+assert.equal((controls.match(/requestFullscreen\(/g) || []).length, 1, "only the explicit fullscreen action requests fullscreen");
+const clickHandler = audio.slice(audio.indexOf("// Global click listener"));
 assert.doesNotMatch(clickHandler, /requestFullscreen/);
-assert.doesNotMatch(main, /addEventListener\("dblclick"/);
+assert.doesNotMatch(main + controls, /addEventListener\("dblclick"/);
 assert.ok(!html.includes('id="war-desk-overview-tab"'));
-assert.ok(main.includes('<details class="country-configuration">'));
-assert.ok(main.includes('expandedCountries.has('), "keep Configure expanded while editing country options");
+assert.ok(setup.includes('<details class="country-configuration">'));
+assert.ok(setup.includes('expandedCountries.has('), "keep Configure expanded while editing country options");
 const menuStart = html.indexOf('id="hud-menu"');
 const menuEnd = html.indexOf('</details>', menuStart);
 for (const id of ['quick-restart-btn', 'restart-scenario-btn', 'god-mode-btn', 'ingame-settings-btn', 'main-menu-btn']) {

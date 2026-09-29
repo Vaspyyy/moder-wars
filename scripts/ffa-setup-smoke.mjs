@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
+import {createConflictSetup} from "../src/conflict-setup.js";
+import {createMenuControls} from "../src/menu-controls.js";
 
 const main = readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
 const button = { setAttribute(name, value) { this[name] = value; } };
@@ -19,9 +21,10 @@ const context = vm.createContext({
 	MAX_SIDES: 2,
 	statusText: {},
 });
-const start = main.indexOf("function updateFfaSetupUi()");
-const end = main.indexOf("export const randomWarBtn", start);
-vm.runInContext(main.slice(start, end), context);
+globalThis.document = context.document;
+const setup = createConflictSetup(context);
+context.updateFfaSetupUi = setup.updateFfaSetupUi;
+createMenuControls(context).bindFfaToggleBtnClick();
 button.onclick();
 assert.equal(context.ffaMode, true);
 assert.equal(button["aria-pressed"], "true");
@@ -36,6 +39,7 @@ assert.equal(note.hidden, true);
 assert.equal(context.sides, sides);
 const selectionStart = main.indexOf("\tif (ffaMode) {\n\t\t// New FFA participants");
 const selectionEnd = main.indexOf("\tconst targetList", selectionStart);
+assert.ok(selectionStart >= 0 && selectionEnd > selectionStart, "FFA selection branch must exist");
 vm.runInContext(`function selectFfaSide() { ${main.slice(selectionStart, selectionEnd)} }`, context);
 context.ffaMode = true;
 context.selectFfaSide();
@@ -73,9 +77,8 @@ Object.assign(context, {
 	rebellionBtn: null, setupOptions: new Node(), startBtn: new Node(),
 	rebuildManpowerInputs() {}, rebuildStatsPanel() {},
 });
-const renderStart = main.indexOf("export function updateSidesUI()");
-const renderEnd = main.indexOf("addSideBtn.onclick", renderStart);
-vm.runInContext(main.slice(renderStart, renderEnd).replace("export function", "function"), context);
+globalThis.document = context.document;
+context.updateSidesUI = setup.updateSidesUI;
 context.ffaMode = false;
 context.activeSideIndex = 0;
 context.updateSidesUI();

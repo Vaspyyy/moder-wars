@@ -250,7 +250,7 @@ const stalled = advanceAiTaskForce(
 	{ tick: 600, currentPower: 100, forceRatio: 0.8 },
 );
 assert.equal(stalled.completionReason, "UNFAVORABLE_STALL");
-for (const planType of ["DEFEND", "DEFEND_CITY"]) {
+for (const planType of ["DEFEND"]) {
 	const defensiveTaskForce = createAiTaskForce({
 		signature: `hold:${planType}`,
 		sideUid: "blue",

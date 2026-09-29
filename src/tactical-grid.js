@@ -11,14 +11,10 @@ export const DEFAULT_TACTICAL_CELL_SIZE = 0.6;
  * @property {string|number} [sideUid] Owning side UID fallback.
  * @property {number} lat Latitude in degrees.
  * @property {number} lng Longitude in degrees.
- * @property {number} [combatPower] Explicit tactical strength.
- * @property {number} [health] Strength fallback when combatPower is absent.
- * @property {number} [allyWeight] Local-balance weight.
- * @property {boolean} [supportRole] Whether this formation provides support.
  */
 
 /**
- * Aggregated information for one side in one fine tactical cell.
+ * Unit bucket for one side in one fine tactical cell.
  *
  * @typedef {object} TacticalGridCell
  * @property {number} key Collision-free row-major cell key.
@@ -27,11 +23,6 @@ export const DEFAULT_TACTICAL_CELL_SIZE = 0.6;
  * @property {string} sideKey Normalized side identity.
  * @property {Array<TacticalGridUnit>} units Original unit references.
  * @property {number} count Formation count.
- * @property {number} totalStrength Sum of non-negative formation strength.
- * @property {number} totalAllyWeight Sum of non-negative local-balance weight.
- * @property {number} weightedStrength Sum of strength multiplied by ally weight.
- * @property {number} centroidLat Ally-weighted latitude centroid.
- * @property {number} centroidLng Ally-weighted circular longitude centroid.
  */
 
 /**
@@ -52,7 +43,7 @@ export const DEFAULT_TACTICAL_CELL_SIZE = 0.6;
 
 /**
  * Fine tactical grid. `bySide` maps normalized side identities to maps of
- * numeric cell keys and per-side cell summaries.
+ * numeric cell keys and per-side unit buckets.
  *
  * @typedef {object} TacticalGrid
  * @property {string} schemaVersion
@@ -187,29 +178,11 @@ function defaultSide(unit) {
 	return unit?.sideIndex ?? unit?.sideUid ?? unit?.side;
 }
 
-function defaultStrength(unit) {
-	if (Number.isFinite(Number(unit?.combatPower))) {
-		return Math.max(0, Number(unit.combatPower));
-	}
-	if (Number.isFinite(Number(unit?.health))) {
-		return Math.max(0, Number(unit.health));
-	}
-	return 1;
-}
-
-function defaultAllyWeight(unit) {
-	return Number.isFinite(Number(unit?.allyWeight))
-		? Math.max(0, Number(unit.allyWeight))
-		: 1;
-}
-
 function normalizeAccessors(options = {}) {
 	return {
 		getSide: options.getSide || defaultSide,
 		getLat: options.getLat || ((unit) => unit?.lat),
 		getLng: options.getLng || ((unit) => unit?.lng),
-		getStrength: options.getStrength || defaultStrength,
-		getAllyWeight: options.getAllyWeight || defaultAllyWeight,
 	};
 }
 
@@ -234,36 +207,7 @@ function createCell(key, x, y, sideKey) {
 		sideKey,
 		units: [],
 		count: 0,
-		totalStrength: 0,
-		totalAllyWeight: 0,
-		weightedStrength: 0,
-		centroidLat: 0,
-		centroidLng: 0,
-
-		_sumLat: 0,
-		_sumLngSin: 0,
-		_sumLngCos: 0,
-		_sumRawLat: 0,
-		_sumRawLngSin: 0,
-		_sumRawLngCos: 0,
 	};
-}
-
-function finalizeCell(cell) {
-	const weighted = cell.totalAllyWeight > 0;
-	const divisor = weighted ? cell.totalAllyWeight : Math.max(1, cell.count);
-	cell.centroidLat = (weighted ? cell._sumLat : cell._sumRawLat) / divisor;
-	const sin = weighted ? cell._sumLngSin : cell._sumRawLngSin;
-	const cos = weighted ? cell._sumLngCos : cell._sumRawLngCos;
-	cell.centroidLng = wrapTacticalLongitude(
-		(Math.atan2(sin / divisor, cos / divisor) * 180) / Math.PI,
-	);
-	delete cell._sumLat;
-	delete cell._sumLngSin;
-	delete cell._sumLngCos;
-	delete cell._sumRawLat;
-	delete cell._sumRawLngSin;
-	delete cell._sumRawLngCos;
 }
 
 /**
@@ -282,11 +226,7 @@ export function rebuildTacticalGrid(grid, units, options = {}) {
 	grid.bySide.clear();
 	grid.accessors = options.accessors
 		? normalizeAccessors(options.accessors)
-		: options.getSide ||
-				options.getLat ||
-				options.getLng ||
-				options.getStrength ||
-				options.getAllyWeight
+		: options.getSide || options.getLat || options.getLng
 			? normalizeAccessors({ ...grid.accessors, ...options })
 			: grid.accessors;
 	grid.counters = createTacticalGridCounters();
@@ -325,20 +265,8 @@ export function rebuildTacticalGrid(grid, units, options = {}) {
 			grid.counters.cellCount++;
 		}
 
-		const strength = Math.max(0, finite(accessors.getStrength(unit), 1));
-		const allyWeight = Math.max(0, finite(accessors.getAllyWeight(unit), 1));
-		const lngRadians = (normalizedLng * Math.PI) / 180;
 		cell.units.push(unit);
 		cell.count++;
-		cell.totalStrength += strength;
-		cell.totalAllyWeight += allyWeight;
-		cell.weightedStrength += strength * allyWeight;
-		cell._sumLat += normalizedLat * allyWeight;
-		cell._sumLngSin += Math.sin(lngRadians) * allyWeight;
-		cell._sumLngCos += Math.cos(lngRadians) * allyWeight;
-		cell._sumRawLat += normalizedLat;
-		cell._sumRawLngSin += Math.sin(lngRadians);
-		cell._sumRawLngCos += Math.cos(lngRadians);
 
 		grid.counters.insertedUnits++;
 		grid.counters.maxBucketOccupancy = Math.max(
@@ -348,9 +276,6 @@ export function rebuildTacticalGrid(grid, units, options = {}) {
 	}
 
 	grid.counters.sideCount = grid.bySide.size;
-	for (const sideCells of grid.bySide.values()) {
-		for (const cell of sideCells.values()) finalizeCell(cell);
-	}
 	return grid;
 }
 
