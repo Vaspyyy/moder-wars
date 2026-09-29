@@ -13842,99 +13842,6 @@ function prepareExperimentSetupForStart() {
 	return readExperimentSeedFromSetup();
 }
 
-function experimentAdvantageFromMetrics(metrics) {
-	const active = metrics.filter((metric) => metric.activeCountries > 0);
-	if (active.length < 2) {
-		return {
-			statement: active[0]
-				? `${active[0].name} is the only side still fielding countries.`
-				: "No active side remains.",
-			tone: "decisive",
-		};
-	}
-	const totals = {
-		cities: active.reduce((sum, metric) => sum + metric.cities, 0),
-		economy: active.reduce(
-			(sum, metric) => sum + Math.max(0, metric.economy),
-			0,
-		),
-		equipment: active.reduce(
-			(sum, metric) => sum + Math.max(0, metric.equipment),
-			0,
-		),
-		personnel: active.reduce(
-			(sum, metric) => sum + Math.max(0, metric.personnel),
-			0,
-		),
-		territory: active.reduce((sum, metric) => sum + metric.territory, 0),
-	};
-	const scored = active
-		.map((metric) => ({
-			metric,
-			score:
-				(metric.territory / Math.max(1, totals.territory)) * 0.3 +
-				(metric.cities / Math.max(1, totals.cities)) * 0.2 +
-				(metric.personnel / Math.max(1, totals.personnel)) * 0.2 +
-				(Math.max(0, metric.economy) / Math.max(1, totals.economy)) * 0.15 +
-				(Math.max(0, metric.equipment) / Math.max(1, totals.equipment)) * 0.15,
-		}))
-		.sort((left, right) => right.score - left.score);
-	const collapsing = scored.find(({ metric }) => metric.phase === "COLLAPSING");
-	const retreating = scored.find(({ metric }) => metric.phase === "RETREATING");
-	const leader = scored[0];
-	if (collapsing) {
-		const opposingLeader = scored.find(
-			({ metric }) => metric.sideUid !== collapsing.metric.sideUid,
-		);
-		return {
-			statement: opposingLeader
-				? `${opposingLeader.metric.name} holds the advantage while ${collapsing.metric.name} is collapsing.`
-				: `${collapsing.metric.name} is in a recorded collapse state.`,
-			tone: "decisive",
-		};
-	}
-	if (retreating) {
-		const opposingLeader = scored.find(
-			({ metric }) => metric.sideUid !== retreating.metric.sideUid,
-		);
-		return {
-			statement: opposingLeader
-				? `${opposingLeader.metric.name} holds the advantage while ${retreating.metric.name} is retreating.`
-				: `${retreating.metric.name} is in a recorded retreat state.`,
-			tone: "warning",
-		};
-	}
-	const gap = leader.score - scored[1].score;
-	return gap < 0.045
-		? {
-				statement: "No clear advantage is visible in the current evidence.",
-				tone: "neutral",
-			}
-		: {
-				statement: `${leader.metric.name} currently holds the observable advantage.`,
-				tone: gap > 0.18 ? "decisive" : "positive",
-			};
-}
-
-function warDeskEconomyRows() {
-	if (!warEconomyEnabled) return ["War economy is disabled for this run."];
-	return Array.from(countryEconomy.values())
-		.sort((left, right) => (right.treasury || 0) - (left.treasury || 0))
-		.slice(0, 12)
-		.map((state) => ({
-			label:
-				countryMetadata[state.countryId - 1]?.name ||
-				`Country ${state.countryId}`,
-			value: `$${Math.round(state.treasury || 0).toLocaleString()} · ${state.commandBand || "PAID"} · arrears ${(state.arrearsCycles || 0).toFixed(1)}`,
-			tone:
-				state.commandBand === COMMAND_BANDS.PAID
-					? "positive"
-					: state.commandBand === COMMAND_BANDS.MUTINY
-						? "danger"
-						: "warning",
-		}));
-}
-
 export function getAiObserverSnapshot(sideUid = aiObserverSideUid) {
 	if (gameMode !== "CONQUEST" || !sideUid) return null;
 	if (gameState === "WAR_OVER" && _frozenAiObserverSnapshots.has(sideUid)) {
@@ -14027,73 +13934,67 @@ function freezeOperationalAiObserverSnapshots() {
 	}
 }
 
+function warDeskOverviewRows(metrics) {
+	const definitions = experimentSideDefinitions();
+	const rows = [];
+	const territoryDetail = (held, total) =>
+		total > 0
+			? `${((held / total) * 100).toFixed(1)}% original territory retained`
+			: "Original territory unavailable";
+	for (const metric of metrics) {
+		const definition = definitions.find((side) => side.uid === metric.sideUid);
+		const sideIndex = sideUids.indexOf(metric.sideUid);
+		const countries = new Map();
+		for (const country of definition?.countries || []) {
+			countries.set(country.countryId ?? country.id, country);
+		}
+		for (const country of sides[sideIndex] || []) {
+			countries.set(country.id, country);
+		}
+		let total = 0;
+		let held = 0;
+		const countryRows = [];
+		for (const [countryId, country] of countries) {
+			const ledger = getCountryLedger(_territoryLedgerSnapshot, countryId);
+			const countryTotal = ledger?.deJureTotal || 0;
+			const countryHeld =
+				sideIndex >= 0 ? ledger?.deJureControlBySide?.[sideIndex] || 0 : 0;
+			total += countryTotal;
+			held += countryHeld;
+			countryRows.push({
+				label: country.name || countryMetadata[countryId - 1]?.name,
+				key: "manpower",
+				primaryLabel: "Deployed manpower",
+				value: Math.round(getCountryLivePersonnel(countryId)),
+				secondaryKey: "casualties",
+				secondaryLabel: "Casualties",
+				secondaryValue: Math.round(countryCasualties.get(countryId) || 0),
+				detail: territoryDetail(countryHeld, countryTotal),
+			});
+		}
+		rows.push({
+			label: metric.name,
+			key: "manpower",
+			primaryLabel: "Manpower",
+			value: Math.round(metric.personnel),
+			secondaryKey: "casualties",
+			secondaryLabel: "Casualties",
+			secondaryValue: Math.round(metric.casualties),
+			detail: territoryDetail(held, total),
+		});
+		if (countries.size > 1) rows.push(...countryRows);
+	}
+	return rows;
+}
+
 function updateExperimentWarDesk(force = false) {
 	if (!activeExperimentRecorder || gameMode !== "CONQUEST") return;
 	const now = performance.now();
 	if (!force && now - _experimentWarDeskLastUpdate < 500) return;
 	_experimentWarDeskLastUpdate = now;
-	const metrics = captureExperimentMetrics({
-		scanWorld: force && _cachedSideTerritoryCounts.length === 0,
-	});
-	const advantage = experimentAdvantageFromMetrics(metrics);
-	const strongestPhase = metrics.some((metric) => metric.phase === "COLLAPSING")
-		? "COLLAPSE"
-		: metrics.some((metric) => metric.phase === "RETREATING")
-			? "RETREAT"
-			: metrics.some((metric) => metric.phase === "ADVANCING")
-				? "MOBILE WAR"
-				: "STALEMATE";
-	const warDeskBody = document.getElementById("war-desk-body");
-	const overviewVisible =
-		!warDeskBody?.hidden &&
-		document.getElementById("war-desk-overview-panel")?.hidden !== true;
-	const economyVisible =
-		!warDeskBody?.hidden &&
-		document.getElementById("war-desk-economy-panel")?.hidden !== true;
-	const eventsVisible =
-		!warDeskBody?.hidden &&
-		document.getElementById("war-desk-events-panel")?.hidden !== true;
-	const warDeskData = {
-		advantage,
-		phase: strongestPhase,
-		summary:
-			"Advantage combines territory, cities and capitals, personnel, economy, equipment, and the current war phase.",
-	};
-	if (force || overviewVisible) {
-		warDeskData.metrics = metrics.map((metric) => ({
-			detail: `${metric.territoryPercent.toFixed(1)}% territory · ${metric.cities} cities · ${metric.phase}`,
-			key: "manpower",
-			label: metric.name,
-			primaryLabel: "Manpower",
-			secondaryKey: "casualties",
-			secondaryLabel: "Casualties",
-			secondaryValue: Math.round(metric.casualties),
-			tone:
-				metric.phase === "COLLAPSING"
-					? "danger"
-					: metric.phase === "RETREATING"
-						? "warning"
-						: metric.phase === "ADVANCING"
-							? "positive"
-							: "neutral",
-			value: Math.round(metric.personnel),
-		}));
-		warDeskData.aiOperations = {
-			sides: sides
-				.map((side, sideIndex) => ({
-					sideUid: sideUids[sideIndex],
-					label: getSideDisplayName(sideIndex, side),
-				}))
-				.filter((side) => side.sideUid && _aiIntelBySide.has(side.sideUid)),
-			selectedSideUid: aiObserverSideUid,
-			...(getAiObserverSnapshot() || {}),
-		};
-	}
-	if (force || economyVisible) warDeskData.economy = warDeskEconomyRows();
-	if (force || eventsVisible) {
-		warDeskData.events = activeExperimentRecorder.events.slice(-15).reverse();
-	}
-	_experimentUi?.updateWarDesk(warDeskData);
+	if (!force && document.getElementById("war-desk-body")?.hidden) return;
+	const metrics = captureExperimentMetrics({ scanWorld: false });
+	_experimentUi?.updateWarDesk({ metrics: warDeskOverviewRows(metrics) });
 }
 
 function endingReasonForTreaty(type, winnerName = "") {

@@ -299,7 +299,7 @@ function nestedMetricEntries(value, limit = 8) {
 
 function renderMetricCards(documentRef, target, metrics, emptyMessage) {
 	if (!target) return;
-	const entries = metricEntries(metrics);
+	const entries = metricEntries(metrics, Number.POSITIVE_INFINITY);
 	if (entries.length === 0) {
 		appendEmptyState(documentRef, target, emptyMessage);
 		return;
@@ -1124,7 +1124,7 @@ export function initExperimentUi(
 		const normalized = asText(tabName, "overview")
 			.replace(/^war-desk-/, "")
 			.replace(/-(tab|panel)$/, "");
-		const allowed = ["overview", "economy", "events", "intervene"];
+		const allowed = ["overview"];
 		if (!allowed.includes(normalized)) return;
 		const changed = state.warDeskTab !== normalized;
 		state.warDeskTab = normalized;
@@ -1738,7 +1738,7 @@ export function initExperimentUi(
 	listen(nodes.aiObserverSide, "change", (event) =>
 		invoke("onAiObserverSideChange", nodes.aiObserverSide?.value || "", event),
 	);
-	const warDeskTabs = ["overview", "economy", "events", "intervene"];
+	const warDeskTabs = ["overview"];
 	for (const name of warDeskTabs) {
 		const tab = byId(`war-desk-${name}-tab`);
 		listen(tab, "click", (event) => setWarDeskTab(name, event));

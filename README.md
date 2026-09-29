@@ -27,7 +27,7 @@ The current **Choose Era** menu exposes one playable era:
 ## What You Can Do
 
 - **PLAY** opens the 2022 Modern Day era and starts the experiment setup. The Basic panel covers sides, force balance, AI posture, and seed; existing simulation controls remain available under Advanced.
-- **War Desk** consolidates live military, economic, and event analysis and provides logged director interventions without replacing God Mode's map-editing tools.
+- **War Desk** shows a single Overview with manpower, casualties, and the percentage of original territory retained for each side and its countries. Country manpower shows deployed personnel; side manpower includes pooled reserves.
 - **After Action Reports** preserve the final map, explain observed contributors, compare linked reruns, and keep the latest 25 report summaries in the browser-local War Archive.
 - **EDITOR** redraws borders, creates countries, manages cities, and saves or loads scenarios.
 - **COMMUNITY** browses, uploads, remixes, and downloads shared scenarios or countries.

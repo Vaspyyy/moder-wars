@@ -3785,7 +3785,7 @@ body.commander-active #reopen-report-btn {
 
 .war-desk-tabs {
 	display: grid;
-	grid-template-columns: repeat(4, minmax(0, 1fr));
+	grid-template-columns: minmax(0, 1fr);
 	border-bottom: 1px solid var(--hud-color-border);
 }
 

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://esm.sh 'sha256-UbZTXngprJmMtanNXRwZ5Pi9M0w7gaPwpxlWfxaufYA='; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.websim.ai https://*.websim.com https://*.arcgisonline.com https://*.google.com wss:; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self';">
-    <title>MW-V0.27.24</title>
+    <title>MW-V0.27.25</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous" />
     <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
@@ -870,39 +870,6 @@
                     >
                         <span data-i18n="WAR_DESK_OVERVIEW">Overview</span>
                     </button>
-                    <button
-                        id="war-desk-economy-tab"
-                        class="war-desk-tab"
-                        type="button"
-                        role="tab"
-                        aria-selected="false"
-                        aria-controls="war-desk-economy-panel"
-                        tabindex="-1"
-                    >
-                        <span data-i18n="WAR_DESK_ECONOMY">Economy</span>
-                    </button>
-                    <button
-                        id="war-desk-events-tab"
-                        class="war-desk-tab"
-                        type="button"
-                        role="tab"
-                        aria-selected="false"
-                        aria-controls="war-desk-events-panel"
-                        tabindex="-1"
-                    >
-                        <span data-i18n="WAR_DESK_EVENTS">Events</span>
-                    </button>
-                    <button
-                        id="war-desk-intervene-tab"
-                        class="war-desk-tab"
-                        type="button"
-                        role="tab"
-                        aria-selected="false"
-                        aria-controls="war-desk-intervene-panel"
-                        tabindex="-1"
-                    >
-                        <span data-i18n="WAR_DESK_INTERVENE">Intervene</span>
-                    </button>
                 </div>
 
                 <section
@@ -911,122 +878,9 @@
                     role="tabpanel"
                     aria-labelledby="war-desk-overview-tab"
                 >
-                    <div id="war-desk-advantage" class="war-desk-advantage" role="status" aria-live="polite">
-                        <span>Current Advantage</span>
-                        <strong>Awaiting frontline telemetry</strong>
-                    </div>
-                    <div id="war-desk-phase" class="war-desk-phase">PHASE · OPENING MOVES</div>
-                    <p id="war-desk-summary" class="war-desk-summary">
-                        Territory, city, personnel, economy, and equipment signals will appear here.
-                    </p>
-                    <section
-                        id="war-desk-ai-operations"
-                        class="war-desk-ai-operations"
-                        aria-labelledby="war-desk-ai-operations-title"
-                    >
-                        <div class="war-desk-ai-operations-header">
-                            <label
-                                id="war-desk-ai-operations-title"
-                                for="war-desk-ai-side-select"
-                                data-i18n="AI_OPERATIONS"
-                            >
-                                AI Operations
-                            </label>
-                            <select id="war-desk-ai-side-select" aria-label="Side to observe">
-                                <option value="">Awaiting sides</option>
-                            </select>
-                        </div>
-                        <div id="war-desk-ai-operations-content" class="war-desk-ai-operations-content">
-                            <p class="war-desk-empty">Select a side to inspect its active operations.</p>
-                        </div>
-                    </section>
                     <div id="war-desk-overview-metrics" class="war-desk-metrics"></div>
                 </section>
 
-                <section
-                    id="war-desk-economy-panel"
-                    class="war-desk-panel"
-                    role="tabpanel"
-                    aria-labelledby="war-desk-economy-tab"
-                    hidden
-                >
-                    <div id="war-desk-economy-content" class="war-desk-scroll-list">
-                        <p class="war-desk-empty">Economic telemetry will appear after mobilization.</p>
-                    </div>
-                </section>
-
-                <section
-                    id="war-desk-events-panel"
-                    class="war-desk-panel"
-                    role="tabpanel"
-                    aria-labelledby="war-desk-events-tab"
-                    hidden
-                >
-                    <ol id="war-desk-events-list" class="war-desk-event-list" aria-live="polite">
-                        <li class="war-desk-empty">No pivotal events recorded yet.</li>
-                    </ol>
-                </section>
-
-                <section
-                    id="war-desk-intervene-panel"
-                    class="war-desk-panel"
-                    role="tabpanel"
-                    aria-labelledby="war-desk-intervene-tab"
-                    hidden
-                >
-                    <p class="intervention-warning">
-                        Opening this desk pauses the experiment. Every applied action marks the run Modified.
-                    </p>
-                    <div class="intervention-fields">
-                        <label for="intervention-country-select">
-                            <span>Country</span>
-                            <select id="intervention-country-select">
-                                <option value="">Select country</option>
-                            </select>
-                        </label>
-                        <label for="intervention-posture-select">
-                            <span>Posture</span>
-                            <select id="intervention-posture-select">
-                                <option value="ADAPTIVE">Adaptive</option>
-                                <option value="AGGRESSIVE">Aggressive</option>
-                                <option value="DEFENSIVE">Defensive</option>
-                                <option value="RETREAT">Retreat</option>
-                            </select>
-                        </label>
-                        <label for="intervention-amount-input">
-                            <span>Amount</span>
-                            <input
-                                id="intervention-amount-input"
-                                type="number"
-                                min="0"
-                                step="1"
-                                inputmode="numeric"
-                                placeholder="0"
-                            >
-                        </label>
-                        <label for="intervention-side-select">
-                            <span>Side</span>
-                            <select id="intervention-side-select">
-                                <option value="">Select side</option>
-                            </select>
-                        </label>
-                    </div>
-
-                    <div class="intervention-actions" aria-label="Director interventions">
-                        <button id="intervention-apply-posture-btn" type="button" data-i18n="APPLY_POSTURE">Apply Posture</button>
-                        <button id="intervention-add-funds-btn" type="button" data-i18n="ADD_FUNDS">Add Funds</button>
-                        <button id="intervention-clear-arrears-btn" type="button" data-i18n="CLEAR_ARREARS">Clear Arrears</button>
-                        <button id="intervention-add-manpower-btn" type="button" data-i18n="ADD_MANPOWER">Add Manpower</button>
-                        <button id="intervention-add-armor-btn" type="button" data-i18n="ADD_ARMOR">Add Armor</button>
-                        <button id="intervention-add-fighters-btn" type="button" data-i18n="ADD_FIGHTERS">Add Fighters</button>
-                        <button id="intervention-add-strike-btn" type="button" data-i18n="ADD_STRIKE_AIRCRAFT">Add Strike Aircraft</button>
-                        <button id="intervention-join-side-btn" type="button" data-i18n="JOIN_SIDE">Join Side</button>
-                        <button id="intervention-withdraw-btn" type="button" data-i18n="WITHDRAW">Withdraw</button>
-                        <button id="intervention-rebellion-btn" type="button" data-i18n="REBELLION">Start Rebellion</button>
-                        <button id="intervention-peace-btn" class="intervention-danger" type="button" data-i18n="ENFORCE_PEACE">Enforce Peace</button>
-                    </div>
-                    <div id="intervention-status" class="intervention-status" role="status" aria-live="polite"></div>
-                </section>
             </div>
         </aside>
 
