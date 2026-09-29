@@ -1,6 +1,6 @@
 // Service Worker — versioned offline shell plus persistent runtime data cache
 
-const CACHE_VERSION = "mw-v0.27.31";
+const CACHE_VERSION = "mw-v0.27.32";
 const APP_SHELL_PREFIX = "mw-app-shell-";
 const RUNTIME_PREFIX = "mw-runtime-";
 const LEGACY_CACHE_PREFIX = "mw-cache-";
@@ -42,6 +42,7 @@ const APP_SHELL_PATHS = [
 	"src/constants.js",
 	"src/firebase.js",
 	"styles/style.css",
+	"assets/images/title-map.svg",
 	"workers/simulation-worker.js",
 	"workers/geo-parse-worker.js",
 	"workers/geo-raster-worker.js",

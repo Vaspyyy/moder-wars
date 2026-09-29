@@ -1,5 +1,5 @@
 export const SCENARIO_MENU_BGS = {
-	"scroller-choice-modern": "assets/images/2022.webp",
+	"scroller-choice-modern": "assets/images/title-map.svg",
 	"scroller-choice-1974": "assets/images/1974.webp",
 
 	"scroller-choice-1942": "assets/images/1942.webp",

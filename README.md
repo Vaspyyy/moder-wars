@@ -54,6 +54,8 @@ Older era data, thumbnails, hidden cards, dormant click handlers, and import pre
 
 ## Development Notes
 
+The title screen uses a dedicated vector backdrop with bundled 50m geography and scenario colors. Regenerate it with `node scripts/build-title-backdrop.mjs` after changing those source assets.
+
 - There is no build step and no root npm install requirement for the main app.
 - Serve the repo as static files during local development.
 - The service worker caches aggressively. After source changes, hard-refresh the browser or bump `CACHE_VERSION`.

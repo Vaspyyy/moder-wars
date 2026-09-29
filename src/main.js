@@ -4039,6 +4039,9 @@ if (useSystemFontCheckbox) {
 
 export const settingsOverlay = document.getElementById("settings-overlay");
 export const mainMenu = document.getElementById("main-menu");
+const titleScreenVersion = document.getElementById("title-screen-version");
+if (titleScreenVersion)
+	titleScreenVersion.textContent = document.title.replace("MW-V", "v");
 export const loadingOverlay = document.getElementById("loading-overlay");
 
 // Helper to update loading UI across both standard and thematic containers

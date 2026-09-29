@@ -235,7 +235,7 @@ function selectScenario(cardId, action) {
 	if (selectedCard) selectedCard.classList.add("selected");
 
 	// 2. Change Menu Background
-	const bgUrl = SCENARIO_MENU_BGS[cardId] || "/assets/images/2022.webp";
+	const bgUrl = SCENARIO_MENU_BGS[cardId] || "assets/images/title-map.svg";
 	if (mainMenu) {
 		mainMenu.style.backgroundImage = `url('${bgUrl}')`;
 	}

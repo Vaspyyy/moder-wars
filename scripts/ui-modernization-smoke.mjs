@@ -43,4 +43,19 @@ const menuEnd = html.indexOf('</details>', menuStart);
 for (const id of ['quick-restart-btn', 'restart-scenario-btn', 'god-mode-btn', 'ingame-settings-btn', 'main-menu-btn']) {
 	assert.ok(html.slice(menuStart, menuEnd).includes(`id="${id}"`), `${id} belongs in the utility menu`);
 }
+const versionStart = main.indexOf('const titleScreenVersion =');
+const versionEnd = main.indexOf(';', main.indexOf('titleScreenVersion.textContent', versionStart)) + 1;
+const versionNode = {};
+const versionContext = vm.createContext({ document: {
+	title: "MW-V0.27.99", getElementById: () => versionNode,
+} });
+vm.runInContext(main.slice(versionStart, versionEnd), versionContext);
+assert.equal(versionNode.textContent, "v0.27.99", "footer follows the authoritative title version without a third version constant");
+const constants = readFileSync(new URL("../src/constants.js", import.meta.url), "utf8");
+const worker = readFileSync(new URL("../workers/service-worker.js", import.meta.url), "utf8");
+const backdrop = readFileSync(new URL("../assets/images/title-map.svg", import.meta.url), "utf8");
+assert.ok(constants.includes('"scroller-choice-modern": "assets/images/title-map.svg"'));
+assert.ok(worker.includes('"assets/images/title-map.svg"'), "dedicated background is available in the offline shell");
+assert.ok(backdrop.includes('viewBox="0 0 2760 1800"'));
+assert.doesNotMatch(backdrop, /NaN|Infinity/);
 console.log("UI modernization smoke tests passed");

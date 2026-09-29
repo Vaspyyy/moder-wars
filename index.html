@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://esm.sh 'sha256-UbZTXngprJmMtanNXRwZ5Pi9M0w7gaPwpxlWfxaufYA='; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.websim.ai https://*.websim.com https://*.arcgisonline.com https://*.google.com wss:; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self';">
-    <title>MW-V0.27.31</title>
+    <title>MW-V0.27.32</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous" />
     <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
@@ -190,25 +190,25 @@
 </div>
 
 <div class="main-menu-v2" id="main-menu" style="display:none">
-<div class="menu-v2-overlay"></div>
+<div class="menu-v2-overlay" aria-hidden="true"></div>
 <div class="menu-v2-container">
 <div class="menu-v2-header">
+<span class="title-screen-eyebrow">GLOBAL STRATEGY · YOUR COMMAND</span>
 <h1 class="menu-v2-title">MODERN WARS</h1>
+<p class="title-screen-subtitle">Shape the conflict. Change the map.</p>
 </div>
 <div class="menu-v2-nav" id="menu-nav-main">
 <div class="nav-links-fade" id="nav-links-container">
 <button class="menu-v2-link primary" id="play-mode-btn">
 <span>PLAY</span>
-<svg fill="currentColor" viewbox="0 0 24 24"><path d="M8 5v14l11-7z"></path></svg>
+<svg fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
 </button>
-<div class="nav-separator"></div>
 <button class="menu-v2-link commander-link" id="commander-mode-btn">
 <span>COMMANDER</span>
 <span class="commander-beta-badge">BETA</span>
-<svg fill="currentColor" viewbox="0 0 24 24"><path d="M12 2 4 5v6c0 5.05 3.41 9.74 8 11 4.59-1.26 8-5.95 8-11V5l-8-3zm0 4.1 4 1.5V11c0 3.25-1.92 6.49-4 7.74C9.92 17.49 8 14.25 8 11V7.6l4-1.5z"></path></svg>
+<svg fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5.05 3.41 9.74 8 11 4.59-1.26 8-5.95 8-11V5l-8-3zm0 4.1 4 1.5V11c0 3.25-1.92 6.49-4 7.74C9.92 17.49 8 14.25 8 11V7.6l4-1.5z"></path></svg>
 </button>
-<div class="nav-separator"></div>
-<button class="menu-v2-link" id="main-settings-btn">SETTINGS</button>
+<button class="menu-v2-link" id="main-settings-btn"><span>SETTINGS</span><svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="currentColor" stroke="none"/><circle cx="15" cy="17" r="3" fill="currentColor" stroke="none"/></svg></button>
 </div>
 <!-- New Integrated Scenario Scroller -->
 <div class="scenario-selection-container" id="menu-scenario-selector" style="display: none;">
@@ -240,11 +240,12 @@
 </div>
 </div>
 </div>
-<div style="position:absolute; bottom:15px; right:30px; font-size: 12px; color:rgba(255,255,255,0.3); text-transform:uppercase; letter-spacing:1px; pointer-events:none;">Select a scenario, then start.</div>
+<p class="title-screen-scenario-hint">Select a scenario, then start.</p>
 <button class="start-btn" id="enter-scenario-btn" style="display:none; margin-top: 20px; animation: fadeIn 0.3s ease-out;">Start scenario</button>
 </div>
 </div>
 </div>
+<footer class="title-screen-footer"><span id="title-screen-version"></span></footer>
 </div>
 
     <div id="commander-briefing-overlay" class="settings-overlay commander-overlay" style="display:none">
