@@ -3490,6 +3490,66 @@ body.commander-active #force-peace-btn {
 	padding: 10px 14px 0;
 }
 
+.setup-panel .setup-side-controls > .mini-btn {
+	width: 100%;
+	min-width: 0;
+	min-height: 36px;
+	box-sizing: border-box;
+	white-space: normal;
+	transition:
+		background-color 160ms ease,
+		border-color 160ms ease,
+		color 160ms ease;
+}
+
+.setup-side-controls #add-side-btn {
+	background: rgba(63, 169, 106, 0.14);
+	border-color: rgba(63, 169, 106, 0.4);
+	color: var(--hud-color-active-text);
+}
+
+.setup-side-controls #add-side-btn:hover,
+.setup-side-controls #add-side-btn:focus-visible {
+	background: var(--hud-color-active-bg);
+	border-color: var(--hud-color-active-border);
+}
+
+.setup-side-controls #ffa-toggle-btn {
+	background: rgba(233, 213, 141, 0.08);
+	border-color: rgba(233, 213, 141, 0.3);
+	color: #e9d58d;
+}
+
+.setup-side-controls #ffa-toggle-btn:hover,
+.setup-side-controls #ffa-toggle-btn:focus-visible {
+	background: rgba(233, 213, 141, 0.16);
+	border-color: rgba(233, 213, 141, 0.65);
+}
+
+.setup-side-controls #ffa-toggle-btn[aria-pressed="true"] {
+	background: rgba(233, 213, 141, 0.23);
+	border-color: #e9d58d;
+	color: #fff0b8;
+}
+
+.ffa-setup-note {
+	margin: 8px 14px 0;
+	color: #e9d58d;
+	font-size: 9px;
+	line-height: 1.45;
+}
+
+.setup-panel.minimized .setup-side-controls,
+.setup-panel.minimized .ffa-setup-note {
+	display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.setup-panel .setup-side-controls > .mini-btn {
+		transition: none;
+	}
+}
+
 .setup-panel .setup-sides {
 	min-height: 88px;
 	margin: 0;

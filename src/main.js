@@ -5444,6 +5444,7 @@ export function estimateUnitsForCountry(countryId) {
 }
 
 export function updateSidesUI() {
+	updateFfaSetupUi();
 	sidesContainer.innerHTML = "";
 	const setupSideCount = Math.max(2, sides.length);
 	const setupContentWidth =
@@ -5785,24 +5786,17 @@ addSideBtn.onclick = () => {
 	updateSidesUI();
 };
 
+function updateFfaSetupUi() {
+	ffaToggleBtn.setAttribute("aria-pressed", String(ffaMode));
+	ffaToggleBtn.textContent = `${getTranslation("FFA")}: ${ffaMode ? "ON" : "OFF"}`;
+	setupPanel.classList.toggle("ffa-setup-active", ffaMode);
+	const note = document.getElementById("ffa-setup-note");
+	if (note) note.hidden = !ffaMode;
+}
+
 ffaToggleBtn.onclick = () => {
 	ffaMode = !ffaMode;
-	ffaToggleBtn.style.border = ffaMode ? "2px solid #fff" : "none";
-	ffaToggleBtn.innerText = ffaMode ? "FFA: ON" : "FFA Mode";
-	if (ffaMode) {
-		const allCountries = sides.flat();
-		sides = allCountries.map((c) => [c]);
-		if (sides.length < 2) sides = [[], []];
-		if (sides.length > MAX_SIDES) sides = sides.slice(0, MAX_SIDES);
-		activeSideIndex = 0;
-	} else {
-		const allCountries = sides.flat();
-		sides = [[], []];
-		allCountries.forEach((c, i) => {
-			sides[i % 2].push(c);
-		});
-	}
-	updateSidesUI();
+	updateFfaSetupUi();
 };
 
 export const randomWarBtn = document.getElementById("random-war-btn");
@@ -7197,10 +7191,19 @@ export function handleCountryClick(
 	}
 
 	if (ffaMode) {
-		// In FFA, every new click creates a new side if the current active side isn't empty
+		// New FFA participants use an empty side before adding another.
 		if (sides[activeSideIndex] && sides[activeSideIndex].length > 0) {
-			sides.push([]);
-			activeSideIndex = sides.length - 1;
+			const emptySideIndex = sides.findIndex((side) => side.length === 0);
+			if (emptySideIndex >= 0) {
+				activeSideIndex = emptySideIndex;
+			} else {
+				if (sides.length >= MAX_SIDES) {
+					statusText.textContent = `Maximum ${MAX_SIDES} sides supported. Select an existing side to reassign a country.`;
+					return;
+				}
+				sides.push([]);
+				activeSideIndex = sides.length - 1;
+			}
 		}
 	}
 
@@ -14129,8 +14132,7 @@ function applyExperimentOptionsToSetup(spec) {
 	ffaMode = !!options.ffa;
 	randomWarMode = !!options.randomWar;
 	updateRandomWarButton();
-	ffaToggleBtn.style.border = ffaMode ? "2px solid #fff" : "none";
-	ffaToggleBtn.innerText = ffaMode ? "FFA: ON" : "FFA Mode";
+	updateFfaSetupUi();
 	setWarEconomyEnabled(false);
 	setArmorEnabled(false);
 	setAirPowerEnabled(false);
@@ -29508,8 +29510,7 @@ export function resetToSelection() {
 	_defenders = sides[1];
 	activeSideIndex = 0;
 	ffaMode = false;
-	ffaToggleBtn.style.border = "none";
-	ffaToggleBtn.innerText = "FFA Mode";
+	updateFfaSetupUi();
 	units = [];
 	unitSpatialHash.clear();
 	for (let si = 0; si < unitHashBySide.length; si++) unitHashBySide[si].clear();
