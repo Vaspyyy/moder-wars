@@ -3483,6 +3483,13 @@ body.commander-active #force-peace-btn {
 	font-size: 8px;
 }
 
+.setup-panel .setup-side-controls {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px;
+	padding: 10px 14px 0;
+}
+
 .setup-panel .setup-sides {
 	min-height: 88px;
 	margin: 0;

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://esm.sh 'sha256-UbZTXngprJmMtanNXRwZ5Pi9M0w7gaPwpxlWfxaufYA='; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.websim.ai https://*.websim.com https://*.arcgisonline.com https://*.google.com wss:; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self';">
-    <title>MW-V0.27.25</title>
+    <title>MW-V0.27.26</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous" />
     <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
@@ -330,7 +330,7 @@
                 </div>
                 <div>
                     <span class="commander-label">YOUR COMMAND</span>
-                    <strong>Ukraine · 360,000 manpower · War economy enabled</strong>
+                    <strong>Ukraine · 360,000 manpower</strong>
                 </div>
                 <div>
                     <span class="commander-label">OPPOSITION</span>
@@ -548,43 +548,7 @@
 
             <div id="setup-basic" class="experiment-basic" aria-label="Basic experiment setup">
                 <div class="experiment-basic-grid">
-                    <div class="experiment-field experiment-field--wide">
-                        <span id="experiment-seed-label" data-i18n="EXPERIMENT_SEED">Seed</span>
-                        <div class="experiment-inline-control">
-                            <input
-                                id="experiment-seed-input"
-                                type="number"
-                                min="0"
-                                max="4294967295"
-                                step="1"
-                                inputmode="numeric"
-                                placeholder="Random"
-                                aria-describedby="experiment-seed-status"
-                                aria-labelledby="experiment-seed-label"
-                            >
-                            <button
-                                id="randomize-seed-btn"
-                                class="mini-btn experiment-secondary-btn"
-                                type="button"
-                                data-i18n="EXPERIMENT_RANDOMIZE"
-                            >
-                                Randomize
-                            </button>
-                        </div>
-                    </div>
-                    <p id="experiment-seed-status" class="experiment-field-note">
-                        A fresh 32-bit seed will be generated when the experiment starts.
-                    </p>
-
-                    <label class="experiment-field" for="force-mode-select">
-                        <span data-i18n="EXPERIMENT_FORCE_MODE">Force Mode</span>
-                        <select id="force-mode-select">
-                            <option value="AUTO" selected>Scenario Strength</option>
-                            <option value="BALANCED">Balanced Sides</option>
-                            <option value="CUSTOM">Custom Totals</option>
-                        </select>
-                    </label>
-                    <label class="experiment-field" for="setup-posture-select">
+                    <label class="experiment-field experiment-field--wide" for="setup-posture-select">
                         <span data-i18n="EXPERIMENT_AI_POSTURE">AI Posture</span>
                         <select id="setup-posture-select">
                             <option value="ADAPTIVE" selected>Adaptive</option>
@@ -615,6 +579,27 @@
 
             </div>
 
+            <div class="setup-side-controls experiment-button-grid" aria-label="Conflict sides">
+                <button
+                    id="add-side-btn"
+                    class="mini-btn experiment-secondary-btn"
+                    type="button"
+                    data-i18n="ADD_SIDE"
+                    title="Add another faction column so more teams can join this conflict."
+                >
+                    + Side
+                </button>
+                <button
+                    id="ffa-toggle-btn"
+                    class="mini-btn experiment-secondary-btn"
+                    type="button"
+                    data-i18n="FFA"
+                    title="Free-for-all: each side fights everyone else instead of two big alliances."
+                >
+                    FFA
+                </button>
+            </div>
+
             <div id="sides-container" class="setup-sides">
                 <!-- Sides will be injected here -->
             </div>
@@ -627,30 +612,6 @@
                 <details id="advanced-setup" class="experiment-advanced">
                     <summary data-i18n="EXPERIMENT_ADVANCED_SETUP">Advanced Setup</summary>
                     <div class="experiment-advanced-groups">
-                        <details id="advanced-sides-ai" class="experiment-detail-group">
-                            <summary data-i18n="EXPERIMENT_SIDES_AI">Sides &amp; AI</summary>
-                            <div class="experiment-detail-content experiment-button-grid">
-                                <button
-                                    id="add-side-btn"
-                                    class="mini-btn experiment-secondary-btn"
-                                    type="button"
-                                    data-i18n="ADD_SIDE"
-                                    title="Add another faction column so more teams can join this conflict."
-                                >
-                                    + Side
-                                </button>
-                                <button
-                                    id="ffa-toggle-btn"
-                                    class="mini-btn experiment-secondary-btn"
-                                    type="button"
-                                    data-i18n="FFA"
-                                    title="Free-for-all: each side fights everyone else instead of two big alliances."
-                                >
-                                    FFA
-                                </button>
-                            </div>
-                        </details>
-
                         <details id="advanced-forces-date" class="experiment-detail-group">
                             <summary data-i18n="EXPERIMENT_FORCES_DATE">Forces &amp; Date</summary>
                             <div class="experiment-detail-content">
@@ -715,27 +676,6 @@
                             </div>
                         </details>
 
-                        <details id="advanced-simulation-systems" class="experiment-detail-group">
-                            <summary data-i18n="EXPERIMENT_SYSTEMS">Simulation Systems</summary>
-                            <div class="experiment-detail-content experiment-check-grid">
-                                <label
-                                    class="experiment-check experiment-check--wide"
-                                    title="Countries collect budget, pay army payroll, and fund occupations."
-                                >
-                                    <input type="checkbox" id="war-economy-checkbox" checked>
-                                    <span>War Economy, Mutinies &amp; Rebellions</span>
-                                </label>
-                                <label class="experiment-check" title="Enable armored formations.">
-                                    <input type="checkbox" id="armor-enabled-checkbox" checked>
-                                    <span>Armored Forces</span>
-                                </label>
-                                <label class="experiment-check" title="Enable fighters, strike aircraft, and destructible airfields.">
-                                    <input type="checkbox" id="air-power-enabled-checkbox" checked>
-                                    <span>Air Power</span>
-                                </label>
-                            </div>
-                        </details>
-
                         <details id="advanced-rules-capture" class="experiment-detail-group">
                             <summary data-i18n="EXPERIMENT_RULES_CAPTURE">Rules &amp; Capture</summary>
                             <div class="experiment-detail-content experiment-check-grid">
@@ -758,16 +698,6 @@
                                     <input type="checkbox" id="cinematic-mode-checkbox">
                                     <span>Cinematic Mode (Record War)</span>
                                 </label>
-                                <button
-                                    id="rebellion-btn"
-                                    class="mini-btn experiment-secondary-btn experiment-button-grid--wide"
-                                    type="button"
-                                    disabled
-                                    data-i18n="REBELLION"
-                                    title="Launch an internal independence war against an empire that annexed other nations."
-                                >
-                                    Start Rebellion
-                                </button>
                             </div>
                         </details>
                     </div>

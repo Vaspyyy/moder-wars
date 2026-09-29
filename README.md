@@ -26,7 +26,7 @@ The current **Choose Era** menu exposes one playable era:
 
 ## What You Can Do
 
-- **PLAY** opens the 2022 Modern Day era and starts the experiment setup. The Basic panel covers sides, force balance, AI posture, and seed; existing simulation controls remain available under Advanced.
+- **PLAY** opens the 2022 Modern Day era and starts the experiment setup. The Basic panel covers AI posture and war rules, with + Side and FFA above the side cards. Optional manpower totals, date, and capture rules remain under Advanced. Seeds are managed internally; economy, mutinies, rebellions, armor, and air power are disabled to simplify the simulation.
 - **War Desk** shows a single Overview with manpower, casualties, and the percentage of original territory retained for each side and its countries. Country manpower shows deployed personnel; side manpower includes pooled reserves.
 - **After Action Reports** preserve the final map, explain observed contributors, compare linked reruns, and keep the latest 25 report summaries in the browser-local War Archive.
 - **EDITOR** redraws borders, creates countries, manages cities, and saves or loads scenarios.

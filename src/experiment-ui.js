@@ -1072,7 +1072,7 @@ export function initExperimentUi(
 		return {
 			forceMode: nodes.forceMode?.value || "AUTO",
 			posture: nodes.setupPosture?.value || "ADAPTIVE",
-			seed: nodes.seedInput?.value || "",
+			seed: nodes.seedInput?.value || state.setupSeed || "",
 		};
 	}
 
@@ -1095,6 +1095,7 @@ export function initExperimentUi(
 	}
 
 	function setSetupSeed(seed, status, tone = "") {
+		state.setupSeed = seed === null || seed === undefined ? "" : String(seed);
 		if (nodes.seedInput) {
 			nodes.seedInput.value =
 				seed === null || seed === undefined ? "" : String(seed);

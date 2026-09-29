@@ -2021,9 +2021,9 @@ export let refAboveTerrain = false;
 export let paintMaskId = -1; // -1 means no mask, >= 0 restricts painting to that ID
 export let peaceTreatiesDisabled = false;
 export let bombsDisabled = false;
-export let warEconomyEnabled = true;
-export let armorEnabled = true;
-export let airPowerEnabled = true;
+export let warEconomyEnabled = false;
+export let armorEnabled = false;
+export let airPowerEnabled = false;
 export const countryEconomy = new Map();
 export const countryEquipment = new Map();
 export const airfields = [];
@@ -3533,8 +3533,8 @@ export function setIsCustomTerrain(val) {
 export function setMissilesEnabled(val) {
 	missilesEnabled = val;
 }
-export function setWarEconomyEnabled(val) {
-	warEconomyEnabled = val !== false;
+export function setWarEconomyEnabled() {
+	warEconomyEnabled = false;
 	if (warEconomyCheckbox) warEconomyCheckbox.checked = warEconomyEnabled;
 }
 export function setRawGeoJsonData(val) {
@@ -7461,14 +7461,14 @@ function estimateTerritoryArmyUnits(cellCount) {
 	);
 }
 
-export function setArmorEnabled(value) {
-	armorEnabled = value !== false;
+export function setArmorEnabled() {
+	armorEnabled = false;
 	const checkbox = document.getElementById("armor-enabled-checkbox");
 	if (checkbox) checkbox.checked = armorEnabled;
 }
 
-export function setAirPowerEnabled(value) {
-	airPowerEnabled = value !== false;
+export function setAirPowerEnabled() {
+	airPowerEnabled = false;
 	const checkbox = document.getElementById("air-power-enabled-checkbox");
 	if (checkbox) checkbox.checked = airPowerEnabled;
 }
@@ -7497,6 +7497,8 @@ function activeAirWingMarkerCount() {
 
 function summarizeLiveEquipment() {
 	const summary = new Map();
+	if (!armorEnabled && !airPowerEnabled && countryEquipment.size === 0)
+		return summary;
 	const ensure = (countryId) => {
 		let entry = summary.get(countryId);
 		if (!entry) {
@@ -7634,6 +7636,7 @@ function initializeCombinedArms(
 	frontlineIndices,
 ) {
 	clearCombinedArmsState();
+	if (!armorEnabled && !airPowerEnabled) return;
 	const profiles = [];
 	const sideFormationCounts = new Int32Array(MAX_SIDES);
 	for (const unit of units) {
@@ -9638,6 +9641,7 @@ export function registerOccupation(victimId, annexerId) {
 }
 
 export function runWarEconomyCycle(force = false) {
+	if (!warEconomyEnabled && !armorEnabled && !airPowerEnabled) return;
 	if (!force && _simTickCount % ECONOMY_CONFIG.PAY_CYCLE_TICKS !== 0) return;
 	const started = performance.now();
 	if (!warEconomyEnabled) {
@@ -13172,7 +13176,7 @@ export async function startOperation(operationId) {
 		timeYearInput.value = String(definition.startDate.year);
 		timeMonthInput.value = String(definition.startDate.month);
 		timeDayInput.value = String(definition.startDate.day);
-		warEconomyCheckbox.checked = true;
+		setWarEconomyEnabled(false);
 		noPeaceCheckbox.checked = true;
 		disableBombsCheckbox.checked = true;
 		disablePuppetsCheckbox.checked = true;
@@ -13315,7 +13319,8 @@ function getSideDisplayName(sideIndex, sideCountries = sides[sideIndex] || []) {
 
 function readExperimentSeedFromSetup() {
 	const input = document.getElementById("experiment-seed-input");
-	const raw = input?.value?.trim();
+	const raw =
+		input?.value?.trim() ?? _experimentUi?.getSetupValues().seed ?? "";
 	const seed = raw === "" ? createRandomSeed() : normalizeSeed(raw);
 	setExperimentSeed(seed);
 	_experimentUi?.setSetupSeed(
@@ -13335,14 +13340,13 @@ function captureExperimentOptions() {
 		manpower.push(Number.isFinite(value) && value > 0 ? value : null);
 	}
 	return {
-		airPower:
-			document.getElementById("air-power-enabled-checkbox")?.checked !== false,
-		armor: document.getElementById("armor-enabled-checkbox")?.checked !== false,
+		airPower: false,
+		armor: false,
 		cinematic: !!document.getElementById("cinematic-mode-checkbox")?.checked,
 		disableMountains: !!setupDisableMountainsCheckbox?.checked,
 		disablePuppets: !!disablePuppetsCheckbox?.checked,
 		ffa: ffaMode,
-		forceMode: document.getElementById("force-mode-select")?.value || "AUTO",
+		forceMode: manpower.some((value) => value > 0) ? "CUSTOM" : "AUTO",
 		gameTime: {
 			enabled: !!timeSystemCheckbox?.checked,
 			year: Number(timeYearInput?.value) || null,
@@ -13362,7 +13366,7 @@ function captureExperimentOptions() {
 			document.getElementById("recruit-model-select")?.value || null,
 		simulationSpeed: simSpeed,
 		unitLimit: document.getElementById("unit-limit-select")?.value || null,
-		warEconomy: warEconomyCheckbox?.checked !== false,
+		warEconomy: false,
 	};
 }
 
@@ -13790,49 +13794,10 @@ function applyBroadSetupPosture(posture) {
 		});
 }
 
-function estimatedSetupSideStrengths() {
-	return sides.map((side, sideIndex) => ({
-		sideIndex,
-		label: getSideDisplayName(sideIndex, side),
-		value: side.reduce(
-			(total, country) =>
-				total + Math.max(0, estimateUnitsForCountry(country.id)),
-			0,
-		),
-	}));
-}
-
-function applyExperimentForceMode(forceMode) {
-	const inputs = sides.map((_, sideIndex) =>
-		document.getElementById(`manpower-side-${sideIndex}`),
-	);
-	const advancedForces = document.getElementById("advanced-forces-date");
-	if (forceMode === "AUTO") {
-		for (const input of inputs) if (input) input.value = "";
-		return;
-	}
-	if (forceMode === "BALANCED") {
-		const estimates = estimatedSetupSideStrengths()
-			.filter((side) => sides[side.sideIndex]?.length)
-			.map((side) => side.value);
-		const target = Math.max(1, ...estimates);
-		for (let sideIndex = 0; sideIndex < inputs.length; sideIndex++) {
-			if (inputs[sideIndex] && sides[sideIndex]?.length) {
-				inputs[sideIndex].value = String(target);
-			}
-		}
-		return;
-	}
-	if (forceMode === "CUSTOM" && advancedForces) advancedForces.open = true;
-}
-
 function prepareExperimentSetupForStart() {
 	if (gameMode !== "CONQUEST") return getExperimentSeed();
 	const values = _experimentUi?.getSetupValues() || {};
 	applyBroadSetupPosture(values.posture || "ADAPTIVE");
-	if (values.forceMode && values.forceMode !== "CUSTOM") {
-		applyExperimentForceMode(values.forceMode);
-	}
 	_experimentUi?.hideAfterActionReport();
 	_experimentUi?.hideReportReopenButton();
 	_experimentUi?.hideWarArchive();
@@ -14166,7 +14131,9 @@ function applyExperimentOptionsToSetup(spec) {
 	updateRandomWarButton();
 	ffaToggleBtn.style.border = ffaMode ? "2px solid #fff" : "none";
 	ffaToggleBtn.innerText = ffaMode ? "FFA: ON" : "FFA Mode";
-	warEconomyEnabled = options.warEconomy !== false;
+	setWarEconomyEnabled(false);
+	setArmorEnabled(false);
+	setAirPowerEnabled(false);
 	peaceTreatiesDisabled = !!options.noPeace;
 	missilesEnabled = options.missiles !== false;
 	mountainsEnabled = !options.disableMountains;
@@ -14586,11 +14553,9 @@ export async function _startWarInner() {
 
 	const _attackers = sides[0] || [];
 	const _defenders = sides[1] || [];
-	warEconomyEnabled = warEconomyCheckbox?.checked !== false;
-	armorEnabled =
-		document.getElementById("armor-enabled-checkbox")?.checked !== false;
-	airPowerEnabled =
-		document.getElementById("air-power-enabled-checkbox")?.checked !== false;
+	setWarEconomyEnabled(false);
+	setArmorEnabled(false);
+	setAirPowerEnabled(false);
 	countryEconomy.clear();
 	clearCombinedArmsState();
 	resetOperationalAiRuntime();
@@ -15909,6 +15874,7 @@ export async function startBenchmark(options = {}) {
 	activeSideIndex = 0;
 	const seedInput = document.getElementById("experiment-seed-input");
 	if (seedInput) seedInput.value = String(benchmarkSeed);
+	_experimentUi?.setSetupSeed(benchmarkSeed);
 	if (noPeaceCheckbox) noPeaceCheckbox.checked = true;
 	// Scenario loading reapplies saved settings, so the programmatic benchmark
 	// cap must be restored immediately before war creation.
@@ -29946,26 +29912,6 @@ if (noPeaceCheckbox) {
 	});
 }
 
-if (warEconomyCheckbox) {
-	warEconomyCheckbox.checked = warEconomyEnabled;
-	warEconomyCheckbox.addEventListener("change", () => {
-		warEconomyEnabled = warEconomyCheckbox.checked;
-		if (
-			warEconomyEnabled &&
-			(gameState === "SIMULATING" ||
-				(godModeActive && preGodModeState === "SIMULATING"))
-		) {
-			initializeWarEconomy();
-		} else if (!warEconomyEnabled) {
-			for (const unit of units) {
-				unit._commandBand = COMMAND_BANDS.PAID;
-				unit._refusesOffense = false;
-			}
-			updateEconomyPanel();
-		}
-	});
-}
-
 if (minimizeEconomyBtn && economyPanel) {
 	minimizeEconomyBtn.addEventListener("click", () => {
 		const minimized = economyPanel.classList.toggle("minimized");
@@ -36014,9 +35960,6 @@ _experimentUi = initExperimentUi({
 	onRandomizeSeed() {
 		const seed = createRandomSeed();
 		_experimentUi.setSetupSeed(seed, `Fresh seed ${seed} generated.`, "ready");
-	},
-	onForceModeChanged(values) {
-		applyExperimentForceMode(values.forceMode);
 	},
 	onSetupPostureChanged(values) {
 		const manpower = preserveSetupManpowerValues();
