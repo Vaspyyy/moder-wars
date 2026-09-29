@@ -1810,13 +1810,6 @@ export function playPeaceSound() {
 document.addEventListener(
 	"click",
 	(e) => {
-		// Auto-fullscreen on first gesture to comply with browser security policies
-		if (!disableFullscreen && !document.fullscreenElement) {
-			document.documentElement.requestFullscreen().catch(() => {
-				// Silently fail if blocked or already handled
-			});
-		}
-
 		// Resume context if suspended (common browser policy on first click)
 		if (audioCtx && audioCtx.state === "suspended") {
 			audioCtx.resume().catch(() => {});
@@ -2921,7 +2914,7 @@ export let godBombSourceId = -1;
 export let buffedSideIdx;
 export let preGodModeState = "SIMULATING";
 export const latestCountryStats = new Map();
-export let disableFullscreen = getCookie("mw_disable_fullscreen") === "true";
+export let disableFullscreen = true;
 
 export function setNativeRuntimeScenarioIdentity(identity) {
 	_nativeRuntimeInitialCheckpoint = null;
@@ -3878,7 +3871,7 @@ export function renderImportCountryCards(filterText = "") {
 
 	if (!filtered.length) {
 		importCountryCardList.innerHTML = `
-            <div style="font-size:11px; color:#777; text-align:center; padding:10px;">
+            <div style="font-size: 12px; color:#777; text-align:center; padding:10px;">
                 No countries match that search.
             </div>
         `;
@@ -4667,8 +4660,8 @@ export function rebuildManpowerInputs() {
 		const color = sideColors[i].replace(rgbaRe, "1)");
 		const label = `Side ${String.fromCharCode(65 + i)}`;
 		html += `<div style="display:flex; flex-direction:column; gap:2px;">
-            <span style="font-size:9px; color:${color}; text-transform:uppercase; letter-spacing:0.5px;">${label}</span>
-            <input id="manpower-side-${i}" type="number" min="0" placeholder="auto" style="width:110px; padding:4px 6px; background:#2a2a30; border:1px solid #444; border-radius:4px; color:#fff; font-size:11px;" title="Total soldiers for ${label}.">
+            <span style="font-size: 12px; color:${color}; text-transform:uppercase; letter-spacing:0.5px;">${label}</span>
+            <input id="manpower-side-${i}" type="number" min="0" placeholder="auto" style="width:110px; padding:4px 6px; background:#2a2a30; border:1px solid #444; border-radius:4px; color:#fff; font-size: 12px;" title="Total soldiers for ${label}.">
         </div>`;
 	}
 	container.innerHTML = html;
@@ -5444,15 +5437,13 @@ export function estimateUnitsForCountry(countryId) {
 }
 
 export function updateSidesUI() {
+	const expandedCountries = new Set(
+		[...sidesContainer.querySelectorAll(".country-configuration[open]")].map(
+			(details) => details.closest(".setup-slot").dataset.countryId,
+		),
+	);
 	updateFfaSetupUi();
 	sidesContainer.innerHTML = "";
-	const setupSideCount = Math.max(2, sides.length);
-	const setupContentWidth =
-		28 + setupSideCount * 160 + (setupSideCount - 1) * 42;
-	setupPanel.style.setProperty(
-		"--setup-content-width",
-		`${setupContentWidth}px`,
-	);
 
 	sides.forEach((sideList, sideIdx) => {
 		const sideCol = document.createElement("div");
@@ -5472,8 +5463,8 @@ export function updateSidesUI() {
 		const sideLabel = String.fromCharCode(65 + sideIdx);
 		if (sideList.length > 0 && sideTotalTroops > 0) {
 			sideHeader.innerHTML = `
-                <div style="font-size:11px; font-weight:900;">SIDE ${sideLabel}</div>
-                <div style="font-size:9px; color:#777; margin-top:2px; text-transform:uppercase; letter-spacing:0.5px;">
+                <div style="font-size: 12px; font-weight:900;">SIDE ${sideLabel}</div>
+                <div style="font-size: 12px; color:#777; margin-top:2px; text-transform:uppercase; letter-spacing:0.5px;">
                     ~ ${influenceLayer.formatSoldiers(sideTotalTroops)} troops
                 </div>
             `;
@@ -5505,6 +5496,7 @@ export function updateSidesUI() {
 			const meta = countryMetadata[country.id - 1];
 			const slot = document.createElement("div");
 			slot.className = "setup-slot";
+			slot.dataset.countryId = String(country.id);
 			slot.style.borderColor = sideColors[sideIdx].replace(rgbaRe, "0.4)");
 			slot.style.borderColor = country.color.replace(rgbaRe, "1)");
 
@@ -5535,37 +5527,46 @@ export function updateSidesUI() {
 				"NATIONS",
 			);
 			slot.innerHTML = `
+                <button class="clear-slot-btn" type="button" aria-label="Remove country" title="Remove this country from the selected side.">×</button>
                 <div class="slot-name" title="${country.name}" style="display: flex; flex-direction: column; gap: 2px; align-items: center; justify-content: center; margin-bottom: 5px;">
                     <div style="display: flex; align-items: center; gap: 8px; justify-content: center;">
                         ${flagUrl ? `<img src="${flagUrl}" style="width: 22px; height: 13px; object-fit: cover; border: 1px solid rgba(255,255,255,0.2); flex-shrink: 0; border-radius: 1px;">` : ""}
                         <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${displayName}</span>
                     </div>
-                    <div style="font-size: 9px; color: #777; text-transform: uppercase; letter-spacing: 0.5px;">~ ${estLabel} troops</div>
-                    <button class="mini-btn buff-toggle-btn" style="margin-top: 4px; background:${bMeta.color}; color:${bMeta.textColor}; font-size:8px; padding:2px 6px; display:flex; align-items:center; gap:4px; justify-content:center;" title="Adjust combat buffs: use ◀ / ▶ to move between CRIPPLED, WEAKENED, NONE, GOLIATH, DEITY, GODLY. Hold ALT while clicking to change an invisible buff that only affects combat.">
-                        <span class="buff-arrow" data-dir="-1" style="font-size:10px;">◀</span>
+                    <div style="font-size: 12px; color: #777; text-transform: uppercase; letter-spacing: 0.5px;">~ ${estLabel} troops</div>
+                </div>
+                <details class="country-configuration">
+                    <summary>Configure</summary>
+                    <div class="country-configuration-actions">
+                    <button class="mini-btn buff-toggle-btn" style="margin-top: 4px; background:${bMeta.color}; color:${bMeta.textColor}; font-size: 12px; padding:2px 6px; display:flex; align-items:center; gap:4px; justify-content:center;" title="Adjust combat buffs: use ◀ / ▶ to move between CRIPPLED, WEAKENED, NONE, GOLIATH, DEITY, GODLY. Hold ALT while clicking to change an invisible buff that only affects combat.">
+                        <span class="buff-arrow" data-dir="-1" style="font-size: 12px;">◀</span>
                         <span class="buff-label">BUFF: ${bMeta.label}</span>
-                        <span class="buff-arrow" data-dir="1" style="font-size:10px;">▶</span>
+                        <span class="buff-arrow" data-dir="1" style="font-size: 12px;">▶</span>
                     </button>
-                    <button class="mini-btn add-allies-btn" style="margin-top: 4px; background:#16a085; font-size: 8px; padding: 2px 6px;" title="Recruit all formal allies (overlord and vassals) of this nation into this side.">ADD ALLIES</button>
-                    
-                    ${releasables.length > 0 ? `<button class="mini-btn release-btn" style="background: #27ae60; font-size: 8px; padding: 2px 6px; margin-top: 4px;" title="Release a releasable core from this country into the war.">RELEASE...</button>` : ""}
+                    <button class="mini-btn add-allies-btn" style="margin-top: 4px; background:#16a085; font-size: 12px; padding: 2px 6px;" title="Recruit all formal allies (overlord and vassals) of this nation into this side.">ADD ALLIES</button>
+
+                    ${releasables.length > 0 ? `<button class="mini-btn release-btn" style="background: #27ae60; font-size: 12px; padding: 2px 6px; margin-top: 4px;" title="Release a releasable core from this country into the war.">RELEASE...</button>` : ""}
                 </div>
                 <div class="slot-controls">
-                    <select class="mini-select role-select" title="OFF: Leads attacks and creates new fronts. SUP: Sends expeditionary support to allied offensives instead of opening its own invasions.">
-                        <option value="OFFENSE" ${country.role === "OFFENSE" ? "selected" : ""} title="OFF: Offensive main participant, pushes its own fronts.">OFF</option>
-                        <option value="SUPPORT" ${country.role === "SUPPORT" ? "selected" : ""} title="SUP: Support nation; mostly sends troops to help allies instead of starting new invasions.">SUP</option>
+                    <select class="mini-select role-select" aria-label="Country role" title="OFF: Leads attacks and creates new fronts. SUP: Sends expeditionary support to allied offensives instead of opening its own invasions.">
+                        <option value="OFFENSE" ${country.role === "OFFENSE" ? "selected" : ""} title="OFF: Offensive main participant, pushes its own fronts.">Offensive</option>
+                        <option value="SUPPORT" ${country.role === "SUPPORT" ? "selected" : ""} title="SUP: Support nation; mostly sends troops to help allies instead of starting new invasions.">Support</option>
                     </select>
-                    <select class="mini-select strategy-select" title="Per-country behavior: TUR = pure defense; DEF = hold cores; BAL = mixed; AGG = push hard; BLZ = fast breakthroughs.">
-                        <option value="TURTLE" ${country.strategy === "TURTLE" ? "selected" : ""} title="TUR: Zero offensive plans until force advantage. Pure defense.">TUR</option>
-                        <option value="DEFENSIVE" ${country.strategy === "DEFENSIVE" ? "selected" : ""} title="DEF: Focuses on defending own cores and reclaiming lost land.">DEF</option>
-                        <option value="BALANCED" ${country.strategy === "BALANCED" ? "selected" : ""} title="BAL: Balanced offense and defense along the whole front.">BAL</option>
-                        <option value="AGGRESSIVE" ${country.strategy === "AGGRESSIVE" ? "selected" : ""} title="AGG: Very aggressive, tries to push hard even when risky.">AGG</option>
-                        <option value="BLITZ" ${country.strategy === "BLITZ" ? "selected" : ""} title="BLZ: Blitz-style spearheads that seek breakthroughs and deep pushes.">BLZ</option>
+                    <select class="mini-select strategy-select" aria-label="Country doctrine" title="Per-country behavior: TUR = pure defense; DEF = hold cores; BAL = mixed; AGG = push hard; BLZ = fast breakthroughs.">
+                        <option value="TURTLE" ${country.strategy === "TURTLE" ? "selected" : ""} title="TUR: Zero offensive plans until force advantage. Pure defense.">Hold position</option>
+                        <option value="DEFENSIVE" ${country.strategy === "DEFENSIVE" ? "selected" : ""} title="DEF: Focuses on defending own cores and reclaiming lost land.">Defensive</option>
+                        <option value="BALANCED" ${country.strategy === "BALANCED" ? "selected" : ""} title="BAL: Balanced offense and defense along the whole front.">Balanced</option>
+                        <option value="AGGRESSIVE" ${country.strategy === "AGGRESSIVE" ? "selected" : ""} title="AGG: Very aggressive, tries to push hard even when risky.">Aggressive</option>
+                        <option value="BLITZ" ${country.strategy === "BLITZ" ? "selected" : ""} title="BLZ: Blitz-style spearheads that seek breakthroughs and deep pushes.">Blitz</option>
                     </select>
-                    <button class="clear-slot-btn" title="Remove this country from the selected side.">×</button>
+
                 </div>
+                </details>
             `;
 
+			slot.querySelector(".country-configuration").open = expandedCountries.has(
+				String(country.id),
+			);
 			const buffBtn = slot.querySelector(".buff-toggle-btn");
 			if (buffBtn) {
 				const buffLabelEl = buffBtn.querySelector(".buff-label");
@@ -5804,7 +5805,7 @@ function updateRandomWarButton() {
 	const translationKey = randomWarMode ? "RANDOM_WAR_ON" : "RANDOM_WAR_OFF";
 	randomWarBtn.dataset.i18n = translationKey;
 	randomWarBtn.textContent = getTranslation(translationKey);
-	randomWarBtn.style.background = randomWarMode ? "#8e44ad" : "#9b59b6";
+	randomWarBtn.setAttribute("aria-pressed", String(randomWarMode));
 }
 
 randomWarBtn.onclick = () => {
@@ -12821,7 +12822,7 @@ function renderOperationEvent() {
 	);
 	if (!event) return;
 	isPaused = true;
-	pauseBtn.innerText = "▶";
+	pauseBtn.innerText = "Resume";
 	pauseBtn.style.background = "#27ae60";
 	commanderEventTitle.textContent = event.title;
 	commanderEventBody.textContent = event.body;
@@ -12919,7 +12920,7 @@ export function resolveOperationEvent(choiceId) {
 		renderOperationEvent();
 	} else {
 		isPaused = false;
-		pauseBtn.innerText = "⏸";
+		pauseBtn.innerText = "Pause";
 		pauseBtn.style.background = "#f39c12";
 	}
 	updateCommanderHud(true);
@@ -13930,6 +13931,7 @@ function warDeskOverviewRows(metrics) {
 			total += countryTotal;
 			held += countryHeld;
 			countryRows.push({
+				kind: "country",
 				label: country.name || countryMetadata[countryId - 1]?.name,
 				key: "manpower",
 				primaryLabel: "Deployed manpower",
@@ -13941,6 +13943,7 @@ function warDeskOverviewRows(metrics) {
 			});
 		}
 		rows.push({
+			kind: "side",
 			label: metric.name,
 			key: "manpower",
 			primaryLabel: "Manpower",
@@ -14263,7 +14266,7 @@ function pauseForExperimentIntervention() {
 	_experimentInterventionPauseState = isPaused;
 	isPaused = true;
 	if (pauseBtn) {
-		pauseBtn.innerText = "▶";
+		pauseBtn.innerText = "Resume";
 		pauseBtn.style.background = "#27ae60";
 	}
 	statusText.innerText = "Experiment paused for director intervention";
@@ -14675,7 +14678,7 @@ export async function _startWarInner() {
 		document.getElementById("game-status").style.display = "flex";
 		document.getElementById("stats-panel").style.display = "block";
 	}
-	pauseBtn.innerText = "⏸";
+	pauseBtn.innerText = "Pause";
 	pauseBtn.style.background = "#f39c12";
 	lastTreatyTime = Date.now();
 	sideCasualties.fill(0);
@@ -30838,8 +30841,9 @@ export let currentSpeedIndex = 0; // Index for "0.1x"
 
 export function togglePause() {
 	isPaused = !isPaused;
-	pauseBtn.innerText = isPaused ? "▶" : "⏸";
-	pauseBtn.style.background = isPaused ? "#27ae60" : "#f39c12";
+	pauseBtn.innerText = isPaused ? "Resume" : "Pause";
+	pauseBtn.setAttribute("aria-pressed", String(isPaused));
+	pauseBtn.style.background = "";
 	statusText.innerText = isPaused
 		? getTranslation("SIM_PAUSED")
 		: ffaMode
@@ -31107,7 +31111,7 @@ export function renderCountryLibrary(countries) {
 														: ""
 												}
                     </div>
-                    <span style="font-size: 10px; color: #555;">${new Date(c.created_at).toLocaleDateString()}</span>
+                    <span style="font-size: 12px; color: #555;">${new Date(c.created_at).toLocaleDateString()}</span>
                 </div>
             </div>
         </div>
@@ -31717,7 +31721,8 @@ musicVolumeSlider.addEventListener("input", (e) => {
 
 muteBtn.addEventListener("click", () => {
 	isMuted = !isMuted;
-	muteBtn.innerText = isMuted ? "🔇" : "🔊";
+	muteBtn.innerText = isMuted ? "Sound: off" : "Sound: on";
+	muteBtn.setAttribute("aria-pressed", String(isMuted));
 
 	if (!audioCtx) return;
 
@@ -31838,7 +31843,7 @@ launchBtn.addEventListener("click", () => {
 			statusText.innerText = `PLAYING: ${currentScenarioContext.name}`;
 		}
 	}
-	launchBtn.innerText = "Apply Changes"; // Change for subsequent opens
+	launchBtn.innerText = "Save settings"; // Change for subsequent opens
 });
 
 // Auto-load settings on boot
@@ -31846,7 +31851,7 @@ export function checkAutoLaunch() {
 	if (getCookie("mw_skip_settings") === "true") {
 		mapResSelect.value = getCookie("mw_map_res") || "110m";
 		gridResSelect.value = getCookie("mw_grid_res") || "0.15";
-		unitLimitSelect.value = getCookie("mw_unit_limit") || "500";
+		unitLimitSelect.value = getCookie("mw_unit_limit") || "250";
 		const mtSaved = getCookie("mw_disable_mountains");
 		if (mtSaved === "true") {
 			document.getElementById("disable-mountains-checkbox").checked = true;
@@ -31905,21 +31910,12 @@ export function checkAutoLaunch() {
 		}
 
 		saveSkipCheckbox.checked = true;
-
-		initializeEngine();
-
-		settingsOverlay.style.display = "none";
-		mainMenu.style.display = "flex";
-		gameState = "MAIN_MENU";
-		launchBtn.innerText = "Apply Changes";
-
-		if (getCookie("mw_tutorial_finished") !== "true") {
-			startTutorial(conquestTutorialSteps, "mw_tutorial_finished");
-		}
-	} else {
-		// Fix: If not auto-launching, we must show the settings overlay so the user can initialize the engine.
-		settingsOverlay.style.display = "flex";
 	}
+	initializeEngine();
+	settingsOverlay.style.display = "none";
+	mainMenu.style.display = "flex";
+	gameState = "MAIN_MENU";
+	launchBtn.textContent = "Save settings";
 }
 
 // Settings Tab Logic
@@ -32001,6 +31997,24 @@ if (benchmarkDismissBtn) {
 	});
 }
 
+document.getElementById("help-btn")?.addEventListener("click", () => {
+	startTutorial(conquestTutorialSteps, "mw_tutorial_finished");
+});
+
+document
+	.getElementById("fullscreen-btn")
+	?.addEventListener("click", async () => {
+		try {
+			if (document.fullscreenElement) await document.exitFullscreen();
+			else await document.documentElement.requestFullscreen();
+		} catch (error) {
+			console.warn("Fullscreen unavailable", error);
+		}
+	});
+document.getElementById("hud-menu")?.addEventListener("click", (event) => {
+	if (event.target.closest("button")) event.currentTarget.open = false;
+});
+
 ingameSettingsBtn.addEventListener("click", () => {
 	settingsOverlay.style.display = "flex";
 	mapUi.style.display = "none";
@@ -32021,12 +32035,9 @@ if (closeSettingsBtn) {
 playModeBtn.addEventListener("click", () => {
 	const navMain = document.getElementById("nav-links-container");
 	const selector = document.getElementById("menu-scenario-selector");
-
-	navMain.classList.add("hidden");
-	setTimeout(() => {
-		navMain.style.display = "none";
-		selector.style.display = "flex";
-	}, 500);
+	navMain.style.display = "none";
+	selector.style.display = "flex";
+	selectScenario("scroller-choice-modern", () => choiceModernDay.click());
 });
 
 commanderModeBtn.addEventListener("click", () => {
@@ -32093,17 +32104,6 @@ document.getElementById("scroller-choice-1936").onclick = () =>
 	selectScenario("scroller-choice-1936", () => choice1936Scenario.click());
 document.getElementById("scroller-choice-1914").onclick = () =>
 	selectScenario("scroller-choice-1914", () => choiceWW1Scenario.click());
-
-// Enable double-click to launch scenarios immediately
-document.querySelectorAll(".scroller-card").forEach((card) => {
-	card.addEventListener("dblclick", () => {
-		// Trigger the select first to ensure queuedScenarioAction is set, then execute
-		card.click();
-		if (queuedScenarioAction) {
-			queuedScenarioAction();
-		}
-	});
-});
 
 choiceModernDay.onclick = async () => {
 	// Smooth transition from Selector to Loading within the menu
@@ -32821,14 +32821,14 @@ export function openInspector(id) {
 	if (allyList) {
 		const allies = Array.isArray(meta.allies) ? meta.allies : [];
 		if (!allies.length) {
-			allyList.innerHTML = `<span style="font-size: 10px; color: #666;">No allies set.</span>`;
+			allyList.innerHTML = `<span style="font-size: 12px; color: #666;">No allies set.</span>`;
 		} else {
 			const items = allies
 				.map((aid) => countryMetadata[aid - 1])
 				.filter(Boolean)
 				.map(
 					(m) =>
-						`<div style="font-size:11px; color:#ccc; margin-bottom:2px;">• ${m.name}</div>`,
+						`<div style="font-size: 12px; color:#ccc; margin-bottom:2px;">• ${m.name}</div>`,
 				)
 				.join("");
 			allyList.innerHTML = items;
@@ -32879,12 +32879,12 @@ export function openInspector(id) {
 		const hMeta = BUFF_METADATA[currentHidden] || BUFF_METADATA.none;
 		const hiddenLabel =
 			currentHidden !== "none"
-				? `<div style="margin-top:4px; font-size:9px; color:#f1c40f; text-transform:uppercase; letter-spacing:0.5px;">INVISIBLE BUFF: ${hMeta.label}</div>`
+				? `<div style="margin-top:4px; font-size: 12px; color:#f1c40f; text-transform:uppercase; letter-spacing:0.5px;">INVISIBLE BUFF: ${hMeta.label}</div>`
 				: "";
 		inspectBuffBtn.innerHTML = `
-            <span class="buff-arrow" data-dir="-1" style="font-size:11px; margin-right:4px;">◀</span>
+            <span class="buff-arrow" data-dir="-1" style="font-size: 12px; margin-right:4px;">◀</span>
             <span class="buff-label">BUFF: ${bMeta.label}</span>
-            <span class="buff-arrow" data-dir="1" style="font-size:11px; margin-left:4px;">▶</span>
+            <span class="buff-arrow" data-dir="1" style="font-size: 12px; margin-left:4px;">▶</span>
             ${hiddenLabel}
         `;
 		inspectBuffBtn.style.background = bMeta.color;
@@ -33930,9 +33930,9 @@ if (inspectBuffBtn) {
 
 		const bMeta = BUFF_METADATA[nextState] || BUFF_METADATA.none;
 		inspectBuffBtn.innerHTML = `
-            <span class="buff-arrow" data-dir="-1" style="font-size:11px; margin-right:4px;">◀</span>
+            <span class="buff-arrow" data-dir="-1" style="font-size: 12px; margin-right:4px;">◀</span>
             <span class="buff-label">BUFF: ${bMeta.label}</span>
-            <span class="buff-arrow" data-dir="1" style="font-size:11px; margin-left:4px;">▶</span>
+            <span class="buff-arrow" data-dir="1" style="font-size: 12px; margin-left:4px;">▶</span>
         `;
 		inspectBuffBtn.style.background = bMeta.color;
 		inspectBuffBtn.style.color = bMeta.textColor;
@@ -34916,7 +34916,7 @@ export function populateImportCountrySelect() {
 	const metaList = importScenarioBuffer.metadata || [];
 	if (!metaList.length) {
 		importCountryCardList.innerHTML = `
-            <div style="font-size:11px; color:#777; text-align:center; padding:10px;">
+            <div style="font-size: 12px; color:#777; text-align:center; padding:10px;">
                 No countries found in scenario
             </div>
         `;
@@ -34952,7 +34952,7 @@ export function populateImportCountrySelect() {
 
 	if (!sortedMeta.length) {
 		importCountryCardList.innerHTML = `
-            <div style="font-size:11px; color:#777; text-align:center; padding:10px;">
+            <div style="font-size: 12px; color:#777; text-align:center; padding:10px;">
                 No countries with territory found
             </div>
         `;
@@ -35011,7 +35011,7 @@ export function openImportCountryModal() {
 	}
 	if (importCountryCardList) {
 		importCountryCardList.innerHTML = `
-            <div style="font-size:11px; color:#777; text-align:center; padding:10px;">
+            <div style="font-size: 12px; color:#777; text-align:center; padding:10px;">
                 Choose a source scenario first
             </div>
         `;
@@ -35043,7 +35043,7 @@ if (importScenarioSelect) {
 		}
 		if (importCountryCardList) {
 			importCountryCardList.innerHTML = `
-                <div style="font-size:11px; color:#777; text-align:center; padding:10px;">
+                <div style="font-size: 12px; color:#777; text-align:center; padding:10px;">
                     Loading…
                 </div>
             `;
@@ -35290,7 +35290,7 @@ closeHubBtn.addEventListener("click", () => {
 export function renderCommentsList(comments) {
 	if (!itemCommentsList) return;
 	if (!comments || comments.length === 0) {
-		itemCommentsList.innerHTML = `<div style="padding:10px; font-size:11px; color:#777; text-align:center;">No comments yet. Be the first to brief this item.</div>`;
+		itemCommentsList.innerHTML = `<div style="padding:10px; font-size: 12px; color:#777; text-align:center;">No comments yet. Be the first to brief this item.</div>`;
 		return;
 	}
 
@@ -35315,17 +35315,17 @@ export function renderCommentsList(comments) {
                 <div class="item-comment" data-comment-id="${safeCommentId}" style="padding:6px 8px; border-bottom:1px solid rgba(255,255,255,0.05); margin-left:${depth * 12}px;">
                     <div style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
                         <img src="https://images.websim.com/avatar/${safeUsername}" style="width:16px; height:16px; border-radius:50%; background:#000;">
-                        <span style="font-size:11px; color:#ddd;">${safeUsername}</span>
-                        <span style="font-size:9px; color:#555; margin-left:auto;">${created}</span>
+                        <span style="font-size: 12px; color:#ddd;">${safeUsername}</span>
+                        <span style="font-size: 12px; color:#555; margin-left:auto;">${created}</span>
                     </div>
                     <div class="item-comment-text" style="font-size:12px; color:#ccc; white-space:pre-wrap;">${safeText}</div>
                     <div style="margin-top:4px; display:flex; gap:4px;">
-                        <button class="mini-btn item-reply-btn" style="padding:2px 6px; font-size:9px;">Reply</button>
+                        <button class="mini-btn item-reply-btn" style="padding:2px 6px; font-size: 12px;">Reply</button>
                         ${
 													isMine
 														? `
-                            <button class="mini-btn item-edit-btn" style="padding:2px 6px; font-size:9px;">Edit</button>
-                            <button class="mini-btn item-delete-btn" style="padding:2px 6px; font-size:9px; background:#c0392b;">Delete</button>
+                            <button class="mini-btn item-edit-btn" style="padding:2px 6px; font-size: 12px;">Edit</button>
+                            <button class="mini-btn item-delete-btn" style="padding:2px 6px; font-size: 12px; background:#c0392b;">Delete</button>
                         `
 														: ""
 												}
@@ -35545,7 +35545,7 @@ export async function openItemModal(type, item) {
 export function renderGlobalChatList(messages) {
 	if (!globalChatList) return;
 	if (!messages || messages.length === 0) {
-		globalChatList.innerHTML = `<div style="text-align:center; font-size:11px; color:#666; padding:16px;">No messages yet. Say hello!</div>`;
+		globalChatList.innerHTML = `<div style="text-align:center; font-size: 12px; color:#666; padding:16px;">No messages yet. Say hello!</div>`;
 		return;
 	}
 	// oldest at top
@@ -35562,8 +35562,8 @@ export function renderGlobalChatList(messages) {
             <div style="margin-bottom:6px; font-size:12px; ${isMine ? "text-align:right;" : ""}">
                 <div style="display:flex; ${isMine ? "flex-direction:row-reverse;" : ""} align-items:center; gap:6px;">
                     <img src="https://images.websim.com/avatar/${safeUsername}" style="width:16px; height:16px; border-radius:50%; background:#000;">
-                    <span style="font-size:11px; color:#ddd;">${safeUsername}</span>
-                    <span style="font-size:9px; color:#555;">${created}</span>
+                    <span style="font-size: 12px; color:#ddd;">${safeUsername}</span>
+                    <span style="font-size: 12px; color:#555;">${created}</span>
                 </div>
                 <div style="margin-top:2px; color:#ccc; white-space:pre-wrap;">${safeText}</div>
             </div>

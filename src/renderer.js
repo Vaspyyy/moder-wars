@@ -2876,9 +2876,16 @@ const ControlMapLayer = L.Layer.extend({
 						ctx.font = `${starSize}px serif`;
 						ctx.textAlign = "center";
 						ctx.textBaseline = "middle";
-						ctx.shadowBlur = 6;
+						ctx.shadowBlur = 0;
 						ctx.shadowColor = "gold";
-						ctx.fillText("⭐", p.x, p.y - sh - 2);
+						ctx.fillStyle = "#e9d58d";
+						ctx.beginPath();
+						ctx.moveTo(p.x, p.y - sh - 2 - starSize / 2);
+						ctx.lineTo(p.x + starSize / 2, p.y - sh - 2);
+						ctx.lineTo(p.x, p.y - sh - 2 + starSize / 2);
+						ctx.lineTo(p.x - starSize / 2, p.y - sh - 2);
+						ctx.closePath();
+						ctx.fill();
 						ctx.restore();
 					}
 
@@ -2964,7 +2971,7 @@ const ControlMapLayer = L.Layer.extend({
 				ctx.textAlign = "center";
 				ctx.textBaseline = "middle";
 
-				ctx.shadowBlur = 10;
+				ctx.shadowBlur = 0;
 				ctx.shadowColor = "rgba(255,255,255,0.4)";
 				ctx.shadowOffsetX = 0;
 				ctx.shadowOffsetY = 0;
@@ -2974,7 +2981,14 @@ const ControlMapLayer = L.Layer.extend({
 				ctx.translate(p.x, p.y);
 				ctx.scale(pulse, pulse);
 
-				ctx.fillText("⚔️", 0, 0);
+				ctx.strokeStyle = "#e9d58d";
+				ctx.lineWidth = 2;
+				ctx.beginPath();
+				ctx.moveTo(-emojiSize / 3, -emojiSize / 3);
+				ctx.lineTo(emojiSize / 3, emojiSize / 3);
+				ctx.moveTo(emojiSize / 3, -emojiSize / 3);
+				ctx.lineTo(-emojiSize / 3, emojiSize / 3);
+				ctx.stroke();
 				ctx.restore();
 			});
 		}

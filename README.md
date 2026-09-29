@@ -10,6 +10,8 @@ A browser-based grand strategy war simulation played on a real-world map. Config
 
 Open https://vaspyyy.github.io/moder-wars/ in a browser.
 
+The game opens directly at the main menu with default or remembered preferences. Fullscreen is available only through an explicit menu action.
+
 For local development, serve the repository as static files:
 
 ```sh
@@ -27,11 +29,13 @@ The current **Choose Era** menu exposes one playable era:
 ## What You Can Do
 
 - **PLAY** opens the 2022 Modern Day era and starts the experiment setup. The Basic panel covers AI posture and war rules, with + Side and FFA above the side cards. Optional manpower totals, date, and capture rules remain under Advanced. Seeds are managed internally; economy, mutinies, rebellions, armor, and air power are disabled to simplify the simulation.
-- **War Desk** shows a single Overview with manpower, casualties, and the percentage of original territory retained for each side and its countries. Country manpower shows deployed personnel; side manpower includes pooled reserves.
+- **War Overview** shows with manpower, casualties, and the percentage of original territory retained for each side and its countries. Country manpower shows deployed personnel; side manpower includes pooled reserves. Country rows are indented beneath their side totals.
 - **After Action Reports** preserve the final map, explain observed contributors, compare linked reruns, and keep the latest 25 report summaries in the browser-local War Archive.
 - **EDITOR** redraws borders, creates countries, manages cities, and saves or loads scenarios.
 - **COMMUNITY** browses, uploads, remixes, and downloads shared scenarios or countries.
-- **SETTINGS** changes simulation speed, map display, audio, language, and related options.
+- **SETTINGS** groups preferences into Gameplay, Display, Audio, Interface, and Advanced. Benchmark and performance tuning live under Advanced.
+- Country cards keep identity and manpower visible, with buffs, allies, role, and doctrine under **Configure**.
+- The live toolbar keeps map controls and simulation speed visible; restart, sandbox, sound, help, fullscreen, and navigation actions live under **Menu**.
 - **God Mode** and editor tools can stage custom wars, alter borders, and test scenarios.
 
 ## Custom Scenarios

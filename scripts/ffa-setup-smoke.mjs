@@ -32,7 +32,7 @@ assert.equal(button["aria-pressed"], "false");
 assert.equal(button.textContent, "FFA: OFF");
 assert.equal(note.hidden, true);
 assert.equal(context.sides, sides);
-const selectionStart = main.indexOf("\tif (ffaMode) {\n\t\t// In FFA");
+const selectionStart = main.indexOf("\tif (ffaMode) {\n\t\t// New FFA participants");
 const selectionEnd = main.indexOf("\tconst targetList", selectionStart);
 vm.runInContext(`function selectFfaSide() { ${main.slice(selectionStart, selectionEnd)} }`, context);
 context.ffaMode = true;

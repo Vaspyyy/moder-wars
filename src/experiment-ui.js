@@ -240,6 +240,7 @@ function metricEntries(value, limit = 8) {
 			if (entry && typeof entry === "object") {
 				return {
 					delta: entry.delta,
+					kind: asText(entry.kind),
 					detail: asText(entry.detail || entry.description),
 					key: asText(entry.key || entry.id, `metric-${index}`),
 					label: asText(entry.label || entry.name, `Metric ${index + 1}`),
@@ -308,6 +309,8 @@ function renderMetricCards(documentRef, target, metrics, emptyMessage) {
 	for (const entry of entries) {
 		const card = createElement(documentRef, "div", "war-desk-metric");
 		setTone(card, entry.tone);
+		if (entry.kind === "country")
+			card.classList.add("war-desk-metric--country");
 		card.append(createElement(documentRef, "span", "", entry.label));
 		if (entry.secondaryLabel) {
 			card.classList.add("war-desk-metric--paired");

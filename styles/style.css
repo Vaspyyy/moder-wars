@@ -18,7 +18,7 @@ html {
 	--hud-color-text: #f5f5f5;
 	--hud-color-text-soft: #e0e0e0;
 	--hud-color-muted: #9ea7b3;
-	--hud-color-dim: #777;
+	--hud-color-dim: #9ca8b5;
 	--hud-color-surface-soft: rgba(10, 10, 12, 0.8);
 	--hud-color-surface-report: rgba(14, 14, 16, 0.82);
 	--hud-color-surface: rgba(12, 12, 14, 0.9);
@@ -41,9 +41,9 @@ html {
 	--hud-radius-xs: 2px;
 	--hud-radius-sm: 4px;
 	--hud-radius-md: 6px;
-	--hud-blur: 8px;
-	--hud-shadow: 0 28px 60px rgba(0, 0, 0, 0.7);
-	--hud-shadow-compact: 0 20px 40px rgba(0, 0, 0, 0.6);
+	--hud-blur: 0px;
+	--hud-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+	--hud-shadow-compact: 0 8px 20px rgba(0, 0, 0, 0.3);
 	--hud-gap-xs: 4px;
 	--hud-gap-sm: 8px;
 	--hud-gap-md: 12px;
@@ -181,7 +181,7 @@ html {
 	align-items: center;
 	gap: var(--hud-gap-xs);
 	color: #ccc;
-	font-size: 9px;
+	font-size: 12px;
 	cursor: pointer;
 }
 
@@ -194,13 +194,13 @@ html {
 .hud-status-meta {
 	margin-top: var(--hud-gap-xs);
 	color: #888;
-	font-size: 10px;
+	font-size: 12px;
 }
 
 .hud-event-status {
 	margin-top: 5px;
 	color: #888;
-	font-size: 10px;
+	font-size: 12px;
 }
 
 .hud-readout {
@@ -478,7 +478,7 @@ body.use-system-font .scroller-card-name {
 	position: absolute;
 	bottom: 40px;
 	right: 40px;
-	font-size: 10px;
+	font-size: 12px;
 	color: rgba(255, 255, 255, 0.3);
 	letter-spacing: 2px;
 	text-transform: uppercase;
@@ -612,7 +612,7 @@ body.use-system-font .scroller-card-name {
 	}
 	.settings-tab-btn {
 		padding: 6px 10px;
-		font-size: 8px;
+		font-size: 12px;
 		letter-spacing: 1px;
 	}
 	.scenario-scroller-v2 {
@@ -659,7 +659,7 @@ body.use-system-font .scroller-card-name {
 	display: block;
 	margin-top: 6px;
 	color: #555;
-	font-size: 11px;
+	font-size: 12px;
 }
 
 .status-panel {
@@ -792,7 +792,7 @@ body.use-system-font .scroller-card-name {
 }
 
 .side-header {
-	font-size: 11px;
+	font-size: 12px;
 	font-weight: 900;
 	text-align: center;
 	padding: 10px;
@@ -903,7 +903,7 @@ body.use-system-font .scroller-card-name {
 }
 
 .slot-label {
-	font-size: 10px;
+	font-size: 12px;
 	color: #aaa;
 	margin-bottom: 4px;
 }
@@ -928,7 +928,7 @@ body.use-system-font .scroller-card-name {
 	background: rgba(0, 0, 0, 0.3);
 	border: 1px solid rgba(255, 255, 255, 0.1);
 	color: #ccc;
-	font-size: 9px;
+	font-size: 12px;
 	padding: 2px 4px;
 	border-radius: 3px;
 	outline: none;
@@ -1082,7 +1082,7 @@ body.use-system-font .scroller-card-name {
 		align-items: center;
 	}
 	.casualty-item {
-		font-size: 10px;
+		font-size: 12px;
 		padding: 2px 6px;
 		background: rgba(0, 0, 0, 0.35);
 		border-radius: 3px;
@@ -1095,10 +1095,10 @@ body.use-system-font .scroller-card-name {
 		height: 8px;
 	}
 	.casualty-item .cas-value {
-		font-size: 10px;
+		font-size: 12px;
 	}
 	.casualty-item .cas-side-mp {
-		font-size: 10px;
+		font-size: 12px;
 	}
 
 	/* Stats panel: keep it compact */
@@ -1188,7 +1188,7 @@ body.use-system-font .scroller-card-name {
 }
 
 .side-stats .metric-value {
-	font-size: 10px;
+	font-size: 12px;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -1200,7 +1200,7 @@ body.use-system-font .scroller-card-name {
 }
 
 .metric-label {
-	font-size: 8px;
+	font-size: 12px;
 	color: var(--hud-color-neutral);
 	font-weight: 900;
 	letter-spacing: 1px;
@@ -1254,7 +1254,7 @@ body.use-system-font .scroller-card-name {
 }
 
 .control-pct {
-	font-size: 11px;
+	font-size: 12px;
 	font-weight: 900;
 	font-family: var(--hud-font-mono);
 	color: var(--hud-color-dim);
@@ -1300,7 +1300,7 @@ body.use-system-font .scroller-card-name {
 	border: 1px solid #3a4046;
 	padding: 5px 10px;
 	border-radius: 3px;
-	font-size: 11px;
+	font-size: 12px;
 	cursor: pointer;
 	transition:
 		background 0.12s ease,
@@ -1337,7 +1337,7 @@ body.use-system-font .scroller-card-name {
 	border: 1px solid rgba(255, 255, 255, 0.08);
 	padding: 4px 9px;
 	border-radius: 2px;
-	font-size: 10px;
+	font-size: 12px;
 	font-weight: 700;
 	cursor: pointer;
 	transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1371,7 +1371,7 @@ body.use-system-font .scroller-card-name {
 		font-size: 14px;
 	}
 	#unit-counts {
-		font-size: 11px;
+		font-size: 12px;
 	}
 	.status-right {
 		width: 100%;
@@ -1386,7 +1386,7 @@ body.use-system-font .scroller-card-name {
 	}
 	.mini-btn {
 		padding: 8px 10px;
-		font-size: 11px;
+		font-size: 12px;
 		min-height: 36px;
 		min-width: 36px;
 		border-radius: 4px;
@@ -1423,7 +1423,7 @@ body.use-system-font .scroller-card-name {
 	--hud-surface-blur: 10px;
 	--hud-surface-shadow: none;
 	padding: 3px 10px;
-	font-size: 10px;
+	font-size: 12px;
 }
 
 /* Map Overrides */
@@ -1490,7 +1490,7 @@ body.use-system-font .scroller-card-name {
 	padding: 8px;
 	border: none;
 	border-radius: 4px;
-	font-size: 11px;
+	font-size: 12px;
 	font-weight: bold;
 	cursor: pointer;
 	text-transform: uppercase;
@@ -1525,7 +1525,7 @@ body.use-system-font .scroller-card-name {
 	pointer-events: auto;
 	margin-top: 8px;
 	padding: 4px 10px;
-	font-size: 10px;
+	font-size: 12px;
 	background: rgba(255, 255, 255, 0.05);
 	color: #666;
 	border: 1px solid rgba(255, 255, 255, 0.1);
@@ -1598,7 +1598,7 @@ body.use-system-font .scroller-card-name {
 }
 
 #editor-toolbox .mini-btn {
-	font-size: 10px;
+	font-size: 12px;
 	padding: 6px 10px;
 }
 
@@ -1654,7 +1654,7 @@ body.use-system-font .scroller-card-name {
 }
 
 .hub-description {
-	font-size: 11px;
+	font-size: 12px;
 	color: #aaa;
 	line-height: 1.4;
 	margin-bottom: 4px;
@@ -1666,7 +1666,7 @@ body.use-system-font .scroller-card-name {
 }
 
 .hub-comment-count {
-	font-size: 10px;
+	font-size: 12px;
 	color: #666;
 	text-transform: uppercase;
 	letter-spacing: 0.5px;
@@ -1680,12 +1680,12 @@ body.use-system-font .scroller-card-name {
 
 .show-more-btn {
 	margin-top: 2px;
-	font-size: 9px;
+	font-size: 12px;
 	padding: 3px 8px;
 }
 
 .hub-meta {
-	font-size: 11px;
+	font-size: 12px;
 	color: #888;
 	display: flex;
 	align-items: center;
@@ -1759,7 +1759,7 @@ body.use-system-font .scroller-card-name {
 }
 
 .era-subtitle {
-	font-size: 11px;
+	font-size: 12px;
 	color: #777;
 	letter-spacing: 0.4px;
 }
@@ -1787,7 +1787,7 @@ body.use-system-font .scroller-card-name {
 	color: rgba(255, 255, 255, 0.4);
 	padding: 8px 16px;
 	border-radius: 1px;
-	font-size: 9px;
+	font-size: 12px;
 	font-weight: 900;
 	letter-spacing: 2px;
 	cursor: pointer;
@@ -1821,7 +1821,7 @@ body.use-system-font .scroller-card-name {
 }
 
 .era-timeline-label {
-	font-size: 9px;
+	font-size: 12px;
 	letter-spacing: 1.5px;
 	text-transform: uppercase;
 	color: #555;
@@ -1900,12 +1900,12 @@ body.use-system-font .scroller-card-name {
 }
 
 .era-desc {
-	font-size: 11px;
+	font-size: 12px;
 	color: #ccc;
 }
 
 .era-meta {
-	font-size: 9px;
+	font-size: 12px;
 	color: #666;
 	text-transform: uppercase;
 	letter-spacing: 0.7px;
@@ -1913,7 +1913,7 @@ body.use-system-font .scroller-card-name {
 }
 
 .era-chip {
-	font-size: 9px;
+	font-size: 12px;
 	padding: 2px 6px;
 	border-radius: 999px;
 	border: 1px solid rgba(255, 255, 255, 0.25);
@@ -1931,7 +1931,7 @@ body.use-system-font .scroller-card-name {
 
 .era-hint {
 	margin-top: 10px;
-	font-size: 10px;
+	font-size: 12px;
 	color: #777;
 	text-align: center;
 }
@@ -1994,7 +1994,7 @@ body.use-system-font .scroller-card-name {
 }
 
 .loading-tip {
-	font-size: 11px;
+	font-size: 12px;
 	color: #666;
 	font-style: italic;
 	max-width: 320px;
@@ -2064,7 +2064,7 @@ body.use-system-font .scroller-card-name {
 	border-radius: 4px;
 	background: rgba(255, 255, 255, 0.03);
 	border: 1px solid rgba(255, 255, 255, 0.05);
-	font-size: 9px;
+	font-size: 12px;
 	padding: 6px 12px;
 }
 
@@ -2212,7 +2212,7 @@ body.use-system-font .scroller-card-name {
 
 .economy-panel-header {
 	padding: 9px 10px;
-	font-size: 11px;
+	font-size: 12px;
 	font-weight: 900;
 	letter-spacing: 1.5px;
 	border-bottom: 1px solid var(--hud-color-border);
@@ -2227,7 +2227,7 @@ body.use-system-font .scroller-card-name {
 .economy-panel-actions .mini-btn,
 .economy-god-actions button {
 	padding: 3px 6px;
-	font-size: 8px;
+	font-size: 12px;
 }
 
 #economy-panel-content {
@@ -2260,19 +2260,19 @@ body.use-system-font .scroller-card-name {
 }
 
 .economy-row-heading {
-	font-size: 10px;
+	font-size: 12px;
 	font-weight: 800;
 }
 
 .economy-metrics {
 	margin-top: 5px;
-	font-size: 8px;
+	font-size: 12px;
 	color: #aaa;
 	flex-wrap: wrap;
 }
 
 .economy-band {
-	font-size: 8px;
+	font-size: 12px;
 	color: var(--hud-color-success);
 }
 
@@ -2301,7 +2301,7 @@ body.use-system-font .scroller-card-name {
 
 .economy-events-title {
 	margin: 8px 0 4px;
-	font-size: 8px;
+	font-size: 12px;
 	font-weight: 900;
 	letter-spacing: 1px;
 	color: var(--hud-color-dim);
@@ -2312,7 +2312,7 @@ body.use-system-font .scroller-card-name {
 	grid-template-columns: 26px 1fr;
 	gap: 5px;
 	padding: 3px 2px;
-	font-size: 8px;
+	font-size: 12px;
 	color: #aaa;
 }
 
@@ -2419,7 +2419,7 @@ body.use-system-font .scroller-card-name {
 .leaderboard-header {
 	display: flex;
 	align-items: center;
-	font-size: 10px;
+	font-size: 12px;
 	text-transform: uppercase;
 	letter-spacing: 1px;
 	color: #888;
@@ -2445,7 +2445,7 @@ body.use-system-font .scroller-card-name {
 	border-radius: 8px;
 	background: rgba(255, 255, 255, 0.02);
 	border: 1px solid rgba(255, 255, 255, 0.04);
-	font-size: 11px;
+	font-size: 12px;
 }
 
 .leaderboard-row:nth-child(odd) {
@@ -2540,7 +2540,7 @@ body.use-system-font .scroller-card-name {
 		background 0.15s ease,
 		border-color 0.15s ease,
 		transform 0.1s ease;
-	font-size: 11px;
+	font-size: 12px;
 }
 
 .import-country-card:hover {
@@ -2573,13 +2573,13 @@ body.use-system-font .scroller-card-name {
 }
 
 .import-country-tiles {
-	font-size: 9px;
+	font-size: 12px;
 	color: #888;
 }
 
 #no-nations-modal .start-btn {
 	padding: 12px;
-	font-size: 11px;
+	font-size: 12px;
 }
 
 /* Editor Choice Modal & Menu Card Styles */
@@ -2646,7 +2646,7 @@ body.use-system-font .scroller-card-name {
 }
 
 .menu-card .btn-sub {
-	font-size: 11px;
+	font-size: 12px;
 	color: #888;
 }
 
@@ -2739,7 +2739,7 @@ body.use-system-font .scroller-card-name {
 }
 
 .scroller-label {
-	font-size: 10px;
+	font-size: 12px;
 	color: #555;
 	letter-spacing: 2px;
 	text-transform: uppercase;
@@ -2789,14 +2789,14 @@ body.use-system-font .scroller-card-name {
 }
 
 .scroller-card-desc {
-	font-size: 11px;
+	font-size: 12px;
 	color: #888;
 	line-height: 1.4;
 	margin-bottom: 6px;
 }
 
 .scroller-card-credits {
-	font-size: 9px;
+	font-size: 12px;
 	color: #444;
 	text-transform: uppercase;
 	letter-spacing: 1px;
@@ -2899,7 +2899,7 @@ body.use-system-font .scroller-card-name {
 .commander-beta-badge {
 	padding: 3px 6px;
 	font-family: system-ui, sans-serif;
-	font-size: 8px;
+	font-size: 12px;
 	font-weight: 900;
 	line-height: 1;
 	letter-spacing: 0.12em;
@@ -2960,7 +2960,7 @@ body.use-system-font .scroller-card-name {
 .commander-kicker,
 .commander-label {
 	font-family: system-ui, sans-serif;
-	font-size: 9px;
+	font-size: 12px;
 	font-weight: 900;
 	letter-spacing: 0.18em;
 	text-transform: uppercase;
@@ -2992,7 +2992,7 @@ body.use-system-font .scroller-card-name {
 
 .commander-beta-warning strong {
 	flex: 0 0 auto;
-	font-size: 9px;
+	font-size: 12px;
 	letter-spacing: 0.16em;
 	color: var(--commander-beta-accent);
 }
@@ -3101,7 +3101,7 @@ body.commander-active #force-peace-btn {
 }
 
 .commander-objective-status strong {
-	font-size: 11px;
+	font-size: 12px;
 	line-height: 1.4;
 }
 
@@ -3114,7 +3114,7 @@ body.commander-active #force-peace-btn {
 
 .commander-city-chip {
 	padding: 5px 2px;
-	font-size: 8px;
+	font-size: 12px;
 	font-weight: 900;
 	text-align: center;
 	text-transform: uppercase;
@@ -3143,7 +3143,7 @@ body.commander-active #force-peace-btn {
 	display: flex;
 	flex-direction: column;
 	gap: 3px;
-	font-size: 8px;
+	font-size: 12px;
 	font-weight: 900;
 	letter-spacing: 0.1em;
 	color: #7e8998;
@@ -3152,7 +3152,7 @@ body.commander-active #force-peace-btn {
 .commander-orders-grid select {
 	min-width: 0;
 	padding: 7px 5px;
-	font-size: 10px;
+	font-size: 12px;
 	color: #fff;
 	background: #172131;
 	border: 1px solid rgba(255, 255, 255, 0.12);
@@ -3163,7 +3163,7 @@ body.commander-active #force-peace-btn {
 	width: 100%;
 	margin-top: 8px;
 	padding: 8px;
-	font-size: 10px;
+	font-size: 12px;
 }
 
 .commander-orders-btn:disabled {
@@ -3204,7 +3204,7 @@ body.commander-active #force-peace-btn {
 
 .commander-medal-preview span {
 	flex: 1;
-	font-size: 8px;
+	font-size: 12px;
 	line-height: 1.3;
 	text-align: center;
 	color: #697383;
@@ -3244,7 +3244,7 @@ body.commander-active #force-peace-btn {
 
 .commander-event-choice span {
 	margin-top: 7px;
-	font-size: 11px;
+	font-size: 12px;
 	line-height: 1.5;
 	color: #aeb8c5;
 }
@@ -3278,7 +3278,7 @@ body.commander-active #force-peace-btn {
 
 .commander-debrief-medal span {
 	margin-top: 5px;
-	font-size: 9px;
+	font-size: 12px;
 }
 
 @media (max-width: 768px) {
@@ -3347,7 +3347,7 @@ body.commander-active #force-peace-btn {
 	margin-bottom: 3px;
 	color: var(--hud-color-danger);
 	font-family: var(--hud-font-mono);
-	font-size: 8px;
+	font-size: 12px;
 	font-weight: 900;
 	letter-spacing: 0.16em;
 	text-transform: uppercase;
@@ -3425,7 +3425,7 @@ body.commander-active #force-peace-btn {
 	flex-direction: column;
 	gap: 4px;
 	color: var(--hud-color-muted);
-	font-size: 8px;
+	font-size: 12px;
 	font-weight: 900;
 	letter-spacing: 0.1em;
 	text-transform: uppercase;
@@ -3439,7 +3439,7 @@ body.commander-active #force-peace-btn {
 .experiment-field-note {
 	margin: -4px 0 1px;
 	color: var(--hud-color-dim);
-	font-size: 8px;
+	font-size: 12px;
 	line-height: 1.35;
 }
 
@@ -3480,7 +3480,7 @@ body.commander-active #force-peace-btn {
 .experiment-inline-control .experiment-secondary-btn {
 	height: 32px;
 	padding: 0 8px;
-	font-size: 8px;
+	font-size: 12px;
 }
 
 .setup-panel .setup-side-controls {
@@ -3535,7 +3535,7 @@ body.commander-active #force-peace-btn {
 .ffa-setup-note {
 	margin: 8px 14px 0;
 	color: #e9d58d;
-	font-size: 9px;
+	font-size: 12px;
 	line-height: 1.45;
 }
 
@@ -3582,7 +3582,7 @@ body.commander-active #force-peace-btn {
 	margin: 0;
 	padding: 4px 14px 10px;
 	color: var(--hud-color-dim);
-	font-size: 9px;
+	font-size: 12px;
 	line-height: 1.4;
 	text-align: left;
 }
@@ -3604,7 +3604,7 @@ body.commander-active #force-peace-btn {
 	position: relative;
 	padding: 10px 30px 10px 10px;
 	color: var(--hud-color-text-soft);
-	font-size: 9px;
+	font-size: 12px;
 	font-weight: 900;
 	letter-spacing: 0.09em;
 	list-style: none;
@@ -3652,7 +3652,7 @@ body.commander-active #force-peace-btn {
 .experiment-detail-group > summary {
 	padding-top: 8px;
 	padding-bottom: 8px;
-	font-size: 8px;
+	font-size: 12px;
 }
 
 .experiment-detail-content {
@@ -3674,7 +3674,7 @@ body.commander-active #force-peace-btn {
 .experiment-button-grid .mini-btn,
 .experiment-check-grid .mini-btn {
 	min-height: 32px;
-	font-size: 8px;
+	font-size: 12px;
 }
 
 .experiment-option-block {
@@ -3689,7 +3689,7 @@ body.commander-active #force-peace-btn {
 
 .experiment-option-label {
 	color: var(--hud-color-muted);
-	font-size: 8px;
+	font-size: 12px;
 	font-weight: 900;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
@@ -3710,7 +3710,7 @@ body.commander-active #force-peace-btn {
 
 .experiment-manpower-inputs label span {
 	color: var(--hud-color-dim);
-	font-size: 8px;
+	font-size: 12px;
 	text-transform: uppercase;
 }
 
@@ -3728,7 +3728,7 @@ body.commander-active #force-peace-btn {
 	align-items: center;
 	gap: 7px;
 	color: var(--hud-color-muted);
-	font-size: 8px;
+	font-size: 12px;
 	font-weight: 800;
 	line-height: 1.35;
 	text-transform: uppercase;
@@ -3863,7 +3863,7 @@ body.commander-active #reopen-report-btn {
 	background: transparent;
 	border: 0;
 	border-bottom: 2px solid transparent;
-	font-size: 8px;
+	font-size: 12px;
 	font-weight: 900;
 	text-transform: uppercase;
 	cursor: pointer;
@@ -3924,7 +3924,7 @@ body.commander-active #reopen-report-btn {
 .war-desk-summary {
 	margin: 7px 0;
 	color: var(--hud-color-muted);
-	font-size: 9px;
+	font-size: 12px;
 	line-height: 1.5;
 }
 
@@ -3990,7 +3990,7 @@ body.commander-active #reopen-report-btn {
 	min-width: 0;
 	overflow: hidden;
 	color: var(--hud-color-text-soft);
-	font-size: 9px;
+	font-size: 12px;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
@@ -4060,7 +4060,7 @@ body.commander-active #reopen-report-btn {
 .war-desk-list-row > span {
 	min-width: 0;
 	color: var(--hud-color-muted);
-	font-size: 9px;
+	font-size: 12px;
 }
 
 .war-desk-metric > strong,
@@ -4099,7 +4099,7 @@ body.commander-active #reopen-report-btn {
 .war-desk-list-row > small {
 	grid-column: 1 / -1;
 	color: var(--hud-color-dim);
-	font-size: 8px;
+	font-size: 12px;
 	line-height: 1.35;
 }
 
@@ -4111,7 +4111,7 @@ body.commander-active #reopen-report-btn {
 	margin: 0;
 	padding: 14px 7px;
 	color: var(--hud-color-dim);
-	font-size: 9px;
+	font-size: 12px;
 	line-height: 1.5;
 	text-align: center;
 }
@@ -4128,7 +4128,7 @@ body.commander-active #reopen-report-btn {
 	padding: 7px 4px 7px 13px;
 	color: var(--hud-color-muted);
 	border-left: 1px solid var(--hud-color-border-strong);
-	font-size: 9px;
+	font-size: 12px;
 	line-height: 1.4;
 }
 
@@ -4172,7 +4172,7 @@ body.commander-active #reopen-report-btn {
 	background: rgba(243, 156, 18, 0.08);
 	border: 1px solid rgba(243, 156, 18, 0.25);
 	border-radius: var(--hud-radius-sm);
-	font-size: 8px;
+	font-size: 12px;
 	line-height: 1.45;
 }
 
@@ -4185,7 +4185,7 @@ body.commander-active #reopen-report-btn {
 .intervention-fields input,
 .intervention-fields select {
 	width: 100%;
-	font-size: 9px;
+	font-size: 12px;
 }
 
 .intervention-actions {
@@ -4204,7 +4204,7 @@ body.commander-active #reopen-report-btn {
 	background: #693030;
 	border: 1px solid rgba(255, 107, 107, 0.34);
 	border-radius: var(--hud-radius-sm);
-	font-size: 8px;
+	font-size: 12px;
 	font-weight: 900;
 	letter-spacing: 0.03em;
 	text-transform: uppercase;
@@ -4226,7 +4226,7 @@ body.commander-active #reopen-report-btn {
 	min-height: 14px;
 	margin-top: 7px;
 	color: var(--hud-color-active-text);
-	font-size: 8px;
+	font-size: 12px;
 	line-height: 1.4;
 }
 
@@ -4238,7 +4238,7 @@ body.commander-active #reopen-report-btn {
 	min-height: 34px;
 	padding: 7px 11px;
 	color: var(--hud-color-text-soft);
-	font-size: 9px;
+	font-size: 12px;
 	font-weight: 900;
 	letter-spacing: 0.06em;
 	text-transform: uppercase;
@@ -4396,7 +4396,7 @@ body.commander-active #reopen-report-btn {
 .after-action-factor p {
 	margin: 0;
 	color: var(--hud-color-muted);
-	font-size: 9px;
+	font-size: 12px;
 	line-height: 1.45;
 }
 
@@ -4412,7 +4412,7 @@ body.commander-active #reopen-report-btn {
 .after-action-comparison-list dt {
 	min-width: 0;
 	color: var(--hud-color-muted);
-	font-size: 9px;
+	font-size: 12px;
 }
 
 .after-action-metric-list dd,
@@ -4437,7 +4437,7 @@ body.commander-active #reopen-report-btn {
 	margin: 0;
 	padding-left: 20px;
 	color: var(--hud-color-muted);
-	font-size: 9px;
+	font-size: 12px;
 }
 
 .after-action-intervention-list li {
@@ -4472,7 +4472,7 @@ body.commander-active #reopen-report-btn {
 	margin: 0;
 	padding-left: 22px;
 	color: var(--hud-color-muted);
-	font-size: 10px;
+	font-size: 12px;
 	line-height: 1.5;
 }
 
@@ -4510,7 +4510,7 @@ body.commander-active #reopen-report-btn {
 .war-archive-header p {
 	margin: 8px 0 0;
 	color: var(--hud-color-muted);
-	font-size: 10px;
+	font-size: 12px;
 }
 
 .war-archive-header .report-secondary-action {
@@ -4606,7 +4606,7 @@ body.commander-active #reopen-report-btn {
 .war-archive-rerun-note {
 	margin: -3px 0 10px;
 	color: var(--hud-color-muted);
-	font-size: 9px;
+	font-size: 12px;
 	line-height: 1.45;
 }
 
@@ -4629,7 +4629,7 @@ body.commander-active #reopen-report-btn {
 	flex-direction: column;
 	gap: 7px;
 	color: var(--hud-color-muted);
-	font-size: 10px;
+	font-size: 12px;
 	text-align: center;
 }
 
@@ -4849,4 +4849,373 @@ body.commander-active #reopen-report-btn {
 		/* biome-ignore lint/complexity/noImportantStyles: Reduced motion must override component and inline motion. */
 		transition-duration: 0.01ms !important;
 	}
+}
+
+/* Modern Wars interface: quiet surfaces, readable controls, map-first layout. */
+body {
+	font-size: 14px;
+}
+button,
+input,
+select,
+textarea,
+summary {
+	font-family: var(--hud-font-body);
+}
+.ui-overlay .hud-surface {
+	background: #121b23;
+	backdrop-filter: none;
+}
+.ui-overlay .hud-action {
+	--hud-action-background: #1b2732;
+	--hud-action-border: #34414e;
+	--hud-action-color: #dce4eb;
+	min-height: 34px;
+	font-size: 12px;
+	letter-spacing: 0.03em;
+}
+.ui-overlay .hud-action--danger {
+	--hud-action-background: #45272b;
+	--hud-action-border: #875052;
+}
+.ui-overlay .hud-action--success,
+.ui-overlay .hud-action.active {
+	--hud-action-background: #264f39;
+	--hud-action-border: #3fa96a;
+}
+button:focus-visible,
+summary:focus-visible,
+select:focus-visible,
+input:focus-visible {
+	outline: 2px solid #e9d58d;
+	outline-offset: 3px;
+}
+#game-status {
+	min-height: 48px;
+	padding: 8px 12px;
+	overflow: visible;
+}
+#game-status .status-right {
+	gap: 10px;
+	flex-wrap: wrap;
+}
+#game-status .status-left {
+	min-width: 0;
+	font-size: 13px;
+}
+#speed-controls {
+	gap: 4px;
+}
+#pause-btn {
+	min-width: 72px;
+}
+.hud-menu {
+	position: relative;
+}
+.hud-menu > summary {
+	list-style: none;
+	padding: 8px 16px;
+	background: #1b2732;
+	border: 1px solid #34414e;
+	border-radius: 4px;
+	cursor: pointer;
+}
+.hud-menu-content {
+	position: absolute;
+	right: 0;
+	top: calc(100% + 10px);
+	z-index: 1100;
+	display: grid;
+	gap: 6px;
+	width: 240px;
+	max-height: calc(100vh - 100px);
+	overflow-y: auto;
+	padding: 14px;
+	background: #121b23;
+	border: 1px solid #34414e;
+	border-radius: 6px;
+	box-shadow: var(--hud-shadow);
+}
+.hud-menu-heading {
+	margin: 10px 0 3px;
+	font-size: 12px;
+	color: var(--hud-color-muted);
+	font-weight: 600;
+}
+.hud-menu-content .hud-action {
+	width: 100%;
+	text-align: left;
+}
+.setup-panel {
+	--setup-content-width: 460px;
+	width: min(460px, calc(100vw - 32px));
+}
+.setup-panel .side-col {
+	flex: 0 0 196px;
+}
+.setup-panel .side-country-list {
+	max-height: min(330px, 38vh);
+}
+.setup-panel .setup-slot {
+	position: relative;
+	padding: 12px;
+	background: #18232d;
+	border-radius: 5px;
+}
+.setup-slot .clear-slot-btn {
+	position: absolute;
+	top: 7px;
+	right: 7px;
+	width: 26px;
+	height: 26px;
+	background: transparent;
+	color: var(--hud-color-muted);
+	border: 0;
+	font-size: 18px;
+}
+.setup-slot .slot-name {
+	padding-right: 18px;
+	font-size: 13px;
+}
+.country-configuration {
+	width: 100%;
+	margin-top: 8px;
+	text-align: left;
+}
+.country-configuration > summary {
+	padding: 6px 0;
+	font-size: 12px;
+	color: var(--hud-color-active-text);
+	cursor: pointer;
+}
+.country-configuration-actions {
+	display: grid;
+	gap: 6px;
+}
+.country-configuration .slot-controls {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 6px;
+	margin-top: 8px;
+}
+.country-configuration select {
+	width: 100%;
+	max-width: none;
+	min-height: 34px;
+	font-size: 12px;
+}
+.experiment-basic-random-war {
+	background: #1b2732;
+	border-color: #34414e;
+	color: var(--hud-color-text-soft);
+}
+.experiment-basic-random-war[aria-pressed="true"] {
+	background: #264f39;
+	border-color: #3fa96a;
+	color: #a6f4c5;
+}
+.experiment-basic-rule {
+	background: #1b2732;
+	border-color: #34414e;
+	color: var(--hud-color-text-soft);
+}
+.experiment-kicker {
+	font-size: 12px;
+	letter-spacing: 0.08em;
+	color: var(--hud-color-muted);
+}
+.war-desk {
+	width: 360px;
+}
+.war-desk-metric {
+	padding: 12px;
+	gap: 8px;
+	background: #1b2732;
+}
+.war-desk-metric--country {
+	margin-left: 14px;
+	background: transparent;
+	border-left: 2px solid #34414e;
+}
+.war-desk-metric > span {
+	font-size: 13px;
+	font-weight: 600;
+}
+.war-desk-metric-value > strong {
+	font-size: 14px;
+	font-variant-numeric: tabular-nums;
+}
+.war-desk-metric-values {
+	min-width: 155px;
+}
+.menu-v2-overlay {
+	background: rgba(10, 17, 23, 0.88);
+	clip-path: none;
+	backdrop-filter: none;
+}
+.menu-v2-title {
+	font-size: clamp(42px, 6vw, 76px);
+	letter-spacing: -1px;
+	line-height: 1.05;
+}
+.menu-v2-link {
+	font-family: var(--hud-font-body);
+	font-size: 20px;
+	letter-spacing: 0.02em;
+}
+.menu-v2-link.primary {
+	font-size: 36px;
+}
+.menu-v2-link svg {
+	width: 28px;
+	height: 28px;
+}
+.menu-v2-link:hover {
+	color: var(--hud-color-active-text);
+	transform: none;
+}
+.scroller-card {
+	background: #18232d;
+	border-radius: 6px;
+	box-shadow: none;
+}
+.scroller-card.primary {
+	border-color: #3fa96a;
+}
+#settings-overlay .menu-v2-container {
+	display: grid;
+	grid-template-columns: 220px minmax(0, 760px);
+	gap: 32px;
+	align-content: center;
+	justify-content: center;
+	padding: 32px;
+}
+#settings-overlay .menu-v2-header {
+	margin: 0;
+}
+#settings-overlay .menu-v2-title {
+	font-size: 42px;
+}
+#settings-overlay .menu-v2-author {
+	font: 14px var(--hud-font-body);
+}
+#settings-overlay .menu-v2-nav {
+	position: static;
+	width: 100%;
+	height: auto;
+	padding: 0;
+}
+#settings-overlay .scenario-selection-container {
+	background: #121b23;
+	border: 1px solid #34414e;
+	border-radius: 8px;
+}
+#settings-overlay .settings-tab-container {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 5px;
+}
+#settings-overlay .settings-tab-btn {
+	padding: 10px 12px;
+	font-size: 13px;
+	text-transform: none;
+	letter-spacing: 0;
+}
+#settings-overlay .settings-tab-btn.active {
+	background: #264f39;
+	color: #a6f4c5;
+}
+#settings-overlay .scenario-scroller-v2 {
+	max-height: 65vh;
+}
+#settings-overlay .setting-group {
+	padding: 12px 0;
+	border-bottom: 1px solid #26333f;
+}
+#settings-overlay label {
+	font-size: 14px;
+	line-height: 1.5;
+	text-transform: none;
+	letter-spacing: 0;
+}
+#settings-overlay small {
+	font-size: 12px;
+	color: var(--hud-color-muted);
+	line-height: 1.5;
+}
+#settings-overlay select,
+#settings-overlay input:not([type="checkbox"]):not([type="range"]) {
+	min-height: 38px;
+	font-size: 14px;
+}
+#settings-overlay .mini-btn {
+	min-height: 36px;
+	font-size: 12px;
+}
+@media (max-width: 900px) {
+	#settings-overlay .menu-v2-container {
+		grid-template-columns: 1fr;
+		gap: 16px;
+		padding: 20px;
+	}
+	#settings-overlay .menu-v2-header {
+		display: none;
+	}
+	#game-status .status-left {
+		max-width: 160px;
+	}
+}
+@media (max-width: 600px) {
+	#game-status {
+		left: 8px;
+		right: 8px;
+	}
+	#game-status .status-left {
+		display: none;
+	}
+	#game-status .status-right {
+		width: 100%;
+		justify-content: space-between;
+	}
+	.setup-panel,
+	.war-desk {
+		width: calc(100vw - 24px);
+		max-width: calc(100vw - 24px);
+	}
+	.war-desk-metric-values {
+		min-width: 140px;
+	}
+	.menu-v2-container {
+		padding: 24px;
+	}
+}
+
+.hud-menu:not([open]) .hud-menu-content {
+	display: none;
+}
+.menu-v2-link.primary:hover {
+	transform: none;
+}
+.scroller-card.primary,
+.scroller-card.selected {
+	background: #1c3028;
+	border-color: #3fa96a;
+	box-shadow: none;
+	transform: none;
+}
+.scroller-card:hover {
+	transform: none;
+}
+.scroller-card-desc,
+.scroller-card-credits {
+	color: var(--hud-color-muted);
+	text-transform: none;
+	letter-spacing: 0;
+}
+.war-desk-header strong {
+	font-size: 20px;
+	text-transform: none;
+}
+.setup-panel .side-col {
+	flex-basis: 188px;
 }
