@@ -14,8 +14,6 @@ export const DEFAULT_TACTICAL_CELL_SIZE = 0.6;
  * @property {number} [combatPower] Explicit tactical strength.
  * @property {number} [health] Strength fallback when combatPower is absent.
  * @property {number} [allyWeight] Local-balance weight.
- * @property {string} [kind] Formation kind, such as army or armor.
- * @property {boolean} [armorSupported] Whether armor has local line support.
  * @property {boolean} [supportRole] Whether this formation provides support.
  */
 
@@ -34,10 +32,6 @@ export const DEFAULT_TACTICAL_CELL_SIZE = 0.6;
  * @property {number} weightedStrength Sum of strength multiplied by ally weight.
  * @property {number} centroidLat Ally-weighted latitude centroid.
  * @property {number} centroidLng Ally-weighted circular longitude centroid.
- * @property {number} armorCount Armor formations in this cell.
- * @property {number} supportCount Support-capable formations in this cell.
- * @property {boolean} hasArmor Whether the cell contains armor.
- * @property {boolean} hasSupport Whether the cell contains support.
  */
 
 /**
@@ -209,19 +203,6 @@ function defaultAllyWeight(unit) {
 		: 1;
 }
 
-function defaultArmor(unit) {
-	return unit?.kind === "armor" || unit?.isArmor === true;
-}
-
-function defaultSupport(unit) {
-	return (
-		unit?.supportRole === true ||
-		String(
-			unit?.role || unit?.countryRole || unit?._taskForceRole || "",
-		).toUpperCase() === "SUPPORT"
-	);
-}
-
 function normalizeAccessors(options = {}) {
 	return {
 		getSide: options.getSide || defaultSide,
@@ -229,8 +210,6 @@ function normalizeAccessors(options = {}) {
 		getLng: options.getLng || ((unit) => unit?.lng),
 		getStrength: options.getStrength || defaultStrength,
 		getAllyWeight: options.getAllyWeight || defaultAllyWeight,
-		isArmor: options.isArmor || defaultArmor,
-		isSupport: options.isSupport || defaultSupport,
 	};
 }
 
@@ -260,10 +239,7 @@ function createCell(key, x, y, sideKey) {
 		weightedStrength: 0,
 		centroidLat: 0,
 		centroidLng: 0,
-		armorCount: 0,
-		supportCount: 0,
-		hasArmor: false,
-		hasSupport: false,
+
 		_sumLat: 0,
 		_sumLngSin: 0,
 		_sumLngCos: 0,
@@ -310,9 +286,7 @@ export function rebuildTacticalGrid(grid, units, options = {}) {
 				options.getLat ||
 				options.getLng ||
 				options.getStrength ||
-				options.getAllyWeight ||
-				options.isArmor ||
-				options.isSupport
+				options.getAllyWeight
 			? normalizeAccessors({ ...grid.accessors, ...options })
 			: grid.accessors;
 	grid.counters = createTacticalGridCounters();
@@ -365,10 +339,7 @@ export function rebuildTacticalGrid(grid, units, options = {}) {
 		cell._sumRawLat += normalizedLat;
 		cell._sumRawLngSin += Math.sin(lngRadians);
 		cell._sumRawLngCos += Math.cos(lngRadians);
-		if (accessors.isArmor(unit)) cell.armorCount++;
-		if (accessors.isSupport(unit)) cell.supportCount++;
-		cell.hasArmor = cell.armorCount > 0;
-		cell.hasSupport = cell.supportCount > 0;
+
 		grid.counters.insertedUnits++;
 		grid.counters.maxBucketOccupancy = Math.max(
 			grid.counters.maxBucketOccupancy,

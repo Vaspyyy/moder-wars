@@ -1113,31 +1113,3 @@ export function getDeJureControlByCountry(
  * @param {number} annexerCountryId
  * @param {number} annexerSideIndex
  */
-export function selectOccupationControl(
-	snapshot,
-	victimCountryId,
-	annexerCountryId,
-	annexerSideIndex,
-) {
-	const victim = getCountryLedger(snapshot, victimCountryId);
-	const total = victim?.deJureTotal || 0;
-	const heldByAnnexerSide = getDeJureControlBySide(
-		snapshot,
-		victimCountryId,
-		annexerSideIndex,
-	);
-	const heldByAnnexerCountry = getDeJureControlByCountry(
-		snapshot,
-		victimCountryId,
-		annexerCountryId,
-	);
-	return Object.freeze({
-		victimCountryId: countryId(victimCountryId),
-		annexerCountryId: countryId(annexerCountryId),
-		annexerSideIndex: sideIndex(annexerSideIndex),
-		total,
-		heldByAnnexerSide,
-		heldByAnnexerCountry,
-		heldRatio: total > 0 ? Math.min(1, heldByAnnexerSide / total) : 0,
-	});
-}

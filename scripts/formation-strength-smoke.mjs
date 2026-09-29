@@ -7,8 +7,6 @@ import {
 	getFormationPersonnel,
 	getFormationStrengthBadge,
 	getFormationStrengthMultiplier,
-	mergeFormationAccounting,
-	splitFormationAccounting,
 } from "../src/formation-strength.js";
 
 function seededRng(seed) {
@@ -59,58 +57,6 @@ assert.equal(
 );
 assert.equal(getFormationStrengthMultiplier({ personnel: 2500 }), 2.5);
 
-const mergedNumeric = mergeFormationAccounting(
-	[
-		{ id: "a", personnel: 1201, equipment: 51, casualties: 11 },
-		{ id: "b", personnel: 799, equipment: 49, casualties: 9 },
-	],
-	{ id: "ab" },
-);
-assert.deepEqual(mergedNumeric, {
-	id: "ab",
-	personnel: 2000,
-	equipment: 100,
-	casualties: 20,
-	nominalPersonnel: 1000,
-	strengthMultiplier: 2,
-	sourceIds: ["a", "b"],
-});
-
-const mixedEquipment = mergeFormationAccounting([
-	{ personnel: 1000, equipment: 5 },
-	{ personnel: 1000, equipment: { armor: 17, trucks: 8 } },
-]);
-assert.deepEqual(mixedEquipment.equipment, {
-	armor: 17,
-	trucks: 8,
-	untyped: 5,
-});
-
-const original = {
-	id: "large-formation",
-	personnel: 10_003,
-	equipment: { armor: 101, trucks: 77 },
-	casualties: 29,
-};
-const split = splitFormationAccounting(original, 4, {
-	weights: [4, 3, 2, 1],
-});
-assert.equal(split.length, 4);
-assert.equal(sum(split, "personnel"), original.personnel);
-assert.equal(sum(split, "casualties"), original.casualties);
-assert.equal(
-	split.reduce((total, part) => total + part.equipment.armor, 0),
-	original.equipment.armor,
-);
-assert.equal(
-	split.reduce((total, part) => total + part.equipment.trucks, 0),
-	original.equipment.trucks,
-);
-const remerged = mergeFormationAccounting(split);
-assert.equal(remerged.personnel, original.personnel);
-assert.deepEqual(remerged.equipment, original.equipment);
-assert.equal(remerged.casualties, original.casualties);
-
 assert.deepEqual(getFormationStrengthBadge({ personnel: 1000 }), {
 	text: "",
 	visible: false,
@@ -129,9 +75,6 @@ assert.throws(
 	() => distributeFormationPersonnel(1000, 0),
 	/formationCount must be positive/,
 );
-assert.throws(
-	() => splitFormationAccounting({ personnel: 1000 }, 0),
-	/partCount must be at least 1/,
-);
+
 
 console.log("Formation strength smoke tests passed");

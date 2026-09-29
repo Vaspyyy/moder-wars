@@ -16,10 +16,8 @@ import { beginLoadTrace } from "./load-profiler.js";
 import {
 	activateImageryProvider,
 	activeScenarioId,
-	airPowerEnabled,
 	applyEarthDeserts,
 	applyWorldBounds,
-	armorEnabled,
 	biomeMask,
 	brushSize,
 	cities,
@@ -77,6 +75,7 @@ import {
 	loadingStatus,
 	loadingTip,
 	mainMenu,
+	map,
 	mapSettingsMissilesCheckbox,
 	mapUi,
 	markTerritoryCellsChanged,
@@ -102,8 +101,6 @@ import {
 	resetConflictSetupState,
 	resetSideInfluenceMaps,
 	setAdjacencyCache,
-	setAirPowerEnabled,
-	setArmorEnabled,
 	setBombsDisabled,
 	setCities,
 	setCountryMetadata,
@@ -123,7 +120,6 @@ import {
 	setIsCustomTerrain,
 	setLoadingThematic,
 	setMissilesEnabled,
-	setNativeRuntimeScenarioIdentity,
 	setRawGeoJsonData,
 	setRefAboveTerrain,
 	setReferenceImageUrl,
@@ -132,7 +128,6 @@ import {
 	setRefScale,
 	setSelectedImportCountryId,
 	setupPanel,
-	setWarEconomyEnabled,
 	sides,
 	skipRandomGenBtn,
 	spawnRandomNationsAcrossMap,
@@ -147,7 +142,6 @@ import {
 	updateRefHandles,
 	updateRestartVisibility,
 	updateSidesUI,
-	warEconomyEnabled,
 	worldControlMap,
 	worldHeightDeg,
 	worldWidthDeg,
@@ -319,7 +313,7 @@ async function updateLandMask(features, maskValue = 1, isBlank = false) {
 						const idx = rowOffset + x;
 						if (idx >= 0 && idx < landMask.length) {
 							landMask[idx] = maskValue;
-							// Always populate De Jure map as a historical reference for rebellions, even in "blank" editor mode
+							// Always populate De Jure map as a historical reference for original territory, even in "blank" editor mode
 							deJureMap[idx] = id;
 							if (!isBlank) {
 								worldControlMap[idx] = id;
@@ -1309,15 +1303,6 @@ function generatePresetData(name) {
 			allies: Array.isArray(m.allies) ? m.allies : [],
 			gdp: Number.isFinite(m.gdp) ? m.gdp : 0,
 			pop: Number.isFinite(m.pop) ? m.pop : 0,
-			armoredVehicles: Number.isFinite(m.armoredVehicles)
-				? m.armoredVehicles
-				: null,
-			fighters: Number.isFinite(m.fighters) ? m.fighters : null,
-			strikeAircraft: Number.isFinite(m.strikeAircraft)
-				? m.strikeAircraft
-				: null,
-			armorQuality: Number.isFinite(m.armorQuality) ? m.armorQuality : null,
-			airQuality: Number.isFinite(m.airQuality) ? m.airQuality : null,
 		}));
 
 	// Persist city data (custom + any edited capitals)
@@ -1347,9 +1332,7 @@ function generatePresetData(name) {
 		worldWidthDeg: worldWidthDeg,
 		worldHeightDeg: worldHeightDeg,
 		missilesEnabled: missilesEnabled,
-		warEconomyEnabled: warEconomyEnabled,
-		armorEnabled: armorEnabled,
-		airPowerEnabled: airPowerEnabled,
+
 		timeEnabled: gameTimeEnabled || timeSystemCheckbox?.checked === true,
 		startDate:
 			gameTimeDate || timeSystemCheckbox?.checked
@@ -1387,7 +1370,6 @@ async function performPresetLoad(
 	}
 
 	const loadGeneration = ++worldLoadGeneration;
-	setNativeRuntimeScenarioIdentity(null);
 	const isCompiledSource =
 		typeof fileOrBlob === "string" ||
 		(typeof URL !== "undefined" && fileOrBlob instanceof URL);
@@ -1547,9 +1529,6 @@ async function performPresetLoad(
 			disableBombsCheckbox.checked = !missilesEnabled;
 		}
 		setBombsDisabled(disableBombsCheckbox?.checked || !missilesEnabled);
-		setWarEconomyEnabled(data.warEconomyEnabled !== false);
-		setArmorEnabled(data.armorEnabled !== false);
-		setAirPowerEnabled(data.airPowerEnabled !== false);
 		if (timeSystemCheckbox) {
 			timeSystemCheckbox.checked = data.timeEnabled === true;
 		}
@@ -1918,15 +1897,6 @@ async function performPresetLoad(
 			await loadCities();
 		}
 		loadTrace.mark("cities-ready", { cities: cities.length });
-		if (compiledMaps?.sourceIdentity?.format === "binary") {
-			setNativeRuntimeScenarioIdentity({
-				format: "binary",
-				name: compiledMaps.sourceIdentity.name,
-				sha256: compiledMaps.sourceIdentity.sha256,
-				gridRes: CONFIG.GRID_RES,
-				sourceUrl: compiledMaps.sourceIdentity.url,
-			});
-		}
 
 		setGameMode(targetMode);
 		mainMenu.style.display = "none";

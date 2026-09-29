@@ -1,79 +1,12 @@
 import L from "leaflet";
 import {
-	createAiIntelObserverSnapshot,
-	createAiIntelState,
-	decayAiIntel,
-	estimateAiIntelArea,
-	refreshAiIntel,
-	setAiIntelHostilities,
-} from "./ai-intel.js";
-import {
 	advanceAiTaskForce,
 	calculateTaskForceReadiness,
 	cleanupAiTaskForces,
-	createAiTaskForceObserverSnapshot,
 	reconcileAiTaskForces,
 	selectWithdrawalAnchor,
 } from "./ai-task-forces.js";
-import {
-	AIR_WING_STATES,
-	createAirPowerRuntime,
-	evacuateDefeatedWings,
-	findEligibleAirfield,
-	runAirPowerTick,
-} from "./air-power.js";
-import {
-	advanceAirfieldRepair,
-	airInfrastructureIsAvailable,
-	allocateAirWingMarkers,
-	COMBINED_ARMS_CONFIG,
-	captureAirfield,
-	computeAirOperationsCost,
-	computeArmorPayroll,
-	computeEquipmentPersonnel,
-	computeReplacementPurchase,
-	countryMayDeployStrategicEquipment,
-	getAirfieldCapacity,
-	getArmorCombatMultiplier,
-	getArmorInfluenceMultiplier,
-	getArmorSpeedMultiplier,
-	getQualityMultiplier,
-	groupEquipment,
-	isCombinedArmsFullyFunded,
-	resolveEquipmentProfile,
-	selectAirfieldSites,
-	unitCountsAsOccupationGarrison,
-	unitCountsForCapitulation,
-} from "./combined-arms.js";
 import { CONFIG } from "./config.js";
-import {
-	COMMAND_BANDS,
-	commandRefusalShare,
-	computeCurrentIncome,
-	computeEconomicStrength,
-	computeOccupationGarrisonPriority,
-	computeRequiredGarrison,
-	createEconomyState,
-	createHostilityMatrix,
-	desertionRate,
-	ECONOMY_CONFIG,
-	selectRebellionCandidates,
-	settleEconomyCycle,
-	updateResistance,
-} from "./economy.js";
-import {
-	appendWarCheckpoint,
-	appendWarEvent,
-	createExperimentRecorder,
-	createRandomSeed,
-	createSeededRng,
-	finalizeWarReport,
-	hashScenarioContent,
-	normalizeSeed,
-	persistWarReport,
-	readWarArchive,
-} from "./experiment.js";
-import { initExperimentUi } from "./experiment-ui.js";
 import {
 	chooseFormationBudget,
 	distributeFormationPersonnel,
@@ -121,7 +54,6 @@ import {
 	selectEligibleCasualtyAttackers,
 	selectMajorityOwnerTransfers,
 	selectOccupationController,
-	updateRebellionFailureCycles,
 } from "./surrender.js";
 import {
 	createTacticalGrid,
@@ -132,35 +64,14 @@ import {
 import {
 	createTerritoryLedger,
 	getCountryLedger,
-	getDeJureControlBySide,
 	getSideLedger,
 } from "./territory-ledger.js";
+import { initWarOverview, renderWarOverview } from "./war-overview.js";
 
 let _jsZipPromise = null;
 async function getJSZip() {
 	_jsZipPromise ||= import("jszip").then((module) => module.default);
 	return _jsZipPromise;
-}
-
-let _experimentSeed = normalizeSeed(createRandomSeed());
-let _gameplayRng = createSeededRng(_experimentSeed);
-
-export function setExperimentSeed(seed) {
-	_experimentSeed = normalizeSeed(seed);
-	_gameplayRng = createSeededRng(_experimentSeed);
-	return _experimentSeed;
-}
-
-export function getExperimentSeed() {
-	return _experimentSeed;
-}
-
-export function getGameplayRngState() {
-	return _gameplayRng.getState();
-}
-
-export function gameplayRandom() {
-	return _gameplayRng.next();
 }
 
 export function escapeHtml(s) {
@@ -258,56 +169,21 @@ export const TRANSLATIONS = {
 		DISABLE_PUPPETS: "DISABLE PUPPETS (NO VASSAL CALL)",
 		INAUGURATE: "Inaugurate Conflict",
 		START_WAR: "Start War",
-		AUTO_AFTER_ACTION_REPORT: "Automatically Open After Action Report",
-		AUTO_AFTER_ACTION_REPORT_NOTE:
-			"When disabled, the final map remains visible and the report can be reopened manually.",
-		EXPERIMENT_SANDBOX: "Simulation Sandbox",
-		EXPERIMENT_SEED: "Seed",
-		EXPERIMENT_RANDOMIZE: "Randomize",
-		EXPERIMENT_FORCE_MODE: "Force Mode",
+
 		EXPERIMENT_AI_POSTURE: "AI Posture",
 		EXPERIMENT_ADVANCED_SETUP: "Advanced Setup",
-		EXPERIMENT_SIDES_AI: "Sides & AI",
+
 		EXPERIMENT_FORCES_DATE: "Forces & Date",
-		EXPERIMENT_SYSTEMS: "Simulation Systems",
+
 		EXPERIMENT_RULES_CAPTURE: "Rules & Capture",
-		WAR_DESK: "War Desk",
-		LIVE_EXPERIMENT: "Live Experiment",
-		WAR_DESK_OVERVIEW: "Overview",
-		WAR_DESK_ECONOMY: "Economy",
-		WAR_DESK_EVENTS: "Events",
-		WAR_DESK_INTERVENE: "Intervene",
+
 		SHOW_AI_OPERATIONS: "Show AI Operations",
 		AI_OPERATIONS: "AI Operations",
-		AFTER_ACTION_REPORT: "After Action Report",
-		EXPERIMENT_COMPLETE: "Experiment Complete",
-		OBSERVED_CONTRIBUTORS: "Observed Contributors",
-		PIVOTAL_EVENTS: "Pivotal Events",
-		FINAL_SIDE_METRICS: "Final Side Metrics",
-		INTERVENTIONS: "Interventions",
-		COMPARISON: "Comparison",
-		INSPECT_FINAL_MAP: "Inspect Final Map",
-		FRESH_REMATCH: "Fresh Rematch",
-		REPEAT_SEED: "Repeat Seed",
-		MODIFY_SETUP: "Modify Setup",
-		CONTINUE_WORLD: "Continue World",
+
 		MAIN_MENU: "Main Menu",
-		WAR_ARCHIVE: "War Archive",
-		LOCAL_RECORDS: "Local Records",
+
 		CLOSE: "Close",
-		REOPEN_REPORT: "Reopen Report",
-		RERUN_EXPERIMENT: "Rerun Experiment",
-		APPLY_POSTURE: "Apply Posture",
-		ADD_FUNDS: "Add Funds",
-		CLEAR_ARREARS: "Clear Arrears",
-		ADD_MANPOWER: "Add Manpower",
-		ADD_ARMOR: "Add Armor",
-		ADD_FIGHTERS: "Add Fighters",
-		ADD_STRIKE_AIRCRAFT: "Add Strike Aircraft",
-		JOIN_SIDE: "Join Side",
-		WITHDRAW: "Withdraw",
-		ENFORCE_PEACE: "Enforce Peace",
-		REBELLION: "Start Rebellion",
+
 		POLITICAL: "POLITICAL",
 		ARROWS: "ARROWS (BUGGY)",
 		BATTLE_VIS: "BATTLE VISUALS",
@@ -436,10 +312,7 @@ export const TRANSLATIONS = {
 		DISABLE_PUPPETS: "БЕЗ ВАССАЛОВ",
 		INAUGURATE: "Начать конфликт",
 		START_WAR: "Начать войну",
-		AUTO_AFTER_ACTION_REPORT: "Автоматически открывать отчёт о войне",
-		AUTO_AFTER_ACTION_REPORT_NOTE:
-			"Если отключено, итоговая карта останется открытой, а отчёт можно будет открыть вручную.",
-		REBELLION: "Восстание",
+
 		POLITICAL: "ПОЛИТИЧЕСКАЯ",
 		ARROWS: "СТРЕЛКИ",
 		BATTLE_VIS: "БОИ",
@@ -571,10 +444,7 @@ export const TRANSLATIONS = {
 		DISABLE_PUPPETS: "傀儡国無効",
 		INAUGURATE: "紛争開始",
 		START_WAR: "戦争を開始",
-		AUTO_AFTER_ACTION_REPORT: "戦後レポートを自動的に開く",
-		AUTO_AFTER_ACTION_REPORT_NOTE:
-			"無効にすると最終マップが表示されたままになり、レポートは手動で開けます。",
-		REBELLION: "反乱開始",
+
 		POLITICAL: "政治地図",
 		ARROWS: "進撃矢印",
 		BATTLE_VIS: "戦闘エフェクト",
@@ -696,10 +566,7 @@ export const TRANSLATIONS = {
 		DISABLE_PUPPETS: "DESACTIVAR PUPPETS",
 		INAUGURATE: "Inaugurar Conflicto",
 		START_WAR: "Iniciar guerra",
-		AUTO_AFTER_ACTION_REPORT: "Abrir automáticamente el informe de posguerra",
-		AUTO_AFTER_ACTION_REPORT_NOTE:
-			"Si está desactivado, el mapa final seguirá visible y el informe podrá abrirse manualmente.",
-		REBELLION: "Iniciar Rebelión",
+
 		POLITICAL: "POLÍTICO",
 		ARROWS: "FLECHAS",
 		BATTLE_VIS: "VISUALES DE BATALLA",
@@ -818,11 +685,7 @@ export const TRANSLATIONS = {
 		DISABLE_MISSILES: "DÉSACTIVER MISSILES",
 		INAUGURATE: "Inaugurer le Conflit",
 		START_WAR: "Lancer la guerre",
-		AUTO_AFTER_ACTION_REPORT:
-			"Ouvrir automatiquement le rapport d’après-guerre",
-		AUTO_AFTER_ACTION_REPORT_NOTE:
-			"Si désactivé, la carte finale reste visible et le rapport peut être rouvert manuellement.",
-		REBELLION: "Lancer Rébellion",
+
 		POLITICAL: "POLITIQUE",
 		ARROWS: "FLÈCHES",
 		BATTLE_VIS: "VISUELS COMBAT",
@@ -942,10 +805,7 @@ export const TRANSLATIONS = {
 		DISABLE_MISSILES: "RAKETEN DEAKTIVIEREN",
 		INAUGURATE: "Konflikt eröffnen",
 		START_WAR: "Krieg starten",
-		AUTO_AFTER_ACTION_REPORT: "Gefechtsbericht automatisch öffnen",
-		AUTO_AFTER_ACTION_REPORT_NOTE:
-			"Wenn deaktiviert, bleibt die Endkarte sichtbar und der Bericht kann manuell geöffnet werden.",
-		REBELLION: "Rebellion starten",
+
 		POLITICAL: "POLITISCH",
 		ARROWS: "PFEILE",
 		BATTLE_VIS: "KAMPFEFFEKTE",
@@ -1064,10 +924,7 @@ export const TRANSLATIONS = {
 		DISABLE_MISSILES: "DESATIVAR MÍSSEIS",
 		INAUGURATE: "Inaugurar Conflito",
 		START_WAR: "Iniciar guerra",
-		AUTO_AFTER_ACTION_REPORT: "Abrir relatório pós-ação automaticamente",
-		AUTO_AFTER_ACTION_REPORT_NOTE:
-			"Quando desativado, o mapa final permanece visível e o relatório pode ser reaberto manualmente.",
-		REBELLION: "Iniciar Rebelião",
+
 		POLITICAL: "POLÍTICO",
 		ARROWS: "SETAS",
 		BATTLE_VIS: "VISUAIS DE BATALHA",
@@ -2014,17 +1871,7 @@ export let refAboveTerrain = false;
 export let paintMaskId = -1; // -1 means no mask, >= 0 restricts painting to that ID
 export let peaceTreatiesDisabled = false;
 export let bombsDisabled = false;
-export let warEconomyEnabled = false;
-export let armorEnabled = false;
-export let airPowerEnabled = false;
-export const countryEconomy = new Map();
-export const countryEquipment = new Map();
-export const airfields = [];
-export const airWings = [];
-export const occupationEconomies = new Map();
-export const activeRebellions = new Map();
-export const economyEvents = [];
-export let economyPayCycle = 0;
+
 export let sideUids = [];
 export const hostileSidePairs = new Set();
 export let hostilityMatrix = new Uint8Array(MAX_SIDES * MAX_SIDES);
@@ -2041,9 +1888,7 @@ export let animationFrameId = null;
 export let backgroundTickId = null;
 export let simFrameCount = 0;
 let _simTickCount = 0; // per-simulation-tick counter (unlike simFrameCount which is per-visual-frame)
-const _airPowerRuntime = createAirPowerRuntime();
-let _nextAirfieldId = 1;
-let _nextAirWingId = 1;
+
 let warGraceEndTick = 0;
 export let simSpeed = 3.0;
 let _perfLastTime = 0;
@@ -2092,22 +1937,16 @@ let _renderAdmissionDeferredFrames = 0;
 let _simulationPhaseJobsRegistered = false;
 const _pendingProposalSides = [];
 const _pendingProposalSideSet = new Set();
-const _retiredSidePersonnelByUid = new Map();
+
 export let _cachedSoldierEls = [];
 export let _cachedSideUnitCounts = [];
 export let _cachedSideSoldierEsts = [];
-export let _cachedSideArmorCounts = [];
-export let _cachedSideFighterCounts = [];
-export let _cachedSideStrikeCounts = [];
 export let _cachedSideTerritoryCounts = [];
 export let _cachedSideTerritoryPcts = [];
 export let _cachedCityEls = [];
 export let _cachedUnitCountSpans = [];
 export let _cachedTerritoryCtrlEls = [];
 export let _cachedMomentumEls = [];
-export let _cachedArmorEls = [];
-export let _cachedFighterEls = [];
-export let _cachedStrikeEls = [];
 export let _cachedTerritorySegEls = [];
 export const _cachedManpowerSpans = [];
 
@@ -2220,45 +2059,6 @@ function getActiveHostilePairs() {
 	return pairs;
 }
 
-function getUnitDiscipline(unit) {
-	if (!Number.isFinite(unit._discipline)) {
-		const seed =
-			Math.sin((unit.id || 0.5) * 99991 + (unit.sovereignId || 0) * 7919) *
-			43758.5453;
-		unit._discipline = Math.abs(seed - Math.floor(seed));
-	}
-	return unit._discipline;
-}
-
-function getUnitCommandPolicy(unit) {
-	if (!warEconomyEnabled) {
-		return {
-			band: COMMAND_BANDS.PAID,
-			refusesOffense: false,
-			returnHome: false,
-			selfDefenseOnly: false,
-		};
-	}
-	let band = unit._commandBand;
-	if (!band) {
-		band =
-			countryEconomy.get(unit.sovereignId)?.commandBand || COMMAND_BANDS.PAID;
-		unit._commandBand = band;
-	}
-	let refusesOffense = unit._refusesOffense;
-	if (typeof refusesOffense !== "boolean") {
-		refusesOffense = getUnitDiscipline(unit) < commandRefusalShare(band);
-		unit._refusesOffense = refusesOffense;
-	}
-	return {
-		band,
-		refusesOffense,
-		returnHome:
-			band === COMMAND_BANDS.BREAKDOWN || band === COMMAND_BANDS.MUTINY,
-		selfDefenseOnly: band === COMMAND_BANDS.MUTINY,
-	};
-}
-
 function clearUnitCommandAssignments(unit) {
 	unit._assignedPlanSignature = null;
 	unit._taskForceUid = null;
@@ -2271,8 +2071,7 @@ function clearUnitCommandAssignments(unit) {
 	unit.supplyAssigned = false;
 	unit.coastalAssigned = false;
 	unit.garrisonAssigned = false;
-	unit._occupationGarrisonVictimId = null;
-	unit._occupationGarrisonPointIndex = null;
+
 	unit.frontSlot = null;
 	unit._defenderReactTarget = null;
 	unit._cachedTarget = null;
@@ -2298,7 +2097,7 @@ function getLiveFormationPersonnel(unit) {
 }
 
 function getLiveFormationStrength(unit) {
-	if (!unit || unit.kind === "armor") return 1;
+	if (!unit) return 1;
 	return getFormationStrengthMultiplier(unit, {
 		referencePersonnel: CONFIG.UNIT_TO_SOLDIER_RATIO,
 		nominalPersonnel: getUnitPersonnelFallback(unit),
@@ -2311,18 +2110,15 @@ function getLiveFormationStrength(unit) {
 function returnUnitPersonnelToReserve(unit) {
 	const sideIdx = Number.isInteger(unit?.sideIndex) ? unit.sideIndex : -1;
 	if (sideIdx < 0 || sideIdx >= MAX_SIDES) return 0;
-	const personnel =
-		unit.kind === "armor"
-			? computeEquipmentPersonnel({ armoredVehicles: unit.equipment || 0 })
-			: getLiveFormationPersonnel(unit);
+	const personnel = getLiveFormationPersonnel(unit);
 	if (personnel > 0) {
 		sideRecruitableManpower[sideIdx] += personnel;
 	}
 	return personnel;
 }
 
-function getFormationCapacityStrength(unit) {
-	if (!unit || unit.kind === "armor") return 1;
+function _getFormationCapacityStrength(unit) {
+	if (!unit) return 1;
 	if (Number.isFinite(unit.personnelCapacity)) {
 		return Math.max(0, unit.personnelCapacity / CONFIG.UNIT_TO_SOLDIER_RATIO);
 	}
@@ -2330,7 +2126,7 @@ function getFormationCapacityStrength(unit) {
 }
 
 function setUnitFormationPersonnel(unit, personnel) {
-	if (!unit || unit.kind === "armor") return unit;
+	if (!unit) return unit;
 	const wholePersonnel = Math.max(1, Math.round(Number(personnel) || 0));
 	const strengthMultiplier =
 		wholePersonnel / Math.max(1, CONFIG.UNIT_TO_SOLDIER_RATIO);
@@ -2456,42 +2252,11 @@ function compactVariableStrengthFormationsForSide(
 }
 
 function applyPendingBenchmarkForceOverride() {
-	const targetTotalPersonnel = _benchmarkForcePersonnelPerSide;
-	if (!Number.isFinite(targetTotalPersonnel) || targetTotalPersonnel <= 0) {
-		return;
-	}
-	for (let sideIdx = 0; sideIdx < sides.length; sideIdx++) {
-		manualSideManpower[sideIdx] = targetTotalPersonnel;
-		let equipmentPersonnel = 0;
-		for (const unit of units) {
-			if (
-				unit.sideIndex !== sideIdx ||
-				unit.kind !== "armor" ||
-				unit.health <= 0
-			) {
-				continue;
-			}
-			equipmentPersonnel += computeEquipmentPersonnel({
-				armoredVehicles: unit.equipment || 0,
-			});
-		}
-		for (const wing of airWings) {
-			if (
-				wing.sideIndex !== sideIdx ||
-				wing.equipment <= 0 ||
-				wing.state === AIR_WING_STATES.EVACUATED
-			) {
-				continue;
-			}
-			equipmentPersonnel += computeEquipmentPersonnel({
-				fighters: wing.role === "FIGHTER" ? wing.equipment : 0,
-				strikeAircraft: wing.role === "STRIKE" ? wing.equipment : 0,
-			});
-		}
-		compactVariableStrengthFormationsForSide(
-			sideIdx,
-			Math.max(1, Math.round(targetTotalPersonnel - equipmentPersonnel)),
-		);
+	const target = _benchmarkForcePersonnelPerSide;
+	if (!Number.isFinite(target) || target <= 0) return;
+	for (let sideIndex = 0; sideIndex < sides.length; sideIndex++) {
+		manualSideManpower[sideIndex] = target;
+		compactVariableStrengthFormationsForSide(sideIndex, Math.round(target));
 	}
 	for (const unit of units) unit.deployTicks = 0;
 	_benchmarkForcePersonnelPerSide = null;
@@ -2517,7 +2282,7 @@ function resetSimulationOptimizationRuntime() {
 	_coastalLandIndices = [];
 	_pendingProposalSides.length = 0;
 	_pendingProposalSideSet.clear();
-	_retiredSidePersonnelByUid.clear();
+
 	_territoryLedger = createRuntimeTerritoryLedger();
 	_frameSimulationCommitFlags.clear();
 	_renderAdmissionDeferredFrames = 0;
@@ -2728,22 +2493,6 @@ function registerSimulationPhaseJobs() {
 	if (_simulationPhaseJobsRegistered) return;
 	_simulationPhaseJobsRegistered = true;
 	_simulationPhaseWheel.register({
-		id: "operational-intel-decay",
-		intervalTicks: 15,
-		phaseOffset: 4,
-		priority: 10,
-		oncePerFrame: false,
-		run: () => decayOperationalAiIntelContacts(),
-	});
-	_simulationPhaseWheel.register({
-		id: "occupation-garrison-sync",
-		intervalTicks: 60,
-		phaseOffset: 17,
-		priority: 20,
-		oncePerFrame: false,
-		run: () => syncOccupationGarrisonAssignments(),
-	});
-	_simulationPhaseWheel.register({
 		id: "unit-consolidation",
 		intervalTicks: 30,
 		phaseOffset: 11,
@@ -2794,7 +2543,6 @@ function consolidateOverlappingUnits() {
 		const unit = units[index];
 		if (
 			unitsToRemove.has(unit) ||
-			unit.kind === "armor" ||
 			unit.personnel !== undefined ||
 			(unit.personnelCapacity || 0) > CONFIG.UNIT_TO_SOLDIER_RATIO ||
 			unit.health >= maxMergedHealth ||
@@ -2820,7 +2568,6 @@ function consolidateOverlappingUnits() {
 			if (
 				other === unit ||
 				unitsToRemove.has(other) ||
-				other.kind === "armor" ||
 				other.personnel !== undefined ||
 				(other.personnelCapacity || 0) > CONFIG.UNIT_TO_SOLDIER_RATIO ||
 				(CONFIG.ENABLE_SIDE_HASH_COMBAT
@@ -2855,16 +2602,11 @@ function consolidateOverlappingUnits() {
 
 function resetOperationalAiRuntime() {
 	window.__mwAiOperationReveal = null;
-	_aiIntelBySide = new Map();
 	_aiTaskForcesBySide = new Map();
-	aiObserverSideUid = null;
-	_aiPrewarEnemyPowerBySide.clear();
 	_aiTaskForceTransitionById.clear();
-	_aiIntelEstimateByTaskForce.clear();
 	_aiPendingLandingHandoffs.clear();
 	_aiLastOperationsTick = Number.NEGATIVE_INFINITY;
 	_aiOperationsDirty = true;
-	_frozenAiObserverSnapshots = new Map();
 	for (const unit of units) {
 		unit._taskForceUid = null;
 		unit._taskForceRole = null;
@@ -2884,9 +2626,6 @@ function requestOperationalAiReassessment(sideIndex = null) {
 	}
 }
 
-function getRebellionForUnit(unit) {
-	return activeRebellions.get(unit.sovereignId) || null;
-}
 export let _casualtyStructureKey = "";
 export let _casualtyValueEls = {};
 export let _casualtySideMpEls = {};
@@ -2902,10 +2641,7 @@ export let currentUsername = null;
 export let flagCodes = null;
 export let isMuted = false;
 export let currentScenarioContext = null; // { id, name, ownerUsername }
-export let nativeRuntimeScenarioIdentity = null;
-let _nativeRuntimeInitialCheckpoint = null;
-let _nativeRuntimeCheckpointError =
-	"No post-startWar checkpoint has been captured";
+
 export let hubReturnState = null;
 export let hubWasInEditor = false;
 export let godModeActive = false;
@@ -2916,36 +2652,45 @@ export let preGodModeState = "SIMULATING";
 export const latestCountryStats = new Map();
 export let disableFullscreen = true;
 
-export function setNativeRuntimeScenarioIdentity(identity) {
-	_nativeRuntimeInitialCheckpoint = null;
-	_nativeRuntimeCheckpointError =
-		"No post-startWar checkpoint has been captured";
-	nativeRuntimeScenarioIdentity = identity
-		? Object.freeze({
-				format: identity.format,
-				name: identity.name,
-				sha256: identity.sha256,
-				gridRes: Number(identity.gridRes),
-				sourceUrl: identity.sourceUrl || null,
-			})
-		: null;
+let _warOverviewSides = [];
+let _warOverviewLastUpdate = -Infinity;
+const _liveSideCombatPower = new Float64Array(MAX_SIDES);
+function refreshLiveCombatPower() {
+	_liveSideCombatPower.fill(0);
+	for (const unit of units)
+		if (
+			unit.health > 0 &&
+			unit.deployTicks <= 0 &&
+			unit.sideIndex >= 0 &&
+			unit.sideIndex < MAX_SIDES
+		)
+			_liveSideCombatPower[unit.sideIndex] += operationalUnitPower(unit);
+}
+function getKnownEnemyPowerForSide(sideIndex) {
+	let power = 0;
+	for (let index = 0; index < sides.length; index++)
+		if (areSidesHostile(sideIndex, index)) power += _liveSideCombatPower[index];
+	return power;
+}
+function formationDamage(damage, attacker) {
+	return (
+		damage *
+		(attacker.kind === "army"
+			? Math.max(0, getLiveFormationStrength(attacker))
+			: 1)
+	);
+}
+function createHostilityMatrix(sideCount, pairs, uids, maxSides = 8) {
+	const matrix = new Uint8Array(maxSides * maxSides);
+	for (let a = 0; a < sideCount; a++)
+		for (let b = a + 1; b < sideCount; b++)
+			if (uids[a] && uids[b] && pairs.has(sidePairKey(uids[a], uids[b]))) {
+				matrix[a * maxSides + b] = 1;
+				matrix[b * maxSides + a] = 1;
+			}
+	return matrix;
 }
 
-// Experiment Loop state is kept apart from the mutable simulation objects.
-// Specs and reports retain serializable ids, uids, options, metrics, and events
-// so rematches reconstruct a clean runtime instead of retaining live objects.
-export let activeExperimentSpec = null;
-export let activeExperimentRecorder = null;
-export let latestWarReport = null;
-let _experimentUi = null;
-let _experimentParentReport = null;
-let _experimentPreviousPhases = [];
-let _experimentPreviousCapitalLosses = new Set();
-let _experimentPreviousCityControllers = new Map();
-let _experimentInterventionPauseState = null;
-let _experimentWarDeskLastUpdate = -Infinity;
-let _experimentRestoredSideUids = null;
-let _experimentRestoredHostilities = null;
 let _warLifecycleToken = 0;
 const _warLifecycleTimers = new Set();
 
@@ -2976,7 +2721,6 @@ const PERF_COUNTER_DEFAULTS = {
 	_enabled: false,
 	plans: 0,
 	legacyPlans: 0,
-	operationalIntel: 0,
 	operationalTaskForces: 0,
 	proposals: 0,
 	eval: 0,
@@ -3029,9 +2773,6 @@ const PERF_COUNTER_DEFAULTS = {
 	unitCityObjective: 0,
 	unitGarrisonTarget: 0,
 	unitCombatMove: 0,
-	economy: 0,
-	armor: 0,
-	airPower: 0,
 	// Tactical-grid workload and stale-target effectiveness counters.
 	tacticalFriendlyCandidatePairs: 0,
 	tacticalEnemyCandidateVisits: 0,
@@ -3325,21 +3066,20 @@ export const _navalSupplyPlan = []; // per-side naval supply run plan (1 per sid
 export const _transportPlan = []; // per-side transport plan (1 per side max)
 export const _coastalDefensePlan = []; // per-side coastal defense passive overlay
 export const _neutralGarrisonPlan = []; // per-side neutral border garrison plans
-export const _occupationGarrisonPlans = new Map(); // victimId -> occupation suppression plan
+// victimId -> occupation suppression plan
 export const _defenderReactionPlan = []; // per-side emergency DEFEND at enemy naval beachhead
 export let _frontIntelBySide = []; // per-side tactical front/theater summaries
 export const _aiPlanMemory = new Map(); // key: side:type:target -> recent plan outcome data
 export let _aiDebugPlans = []; // per-side diagnostics for the war plan overlay/console
-export let _aiIntelBySide = new Map(); // stable side UID -> observer-scoped contact state
+// stable side UID -> observer-scoped contact state
 export let _aiTaskForcesBySide = new Map(); // stable side UID -> coalition task-force list
-export let aiObserverSideUid = null;
-const _aiPrewarEnemyPowerBySide = new Map();
+
 const _aiTaskForceTransitionById = new Map();
-const _aiIntelEstimateByTaskForce = new Map();
+
 const _aiPendingLandingHandoffs = new Map();
 let _aiLastOperationsTick = Number.NEGATIVE_INFINITY;
 let _aiOperationsDirty = true;
-let _frozenAiObserverSnapshots = new Map();
+
 const _proposalReassessTick = []; // per-side last reassessment tick
 const _proposalsCache = []; // per-side cached scored proposals
 const _planReassessNeeded = []; // per-side flag: force immediate reassessment
@@ -3367,7 +3107,7 @@ export const WAR_PLAN_TYPES = [
 	"NAVAL_SUPPLY",
 	"COASTAL_DEFENSE",
 	"NEUTRAL_GARRISON",
-	"OCCUPATION_GARRISON",
+
 	"TRANSPORT",
 ];
 export const WAR_PLAN_PHASES = [
@@ -3526,10 +3266,7 @@ export function setIsCustomTerrain(val) {
 export function setMissilesEnabled(val) {
 	missilesEnabled = val;
 }
-export function setWarEconomyEnabled() {
-	warEconomyEnabled = false;
-	if (warEconomyCheckbox) warEconomyCheckbox.checked = warEconomyEnabled;
-}
+
 export function setRawGeoJsonData(val) {
 	rawGeoJsonData = val;
 }
@@ -3809,19 +3546,7 @@ export const inspectAnnexClickBtn = document.getElementById(
 export const shareCountryBtn = document.getElementById("share-country-btn");
 export const closeInspectorBtn = document.getElementById("close-inspector-btn");
 export const inspectBuffBtn = document.getElementById("inspect-buff-btn");
-export const inspectArmoredVehiclesInput = document.getElementById(
-	"inspect-armored-vehicles",
-);
-export const inspectArmorQualityInput = document.getElementById(
-	"inspect-armor-quality",
-);
-export const inspectFightersInput = document.getElementById("inspect-fighters");
-export const inspectStrikeAircraftInput = document.getElementById(
-	"inspect-strike-aircraft",
-);
-export const inspectAirQualityInput = document.getElementById(
-	"inspect-air-quality",
-);
+
 export const annexCountryInput = document.getElementById("annex-country-input");
 export const annexCountryBtn = document.getElementById("annex-country-btn");
 export const addAllyBtn = document.getElementById("add-ally-btn");
@@ -3955,9 +3680,7 @@ export const disableAutoFullscreenCheckbox = document.getElementById(
 export const disableCountryGradientCheckbox = document.getElementById(
 	"disable-country-gradient-checkbox",
 );
-export const autoAfterActionReportCheckbox = document.getElementById(
-	"auto-after-action-report-checkbox",
-);
+
 export const useSystemFontCheckbox = document.getElementById(
 	"use-system-font-checkbox",
 );
@@ -4001,18 +3724,7 @@ if (disableCountryGradientCheckbox) {
 		);
 	});
 }
-if (autoAfterActionReportCheckbox) {
-	const savedPreference = getCookie("mw_auto_after_action_report");
-	if (savedPreference !== "") {
-		autoAfterActionReportCheckbox.checked = savedPreference === "true";
-	}
-	autoAfterActionReportCheckbox.addEventListener("change", (event) => {
-		setCookie(
-			"mw_auto_after_action_report",
-			event.target.checked ? "true" : "false",
-		);
-	});
-}
+
 if (saveSkipCheckbox) {
 	saveSkipCheckbox.addEventListener("change", (e) => {
 		setCookie("mw_skip_settings", e.target.checked ? "true" : "false");
@@ -4440,15 +4152,9 @@ export const statusText = document.getElementById("status-text");
 export const setupPanel = document.getElementById("setup-panel");
 export const setupOptions = document.getElementById("setup-options");
 export const startBtn = document.getElementById("start-btn");
-export const rebellionBtn = document.getElementById("rebellion-btn");
-if (rebellionBtn) {
-	rebellionBtn.style.display = "none";
-}
 
 export const noPeaceCheckbox = document.getElementById("no-peace-checkbox");
-export const warEconomyCheckbox = document.getElementById(
-	"war-economy-checkbox",
-);
+
 export const disableBombsCheckbox = document.getElementById(
 	"disable-bombs-checkbox",
 );
@@ -4473,12 +4179,7 @@ export const closeLeaderboardBtn = document.getElementById(
 
 // Status & control panels
 export const statsPanel = document.getElementById("stats-panel");
-export const economyPanel = document.getElementById("economy-panel");
-export const economyPanelBody = document.getElementById("economy-panel-body");
-export const economyEventsList = document.getElementById("economy-events");
-export const minimizeEconomyBtn = document.getElementById(
-	"minimize-economy-btn",
-);
+
 export const restartScenarioBtn = document.getElementById(
 	"restart-scenario-btn",
 );
@@ -4550,9 +4251,6 @@ export function rebuildStatsPanel() {
             <div class="stat-metrics">
 				<div class="metric"><span class="metric-label">PERSONNEL</span><span class="metric-value hud-side-accent" data-sidesoldiers="${s.idx}">0</span></div>
                 <div class="metric"><span class="metric-label">CITIES</span><span class="metric-value" data-sidecities="${s.idx}">0</span></div>
-                <div class="metric"><span class="metric-label">ARMOR</span><span class="metric-value" data-sidearmor="${s.idx}">0</span></div>
-                <div class="metric"><span class="metric-label">FTR</span><span class="metric-value" data-sidefighters="${s.idx}">0</span></div>
-                <div class="metric"><span class="metric-label">STRIKE</span><span class="metric-value" data-sidestrike="${s.idx}">0</span></div>
 				<div class="metric"><span class="metric-label">MOMENTUM</span><span class="metric-value metric-value--momentum" data-sidemomentum="${s.idx}">◆ STALEMATE</span></div>
             </div>
         </div>`;
@@ -4571,9 +4269,6 @@ export function rebuildStatsPanel() {
 	_cachedTerritoryCtrlEls = [];
 	_cachedTerritorySegEls = [];
 	_cachedMomentumEls = [];
-	_cachedArmorEls = [];
-	_cachedFighterEls = [];
-	_cachedStrikeEls = [];
 	for (const s of activeSides) {
 		_cachedSoldierEls[s.idx] = document.querySelector(
 			`[data-sidesoldiers="${s.idx}"]`,
@@ -4589,15 +4284,6 @@ export function rebuildStatsPanel() {
 		);
 		_cachedMomentumEls[s.idx] = document.querySelector(
 			`[data-sidemomentum="${s.idx}"]`,
-		);
-		_cachedArmorEls[s.idx] = document.querySelector(
-			`[data-sidearmor="${s.idx}"]`,
-		);
-		_cachedFighterEls[s.idx] = document.querySelector(
-			`[data-sidefighters="${s.idx}"]`,
-		);
-		_cachedStrikeEls[s.idx] = document.querySelector(
-			`[data-sidestrike="${s.idx}"]`,
 		);
 	}
 
@@ -4718,10 +4404,7 @@ function applyFrontlineLayout(data) {
 	for (const assignment of data.slotAssignments) {
 		const unit = unitsById.get(assignment.unitId);
 		if (!unit) continue;
-		if (
-			assignment.pairKey == null ||
-			unit._occupationGarrisonVictimId != null
-		) {
+		if (assignment.pairKey == null) {
 			unit.frontSlot = null;
 			continue;
 		}
@@ -4901,7 +4584,7 @@ function dispatchFrontlineWork(includeField = false, includeLayout = false) {
 					lat: unit.lat,
 					lng: unit.lng,
 					deployTicks: unit.deployTicks || 0,
-					garrisonExcluded: unit._occupationGarrisonVictimId != null,
+
 					previousPairKey: unit.frontSlot?.pairKey || null,
 					previousSegmentIdx: unit.frontSlot?.segmentIdx || 0,
 				}))
@@ -5780,10 +5463,6 @@ export function updateSidesUI() {
 	const _allSelectedCountries = sides.flat().filter((c) => !!c);
 
 	// Rebellions are disabled: ensure button (if present) stays hidden and inert.
-	if (rebellionBtn) {
-		rebellionBtn.style.display = "none";
-		rebellionBtn.disabled = true;
-	}
 
 	setupOptions.style.display = activeSidesCount >= 1 ? "block" : "none";
 	const canStart = activeSidesCount >= 2;
@@ -6128,7 +5807,6 @@ export function updatePersistentInfluence(
 
 	// Smooth only cells near active influence or controller changes. The previous
 	// global random sampler rejected most water/stable cells and produced a large
-	// three-tick sawtooth. Fixed item-count work keeps repeat-seed ordering stable.
 	processInfluenceFrontierDiffusion(
 		Math.max(400, Math.floor(1600 / optimizationFactor)),
 	);
@@ -6200,7 +5878,7 @@ export function updatePersistentInfluence(
 		}
 
 		const countryObj = countryById.get(u.sovereignId);
-		const commandPolicy = getUnitCommandPolicy(u);
+
 		const role = countryObj?.role || "OFFENSE";
 
 		if (countryObj) {
@@ -6227,11 +5905,7 @@ export function updatePersistentInfluence(
 		}
 		// Naval units exert less influence on territory capture than land units.
 		if (isAtSea) teamMult *= 0.4;
-		if (u.kind === "armor") {
-			teamMult *= getArmorInfluenceMultiplier(!!u._armorSupported);
-		} else {
-			teamMult *= getLiveFormationStrength(u);
-		}
+		teamMult *= getLiveFormationStrength(u);
 
 		// Organic Push: Randomize push intensity per unit to create ragged, non-linear salients
 		const organicNoise =
@@ -6243,8 +5917,7 @@ export function updatePersistentInfluence(
 		const rVar = r * (0.9 + Math.sin(u.id * 500 + _simTickCount * 0.1) * 0.2);
 		const radiusSq = rVar * rVar;
 		const concentrationBonus = Math.min(2.5, (u.lastAllyCount || 1) / 5);
-		const unitRebellion = getRebellionForUnit(u);
-		const isRebelUnit = !!unitRebellion;
+
 		const hostileSideIndices = _influenceHostileSideIndices[mySideIdx];
 		const myInfluenceMap = sideInfluenceMaps[mySideIdx];
 
@@ -6290,12 +5963,6 @@ export function updatePersistentInfluence(
 					let newInfluence = curInfluence + Math.abs(cellDelta) * weight;
 					if (newInfluence > 1) newInfluence = 1;
 
-					if (isRebelUnit && deJureMap[idx] !== unitRebellion.rebelId) {
-						if (newInfluence > curInfluence) {
-							newInfluence = curInfluence;
-						}
-					}
-
 					const ownerId = worldControlMap[idx];
 					const ownerSideIdx = countryToSideMap.get(ownerId);
 					if (
@@ -6308,7 +5975,6 @@ export function updatePersistentInfluence(
 					const isOwnerAlly =
 						sideAllyIdSets[u.sideIndex] &&
 						sideAllyIdSets[u.sideIndex].has(ownerId);
-					if (commandPolicy.refusesOffense && !isOwnerAlly) continue;
 
 					// If owner is a SUPPORT nation on the other side and we are OFFENSE, don't invade (skip influence)
 					// unless we already have established some occupation in that cell.
@@ -6340,17 +6006,8 @@ export function updatePersistentInfluence(
 							);
 
 							const finalCreditId = bestAllyId || creditToId;
-
-							const creditRebellion = activeRebellions.get(finalCreditId);
-							const isRebelFinalCredit = !!creditRebellion;
-							const canReceiveCredit =
-								!isRebelFinalCredit ||
-								deJureMap[idx] === creditRebellion.rebelId;
-
-							if (canReceiveCredit) {
-								if (newInfluence > 0.05 || currentOccupierId === 0) {
-									primaryOccupierMap[idx] = finalCreditId;
-								}
+							if (newInfluence > 0.05 || currentOccupierId === 0) {
+								primaryOccupierMap[idx] = finalCreditId;
 							}
 						}
 					}
@@ -6936,7 +6593,7 @@ export function handleCountryClick(
 			let fromLat, fromLng;
 
 			if (myBases.length > 0) {
-				const b = myBases[Math.floor(gameplayRandom() * myBases.length)];
+				const b = myBases[Math.floor(Math.random() * myBases.length)];
 				fromLat = b.lat;
 				fromLng = b.lng;
 			} else if (senderMeta?.stableCenter) {
@@ -7314,16 +6971,6 @@ export function spawnSingleUnit(
 	sovereignId,
 	_preferEnemyFront = false,
 ) {
-	const economyState = countryEconomy.get(sovereignId);
-	if (
-		warEconomyEnabled &&
-		gameState === "SIMULATING" &&
-		economyState &&
-		(economyState.arrearsCycles >= 1 ||
-			economyState.treasury < ECONOMY_CONFIG.RECRUITMENT_COST)
-	) {
-		return false;
-	}
 	const supplyFailed = capitalLostCountries?.has(sovereignId);
 	const nominalPersonnel = Math.max(
 		1,
@@ -7381,11 +7028,11 @@ export function spawnSingleUnit(
 
 		const pick =
 			frontlineCities.length > 0 && !supplyFailed
-				? frontlineCities[Math.floor(gameplayRandom() * frontlineCities.length)]
-				: friendlyCities[Math.floor(gameplayRandom() * friendlyCities.length)];
+				? frontlineCities[Math.floor(Math.random() * frontlineCities.length)]
+				: friendlyCities[Math.floor(Math.random() * friendlyCities.length)];
 
-		lat = pick.lat + (gameplayRandom() - 0.5) * CONFIG.GRID_RES * 0.8;
-		lng = pick.lng + (gameplayRandom() - 0.5) * CONFIG.GRID_RES * 0.8;
+		lat = pick.lat + (Math.random() - 0.5) * CONFIG.GRID_RES * 0.8;
+		lng = pick.lng + (Math.random() - 0.5) * CONFIG.GRID_RES * 0.8;
 
 		// Validate: ensure still within friendly territory
 		const vIdx = getGridIndex(lat, lng);
@@ -7420,7 +7067,7 @@ export function spawnSingleUnit(
 		}
 
 		const idx =
-			theaterIndices[Math.floor(gameplayRandom() * theaterIndices.length)];
+			theaterIndices[Math.floor(Math.random() * theaterIndices.length)];
 		const y = Math.floor(idx / gridWidth);
 		const x = idx % gridWidth;
 		lat = y * CONFIG.GRID_RES - 90 + CONFIG.GRID_RES / 2;
@@ -7431,11 +7078,10 @@ export function spawnSingleUnit(
 	const isMountainCell =
 		terrainMask && finalIdx >= 0 ? terrainMask[finalIdx] > 0.35 : false;
 	// Alpenjägers: mostly drawn from mountainous recruitment cells
-	const isAlpen = isMountainCell && gameplayRandom() < 0.4;
+	const isAlpen = isMountainCell && Math.random() < 0.4;
 
-	const unitId = gameplayRandom();
-	const unitDiscipline = getUnitDiscipline({ id: unitId, sovereignId });
-	const unitCommandBand = economyState?.commandBand || COMMAND_BANDS.PAID;
+	const unitId = Math.random();
+
 	const unit = {
 		id: unitId,
 		kind: "army",
@@ -7453,9 +7099,6 @@ export function spawnSingleUnit(
 		_cachedScanKx: -999,
 		_cachedScanKy: -999,
 		_lastFullScanTick: 0,
-		_discipline: unitDiscipline,
-		_commandBand: unitCommandBand,
-		_refusesOffense: unitDiscipline < commandRefusalShare(unitCommandBand),
 	};
 	setUnitFormationPersonnel(unit, nominalPersonnel);
 	if (supplyFailed) {
@@ -7464,12 +7107,6 @@ export function spawnSingleUnit(
 		unit.strengthMultiplier = unit.personnel / CONFIG.UNIT_TO_SOLDIER_RATIO;
 	}
 	units.push(unit);
-	if (warEconomyEnabled && gameState === "SIMULATING" && economyState) {
-		economyState.treasury = Math.max(
-			0,
-			economyState.treasury - ECONOMY_CONFIG.RECRUITMENT_COST,
-		);
-	}
 
 	if (sideIdx >= 0 && sideIdx < MAX_SIDES) {
 		sideRecruitableManpower[sideIdx] = Math.max(
@@ -7481,7 +7118,7 @@ export function spawnSingleUnit(
 	return true;
 }
 
-function estimateTerritoryArmyUnits(cellCount) {
+function _estimateTerritoryArmyUnits(cellCount) {
 	const cells = Math.max(1, cellCount || 0);
 	const sizeFactor = Math.max(1, cells / 1500);
 	const densityScale = 1 / sizeFactor ** 0.45;
@@ -7494,506 +7131,6 @@ function estimateTerritoryArmyUnits(cellCount) {
 	);
 }
 
-export function setArmorEnabled() {
-	armorEnabled = false;
-	const checkbox = document.getElementById("armor-enabled-checkbox");
-	if (checkbox) checkbox.checked = armorEnabled;
-}
-
-export function setAirPowerEnabled() {
-	airPowerEnabled = false;
-	const checkbox = document.getElementById("air-power-enabled-checkbox");
-	if (checkbox) checkbox.checked = airPowerEnabled;
-}
-
-function clearCombinedArmsState() {
-	countryEquipment.clear();
-	airfields.length = 0;
-	airWings.length = 0;
-	_nextAirfieldId = 1;
-	_nextAirWingId = 1;
-	_airPowerRuntime.lastMissionTick = 0;
-	_airPowerRuntime.lastUpdateMs = 0;
-}
-
-function equipmentStateForCountry(countryId) {
-	return countryEquipment.get(countryId) || null;
-}
-
-function activeAirWingMarkerCount() {
-	let count = 0;
-	for (const wing of airWings) {
-		if (wing.state !== AIR_WING_STATES.EVACUATED && wing.equipment > 0) count++;
-	}
-	return count;
-}
-
-function summarizeLiveEquipment() {
-	const summary = new Map();
-	if (!armorEnabled && !airPowerEnabled && countryEquipment.size === 0)
-		return summary;
-	const ensure = (countryId) => {
-		let entry = summary.get(countryId);
-		if (!entry) {
-			entry = {
-				armor: 0,
-				fighters: 0,
-				strike: 0,
-				operationalFighters: 0,
-				operationalStrike: 0,
-			};
-			summary.set(countryId, entry);
-		}
-		return entry;
-	};
-	for (const unit of units) {
-		if (unit.kind !== "armor" || unit.health <= 0) continue;
-		ensure(unit.sovereignId).armor += Math.max(0, unit.equipment || 0);
-	}
-	for (const wing of airWings) {
-		if (wing.equipment <= 0) continue;
-		const entry = ensure(wing.sovereignId);
-		if (wing.role === "FIGHTER") {
-			entry.fighters += wing.equipment;
-			if (wing.state !== AIR_WING_STATES.EVACUATED) {
-				entry.operationalFighters += wing.equipment;
-			}
-		} else {
-			entry.strike += wing.equipment;
-			if (wing.state !== AIR_WING_STATES.EVACUATED) {
-				entry.operationalStrike += wing.equipment;
-			}
-		}
-	}
-	for (const [countryId, state] of countryEquipment) {
-		const entry = ensure(countryId);
-		entry.armor += Math.max(0, state.reserveArmor || 0);
-		entry.fighters += Math.max(0, state.reserveFighters || 0);
-		entry.strike += Math.max(0, state.reserveStrike || 0);
-		state.currentArmor = entry.armor;
-		state.currentFighters = entry.fighters;
-		state.currentStrike = entry.strike;
-	}
-	return summary;
-}
-
-function countryFallbackAirfield(countryId, indices) {
-	if (!indices?.length) return null;
-	let rowSum = 0;
-	let columnSum = 0;
-	for (const cellIndex of indices) {
-		rowSum += Math.floor(cellIndex / gridWidth);
-		columnSum += cellIndex % gridWidth;
-	}
-	const centroidRow = rowSum / indices.length;
-	const centroidColumn = columnSum / indices.length;
-	let idx = indices[0];
-	let bestDistance = Infinity;
-	for (const cellIndex of indices) {
-		const row = Math.floor(cellIndex / gridWidth);
-		const column = cellIndex % gridWidth;
-		const distance = (row - centroidRow) ** 2 + (column - centroidColumn) ** 2;
-		if (distance < bestDistance) {
-			bestDistance = distance;
-			idx = cellIndex;
-		}
-	}
-	const y = Math.floor(idx / gridWidth);
-	const x = idx % gridWidth;
-	return {
-		name: `${countryMetadata[countryId - 1]?.name || "National"} Airbase`,
-		lat: y * CONFIG.GRID_RES - 90 + CONFIG.GRID_RES / 2,
-		lng: x * CONFIG.GRID_RES - 180 + CONFIG.GRID_RES / 2,
-	};
-}
-
-function createArmorFormationAtIndex({
-	countryId,
-	sideIdx,
-	equipment,
-	maxEquipment = equipment,
-	quality,
-	cellIndex,
-	frontVector = null,
-}) {
-	if (cellIndex < 0 || equipment <= 0) return null;
-	const y = Math.floor(cellIndex / gridWidth);
-	const x = cellIndex % gridWidth;
-	const pushBack = frontVector ? CONFIG.GRID_RES * 1.25 : 0;
-	const unitId = gameplayRandom();
-	const unitDiscipline = getUnitDiscipline({
-		id: unitId,
-		sovereignId: countryId,
-	});
-	const unitCommandBand =
-		countryEconomy.get(countryId)?.commandBand || COMMAND_BANDS.PAID;
-	const unit = {
-		id: unitId,
-		kind: "armor",
-		lat:
-			y * CONFIG.GRID_RES -
-			90 +
-			CONFIG.GRID_RES / 2 +
-			(frontVector?.vy || 0) * pushBack,
-		lng:
-			x * CONFIG.GRID_RES -
-			180 +
-			CONFIG.GRID_RES / 2 +
-			(frontVector?.vx || 0) * pushBack,
-		sideIndex: sideIdx,
-		sovereignId: countryId,
-		beneficiaryId: countryId,
-		isAlpenjager: false,
-		health: CONFIG.UNIT_HEALTH,
-		equipment,
-		maxEquipment,
-		quality,
-		lastAttack: 0,
-		deployTicks: 45,
-		_cachedTarget: null,
-		_cachedScanKx: -999,
-		_cachedScanKy: -999,
-		_lastFullScanTick: 0,
-		_discipline: unitDiscipline,
-		_commandBand: unitCommandBand,
-		_refusesOffense: unitDiscipline < commandRefusalShare(unitCommandBand),
-		_armorSupported: false,
-	};
-	units.push(unit);
-	return unit;
-}
-
-function initializeCombinedArms(
-	countryToSideMap,
-	countryIndices,
-	frontlineIndices,
-) {
-	clearCombinedArmsState();
-	if (!armorEnabled && !airPowerEnabled) return;
-	const profiles = [];
-	const sideFormationCounts = new Int32Array(MAX_SIDES);
-	for (const unit of units) {
-		if (unit.sideIndex >= 0 && unit.sideIndex < MAX_SIDES) {
-			sideFormationCounts[unit.sideIndex]++;
-		}
-	}
-	for (const country of sides.flat().filter(Boolean)) {
-		if (!countryMayDeployStrategicEquipment(country)) continue;
-		const sideIdx = countryToSideMap.get(country.id);
-		if (sideIdx === undefined) continue;
-		const meta = countryMetadata[country.id - 1] || country;
-		const indices = countryIndices.get(country.id) || [];
-		const expectedArmyUnits = estimateTerritoryArmyUnits(indices.length);
-		const economicStrength = computeEconomicStrength({
-			gdp: meta.gdp || 0,
-			pop: meta.pop || 0,
-			territoryUnits: expectedArmyUnits,
-		});
-		const profile = resolveEquipmentProfile({
-			metadata: meta,
-			expectedArmyUnits,
-			economicStrength,
-			timeEnabled: gameTimeEnabled,
-			startDate: gameTimeDate,
-			armorEnabled,
-			airPowerEnabled,
-		});
-		const state = {
-			countryId: country.id,
-			armorCapacity: profile.armoredVehicles,
-			fighterCapacity: profile.fighters,
-			strikeCapacity: profile.strikeAircraft,
-			currentArmor: profile.armoredVehicles,
-			currentFighters: profile.fighters,
-			currentStrike: profile.strikeAircraft,
-			reserveArmor: profile.armoredVehicles,
-			reserveFighters: profile.fighters,
-			reserveStrike: profile.strikeAircraft,
-			armorQuality: profile.armorQuality,
-			airQuality: profile.airQuality,
-			airOperationsDue: 0,
-			airOperationsCoverage: 1,
-			replacementSpent: 0,
-		};
-		countryEquipment.set(country.id, state);
-		profiles.push({ country, sideIdx, state, indices });
-
-		if (
-			airInfrastructureIsAvailable({
-				airPowerEnabled,
-				timeEnabled: gameTimeEnabled,
-				startDate: gameTimeDate,
-				aircraftCapacity: profile.fighters + profile.strikeAircraft,
-			})
-		) {
-			const countryCities = activeTheaterCities.filter(
-				(city) => (city.ownerId || city.sovereignId) === country.id,
-			);
-			const sites = selectAirfieldSites(
-				countryCities,
-				countryFallbackAirfield(country.id, indices),
-			);
-			for (const site of sites) {
-				airfields.push({
-					id: `airfield-${_nextAirfieldId++}`,
-					name: site.name || "Airbase",
-					lat: site.lat,
-					lng: site.lng,
-					ownerId: country.id,
-					controllerId: country.id,
-					sideIndex: sideIdx,
-					isCapital: !!site.isCapital,
-					health: COMBINED_ARMS_CONFIG.AIRFIELD_MAX_HEALTH,
-					disabled: false,
-					captureRepairCycles:
-						COMBINED_ARMS_CONFIG.AIRFIELD_CAPTURE_REPAIR_CYCLES,
-				});
-			}
-		}
-	}
-
-	if (armorEnabled) {
-		for (const profile of profiles) {
-			if (!profile.indices.length) continue;
-			const groups = groupEquipment(
-				profile.state.armorCapacity,
-				COMBINED_ARMS_CONFIG.ARMOR_GROUP_SIZE,
-				COMBINED_ARMS_CONFIG.MAX_ARMOR_GROUPS_PER_COUNTRY,
-			);
-			const fronts = frontlineIndices.get(profile.country.id) || [];
-			for (let groupIndex = 0; groupIndex < groups.length; groupIndex++) {
-				if (sideFormationCounts[profile.sideIdx] >= CONFIG.MAX_UNITS_PER_SIDE)
-					break;
-				const front = fronts.length ? fronts[groupIndex % fronts.length] : null;
-				const cellIndex =
-					front?.idx ?? profile.indices[groupIndex % profile.indices.length];
-				const formation = createArmorFormationAtIndex({
-					countryId: profile.country.id,
-					sideIdx: profile.sideIdx,
-					equipment: groups[groupIndex],
-					quality: profile.state.armorQuality,
-					cellIndex,
-					frontVector: front,
-				});
-				if (!formation) continue;
-				profile.state.reserveArmor -= groups[groupIndex];
-				sideFormationCounts[profile.sideIdx]++;
-			}
-		}
-	}
-
-	if (airPowerEnabled) {
-		const allocation = allocateAirWingMarkers(
-			profiles.flatMap(({ country, state }) => [
-				{
-					countryId: country.id,
-					role: "FIGHTER",
-					count: state.fighterCapacity,
-				},
-				{ countryId: country.id, role: "STRIKE", count: state.strikeCapacity },
-			]),
-		);
-		const fieldOccupancy = new Map();
-		for (const marker of allocation.markers) {
-			const state = countryEquipment.get(marker.countryId);
-			const field = airfields.find((candidate) => {
-				if (candidate.controllerId !== marker.countryId) return false;
-				const used = fieldOccupancy.get(candidate.id) || 0;
-				return used < getAirfieldCapacity(candidate);
-			});
-			if (!state || !field) continue;
-			fieldOccupancy.set(field.id, (fieldOccupancy.get(field.id) || 0) + 1);
-			if (marker.role === "FIGHTER") state.reserveFighters -= marker.equipment;
-			else state.reserveStrike -= marker.equipment;
-			airWings.push({
-				id: `air-wing-${_nextAirWingId++}`,
-				role: marker.role,
-				sovereignId: marker.countryId,
-				sideIndex: field.sideIndex,
-				equipment: marker.equipment,
-				maxEquipment: marker.equipment,
-				quality: state.airQuality,
-				airfieldId: field.id,
-				lat: field.lat,
-				lng: field.lng,
-				state:
-					marker.role === "FIGHTER"
-						? AIR_WING_STATES.PATROL
-						: AIR_WING_STATES.GROUNDED,
-				cooldownTicks:
-					marker.role === "STRIKE"
-						? (marker.countryId * 37 + airWings.length * 13) % 120
-						: 0,
-				rearmTicks: 0,
-				enduranceTicks: 0,
-			});
-		}
-	}
-	summarizeLiveEquipment();
-}
-
-function initializeMidWarCombinedArms(
-	country,
-	sideIdx,
-	indices,
-	fronts,
-	countryCities,
-) {
-	if (
-		!countryMayDeployStrategicEquipment(country) ||
-		countryEquipment.has(country.id) ||
-		!indices.length
-	)
-		return;
-	const meta = countryMetadata[country.id - 1] || country;
-	const expectedArmyUnits = estimateTerritoryArmyUnits(indices.length);
-	const profile = resolveEquipmentProfile({
-		metadata: meta,
-		expectedArmyUnits,
-		economicStrength: computeEconomicStrength({
-			gdp: meta.gdp || 0,
-			pop: meta.pop || 0,
-			territoryUnits: expectedArmyUnits,
-		}),
-		timeEnabled: gameTimeEnabled,
-		startDate: gameTimeDate,
-		armorEnabled,
-		airPowerEnabled,
-	});
-	const state = {
-		countryId: country.id,
-		armorCapacity: profile.armoredVehicles,
-		fighterCapacity: profile.fighters,
-		strikeCapacity: profile.strikeAircraft,
-		currentArmor: profile.armoredVehicles,
-		currentFighters: profile.fighters,
-		currentStrike: profile.strikeAircraft,
-		reserveArmor: profile.armoredVehicles,
-		reserveFighters: profile.fighters,
-		reserveStrike: profile.strikeAircraft,
-		armorQuality: profile.armorQuality,
-		airQuality: profile.airQuality,
-		airOperationsDue: 0,
-		airOperationsCoverage: 1,
-		replacementSpent: 0,
-	};
-	countryEquipment.set(country.id, state);
-	if (
-		airInfrastructureIsAvailable({
-			airPowerEnabled,
-			timeEnabled: gameTimeEnabled,
-			startDate: gameTimeDate,
-			aircraftCapacity: state.fighterCapacity + state.strikeCapacity,
-		})
-	) {
-		const sites = selectAirfieldSites(
-			countryCities,
-			countryFallbackAirfield(country.id, indices),
-		);
-		for (const site of sites) {
-			airfields.push({
-				id: `airfield-${_nextAirfieldId++}`,
-				name: site.name || "Airbase",
-				lat: site.lat,
-				lng: site.lng,
-				ownerId: country.id,
-				controllerId: country.id,
-				sideIndex: sideIdx,
-				isCapital: !!site.isCapital,
-				health: COMBINED_ARMS_CONFIG.AIRFIELD_MAX_HEALTH,
-				disabled: false,
-				captureRepairCycles:
-					COMBINED_ARMS_CONFIG.AIRFIELD_CAPTURE_REPAIR_CYCLES,
-			});
-		}
-	}
-	if (armorEnabled) {
-		const groups = groupEquipment(
-			state.armorCapacity,
-			COMBINED_ARMS_CONFIG.ARMOR_GROUP_SIZE,
-			COMBINED_ARMS_CONFIG.MAX_ARMOR_GROUPS_PER_COUNTRY,
-		);
-		let sideFormationCount = units.reduce(
-			(count, unit) => count + Number(unit.sideIndex === sideIdx),
-			0,
-		);
-		for (let index = 0; index < groups.length; index++) {
-			if (sideFormationCount >= CONFIG.MAX_UNITS_PER_SIDE) break;
-			const front = fronts.length ? fronts[index % fronts.length] : null;
-			const formation = createArmorFormationAtIndex({
-				countryId: country.id,
-				sideIdx,
-				equipment: groups[index],
-				quality: state.armorQuality,
-				cellIndex: front?.idx ?? indices[index % indices.length],
-				frontVector: front,
-			});
-			if (!formation) continue;
-			state.reserveArmor -= groups[index];
-			sideFormationCount++;
-		}
-	}
-	if (
-		airPowerEnabled &&
-		airfields.some((field) => field.ownerId === country.id)
-	) {
-		const room = Math.max(
-			0,
-			COMBINED_ARMS_CONFIG.MAX_ACTIVE_AIR_WINGS - activeAirWingMarkerCount(),
-		);
-		const allocation = allocateAirWingMarkers(
-			[
-				{
-					countryId: country.id,
-					role: "FIGHTER",
-					count: state.fighterCapacity,
-				},
-				{ countryId: country.id, role: "STRIKE", count: state.strikeCapacity },
-			],
-			room,
-		);
-		for (const marker of allocation.markers) {
-			const probe = {
-				sovereignId: country.id,
-				sideIndex: sideIdx,
-				lat: countryCities[0]?.lat || 0,
-				lng: countryCities[0]?.lng || 0,
-			};
-			const field = findEligibleAirfield({
-				wing: probe,
-				airfields,
-				wings: airWings,
-				allowAllied: false,
-				ferryRangeKm: Number.POSITIVE_INFINITY,
-			});
-			if (!field) continue;
-			const reserveKey =
-				marker.role === "FIGHTER" ? "reserveFighters" : "reserveStrike";
-			state[reserveKey] -= marker.equipment;
-			airWings.push({
-				id: `air-wing-${_nextAirWingId++}`,
-				role: marker.role,
-				sovereignId: country.id,
-				sideIndex: sideIdx,
-				equipment: marker.equipment,
-				maxEquipment: marker.equipment,
-				quality: state.airQuality,
-				airfieldId: field.id,
-				lat: field.lat,
-				lng: field.lng,
-				state:
-					marker.role === "FIGHTER"
-						? AIR_WING_STATES.PATROL
-						: AIR_WING_STATES.GROUNDED,
-				cooldownTicks: 0,
-				rearmTicks: 0,
-				enduranceTicks: 0,
-			});
-		}
-	}
-	summarizeLiveEquipment();
-}
-
 function findCountrySideIndex(countryId) {
 	return sides.findIndex((side) => side?.some((c) => c.id === countryId));
 }
@@ -8002,26 +7139,7 @@ function getCountryLivePersonnel(countryId) {
 	let personnel = 0;
 	for (const unit of units) {
 		if (unit.sovereignId !== countryId || unit.health <= 0) continue;
-		if (unit.kind === "armor") {
-			personnel += computeEquipmentPersonnel({
-				armoredVehicles: unit.equipment || 0,
-			});
-		} else {
-			personnel += getLiveFormationPersonnel(unit);
-		}
-	}
-	for (const wing of airWings) {
-		if (
-			wing.sovereignId !== countryId ||
-			wing.equipment <= 0 ||
-			wing.state === AIR_WING_STATES.EVACUATED
-		) {
-			continue;
-		}
-		personnel += computeEquipmentPersonnel({
-			fighters: wing.role === "FIGHTER" ? wing.equipment : 0,
-			strikeAircraft: wing.role === "STRIKE" ? wing.equipment : 0,
-		});
+		personnel += getLiveFormationPersonnel(unit);
 	}
 	return personnel;
 }
@@ -8040,16 +7158,6 @@ function clearSidePersonnelAccounting(sideIdx) {
 	sideRecruitableManpower[sideIdx] = 0;
 	sideCasualties[sideIdx] = 0;
 	soldiersPerUnit[sideIdx] = CONFIG.UNIT_TO_SOLDIER_RATIO;
-}
-
-function preserveRetiredSidePersonnel(sideIdx) {
-	const sideUid = sideUids[sideIdx];
-	if (!sideUid) return;
-	_retiredSidePersonnelByUid.set(sideUid, {
-		personnel: Math.max(0, sideSoldiers[sideIdx] || 0),
-		initialPersonnel: Math.max(0, initialSideSoldiers[sideIdx] || 0),
-		casualties: Math.max(0, sideCasualties[sideIdx] || 0),
-	});
 }
 
 function releaseCountryPersonnelFromSide(
@@ -8127,7 +7235,7 @@ function clearSideHostilities(sideIdx) {
 	rebuildHostilityMatrix();
 }
 
-function allocateIndependentSide(country, hostileSideIdx = -1) {
+function _allocateIndependentSide(country, hostileSideIdx = -1) {
 	let sideIdx = sides.findIndex((side) => !side || side.length === 0);
 	if (sideIdx === -1) {
 		if (sides.length >= MAX_SIDES) return -1;
@@ -8135,12 +7243,10 @@ function allocateIndependentSide(country, hostileSideIdx = -1) {
 		rebaseSecondaryWarPlanSlotsForSideAppend(sides.length);
 		sides.push([]);
 	}
-	preserveRetiredSidePersonnel(sideIdx);
 	clearSideHostilities(sideIdx);
 	clearSidePersonnelAccounting(sideIdx);
 	// An empty slot may belong to a side that was eliminated earlier in the run.
-	// A restored neutral or rebellion is a new side and needs a distinct stable UID
-	// so reports do not overwrite the eliminated side's history.
+	// A restored neutral country is a new side and needs a distinct stable UID
 	sideUids[sideIdx] = allocateSideUid();
 	ensureSideIdentities();
 	sides[sideIdx] = [country];
@@ -8160,7 +7266,6 @@ function prepareEmptySideForNewMembership(sideIdx) {
 		if (leftUid === previousUid) hostilePeers.add(rightUid);
 		else if (rightUid === previousUid) hostilePeers.add(leftUid);
 	}
-	preserveRetiredSidePersonnel(sideIdx);
 	clearSideHostilities(sideIdx);
 	clearSidePersonnelAccounting(sideIdx);
 	if (!sides[sideIdx]) sides[sideIdx] = [];
@@ -8174,4461 +7279,6 @@ function prepareEmptySideForNewMembership(sideIdx) {
 	rebuildHostilityMatrix();
 	return true;
 }
-
-function emitEconomyEvent(message, level = "info") {
-	if (!message) return;
-	economyEvents.unshift({
-		cycle: economyPayCycle,
-		message,
-		level,
-	});
-	if (economyEvents.length > 8) economyEvents.length = 8;
-	recordExperimentEvent("ECONOMY_EVENT", {
-		source: "economy",
-		evidence: {
-			economyCycle: economyPayCycle,
-			level,
-			message,
-		},
-	});
-}
-
-function formatBudget(value) {
-	if (!Number.isFinite(value)) return "0";
-	if (Math.abs(value) >= 1000)
-		return value.toLocaleString(undefined, {
-			maximumFractionDigits: 0,
-		});
-	return value.toFixed(value >= 100 ? 0 : 1);
-}
-
-export function updateEconomyPanel() {
-	if (!economyPanel || !economyPanelBody || !economyEventsList) return;
-	const warDeskOwnsEconomy =
-		document.body.classList.contains("experiment-loop-active") &&
-		!document.body.classList.contains("commander-active");
-	if (warDeskOwnsEconomy) {
-		economyPanel.style.display = "none";
-		return;
-	}
-	const simulating =
-		gameState === "SIMULATING" ||
-		(godModeActive && preGodModeState === "SIMULATING");
-	if (
-		!warEconomyEnabled ||
-		!simulating ||
-		cinematicMode ||
-		gameMode === "OPERATION"
-	) {
-		economyPanel.style.display = "none";
-		return;
-	}
-	summarizeLiveEquipment();
-	economyPanel.style.display = "flex";
-	const activeIds = new Set(
-		sides
-			.flat()
-			.filter(Boolean)
-			.map((c) => c.id),
-	);
-	const rows = Array.from(countryEconomy.values())
-		.filter((state) => activeIds.has(state.countryId) && !state.capitulated)
-		.sort((a, b) => b.arrearsCycles - a.arrearsCycles)
-		.map((state) => {
-			const meta = countryMetadata[state.countryId - 1];
-			const equipment = equipmentStateForCountry(state.countryId);
-			const bandClass = state.commandBand.toLowerCase();
-			const godActions = godModeActive
-				? `<div class="economy-god-actions"><button data-economy-action="fund" data-country-id="${state.countryId}">+$</button><button data-economy-action="clear" data-country-id="${state.countryId}">CLEAR</button>${equipment ? `<button title="Add 100 armored vehicles" data-economy-action="armor-add" data-country-id="${state.countryId}">+ARM</button><button title="Remove 100 armored vehicles" data-economy-action="armor-remove" data-country-id="${state.countryId}">−ARM</button><button title="Add 24 fighters" data-economy-action="fighter-add" data-country-id="${state.countryId}">+FTR</button><button title="Remove 24 fighters" data-economy-action="fighter-remove" data-country-id="${state.countryId}">−FTR</button><button title="Add 24 strike aircraft" data-economy-action="strike-add" data-country-id="${state.countryId}">+STR</button><button title="Remove 24 strike aircraft" data-economy-action="strike-remove" data-country-id="${state.countryId}">−STR</button><button data-economy-action="replacement-cycle" data-country-id="${state.countryId}">REPLACE</button><button data-economy-action="restore-equipment" data-country-id="${state.countryId}">RESTORE</button><button data-economy-action="repair-field" data-country-id="${state.countryId}">REPAIR FIELD</button><button data-economy-action="disable-field" data-country-id="${state.countryId}">DISABLE FIELD</button><button data-economy-action="strike-now" data-country-id="${state.countryId}">STRIKE</button>` : ""}</div>`
-				: "";
-			const equipmentMetrics = equipment
-				? `<div class="economy-metrics economy-equipment-metrics"><span title="Armored vehicles">ARM ${Math.round(equipment.currentArmor)}/${Math.round(equipment.armorCapacity)}</span><span title="Fighters">FTR ${Math.round(equipment.currentFighters)}/${Math.round(equipment.fighterCapacity)}</span><span title="Strike aircraft">STR ${Math.round(equipment.currentStrike)}/${Math.round(equipment.strikeCapacity)}</span><span title="Air operations funding">AIR ${Math.round((equipment.airOperationsCoverage ?? 1) * 100)}%</span><span title="Replacement spending">REP ${formatBudget(equipment.replacementSpent || 0)}</span></div>`
-				: "";
-			return `<div class="economy-row">
-				<div class="economy-row-heading"><span>${escapeHtml(meta?.name || `Country ${state.countryId}`)}</span><span class="economy-band ${bandClass}">${state.commandBand}</span></div>
-				<div class="economy-metrics"><span title="Treasury">$ ${formatBudget(state.treasury)}</span><span title="Income">+${formatBudget(state.income + state.occupationYield)}</span><span title="Payroll">PAY ${formatBudget(state.payrollDue)} @ ${Math.round(state.payrollCoverage * 100)}%</span><span title="Occupation costs">OCC ${formatBudget(state.occupationDue)}</span><span title="Payroll arrears">AR ${state.arrearsCycles.toFixed(1)}</span></div>
-				${equipmentMetrics}
-				${godActions}
-			</div>`;
-		});
-
-	const occupations = Array.from(occupationEconomies.values())
-		.sort((a, b) => b.resistance - a.resistance)
-		.map((record) => {
-			const victim = countryMetadata[record.victimId - 1];
-			const annexer = countryMetadata[record.annexerId - 1];
-			const godActions = godModeActive
-				? `<div class="economy-god-actions"><button data-economy-action="resist" data-country-id="${record.victimId}">+25 RES</button><button data-economy-action="rebel" data-country-id="${record.victimId}">REVOLT</button></div>`
-				: "";
-			const requiredGarrison =
-				record.requiredGarrison ||
-				computeRequiredGarrison(record.expectedArmyUnits || 0);
-			return `<div class="economy-row occupation-row">
-				<div class="economy-row-heading"><span>${escapeHtml(victim?.name || `Country ${record.victimId}`)}</span><span>${Math.round(record.resistance)}% RES</span></div>
-				<div class="economy-metrics"><span>${escapeHtml(annexer?.name || "Unknown")} occupation</span><span>COST ${formatBudget(record.baseIncome * ECONOMY_CONFIG.OCCUPATION_COST_SHARE * (record.heldRatio || 0))}</span><span>GARR ${Math.round((record.garrisonCoverage || 0) * 100)}%</span><span>ORD ${record.garrisonAssignedCount || 0}/${requiredGarrison}</span><span>FUND ${Math.round((record.occupationCoverage || 0) * 100)}%</span></div>
-				${godActions}
-			</div>`;
-		});
-
-	economyPanelBody.innerHTML = [...rows, ...occupations].join("");
-	economyEventsList.innerHTML = economyEvents
-		.map(
-			(event) =>
-				`<div class="economy-event ${event.level}"><span>C${event.cycle}</span>${escapeHtml(event.message)}</div>`,
-		)
-		.join("");
-	const cycleButton = document.getElementById("economy-force-cycle-btn");
-	if (cycleButton) cycleButton.style.display = godModeActive ? "block" : "none";
-}
-
-function initializeWarEconomy() {
-	countryEconomy.clear();
-	if (!warEconomyEnabled) {
-		updateEconomyPanel();
-		return;
-	}
-	const cityPopByCountry = new Map();
-	for (const city of cities) {
-		const ownerId = city.ownerId || city.sovereignId;
-		if (!ownerId) continue;
-		cityPopByCountry.set(
-			ownerId,
-			(cityPopByCountry.get(ownerId) || 0) + Math.max(0, city.pop || 0),
-		);
-	}
-	for (const country of sides.flat().filter(Boolean)) {
-		const meta = countryMetadata[country.id - 1] || country;
-		const territoryUnits = estimateTerritoryArmyUnits(
-			country.initialCells || 0,
-		);
-		const state = createEconomyState({
-			countryId: country.id,
-			gdp: meta.gdp || 0,
-			pop: meta.pop || 0,
-			territoryUnits,
-			initialCoreCells: country.initialCells || 0,
-			initialCityPop: cityPopByCountry.get(country.id) || 0,
-		});
-		const startingUnits = units.filter(
-			(unit) => unit.sovereignId === country.id,
-		);
-		const startingArmyEquivalents = startingUnits.reduce(
-			(total, unit) =>
-				total + (unit.kind === "armor" ? 0 : getLiveFormationStrength(unit)),
-			0,
-		);
-		state.expectedArmyUnits = Math.max(territoryUnits, startingArmyEquivalents);
-		const startingMandatoryPayroll = startingUnits.reduce(
-			(total, unit) =>
-				total +
-				(unit.kind === "armor"
-					? computeArmorPayroll(unit.equipment || 0)
-					: ECONOMY_CONFIG.PAYROLL_PER_UNIT *
-						getFormationCapacityStrength(unit)),
-			0,
-		);
-		state.baseIncome = Math.max(
-			state.baseIncome,
-			startingMandatoryPayroll / ECONOMY_CONFIG.TARGET_STARTING_PAYROLL_SHARE,
-		);
-		state.income = state.baseIncome;
-		state.treasury = state.baseIncome * ECONOMY_CONFIG.STARTING_RESERVE_CYCLES;
-		countryEconomy.set(country.id, state);
-		for (const unit of units) {
-			if (unit.sovereignId !== country.id) continue;
-			getUnitDiscipline(unit);
-			unit._commandBand = COMMAND_BANDS.PAID;
-			unit._refusesOffense = false;
-		}
-	}
-	emitEconomyEvent("War economy initialized");
-	updateEconomyPanel();
-}
-
-function reinforceEquipmentFromReserves(countryId) {
-	const state = countryEquipment.get(countryId);
-	if (!state) return;
-	const sideIdx = findCountrySideIndex(countryId);
-	if (sideIdx < 0) return;
-	const claimCrewedEquipment = (requestedEquipment, crewPerEquipment) => {
-		const requested = Math.max(0, Math.floor(requestedEquipment || 0));
-		const crewSize = Math.max(0, Math.floor(crewPerEquipment || 0));
-		if (crewSize === 0) return requested;
-		const availableEquipment = Math.floor(
-			Math.max(0, sideRecruitableManpower[sideIdx] || 0) / crewSize,
-		);
-		const claimed = Math.min(requested, availableEquipment);
-		sideRecruitableManpower[sideIdx] = Math.max(
-			0,
-			sideRecruitableManpower[sideIdx] - claimed * crewSize,
-		);
-		return claimed;
-	};
-	const refundCrew = (equipment, crewPerEquipment) => {
-		sideRecruitableManpower[sideIdx] +=
-			Math.max(0, Math.floor(equipment || 0)) *
-			Math.max(0, Math.floor(crewPerEquipment || 0));
-	};
-	for (const unit of units) {
-		if (
-			unit.kind !== "armor" ||
-			unit.sovereignId !== countryId ||
-			state.reserveArmor <= 0
-		)
-			continue;
-		const missing = Math.max(
-			0,
-			(unit.maxEquipment || 0) - (unit.equipment || 0),
-		);
-		const transfer = claimCrewedEquipment(
-			Math.min(missing, state.reserveArmor),
-			COMBINED_ARMS_CONFIG.ARMOR_CREW_PER_VEHICLE,
-		);
-		if (transfer <= 0) continue;
-		unit.equipment += transfer;
-		state.reserveArmor -= transfer;
-		unit.health = Math.max(
-			unit.health,
-			CONFIG.UNIT_HEALTH * (unit.equipment / Math.max(1, unit.maxEquipment)),
-		);
-	}
-	for (const wing of airWings) {
-		if (wing.sovereignId !== countryId) continue;
-		const reserveKey =
-			wing.role === "FIGHTER" ? "reserveFighters" : "reserveStrike";
-		const reserve = state[reserveKey] || 0;
-		if (reserve <= 0) continue;
-		const missing = Math.max(0, wing.maxEquipment - wing.equipment);
-		const transfer = claimCrewedEquipment(
-			Math.min(missing, reserve),
-			COMBINED_ARMS_CONFIG.AIRCREW_PER_AIRCRAFT,
-		);
-		wing.equipment += transfer;
-		state[reserveKey] -= transfer;
-	}
-
-	const sideFormationCount = units.reduce(
-		(count, unit) => count + Number(unit.sideIndex === sideIdx),
-		0,
-	);
-	const armorFormations = units.filter(
-		(unit) => unit.kind === "armor" && unit.sovereignId === countryId,
-	).length;
-	const desiredArmorFormations = Math.min(
-		COMBINED_ARMS_CONFIG.MAX_ARMOR_GROUPS_PER_COUNTRY,
-		Math.ceil(
-			state.armorCapacity / Math.max(1, COMBINED_ARMS_CONFIG.ARMOR_GROUP_SIZE),
-		),
-	);
-	if (
-		state.reserveArmor > 0 &&
-		armorFormations < desiredArmorFormations &&
-		sideFormationCount < CONFIG.MAX_UNITS_PER_SIDE
-	) {
-		const home = findCountryHomeTarget(countryId, sideIdx);
-		const cellIndex = home ? getGridIndex(home.lat, home.lng) : -1;
-		if (cellIndex >= 0) {
-			const targetSize = Math.ceil(
-				state.armorCapacity / Math.max(1, desiredArmorFormations),
-			);
-			const equipment = claimCrewedEquipment(
-				Math.min(targetSize, state.reserveArmor),
-				COMBINED_ARMS_CONFIG.ARMOR_CREW_PER_VEHICLE,
-			);
-			if (
-				equipment > 0 &&
-				createArmorFormationAtIndex({
-					countryId,
-					sideIdx,
-					equipment,
-					maxEquipment: targetSize,
-					quality: state.armorQuality,
-					cellIndex,
-				})
-			) {
-				state.reserveArmor -= equipment;
-			} else if (equipment > 0) {
-				refundCrew(equipment, COMBINED_ARMS_CONFIG.ARMOR_CREW_PER_VEHICLE);
-			}
-		}
-	}
-
-	for (const role of ["FIGHTER", "STRIKE"]) {
-		const reserveKey = role === "FIGHTER" ? "reserveFighters" : "reserveStrike";
-		const capacityKey =
-			role === "FIGHTER" ? "fighterCapacity" : "strikeCapacity";
-		const currentWings = airWings.filter(
-			(wing) => wing.sovereignId === countryId && wing.role === role,
-		);
-		const desiredWings = Math.min(
-			COMBINED_ARMS_CONFIG.MAX_WINGS_PER_ROLE_PER_COUNTRY,
-			Math.ceil(
-				state[capacityKey] / Math.max(1, COMBINED_ARMS_CONFIG.AIR_WING_SIZE),
-			),
-		);
-		if ((state[reserveKey] || 0) <= 0 || currentWings.length >= desiredWings)
-			continue;
-		if (activeAirWingMarkerCount() >= COMBINED_ARMS_CONFIG.MAX_ACTIVE_AIR_WINGS)
-			continue;
-		const probe = {
-			sovereignId: countryId,
-			sideIndex: sideIdx,
-			lat: currentWings[0]?.lat || 0,
-			lng: currentWings[0]?.lng || 0,
-		};
-		const field = findEligibleAirfield({
-			wing: probe,
-			airfields,
-			wings: airWings,
-			ferryRangeKm: Number.POSITIVE_INFINITY,
-		});
-		if (!field) continue;
-		const targetSize = Math.ceil(
-			state[capacityKey] / Math.max(1, desiredWings),
-		);
-		const equipment = claimCrewedEquipment(
-			Math.min(targetSize, state[reserveKey]),
-			COMBINED_ARMS_CONFIG.AIRCREW_PER_AIRCRAFT,
-		);
-		if (equipment <= 0) continue;
-		state[reserveKey] -= equipment;
-		airWings.push({
-			id: `air-wing-${_nextAirWingId++}`,
-			role,
-			sovereignId: countryId,
-			sideIndex: sideIdx,
-			equipment,
-			maxEquipment: targetSize,
-			quality: state.airQuality,
-			airfieldId: field.id,
-			lat: field.lat,
-			lng: field.lng,
-			state:
-				role === "FIGHTER" ? AIR_WING_STATES.PATROL : AIR_WING_STATES.GROUNDED,
-			cooldownTicks: 0,
-			rearmTicks: 0,
-			enduranceTicks: 0,
-		});
-	}
-}
-
-function ensureCountryAirfields(countryId) {
-	if (airfields.some((field) => field.controllerId === countryId)) return true;
-	const sideIdx = findCountrySideIndex(countryId);
-	if (sideIdx < 0) return false;
-	const indices = [];
-	for (let index = 0; index < worldControlMap.length; index++) {
-		if (
-			landMask[index] > 0 &&
-			worldControlMap[index] === countryId &&
-			dominantSideMap[index] === sideIdx
-		) {
-			indices.push(index);
-		}
-	}
-	if (!indices.length) return false;
-	const countryCities = cities.filter((city) => {
-		if ((city.ownerId || city.sovereignId) !== countryId) return false;
-		const index = getGridIndex(city.lat, city.lng);
-		return index >= 0 && dominantSideMap[index] === sideIdx;
-	});
-	const sites = selectAirfieldSites(
-		countryCities,
-		countryFallbackAirfield(countryId, indices),
-	);
-	for (const site of sites) {
-		airfields.push({
-			id: `airfield-${_nextAirfieldId++}`,
-			name: site.name || "Airbase",
-			lat: site.lat,
-			lng: site.lng,
-			ownerId: countryId,
-			controllerId: countryId,
-			sideIndex: sideIdx,
-			isCapital: !!site.isCapital,
-			health: COMBINED_ARMS_CONFIG.AIRFIELD_MAX_HEALTH,
-			disabled: false,
-			captureRepairCycles: COMBINED_ARMS_CONFIG.AIRFIELD_CAPTURE_REPAIR_CYCLES,
-		});
-	}
-	return sites.length > 0;
-}
-
-function adjustCountryEquipment(countryId, category, delta) {
-	const state = countryEquipment.get(countryId);
-	if (!state || !Number.isFinite(delta) || delta === 0) return false;
-	const config = {
-		armor: {
-			capacity: "armorCapacity",
-			reserve: "reserveArmor",
-			role: null,
-		},
-		fighter: {
-			capacity: "fighterCapacity",
-			reserve: "reserveFighters",
-			role: "FIGHTER",
-		},
-		strike: {
-			capacity: "strikeCapacity",
-			reserve: "reserveStrike",
-			role: "STRIKE",
-		},
-	}[category];
-	if (!config) return false;
-	if (delta > 0) {
-		state[config.capacity] += delta;
-		state[config.reserve] += delta;
-		if (category !== "armor") ensureCountryAirfields(countryId);
-		reinforceEquipmentFromReserves(countryId);
-		summarizeLiveEquipment();
-		return true;
-	}
-
-	let remaining = Math.min(Math.abs(delta), state[config.capacity]);
-	state[config.capacity] = Math.max(0, state[config.capacity] - remaining);
-	const reserveRemoval = Math.min(remaining, state[config.reserve] || 0);
-	state[config.reserve] -= reserveRemoval;
-	remaining -= reserveRemoval;
-	let returnedCrew = 0;
-	if (category === "armor") {
-		for (let index = units.length - 1; index >= 0 && remaining > 0; index--) {
-			const unit = units[index];
-			if (unit.kind !== "armor" || unit.sovereignId !== countryId) continue;
-			const removed = Math.min(remaining, unit.equipment || 0);
-			unit.equipment -= removed;
-			remaining -= removed;
-			returnedCrew += removed * COMBINED_ARMS_CONFIG.ARMOR_CREW_PER_VEHICLE;
-			unit.health =
-				unit.equipment > 0
-					? CONFIG.UNIT_HEALTH *
-						(unit.equipment / Math.max(1, unit.maxEquipment || unit.equipment))
-					: 0;
-			if (unit.equipment <= 0) units.splice(index, 1);
-		}
-	} else {
-		for (
-			let index = airWings.length - 1;
-			index >= 0 && remaining > 0;
-			index--
-		) {
-			const wing = airWings[index];
-			if (wing.sovereignId !== countryId || wing.role !== config.role) continue;
-			const removed = Math.min(remaining, wing.equipment || 0);
-			wing.equipment -= removed;
-			remaining -= removed;
-			returnedCrew += removed * COMBINED_ARMS_CONFIG.AIRCREW_PER_AIRCRAFT;
-			if (wing.equipment <= 0) airWings.splice(index, 1);
-		}
-	}
-	const sideIdx = findCountrySideIndex(countryId);
-	if (sideIdx >= 0 && returnedCrew > 0) {
-		sideRecruitableManpower[sideIdx] += returnedCrew;
-	}
-	summarizeLiveEquipment();
-	return true;
-}
-
-function restoreCountryEquipmentCapacity(countryId) {
-	const state = countryEquipment.get(countryId);
-	if (!state) return false;
-	const live = summarizeLiveEquipment().get(countryId) || {
-		armor: 0,
-		fighters: 0,
-		strike: 0,
-	};
-	state.reserveArmor += Math.max(0, state.armorCapacity - live.armor);
-	state.reserveFighters += Math.max(0, state.fighterCapacity - live.fighters);
-	state.reserveStrike += Math.max(0, state.strikeCapacity - live.strike);
-	reinforceEquipmentFromReserves(countryId);
-	summarizeLiveEquipment();
-	return true;
-}
-
-function forceCountryStrike(countryId) {
-	const wing = airWings.find(
-		(candidate) =>
-			candidate.sovereignId === countryId &&
-			candidate.role === "STRIKE" &&
-			candidate.equipment > 0 &&
-			candidate.state !== AIR_WING_STATES.EVACUATED,
-	);
-	if (!wing) return false;
-	wing.cooldownTicks = 0;
-	wing.rearmTicks = 0;
-	wing.state = AIR_WING_STATES.GROUNDED;
-	wing.forceMission = true;
-	return true;
-}
-
-function updateEquipmentShortageState(countryId, equipment, live) {
-	const shortage = [
-		["armor", equipment.armorCapacity, live.armor],
-		["fighters", equipment.fighterCapacity, live.fighters],
-		["strike aircraft", equipment.strikeCapacity, live.strike],
-	]
-		.filter(
-			([, capacity, current]) => capacity > 0 && current / capacity < 0.25,
-		)
-		.map(([label]) => label);
-	const key = shortage.join("|");
-	const previousKey = equipment._majorShortageKey || "";
-	if (key === previousKey) return;
-	const name = countryMetadata[countryId - 1]?.name || `Country ${countryId}`;
-	const sideIdx = findCountrySideIndex(countryId);
-	const ratios = {
-		armor:
-			equipment.armorCapacity > 0 ? live.armor / equipment.armorCapacity : null,
-		fighters:
-			equipment.fighterCapacity > 0
-				? live.fighters / equipment.fighterCapacity
-				: null,
-		strikeAircraft:
-			equipment.strikeCapacity > 0
-				? live.strike / equipment.strikeCapacity
-				: null,
-	};
-	if (shortage.length > 0) {
-		emitEconomyEvent(
-			`${name}: critical ${shortage.join(", ")} shortage`,
-			"danger",
-		);
-		recordExperimentEvent("EQUIPMENT_SHORTAGE", {
-			source: "economy",
-			actorCountryId: countryId,
-			actorSideUid: sideUids[sideIdx] || null,
-			evidence: {
-				categories: shortage,
-				previousCategories: previousKey.split("|").filter(Boolean),
-				ratios,
-				threshold: 0.25,
-			},
-		});
-	} else if (previousKey) {
-		emitEconomyEvent(`${name}: strategic equipment recovered`, "recovery");
-		recordExperimentEvent("EQUIPMENT_RECOVERED", {
-			source: "economy",
-			actorCountryId: countryId,
-			actorSideUid: sideUids[sideIdx] || null,
-			evidence: {
-				previousCategories: previousKey.split("|").filter(Boolean),
-				ratios,
-				threshold: 0.25,
-			},
-		});
-	}
-	equipment._majorShortageKey = key;
-}
-
-function settleCombinedArmsCycle(countryId, economyState, liveSummary) {
-	const equipment = countryEquipment.get(countryId);
-	if (!equipment) return;
-	if (activeRebellions.has(countryId)) {
-		equipment.airOperationsDue = 0;
-		equipment.airOperationsCoverage = 0;
-		equipment.replacementSpent = 0;
-		return;
-	}
-	const live = liveSummary.get(countryId) || {
-		armor: 0,
-		fighters: 0,
-		strike: 0,
-		operationalFighters: 0,
-		operationalStrike: 0,
-	};
-	const airOperationsDue = computeAirOperationsCost({
-		fighters: live.operationalFighters,
-		strikeAircraft: live.operationalStrike,
-	});
-	equipment.airOperationsDue = airOperationsDue;
-	const canOperate = isCombinedArmsFullyFunded(economyState);
-	const operationsSpend = canOperate
-		? Math.min(economyState.treasury, airOperationsDue)
-		: 0;
-	economyState.treasury -= operationsSpend;
-	equipment.airOperationsCoverage =
-		airOperationsDue > 0 ? operationsSpend / airOperationsDue : 1;
-	const wasGrounded = equipment._airGrounded === true;
-	equipment._airGrounded = equipment.airOperationsCoverage < 0.25;
-	if (wasGrounded !== equipment._airGrounded) {
-		const name = countryMetadata[countryId - 1]?.name || `Country ${countryId}`;
-		emitEconomyEvent(
-			`${name}: aircraft ${equipment._airGrounded ? "grounded" : "operations restored"}`,
-			equipment._airGrounded ? "warning" : "recovery",
-		);
-	}
-
-	const fullyFunded = canOperate && equipment.airOperationsCoverage >= 0.999;
-	if (fullyFunded) {
-		for (let index = 0; index < airfields.length; index++) {
-			const field = airfields[index];
-			if (field.controllerId !== countryId || field.health >= 100) continue;
-			const repair = advanceAirfieldRepair(field, {
-				fullyFunded,
-				budget: economyState.treasury,
-			});
-			if (repair.spent <= 0) continue;
-			Object.assign(field, repair.field);
-			economyState.treasury -= repair.spent;
-		}
-	}
-
-	equipment.replacementSpent = 0;
-	if (!fullyFunded) {
-		updateEquipmentShortageState(countryId, equipment, live);
-		summarizeLiveEquipment();
-		return;
-	}
-	const purchases = [
-		{
-			capacity: equipment.armorCapacity,
-			current: live.armor,
-			cost: COMBINED_ARMS_CONFIG.ARMOR_REPLACEMENT_COST,
-			reserveKey: "reserveArmor",
-		},
-		{
-			capacity: equipment.fighterCapacity,
-			current: live.fighters,
-			cost: COMBINED_ARMS_CONFIG.FIGHTER_REPLACEMENT_COST,
-			reserveKey: "reserveFighters",
-		},
-		{
-			capacity: equipment.strikeCapacity,
-			current: live.strike,
-			cost: COMBINED_ARMS_CONFIG.STRIKE_REPLACEMENT_COST,
-			reserveKey: "reserveStrike",
-		},
-	];
-	for (const offer of purchases) {
-		const purchase = computeReplacementPurchase({
-			capacity: offer.capacity,
-			current: offer.current,
-			unitCost: offer.cost,
-			budget: economyState.treasury,
-		});
-		if (purchase.purchased <= 0) continue;
-		equipment[offer.reserveKey] += purchase.purchased;
-		economyState.treasury -= purchase.spent;
-		equipment.replacementSpent += purchase.spent;
-	}
-	reinforceEquipmentFromReserves(countryId);
-	const nextLive = summarizeLiveEquipment().get(countryId) || live;
-	updateEquipmentShortageState(countryId, equipment, nextLive);
-}
-
-function runFreeCombinedArmsMaintenanceCycle() {
-	const live = summarizeLiveEquipment();
-	for (const countryId of countryEquipment.keys()) {
-		if (findCountrySideIndex(countryId) < 0) continue;
-		settleCombinedArmsCycle(
-			countryId,
-			{
-				treasury: Number.POSITIVE_INFINITY,
-				payrollCoverage: 1,
-				occupationCoverage: 1,
-				arrearsCycles: 0,
-			},
-			live,
-		);
-	}
-}
-
-function findCountryHomeTarget(countryId, sideIdx) {
-	const capital = cities.find(
-		(city) =>
-			(city.ownerId || city.sovereignId) === countryId && city.isCapital,
-	);
-	if (capital) {
-		const idx = getGridIndex(capital.lat, capital.lng);
-		if (idx !== -1 && dominantSideMap[idx] === sideIdx) {
-			return { lat: capital.lat, lng: capital.lng };
-		}
-	}
-	let chosen = -1;
-	let seen = 0;
-	for (let i = 0; i < worldControlMap.length; i++) {
-		if (
-			worldControlMap[i] !== countryId ||
-			landMask[i] === 0 ||
-			dominantSideMap[i] !== sideIdx
-		)
-			continue;
-		seen++;
-		if (Math.floor(gameplayRandom() * seen) === 0) chosen = i;
-	}
-	if (chosen < 0) return null;
-	return {
-		lat: Math.floor(chosen / gridWidth) * CONFIG.GRID_RES - 90,
-		lng: (chosen % gridWidth) * CONFIG.GRID_RES - 180,
-	};
-}
-
-function updateUnitCommandState(countryId, previousBand, nextBand) {
-	if (previousBand === nextBand) return;
-	const sideIdx = findCountrySideIndex(countryId);
-	const homeTarget =
-		nextBand === COMMAND_BANDS.BREAKDOWN || nextBand === COMMAND_BANDS.MUTINY
-			? findCountryHomeTarget(countryId, sideIdx)
-			: null;
-	for (const unit of units) {
-		if (unit.sovereignId !== countryId) continue;
-		clearUnitCommandAssignments(unit);
-		unit._commandBand = nextBand;
-		unit._refusesOffense =
-			getUnitDiscipline(unit) < commandRefusalShare(nextBand);
-		unit._economyHomeTarget = homeTarget ? { ...homeTarget } : null;
-		unit._commandTransitionCycle = economyPayCycle;
-	}
-	const name = countryMetadata[countryId - 1]?.name || `Country ${countryId}`;
-	const severity =
-		nextBand === COMMAND_BANDS.BREAKDOWN || nextBand === COMMAND_BANDS.MUTINY
-			? "danger"
-			: nextBand === COMMAND_BANDS.PAID
-				? "recovery"
-				: "warning";
-	const transitionMessages = {
-		[COMMAND_BANDS.PAID]: "command and recruitment recovered",
-		[COMMAND_BANDS.STRAINED]: "25% of troops resist offensive orders",
-		[COMMAND_BANDS.UNPAID]: "60% of troops refuse offensive orders",
-		[COMMAND_BANDS.BREAKDOWN]: "command breakdown; troops returning home",
-		[COMMAND_BANDS.MUTINY]: "army mutiny; self-defense orders only",
-	};
-	emitEconomyEvent(`${name}: ${transitionMessages[nextBand]}`, severity);
-	const economyState = countryEconomy.get(countryId);
-	recordExperimentEvent("ECONOMY_BAND_CHANGED", {
-		source: "economy",
-		actorCountryId: countryId,
-		actorSideUid: sideUids[sideIdx] || null,
-		evidence: {
-			previousBand,
-			nextBand,
-			arrearsCycles: economyState?.arrearsCycles || 0,
-			payrollCoverage: economyState?.payrollCoverage ?? 1,
-			treasury: economyState?.treasury || 0,
-		},
-	});
-}
-
-function applyDesertion() {
-	const survivingUnits = [];
-	for (const unit of units) {
-		const state = countryEconomy.get(unit.sovereignId);
-		const rate = state ? desertionRate(state.commandBand) : 0;
-		if (rate <= 0) {
-			survivingUnits.push(unit);
-			continue;
-		}
-		const healthLoss = Math.max(0, unit.health * rate);
-		const personnelBefore =
-			unit.kind === "armor" ? 0 : getLiveFormationPersonnel(unit);
-		unit.health -= healthLoss;
-		const sideIdx = unit.sideIndex;
-		if (sideIdx >= 0 && sideIdx < MAX_SIDES) {
-			let soldierLoss;
-			if (unit.kind === "armor") {
-				const beforeEquipment = Math.max(0, unit.equipment || 0);
-				const nextEquipment = Math.min(
-					beforeEquipment,
-					Math.max(
-						0,
-						Math.ceil(
-							(unit.maxEquipment || beforeEquipment) *
-								(unit.health / CONFIG.UNIT_HEALTH),
-						),
-					),
-				);
-				unit.equipment = nextEquipment;
-				soldierLoss =
-					(beforeEquipment - nextEquipment) *
-					COMBINED_ARMS_CONFIG.ARMOR_CREW_PER_VEHICLE;
-			} else {
-				soldierLoss = Math.min(personnelBefore, personnelBefore * rate);
-				unit.personnel = Math.max(0, Math.round(personnelBefore - soldierLoss));
-				unit.strengthMultiplier = unit.personnel / CONFIG.UNIT_TO_SOLDIER_RATIO;
-			}
-			if (unit.health <= 1) {
-				if (unit.kind === "armor") {
-					const residualEquipment = Math.max(0, unit.equipment || 0);
-					soldierLoss +=
-						residualEquipment * COMBINED_ARMS_CONFIG.ARMOR_CREW_PER_VEHICLE;
-					unit.equipment = 0;
-				} else {
-					const residualPersonnel = Math.max(0, unit.personnel || 0);
-					soldierLoss += residualPersonnel;
-					unit.personnel = 0;
-					unit.strengthMultiplier = 0;
-				}
-			}
-			sideSoldiers[sideIdx] = Math.max(0, sideSoldiers[sideIdx] - soldierLoss);
-		}
-		if (unit.health > 1) survivingUnits.push(unit);
-	}
-	units = survivingUnits;
-}
-
-function occupationCountsByAnnexer() {
-	const counts = new Map();
-	for (const rebellion of activeRebellions.values()) {
-		counts.set(rebellion.annexerId, (counts.get(rebellion.annexerId) || 0) + 1);
-	}
-	return counts;
-}
-
-function pickRebellionSeed(record, annexerSideIdx) {
-	const candidates = [];
-	let seen = 0;
-	const capital = cities.find(
-		(c) => (c.ownerId || c.sovereignId) === record.victimId && c.isCapital,
-	);
-	const capitalIdx = capital ? getGridIndex(capital.lat, capital.lng) : -1;
-	for (let i = 0; i < deJureMap.length; i++) {
-		if (
-			deJureMap[i] !== record.victimId ||
-			landMask[i] === 0 ||
-			dominantSideMap[i] !== annexerSideIdx
-		)
-			continue;
-		seen++;
-		if (candidates.length < 256) candidates.push(i);
-		else {
-			const replacement = Math.floor(gameplayRandom() * seen);
-			if (replacement < candidates.length) candidates[replacement] = i;
-		}
-	}
-	if (capitalIdx !== -1 && candidates.includes(capitalIdx)) return capitalIdx;
-	if (!candidates.length) return -1;
-	const garrisons = units
-		.filter((u) => u.sideIndex === annexerSideIdx)
-		.map((u) => ({ lat: u.lat, lng: u.lng }));
-	let best = candidates[0];
-	let bestScore = -Infinity;
-	for (const idx of candidates) {
-		const y = Math.floor(idx / gridWidth);
-		const x = idx % gridWidth;
-		const lat = y * CONFIG.GRID_RES - 90;
-		const lng = x * CONFIG.GRID_RES - 180;
-		let nearest = 9999;
-		for (const unit of garrisons) {
-			let dLng = unit.lng - lng;
-			if (dLng > 180) dLng -= 360;
-			else if (dLng < -180) dLng += 360;
-			nearest = Math.min(nearest, (unit.lat - lat) ** 2 + dLng ** 2);
-		}
-		const capitalBonus = idx === capitalIdx ? 100000 : 0;
-		const score = nearest + capitalBonus;
-		if (score > bestScore) {
-			bestScore = score;
-			best = idx;
-		}
-	}
-	return best;
-}
-
-function collectRebellionFoothold(record, seedIdx, annexerSideIdx) {
-	if (seedIdx < 0) return [];
-	const target = Math.max(
-		5,
-		Math.min(50, Math.round((record.coreCells || 1) * 0.02)),
-	);
-	const queue = [seedIdx];
-	const visited = new Set([seedIdx]);
-	const foothold = [];
-	while (queue.length && foothold.length < target) {
-		const idx = queue.shift();
-		if (
-			deJureMap[idx] !== record.victimId ||
-			landMask[idx] === 0 ||
-			dominantSideMap[idx] !== annexerSideIdx
-		)
-			continue;
-		foothold.push(idx);
-		const x = idx % gridWidth;
-		const neighbors = [idx + gridWidth, idx - gridWidth];
-		if (x > 0) neighbors.push(idx - 1);
-		if (x < gridWidth - 1) neighbors.push(idx + 1);
-		for (const neighbor of neighbors) {
-			if (
-				neighbor >= 0 &&
-				neighbor < deJureMap.length &&
-				!visited.has(neighbor)
-			) {
-				visited.add(neighbor);
-				queue.push(neighbor);
-			}
-		}
-	}
-	return foothold;
-}
-
-function launchRebellion(record) {
-	if (!warEconomyEnabled || record.cooldownUntilCycle > economyPayCycle)
-		return false;
-	if (activeRebellions.has(record.victimId)) return false;
-	if (activeRebellions.size >= ECONOMY_CONFIG.MAX_ACTIVE_REBELLIONS)
-		return false;
-	const annexerCounts = occupationCountsByAnnexer();
-	if (
-		(annexerCounts.get(record.annexerId) || 0) >=
-		ECONOMY_CONFIG.MAX_REBELLIONS_PER_ANNEXER
-	)
-		return false;
-	const annexerSideIdx = findCountrySideIndex(record.annexerId);
-	if (annexerSideIdx < 0) return false;
-	const meta = countryMetadata[record.victimId - 1];
-	if (!meta) return false;
-	const country = {
-		id: meta.id,
-		name: meta.name || `Country ${meta.id}`,
-		color: meta.color,
-		role: "OFFENSE",
-		strategy: "DEFENSIVE",
-		buffState: "buff",
-		initialCells: record.coreCells,
-		isRebel: true,
-	};
-	const rebelSideIdx = allocateIndependentSide(country, annexerSideIdx);
-	if (rebelSideIdx < 0) return false;
-	const seed = pickRebellionSeed(record, annexerSideIdx);
-	const foothold = collectRebellionFoothold(record, seed, annexerSideIdx);
-	if (!foothold.length) {
-		sides[rebelSideIdx] = [];
-		clearSideHostilities(rebelSideIdx);
-		return false;
-	}
-	for (const idx of foothold) {
-		worldControlMap[idx] = record.victimId;
-		primaryOccupierMap[idx] = record.victimId;
-		landMask[idx] = 2;
-		for (let sideIdx = 0; sideIdx < sideInfluenceMaps.length; sideIdx++) {
-			sideInfluenceMaps[sideIdx][idx] = 0;
-		}
-		sideInfluenceMaps[rebelSideIdx][idx] = 1;
-		syncOccupationFromSideInfluence(idx);
-	}
-	const spawnCount = Math.max(
-		3,
-		Math.min(12, Math.ceil((record.expectedArmyUnits || 3) * 0.15)),
-	);
-	for (let i = 0; i < spawnCount; i++) {
-		const idx = foothold[i % foothold.length];
-		const y = Math.floor(idx / gridWidth);
-		const x = idx % gridWidth;
-		const unitId = gameplayRandom();
-		const recruitedUnit = {
-			id: unitId,
-			kind: "army",
-			lat:
-				y * CONFIG.GRID_RES -
-				90 +
-				CONFIG.GRID_RES / 2 +
-				(gameplayRandom() - 0.5) * CONFIG.GRID_RES * 0.4,
-			lng:
-				x * CONFIG.GRID_RES -
-				180 +
-				CONFIG.GRID_RES / 2 +
-				(gameplayRandom() - 0.5) * CONFIG.GRID_RES * 0.4,
-			sideIndex: rebelSideIdx,
-			sovereignId: record.victimId,
-			beneficiaryId: record.victimId,
-			health: CONFIG.UNIT_HEALTH,
-			lastAttack: 0,
-			deployTicks: 15,
-			_discipline: getUnitDiscipline({
-				id: unitId,
-				sovereignId: record.victimId,
-			}),
-			_commandBand: COMMAND_BANDS.PAID,
-			_refusesOffense: false,
-		};
-		setUnitFormationPersonnel(
-			recruitedUnit,
-			Math.max(
-				1,
-				Math.round(
-					soldiersPerUnit[rebelSideIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO,
-				),
-			),
-		);
-		units.push(recruitedUnit);
-	}
-	initialSideSoldiers[rebelSideIdx] = Math.max(
-		spawnCount * CONFIG.UNIT_TO_SOLDIER_RATIO,
-		(meta.pop || 0) * 0.002,
-	);
-	sideSoldiers[rebelSideIdx] = initialSideSoldiers[rebelSideIdx];
-	sideRecruitableManpower[rebelSideIdx] = Math.max(
-		0,
-		sideSoldiers[rebelSideIdx] -
-			units.reduce(
-				(total, unit) =>
-					total +
-					(unit.sideIndex === rebelSideIdx && unit.kind !== "armor"
-						? getLiveFormationPersonnel(unit)
-						: 0),
-				0,
-			),
-	);
-	soldiersPerUnit[rebelSideIdx] = CONFIG.UNIT_TO_SOLDIER_RATIO;
-	meta.releasableBy = null;
-	meta.buffState = "buff";
-	let state = countryEconomy.get(record.victimId);
-	if (!state) {
-		state = createEconomyState({
-			countryId: record.victimId,
-			gdp: meta.gdp || 0,
-			pop: meta.pop || 0,
-			territoryUnits: record.expectedArmyUnits,
-			initialCoreCells: record.coreCells,
-			initialCityPop: record.initialCityPop || 0,
-		});
-	}
-	state.capitulated = false;
-	state.arrearsCycles = 0;
-	state.commandBand = COMMAND_BANDS.PAID;
-	state.mutinyRecoveryCycles = 0;
-	state.treasury = Math.max(state.treasury, state.baseIncome * 3);
-	countryEconomy.set(record.victimId, state);
-	record.active = true;
-	record.queued = false;
-	_occupationGarrisonPlans.delete(record.victimId);
-	clearOccupationGarrisonAssignments(record.victimId);
-	const rebellion = {
-		rebelId: record.victimId,
-		annexerId: record.annexerId,
-		annexerSideIdx,
-		rebelSideIdx,
-		startCycle: economyPayCycle,
-		failedCycles: 0,
-	};
-	activeRebellions.set(record.victimId, rebellion);
-	reconcileOperationalAiLifecycle("rebellion-started");
-	const seedRow = Math.floor(seed / gridWidth);
-	const seedColumn = seed % gridWidth;
-	recordExperimentEvent("REBELLION_STARTED", {
-		source: "economy",
-		major: true,
-		actorCountryId: record.victimId,
-		actorSideUid: sideUids[rebelSideIdx] || null,
-		targetCountryId: record.annexerId,
-		targetSideUid: sideUids[annexerSideIdx] || null,
-		location: {
-			lat: seedRow * CONFIG.GRID_RES - 90 + CONFIG.GRID_RES / 2,
-			lng: seedColumn * CONFIG.GRID_RES - 180 + CONFIG.GRID_RES / 2,
-			gridIndex: seed,
-		},
-		evidence: {
-			economyCycle: economyPayCycle,
-			footholdCells: foothold.length,
-			spawnedUnits: spawnCount,
-			resistance: record.resistance || 0,
-		},
-	});
-	emitEconomyEvent(`${country.name}: rebellion has begun`, "danger");
-	generateProvinces();
-	recalculateAllBounds();
-	invalidateFrontlineField();
-	updateSidesUI();
-	if (influenceLayer) influenceLayer.render();
-	return true;
-}
-
-function returnEvacuatedAircraftToNationalReserve(countryId) {
-	const equipment = countryEquipment.get(countryId);
-	if (!equipment) return;
-	for (let index = airWings.length - 1; index >= 0; index--) {
-		const wing = airWings[index];
-		if (
-			wing.sovereignId !== countryId ||
-			wing.state !== AIR_WING_STATES.EVACUATED
-		)
-			continue;
-		if (wing.role === "FIGHTER") {
-			equipment.reserveFighters += Math.max(0, wing.equipment || 0);
-		} else {
-			equipment.reserveStrike += Math.max(0, wing.equipment || 0);
-		}
-		airWings.splice(index, 1);
-	}
-	summarizeLiveEquipment();
-}
-
-function restoreNationalAirfields(countryId, sideIdx) {
-	for (const field of airfields) {
-		if (field.ownerId !== countryId) continue;
-		Object.assign(
-			field,
-			captureAirfield(field, {
-				controllerId: countryId,
-				sideIndex: sideIdx,
-			}),
-		);
-	}
-}
-
-function resolveRebellionSuccess(rebellion) {
-	const record = occupationEconomies.get(rebellion.rebelId);
-	const rebelSideIdx = findCountrySideIndex(rebellion.rebelId);
-	const annexerSideIdx = findCountrySideIndex(rebellion.annexerId);
-	if (!record || rebelSideIdx < 0) return;
-	const rebelSideUid = sideUids[rebelSideIdx] || null;
-	const annexerSideUid = sideUids[annexerSideIdx] || null;
-	for (let i = 0; i < deJureMap.length; i++) {
-		if (deJureMap[i] !== rebellion.rebelId || landMask[i] === 0) continue;
-		if (
-			dominantSideMap[i] === rebelSideIdx ||
-			dominantSideMap[i] === annexerSideIdx
-		) {
-			worldControlMap[i] = rebellion.rebelId;
-			primaryOccupierMap[i] = rebellion.rebelId;
-			landMask[i] = 2;
-			for (let sideIdx = 0; sideIdx < sideInfluenceMaps.length; sideIdx++) {
-				sideInfluenceMaps[sideIdx][i] = 0;
-			}
-			sideInfluenceMaps[rebelSideIdx][i] = 1;
-			syncOccupationFromSideInfluence(i);
-		}
-	}
-	if (annexerSideIdx >= 0) setSidesHostile(rebelSideIdx, annexerSideIdx, false);
-	const meta = countryMetadata[rebellion.rebelId - 1];
-	if (meta) {
-		meta.releasableBy = null;
-		meta.buffState = "none";
-	}
-	const country = sides[rebelSideIdx]?.find((c) => c.id === rebellion.rebelId);
-	if (country) {
-		country.isRebel = false;
-		country.isRestoredNeutral = true;
-		country.buffState = "none";
-		country.strategy = "DEFENSIVE";
-	}
-	activeRebellions.delete(rebellion.rebelId);
-	restoreNationalAirfields(rebellion.rebelId, rebelSideIdx);
-	returnEvacuatedAircraftToNationalReserve(rebellion.rebelId);
-	occupationEconomies.delete(rebellion.rebelId);
-	_occupationGarrisonPlans.delete(rebellion.rebelId);
-	clearOccupationGarrisonAssignments(rebellion.rebelId);
-	recordExperimentEvent("REBELLION_SUCCEEDED", {
-		source: "economy",
-		major: true,
-		actorCountryId: rebellion.rebelId,
-		actorSideUid: rebelSideUid,
-		targetCountryId: rebellion.annexerId,
-		targetSideUid: annexerSideUid,
-		evidence: {
-			economyCycle: economyPayCycle,
-			durationCycles: Math.max(0, economyPayCycle - rebellion.startCycle),
-		},
-	});
-	emitEconomyEvent(
-		`${meta?.name || "Rebels"}: independence restored`,
-		"recovery",
-	);
-	statusText.innerText = `${meta?.name || "Rebels"} INDEPENDENCE RECOGNIZED`;
-	generateProvinces();
-	recalculateAllBounds();
-	invalidateFrontlineField();
-	updateSidesUI();
-	reconcileOperationalAiLifecycle("rebellion-succeeded");
-}
-
-function resolveRebellionFailure(rebellion) {
-	const record = occupationEconomies.get(rebellion.rebelId);
-	if (!record) return;
-	const rebelSideIdx = findCountrySideIndex(rebellion.rebelId);
-	const annexerSideIdx = findCountrySideIndex(record.annexerId);
-	const rebelSideUid = sideUids[rebelSideIdx] || null;
-	const annexerSideUid = sideUids[annexerSideIdx] || null;
-	for (let i = 0; i < deJureMap.length; i++) {
-		if (deJureMap[i] !== rebellion.rebelId || landMask[i] === 0) continue;
-		if (dominantSideMap[i] === rebelSideIdx) {
-			worldControlMap[i] = record.annexerId;
-			primaryOccupierMap[i] = record.annexerId;
-			for (let sideIdx = 0; sideIdx < sideInfluenceMaps.length; sideIdx++) {
-				sideInfluenceMaps[sideIdx][i] = 0;
-			}
-			if (annexerSideIdx >= 0) {
-				sideInfluenceMaps[annexerSideIdx][i] = 1;
-				syncOccupationFromSideInfluence(i);
-			}
-		}
-	}
-	units = units.filter((unit) => unit.sovereignId !== rebellion.rebelId);
-	if (rebelSideIdx >= 0) {
-		sideSoldiers[rebelSideIdx] = 0;
-		sideRecruitableManpower[rebelSideIdx] = 0;
-		preserveRetiredSidePersonnel(rebelSideIdx);
-		sides[rebelSideIdx] = sides[rebelSideIdx].filter(
-			(country) => country.id !== rebellion.rebelId,
-		);
-		clearSideHostilities(rebelSideIdx);
-	}
-	const state = countryEconomy.get(rebellion.rebelId);
-	if (state) state.capitulated = true;
-	const meta = countryMetadata[rebellion.rebelId - 1];
-	if (meta) {
-		meta.releasableBy = record.annexerId;
-		meta.buffState = "none";
-	}
-	record.active = false;
-	record.queued = false;
-	record.resistance = 40;
-	record.cooldownUntilCycle = economyPayCycle + 10;
-	activeRebellions.delete(rebellion.rebelId);
-	if (annexerSideIdx >= 0) _planReassessNeeded[annexerSideIdx] = true;
-	recordExperimentEvent("REBELLION_FAILED", {
-		source: "economy",
-		major: true,
-		actorCountryId: rebellion.rebelId,
-		actorSideUid: rebelSideUid,
-		targetCountryId: record.annexerId,
-		targetSideUid: annexerSideUid,
-		evidence: {
-			economyCycle: economyPayCycle,
-			durationCycles: Math.max(0, economyPayCycle - rebellion.startCycle),
-			failedCycles: rebellion.failedCycles,
-			resistanceAfterDefeat: record.resistance,
-		},
-	});
-	emitEconomyEvent(`${meta?.name || "Rebels"}: rebellion defeated`, "warning");
-	generateProvinces();
-	recalculateAllBounds();
-	updateSidesUI();
-	reconcileOperationalAiLifecycle("rebellion-failed");
-}
-
-function processRebellionStates(territorySnapshot = _territoryLedgerSnapshot) {
-	for (const rebellion of Array.from(activeRebellions.values())) {
-		const rebelSideIdx = findCountrySideIndex(rebellion.rebelId);
-		const countryLedger = getCountryLedger(
-			territorySnapshot,
-			rebellion.rebelId,
-		);
-		const coreCells = countryLedger?.deJureTotal || 0;
-		const controlled = getDeJureControlBySide(
-			territorySnapshot,
-			rebellion.rebelId,
-			rebelSideIdx,
-		);
-		const ratio = coreCells > 0 ? controlled / coreCells : 0;
-		if (ratio >= 0.85) {
-			resolveRebellionSuccess(rebellion);
-			continue;
-		}
-		const unitCount = units.filter(
-			(unit) => unit.sovereignId === rebellion.rebelId,
-		).length;
-		rebellion.failedCycles = updateRebellionFailureCycles(
-			rebellion.failedCycles,
-			{
-				unitCount,
-				controlRatio: ratio,
-			},
-		);
-		if (rebellion.failedCycles >= 3) resolveRebellionFailure(rebellion);
-	}
-
-	const queued = selectRebellionCandidates(
-		occupationEconomies.values(),
-		activeRebellions.values(),
-		economyPayCycle,
-	);
-	for (const record of queued) {
-		record.queued = true;
-		if (!record.queuedAtCycle) record.queuedAtCycle = economyPayCycle;
-		launchRebellion(record);
-	}
-}
-
-function restoreCountryPeacefully(record) {
-	const meta = countryMetadata[record.victimId - 1];
-	if (!meta) return false;
-	const country = {
-		id: meta.id,
-		name: meta.name || `Country ${meta.id}`,
-		color: meta.color,
-		role: "OFFENSE",
-		strategy: "DEFENSIVE",
-		buffState: "none",
-		initialCells: record.coreCells,
-		isRestoredNeutral: true,
-	};
-	const sideIdx = allocateIndependentSide(country, -1);
-	if (sideIdx < 0) return false;
-	const restoredPool = Math.max(
-		0,
-		Math.round((meta.pop || 0) * 0.002) ||
-			Math.round((record.coreCells || 0) * 200),
-	);
-	initialSideSoldiers[sideIdx] = restoredPool;
-	sideSoldiers[sideIdx] = restoredPool;
-	sideRecruitableManpower[sideIdx] = restoredPool;
-	for (let i = 0; i < deJureMap.length; i++) {
-		if (deJureMap[i] !== record.victimId || landMask[i] === 0) continue;
-		worldControlMap[i] = record.victimId;
-		primaryOccupierMap[i] = record.victimId;
-		landMask[i] = 2;
-		for (let si = 0; si < sideInfluenceMaps.length; si++) {
-			sideInfluenceMaps[si][i] = 0;
-		}
-		sideInfluenceMaps[sideIdx][i] = 1;
-		syncOccupationFromSideInfluence(i);
-	}
-	meta.releasableBy = null;
-	const state = countryEconomy.get(record.victimId);
-	if (state) {
-		state.capitulated = false;
-		state.treasury = Math.max(state.treasury, state.baseIncome * 3);
-		state.arrearsCycles = 0;
-		state.commandBand = COMMAND_BANDS.PAID;
-	}
-	restoreNationalAirfields(record.victimId, sideIdx);
-	returnEvacuatedAircraftToNationalReserve(record.victimId);
-	const restoredLivePersonnel = getCountryLivePersonnel(record.victimId);
-	if (restoredLivePersonnel > sideSoldiers[sideIdx]) {
-		sideSoldiers[sideIdx] = restoredLivePersonnel;
-		initialSideSoldiers[sideIdx] = restoredLivePersonnel;
-	}
-	sideRecruitableManpower[sideIdx] = Math.max(
-		0,
-		sideSoldiers[sideIdx] - restoredLivePersonnel,
-	);
-	occupationEconomies.delete(record.victimId);
-	_occupationGarrisonPlans.delete(record.victimId);
-	clearOccupationGarrisonAssignments(record.victimId);
-	emitEconomyEvent(`${country.name}: occupation ended`, "recovery");
-	generateProvinces();
-	updateSidesUI();
-	reconcileOperationalAiLifecycle("country-restored");
-	return true;
-}
-
-function ensureOccupationControllers(
-	territorySnapshot = _territoryLedgerSnapshot,
-) {
-	const activeCountryIds = new Set(
-		sides
-			.flat()
-			.filter(Boolean)
-			.map((c) => c.id),
-	);
-	for (const record of Array.from(occupationEconomies.values())) {
-		if (activeCountryIds.has(record.annexerId)) continue;
-		const controllerCounts =
-			getCountryLedger(territorySnapshot, record.victimId)
-				?.deJureControlByCountry || {};
-		let nextAnnexer = 0;
-		let bestCount = 0;
-		for (const [rawCountryId, count] of Object.entries(controllerCounts)) {
-			const countryId = Number(rawCountryId);
-			if (
-				countryId <= 0 ||
-				countryId === record.victimId ||
-				!activeCountryIds.has(countryId)
-			) {
-				continue;
-			}
-			if (count > bestCount) {
-				bestCount = count;
-				nextAnnexer = countryId;
-			}
-		}
-		const rebellion = activeRebellions.get(record.victimId);
-		if (nextAnnexer > 0) {
-			const previousAnnexerSide = findCountrySideIndex(record.annexerId);
-			record.annexerId = nextAnnexer;
-			const nextAnnexerSide = findCountrySideIndex(nextAnnexer);
-			_occupationGarrisonPlans.delete(record.victimId);
-			clearOccupationGarrisonAssignments(record.victimId);
-			if (nextAnnexerSide >= 0) {
-				_planReassessNeeded[nextAnnexerSide] = true;
-			}
-			if (rebellion) {
-				if (previousAnnexerSide >= 0) {
-					setSidesHostile(rebellion.rebelSideIdx, previousAnnexerSide, false);
-				}
-				if (nextAnnexerSide >= 0) {
-					setSidesHostile(rebellion.rebelSideIdx, nextAnnexerSide, true);
-				}
-				rebellion.annexerId = nextAnnexer;
-				rebellion.annexerSideIdx = nextAnnexerSide;
-			}
-		} else if (rebellion) {
-			resolveRebellionSuccess(rebellion);
-		} else {
-			restoreCountryPeacefully(record);
-		}
-	}
-}
-
-function buildOccupationGarrisonPoints(
-	victimId,
-	coreCellIndices,
-	annexerSideIdx,
-	desiredCount,
-) {
-	const points = [];
-	const seen = new Set();
-	const addPoint = (lat, lng) => {
-		const idx = getGridIndex(lat, lng);
-		if (
-			idx === -1 ||
-			seen.has(idx) ||
-			deJureMap[idx] !== victimId ||
-			landMask[idx] === 0
-		)
-			return;
-		seen.add(idx);
-		points.push({ lat, lng, idx });
-	};
-
-	const victimCities = cities
-		.filter((city) => (city.ownerId || city.sovereignId) === victimId)
-		.sort((a, b) => Number(b.isCapital) - Number(a.isCapital));
-	for (const city of victimCities) addPoint(city.lat, city.lng);
-
-	const controlledCells = coreCellIndices.filter(
-		(idx) => dominantSideMap[idx] === annexerSideIdx,
-	);
-	const candidates = controlledCells.length ? controlledCells : coreCellIndices;
-	const targetCount = Math.max(3, Math.min(24, desiredCount || 3));
-	const remaining = Math.max(0, targetCount - points.length);
-	for (let i = 0; i < remaining && candidates.length > 0; i++) {
-		const sampleAt = Math.min(
-			candidates.length - 1,
-			Math.floor(((i + 0.5) * candidates.length) / Math.max(1, remaining)),
-		);
-		const idx = candidates[sampleAt];
-		const y = Math.floor(idx / gridWidth);
-		const x = idx % gridWidth;
-		addPoint(
-			y * CONFIG.GRID_RES - 90 + CONFIG.GRID_RES * 0.5,
-			x * CONFIG.GRID_RES - 180 + CONFIG.GRID_RES * 0.5,
-		);
-	}
-	return points.slice(0, targetCount);
-}
-
-export function registerOccupation(victimId, annexerId) {
-	if (!warEconomyEnabled || victimId <= 0 || annexerId <= 0) return null;
-	const meta = countryMetadata[victimId - 1] || {};
-	let state = countryEconomy.get(victimId);
-	let coreCells = 0;
-	const coreCellIndices = [];
-	for (let i = 0; i < deJureMap.length; i++) {
-		if (deJureMap[i] === victimId && landMask[i] > 0) {
-			coreCells++;
-			coreCellIndices.push(i);
-		}
-	}
-	const initialCityPop = cities
-		.filter((city) => (city.ownerId || city.sovereignId) === victimId)
-		.reduce((sum, city) => sum + Math.max(0, city.pop || 0), 0);
-	if (!state) {
-		state = createEconomyState({
-			countryId: victimId,
-			gdp: meta.gdp || 0,
-			pop: meta.pop || 0,
-			territoryUnits: estimateTerritoryArmyUnits(coreCells),
-			initialCoreCells: coreCells,
-			initialCityPop,
-		});
-		countryEconomy.set(victimId, state);
-	}
-	state.capitulated = true;
-	const requiredGarrison = computeRequiredGarrison(
-		Math.max(
-			3,
-			state.expectedArmyUnits || estimateTerritoryArmyUnits(coreCells),
-		),
-	);
-	const annexerSideIdx = findCountrySideIndex(annexerId);
-	const record = {
-		victimId,
-		annexerId,
-		baseIncome: state.baseIncome,
-		coreCells: Math.max(1, coreCells),
-		initialCityPop,
-		expectedArmyUnits: Math.max(
-			3,
-			state.expectedArmyUnits || estimateTerritoryArmyUnits(coreCells),
-		),
-		resistance: 0,
-		occupationCoverage: 1,
-		garrisonCoverage: 0,
-		garrisonAssignedCount: 0,
-		requiredGarrison,
-		garrisonPoints: buildOccupationGarrisonPoints(
-			victimId,
-			coreCellIndices,
-			annexerSideIdx,
-			requiredGarrison,
-		),
-		heldRatio: 1,
-		active: false,
-		queued: false,
-		queuedAtCycle: 0,
-		cooldownUntilCycle: 0,
-	};
-	occupationEconomies.set(victimId, record);
-	if (annexerSideIdx >= 0) _planReassessNeeded[annexerSideIdx] = true;
-	return record;
-}
-
-export function runWarEconomyCycle(force = false) {
-	if (!warEconomyEnabled && !armorEnabled && !airPowerEnabled) return;
-	if (!force && _simTickCount % ECONOMY_CONFIG.PAY_CYCLE_TICKS !== 0) return;
-	const started = performance.now();
-	if (!warEconomyEnabled) {
-		runFreeCombinedArmsMaintenanceCycle();
-		updateEconomyPanel();
-		window.__perf.economy =
-			(window.__perf.economy || 0) + performance.now() - started;
-		return;
-	}
-	let territorySnapshot = flushTerritoryLedger();
-	economyPayCycle++;
-	ensureOccupationControllers(territorySnapshot);
-	// Controller migration can create or restore a side. Reflush only when that
-	// changed topology invalidated the prior atomic view; otherwise this is O(1).
-	territorySnapshot = flushTerritoryLedger();
-	const countryToSide = new Map();
-	for (let sideIdx = 0; sideIdx < sides.length; sideIdx++) {
-		for (const country of sides[sideIdx] || []) {
-			countryToSide.set(country.id, sideIdx);
-		}
-	}
-	const payrollDueByCountry = new Map();
-	const garrisonByVictim = new Map();
-	for (const unit of units) {
-		const payroll =
-			unit.kind === "armor"
-				? computeArmorPayroll(unit.equipment || 0)
-				: ECONOMY_CONFIG.PAYROLL_PER_UNIT * getFormationCapacityStrength(unit);
-		payrollDueByCountry.set(
-			unit.sovereignId,
-			(payrollDueByCountry.get(unit.sovereignId) || 0) + payroll,
-		);
-		getUnitDiscipline(unit);
-		if (!unitCountsAsOccupationGarrison(unit)) continue;
-		const gridIndex = getGridIndex(unit.lat, unit.lng);
-		if (gridIndex < 0) continue;
-		const victimId = deJureMap[gridIndex];
-		const occupation = occupationEconomies.get(victimId);
-		if (!occupation) continue;
-		const annexerSideIdx = countryToSide.get(occupation.annexerId);
-		if (annexerSideIdx !== unit.sideIndex) continue;
-		garrisonByVictim.set(
-			victimId,
-			(garrisonByVictim.get(victimId) || 0) + getLiveFormationStrength(unit),
-		);
-	}
-	const liveEquipment = summarizeLiveEquipment();
-	const occupationDueByAnnexer = new Map();
-	const occupationYieldByAnnexer = new Map();
-	for (const record of occupationEconomies.values()) {
-		const annexerSideIdx = countryToSide.get(record.annexerId);
-		const held = getDeJureControlBySide(
-			territorySnapshot,
-			record.victimId,
-			annexerSideIdx,
-		);
-		record.heldRatio = Math.max(0, Math.min(1, held / record.coreCells));
-		const garrisonUnits = garrisonByVictim.get(record.victimId) || 0;
-		const requiredGarrison =
-			record.requiredGarrison ||
-			computeRequiredGarrison(record.expectedArmyUnits || 0);
-		record.requiredGarrison = requiredGarrison;
-		record.garrisonCoverage = Math.min(1, garrisonUnits / requiredGarrison);
-		const due =
-			record.baseIncome *
-			ECONOMY_CONFIG.OCCUPATION_COST_SHARE *
-			record.heldRatio;
-		const yieldAmount =
-			record.baseIncome *
-			ECONOMY_CONFIG.OCCUPATION_YIELD_SHARE *
-			record.heldRatio;
-		occupationDueByAnnexer.set(
-			record.annexerId,
-			(occupationDueByAnnexer.get(record.annexerId) || 0) + due,
-		);
-		occupationYieldByAnnexer.set(
-			record.annexerId,
-			(occupationYieldByAnnexer.get(record.annexerId) || 0) + yieldAmount,
-		);
-	}
-
-	for (const [countryId, sideIdx] of countryToSide) {
-		const state = countryEconomy.get(countryId);
-		if (!state || state.capitulated) continue;
-		const territory = getCountryLedger(territorySnapshot, countryId);
-		const coreControlRatio = Math.max(
-			0,
-			Math.min(1, (territory?.coreControlled || 0) / state.initialCoreCells),
-		);
-		const cityControlRatio =
-			state.initialCityPop > 0
-				? Math.max(
-						0,
-						Math.min(
-							1,
-							(territory?.cityPopulationControlled || 0) / state.initialCityPop,
-						),
-					)
-				: coreControlRatio;
-		const hasCapital = territory?.capitalHeld !== false;
-		const income = computeCurrentIncome(state.baseIncome, {
-			coreControlRatio,
-			cityControlRatio,
-			capitalHeld: hasCapital,
-		});
-		const previousBand = state.commandBand;
-		const previousCoverage = state.payrollCoverage;
-		const settled = settleEconomyCycle(state, {
-			income,
-			occupationYield: occupationYieldByAnnexer.get(countryId) || 0,
-			payrollDue: payrollDueByCountry.get(countryId) || 0,
-			occupationDue: occupationDueByAnnexer.get(countryId) || 0,
-		});
-		settled.coreControlRatio = coreControlRatio;
-		settled.cityControlRatio = cityControlRatio;
-		settled.capitalHeld = hasCapital;
-		countryEconomy.set(countryId, settled);
-		if (previousCoverage >= 0.999 && settled.payrollCoverage < 0.999) {
-			const name =
-				countryMetadata[countryId - 1]?.name || `Country ${countryId}`;
-			emitEconomyEvent(
-				`${name}: budget deficit; recruitment frozen`,
-				"warning",
-			);
-		}
-		updateUnitCommandState(countryId, previousBand, settled.commandBand);
-		if (sideIdx >= 0 && settled.commandBand !== COMMAND_BANDS.PAID) {
-			const country = sides[sideIdx]?.find((c) => c.id === countryId);
-			if (country) country.isSurging = false;
-		}
-		settleCombinedArmsCycle(countryId, settled, liveEquipment);
-	}
-
-	for (const record of occupationEconomies.values()) {
-		const annexerState = countryEconomy.get(record.annexerId);
-		record.occupationCoverage = annexerState?.occupationCoverage ?? 0;
-		const casualtyPressure = Math.min(
-			1,
-			(countryCasualties.get(record.victimId) || 0) /
-				Math.max(1, record.expectedArmyUnits * CONFIG.UNIT_TO_SOLDIER_RATIO),
-		);
-		const previousResistance = record.resistance;
-		record.resistance = updateResistance(record.resistance, {
-			occupationCoverage: record.occupationCoverage,
-			garrisonCoverage: record.garrisonCoverage,
-			casualtyPressure,
-		});
-		if (previousResistance < 75 && record.resistance >= 75) {
-			const name =
-				countryMetadata[record.victimId - 1]?.name || "Occupied nation";
-			emitEconomyEvent(`${name}: resistance is nearing revolt`, "warning");
-		}
-	}
-	applyDesertion();
-	processRebellionStates(territorySnapshot);
-	updateEconomyPanel();
-	window.__perf.economy =
-		(window.__perf.economy || 0) + performance.now() - started;
-}
-
-window.economyDebugReport = (countryId = null) => {
-	const countries = Array.from(countryEconomy.values())
-		.filter(
-			(state) => countryId == null || state.countryId === Number(countryId),
-		)
-		.map((state) => ({ ...state }));
-	const occupations = Array.from(occupationEconomies.values())
-		.filter(
-			(state) => countryId == null || state.victimId === Number(countryId),
-		)
-		.map((state) => ({ ...state }));
-	return {
-		enabled: warEconomyEnabled,
-		payCycle: economyPayCycle,
-		countries,
-		occupations,
-		equipment: Array.from(countryEquipment.values()).map((state) => ({
-			...state,
-		})),
-		airfields: airfields.map((field) => ({ ...field })),
-		airWings: airWings.map((wing) => ({ ...wing })),
-		occupationGarrisons: Array.from(_occupationGarrisonPlans.values()).map(
-			(plan) => ({
-				victimId: plan.victimId,
-				annexerId: plan.annexerId,
-				sideIdx: plan.sideIdx,
-				requiredGarrison: plan.requiredGarrison,
-				assignedUnitIds: [...(plan.assignedUnitIds || [])],
-				priority: plan.priority,
-				resistance: plan.resistance,
-			}),
-		),
-		rebellions: Array.from(activeRebellions.values()).map((state) => ({
-			...state,
-		})),
-		sideUids: [...sideUids],
-		hostilityMatrix: Array.from(hostilityMatrix),
-		events: [...economyEvents],
-	};
-};
-
-const NATIVE_RUNTIME_CHECKPOINT_SCHEMA = "native-runtime-checkpoint-v1";
-const NATIVE_RUNTIME_CHECKPOINT_V2_SCHEMA = "native-runtime-checkpoint-v2";
-const NATIVE_RUNTIME_CHECKPOINT_V3_SCHEMA = "native-runtime-checkpoint-v3";
-const NATIVE_RUNTIME_CHECKPOINT_V4_SCHEMA = "native-runtime-checkpoint-v4";
-const NATIVE_RUNTIME_CHECKPOINT_V5_SCHEMA = "native-runtime-checkpoint-v5";
-const NATIVE_RUNTIME_CHECKPOINT_V6_SCHEMA = "native-runtime-checkpoint-v6";
-const NATIVE_OPERATIONAL_AI_SCHEMA = "native-operational-ai-v1";
-const NATIVE_OPERATIONAL_EXECUTION_SCHEMA = "native-operational-execution-v1";
-const NATIVE_AIR_POWER_SCHEMA = "native-air-v2";
-const NATIVE_SIDE_DYNAMICS_SCHEMA = "native-side-dynamics-v1";
-const NATIVE_RUNTIME_BATTLEFIELD_SCHEMA = "native-battlefield-v1";
-const NATIVE_INFLUENCE_RUNTIME_SCHEMA = "native-influence-runtime-v1";
-
-function nativeRuntimeWarIsActive() {
-	return (
-		gameState === "SIMULATING" ||
-		(godModeActive && preGodModeState === "SIMULATING")
-	);
-}
-
-function encodeNativeRuntimeRuns(
-	source,
-	label,
-	maxValue = Number.MAX_SAFE_INTEGER,
-	projectValue = null,
-) {
-	if (!source || !Number.isSafeInteger(source.length) || source.length <= 0) {
-		throw new Error(`${label} must be a non-empty dense map`);
-	}
-	const readValue = (index) => {
-		const sourceValue = Number(source[index]);
-		if (!Number.isSafeInteger(sourceValue) || sourceValue < 0) {
-			throw new Error(`${label}[${index}] must be a non-negative integer`);
-		}
-		const value = Number(
-			projectValue ? projectValue(sourceValue, index) : sourceValue,
-		);
-		if (!Number.isSafeInteger(value) || value < 0 || value > maxValue) {
-			throw new Error(
-				`${label}[${index}] must be an integer from 0 through ${maxValue}`,
-			);
-		}
-		return value;
-	};
-	const runs = [];
-	let runValue = readValue(0);
-	let runLength = 1;
-	for (let index = 1; index < source.length; index++) {
-		const value = readValue(index);
-		if (value === runValue) {
-			runLength++;
-			if (!Number.isSafeInteger(runLength)) {
-				throw new Error(`${label} contains an unsafe run length`);
-			}
-			continue;
-		}
-		runs.push([runLength, runValue]);
-		runValue = value;
-		runLength = 1;
-	}
-	runs.push([runLength, runValue]);
-	const coveredCells = runs.reduce((total, [length]) => total + length, 0);
-	if (coveredCells !== source.length) {
-		throw new Error(`${label} RLE coverage disagrees with its dense map`);
-	}
-	return runs;
-}
-
-function encodeNativeRuntimeSignedRuns(
-	source,
-	label,
-	minValue,
-	maxValue,
-	projectValue = null,
-) {
-	if (!source || !Number.isSafeInteger(source.length) || source.length <= 0) {
-		throw new Error(`${label} must be a non-empty dense map`);
-	}
-	const readValue = (index) => {
-		const sourceValue = Number(source[index]);
-		const value = Number(
-			projectValue ? projectValue(sourceValue, index) : sourceValue,
-		);
-		if (!Number.isSafeInteger(value) || value < minValue || value > maxValue) {
-			throw new Error(
-				`${label}[${index}] must be an integer from ${minValue} through ${maxValue}`,
-			);
-		}
-		return value;
-	};
-	const runs = [];
-	let runValue = readValue(0);
-	let runLength = 1;
-	for (let index = 1; index < source.length; index++) {
-		const value = readValue(index);
-		if (value === runValue) {
-			runLength++;
-			if (!Number.isSafeInteger(runLength)) {
-				throw new Error(`${label} contains an unsafe run length`);
-			}
-			continue;
-		}
-		runs.push([runLength, runValue]);
-		runValue = value;
-		runLength = 1;
-	}
-	runs.push([runLength, runValue]);
-	return runs;
-}
-
-function encodeNativeRuntimeFloat32BitRuns(source, label) {
-	if (!(source instanceof Float32Array) || source.length <= 0) {
-		throw new Error(`${label} must be a non-empty Float32Array`);
-	}
-	const bits = new Uint32Array(source.buffer, source.byteOffset, source.length);
-	return encodeNativeRuntimeRuns(bits, label, 0xffffffff);
-}
-
-function encodeNativeRuntimeFiniteFloat32BitRuns(source, label) {
-	if (!(source instanceof Float32Array) || source.length <= 0) {
-		throw new Error(`${label} must be a non-empty Float32Array`);
-	}
-	for (let index = 0; index < source.length; index++) {
-		if (
-			!Number.isFinite(source[index]) ||
-			source[index] < 0 ||
-			source[index] > 1
-		) {
-			throw new Error(`${label}[${index}] must be finite and within [0, 1]`);
-		}
-	}
-	const runs = encodeNativeRuntimeFloat32BitRuns(source, label);
-	let covered = 0;
-	let previousBits = null;
-	for (const [length, bits] of runs) {
-		if (!Number.isSafeInteger(length) || length <= 0) {
-			throw new Error(`${label} contains an invalid run length`);
-		}
-		if (previousBits === bits) {
-			throw new Error(`${label} contains adjacent non-maximal runs`);
-		}
-		covered += length;
-		previousBits = bits;
-	}
-	if (covered !== source.length) {
-		throw new Error(`${label} RLE coverage disagrees with its dense map`);
-	}
-	return runs;
-}
-
-function encodeNativeRuntimeOccupationBitRuns(
-	occupation,
-	dominance,
-	browserToNativeSide,
-	label,
-) {
-	if (
-		!(occupation instanceof Float32Array) ||
-		occupation.length <= 0 ||
-		dominance?.length !== occupation.length
-	) {
-		throw new Error(
-			`${label} requires equally sized Float32 occupation and dominance maps`,
-		);
-	}
-	const sourceBits = new Uint32Array(
-		occupation.buffer,
-		occupation.byteOffset,
-		occupation.length,
-	);
-	const readBits = (index) => {
-		const browserSide = Number(dominance[index]);
-		if (browserSide === -1) return 0;
-		if (!Number.isInteger(browserSide) || browserSide < 0) {
-			throw new Error(`${label} has invalid dominance at cell ${index}`);
-		}
-		const nativeSide = browserToNativeSide.get(browserSide);
-		if (nativeSide === undefined) {
-			throw new Error(
-				`${label} references undeclared browser side ${browserSide}`,
-			);
-		}
-		const magnitudeBits = sourceBits[index] & 0x7fffffff;
-		return nativeSide % 2 === 0
-			? magnitudeBits
-			: (magnitudeBits | 0x80000000) >>> 0;
-	};
-	const runs = [];
-	let runValue = readBits(0);
-	let runLength = 1;
-	for (let index = 1; index < occupation.length; index++) {
-		const value = readBits(index);
-		if (value === runValue) {
-			runLength++;
-			if (!Number.isSafeInteger(runLength)) {
-				throw new Error(`${label} contains an unsafe run length`);
-			}
-			continue;
-		}
-		runs.push([runLength, runValue]);
-		runValue = value;
-		runLength = 1;
-	}
-	runs.push([runLength, runValue]);
-	return runs;
-}
-
-function nativeRuntimeTopology() {
-	const active = [];
-	const countryToSide = new Map();
-	for (
-		let browserSideIndex = 0;
-		browserSideIndex < sides.length;
-		browserSideIndex++
-	) {
-		const countryIds = (sides[browserSideIndex] || [])
-			.filter(Boolean)
-			.map((country) => Number(country.id));
-		if (countryIds.length === 0) continue;
-		const sideIndex = active.length;
-		for (const countryId of countryIds) {
-			if (!Number.isInteger(countryId) || countryId <= 0) {
-				throw new Error(
-					`Side ${browserSideIndex} contains an invalid country id`,
-				);
-			}
-			if (countryToSide.has(countryId)) {
-				throw new Error(`Country ${countryId} appears in more than one side`);
-			}
-			countryToSide.set(countryId, sideIndex);
-		}
-		active.push({ browserSideIndex, sideIndex, countryIds });
-	}
-	if (active.length < 2) {
-		throw new Error(
-			"A native runtime checkpoint needs at least two active sides",
-		);
-	}
-
-	const compactHostility = [];
-	let hostileDirections = 0;
-	for (const left of active) {
-		for (const right of active) {
-			const hostile =
-				left.browserSideIndex === right.browserSideIndex
-					? 0
-					: Number(
-							hostilityMatrix[
-								left.browserSideIndex * MAX_SIDES + right.browserSideIndex
-							] || 0,
-						);
-			compactHostility.push(hostile === 1 ? 1 : 0);
-			if (hostile === 1) hostileDirections++;
-		}
-	}
-	if (hostileDirections === 0) {
-		throw new Error(
-			"The active sides do not have an active directed hostility",
-		);
-	}
-	return {
-		sides: active.map(({ sideIndex, countryIds }) => ({
-			sideIndex,
-			countryIds,
-		})),
-		activeSides: active.map(({ sideIndex }) => sideIndex),
-		hostilityMatrix: compactHostility,
-		countryToSide,
-		browserToNativeSide: new Map(
-			active.map(({ browserSideIndex, sideIndex }) => [
-				browserSideIndex,
-				sideIndex,
-			]),
-		),
-	};
-}
-
-function nativeRuntimeStableTopology() {
-	if (!_nativeRuntimeInitialCheckpoint) {
-		throw new Error(
-			"Native runtime v2 is unavailable before war initialization commits",
-		);
-	}
-	const countriesByBrowserSide = new Map();
-	const seenCountryIds = new Set();
-	for (const entry of initialCombatants) {
-		const countryId = Number(entry?.id);
-		const browserSideIndex = Number(entry?.sideIndex);
-		if (!Number.isInteger(countryId) || countryId <= 0) {
-			throw new Error(
-				"The stable combatant topology has an invalid country id",
-			);
-		}
-		if (
-			!Number.isInteger(browserSideIndex) ||
-			browserSideIndex < 0 ||
-			browserSideIndex >= MAX_SIDES
-		) {
-			throw new Error(`Country ${countryId} has an invalid stable side`);
-		}
-		if (seenCountryIds.has(countryId)) {
-			throw new Error(`Country ${countryId} appears twice in stable topology`);
-		}
-		seenCountryIds.add(countryId);
-		let countryIds = countriesByBrowserSide.get(browserSideIndex);
-		if (!countryIds) {
-			countryIds = [];
-			countriesByBrowserSide.set(browserSideIndex, countryIds);
-		}
-		countryIds.push(countryId);
-	}
-	const stable = Array.from(
-		countriesByBrowserSide,
-		([browserSideIndex, ids]) => ({
-			browserSideIndex,
-			countryIds: ids.sort((left, right) => left - right),
-		}),
-	).sort((left, right) => left.browserSideIndex - right.browserSideIndex);
-	if (stable.length < 2) {
-		throw new Error("Native runtime v2 needs at least two stable sides");
-	}
-	const browserToNativeSide = new Map(
-		stable.map(({ browserSideIndex }, sideIndex) => [
-			browserSideIndex,
-			sideIndex,
-		]),
-	);
-	const countryToSide = new Map();
-	const topologySides = stable.map(({ countryIds }, sideIndex) => {
-		for (const countryId of countryIds) countryToSide.set(countryId, sideIndex);
-		return { sideIndex, countryIds };
-	});
-	const activeSides = [];
-	for (const { browserSideIndex, countryIds } of stable) {
-		const currentIds = new Set(
-			(sides[browserSideIndex] || [])
-				.filter(Boolean)
-				.map((country) => country.id),
-		);
-		const active = countryIds.some(
-			(countryId) =>
-				currentIds.has(countryId) &&
-				countryEconomy.get(countryId)?.capitulated !== true,
-		);
-		if (active) activeSides.push(browserToNativeSide.get(browserSideIndex));
-	}
-	if (activeSides.length < 2) {
-		throw new Error("Native runtime v2 needs at least two active sides");
-	}
-	const compactHostility = [];
-	let activeHostileDirections = 0;
-	const activeSet = new Set(activeSides);
-	for (const left of stable) {
-		const leftNative = browserToNativeSide.get(left.browserSideIndex);
-		for (const right of stable) {
-			const rightNative = browserToNativeSide.get(right.browserSideIndex);
-			const hostile =
-				left.browserSideIndex === right.browserSideIndex
-					? 0
-					: Number(
-							hostilityMatrix[
-								left.browserSideIndex * MAX_SIDES + right.browserSideIndex
-							] || 0,
-						);
-			const compact = hostile === 1 ? 1 : 0;
-			compactHostility.push(compact);
-			if (compact && activeSet.has(leftNative) && activeSet.has(rightNative)) {
-				activeHostileDirections++;
-			}
-		}
-	}
-	if (activeHostileDirections === 0) {
-		throw new Error("Native runtime v2 has no hostility between active sides");
-	}
-	return {
-		sides: topologySides,
-		activeSides,
-		hostilityMatrix: compactHostility,
-		countryToSide,
-		browserToNativeSide,
-		stable,
-	};
-}
-
-function nativeRuntimeUnitIsEncircled(unit, gridIndex) {
-	if (
-		gridIndex < 0 ||
-		landMask[gridIndex] === 0 ||
-		["buff", "super"].includes(
-			getEffectiveBuffState(
-				sides[unit.sideIndex]?.find(
-					(country) => country.id === unit.sovereignId,
-				),
-				countryMetadata[unit.sovereignId - 1] || null,
-			),
-		)
-	) {
-		return false;
-	}
-	const radiusCells = Math.round(CONFIG.ENCIRCLEMENT_RADIUS / CONFIG.GRID_RES);
-	const row = Math.floor(gridIndex / gridWidth);
-	const column = gridIndex % gridWidth;
-	const diagonal = Math.round(radiusCells * 0.7);
-	const offsets = [
-		[0, radiusCells],
-		[0, -radiusCells],
-		[radiusCells, 0],
-		[-radiusCells, 0],
-		[diagonal, diagonal],
-		[-diagonal, -diagonal],
-		[diagonal, -diagonal],
-		[-diagonal, diagonal],
-	];
-	let enemyCount = 0;
-	for (const [columnOffset, rowOffset] of offsets) {
-		const nextRow = row + rowOffset;
-		const nextColumn = column + columnOffset;
-		if (
-			nextRow < 0 ||
-			nextRow >= gridHeight ||
-			nextColumn < 0 ||
-			nextColumn >= gridWidth
-		) {
-			continue;
-		}
-		const index = nextRow * gridWidth + nextColumn;
-		if (landMask[index] > 0 && isEnemyTerritory(index, unit.sideIndex)) {
-			enemyCount++;
-		}
-	}
-	return enemyCount / offsets.length > 0.875;
-}
-
-function nativeRuntimePolicyContext(topology, liveUnits) {
-	const countryById = new Map();
-	const supportCountryIds = new Set();
-	for (const side of sides) {
-		for (const country of side || []) {
-			if (!country) continue;
-			countryById.set(country.id, country);
-			if (country.role === "SUPPORT") supportCountryIds.add(country.id);
-		}
-	}
-	const activeCityCells = new Set();
-	const citiesBySovereign = new Map();
-	for (const city of activeTheaterCities) {
-		const index = getGridIndex(city.lat, city.lng);
-		if (index >= 0) activeCityCells.add(index);
-		const sovereign = city.sovereignId || city.ownerId;
-		if (!sovereign) continue;
-		let countryCities = citiesBySovereign.get(sovereign);
-		if (!countryCities) {
-			countryCities = [];
-			citiesBySovereign.set(sovereign, countryCities);
-		}
-		countryCities.push(city);
-	}
-	const sideFormationCounts = new Map();
-	for (const unit of liveUnits) {
-		if (!unitCountsForCapitulation(unit)) continue;
-		const nativeSide = topology.browserToNativeSide.get(unit.sideIndex);
-		if (nativeSide === undefined) {
-			throw new Error(`Live unit side ${unit.sideIndex} is outside topology`);
-		}
-		sideFormationCounts.set(
-			nativeSide,
-			(sideFormationCounts.get(nativeSide) || 0) +
-				getLiveFormationStrength(unit),
-		);
-	}
-	return {
-		...topology,
-		countryById,
-		supportCountryIds,
-		activeCityCells,
-		citiesBySovereign,
-		sideFormationCounts,
-		rebelDeJureByCountry: new Map(
-			Array.from(activeRebellions.keys(), (countryId) => [
-				countryId,
-				countryId,
-			]),
-		),
-	};
-}
-
-function resolveNativeRuntimeUnitPolicy(unit, context) {
-	const gridIndex = getGridIndex(unit.lat, unit.lng);
-	const isAtSea = gridIndex < 0 || landMask[gridIndex] === 0;
-	const mountainIntensity =
-		mountainsEnabled && gridIndex >= 0
-			? Math.max(0, Number(terrainMask[gridIndex]) || 0)
-			: 0;
-	const mountain = mountainIntensity > 0;
-	const country = context.countryById.get(unit.sovereignId) || null;
-	const meta = countryMetadata[unit.sovereignId - 1] || null;
-	const effectiveBuff = getEffectiveBuffState(country, meta);
-	const commandPolicy = getUnitCommandPolicy(unit);
-	const aiProfile = aiCountryState.get(unit.sovereignId) || {
-		speedMult: 1,
-		forceDefensive: false,
-	};
-
-	let dealtMultiplier = 1;
-	let takenMultiplier = 1;
-	let terrainSpeedMultiplier = 1;
-	if (unit.victoryBoostTicks > 0) {
-		dealtMultiplier *= 1.4;
-		terrainSpeedMultiplier *= 1.3;
-	}
-	if (capitalLostCountries.has(unit.sovereignId)) {
-		dealtMultiplier *= 0.8;
-		takenMultiplier *= 1.15;
-		terrainSpeedMultiplier *= 0.9;
-	}
-	const warPhase = _sideWarPhase[unit.sideIndex];
-	if (warPhase === "COLLAPSING") dealtMultiplier *= 0.7;
-	else if (gameMode !== "CONQUEST" && warPhase === "ADVANCING") {
-		dealtMultiplier *= 1.15;
-	}
-	if (effectiveBuff === "buff") {
-		dealtMultiplier = 2.5;
-		takenMultiplier = 0.6;
-		terrainSpeedMultiplier = 1.3;
-	} else if (effectiveBuff === "super") {
-		dealtMultiplier = 10;
-		takenMultiplier = 0.2;
-		terrainSpeedMultiplier = 1.8;
-	} else if (effectiveBuff === "godly") {
-		dealtMultiplier = 40;
-		takenMultiplier = 0.015;
-		terrainSpeedMultiplier = 2.2;
-	} else if (effectiveBuff === "weakened") {
-		dealtMultiplier = 0.7;
-		takenMultiplier = 1.4;
-		terrainSpeedMultiplier = 0.7;
-	} else if (effectiveBuff === "crippled") {
-		dealtMultiplier = 0.4;
-		takenMultiplier = 2.5;
-		terrainSpeedMultiplier = 0.7;
-	}
-	const attackFactor = 1 + Number(country?.attackBuffPercent || 0) / 100;
-	const defenseFactor = 1 + Number(country?.defenseBuffPercent || 0) / 100;
-	if (attackFactor > 0) dealtMultiplier *= attackFactor;
-	if (defenseFactor > 0.01) takenMultiplier *= 1 / defenseFactor;
-	if (mountain) {
-		terrainSpeedMultiplier *= 1 - 0.65 * mountainIntensity;
-		dealtMultiplier *= 1 - 0.4 * mountainIntensity;
-		takenMultiplier *= 1 - 0.4 * mountainIntensity;
-	}
-	if (unit.isAlpenjager) {
-		if (mountain) terrainSpeedMultiplier *= CONFIG.ALPEN_MTN_SPEED_MULT;
-		dealtMultiplier *= CONFIG.ALPEN_COMBAT_MULT;
-		takenMultiplier *= 1 / CONFIG.ALPEN_COMBAT_MULT;
-	}
-
-	const encircled = nativeRuntimeUnitIsEncircled(unit, gridIndex);
-	if (encircled && !["buff", "super"].includes(effectiveBuff)) {
-		const duration =
-			(unit.encircledTicks || 0) > 180
-				? 0.15
-				: (unit.encircledTicks || 0) > 60
-					? 0.2
-					: 0.25;
-		dealtMultiplier *= duration;
-		takenMultiplier *= 4;
-	}
-
-	let urban = context.activeCityCells.has(gridIndex);
-	let defenseBonus = 1;
-	if (!isAtSea && gridIndex >= 0) {
-		if (deJureMap[gridIndex] === unit.sovereignId) defenseBonus *= 0.65;
-		if (
-			worldControlMap[gridIndex] === unit.sovereignId &&
-			Math.abs(getControlValue(unit.lat, unit.lng)) < 0.2
-		) {
-			defenseBonus *= 0.85;
-		}
-		for (const city of context.citiesBySovereign.get(unit.sovereignId) || []) {
-			if ((unit.lat - city.lat) ** 2 + (unit.lng - city.lng) ** 2 < 0.04) {
-				defenseBonus *= 0.45;
-				urban = true;
-				break;
-			}
-		}
-	}
-
-	const ownInfluence =
-		gridIndex >= 0
-			? Number(sideInfluenceMaps[unit.sideIndex]?.[gridIndex] || 0)
-			: 0;
-	const landSpeedMultiplier =
-		!isAtSea &&
-		gridIndex >= 0 &&
-		dominantSideMap[gridIndex] === unit.sideIndex &&
-		ownInfluence > 0.5
-			? 1.8
-			: 1.2;
-	const ownerId = gridIndex >= 0 ? worldControlMap[gridIndex] : 0;
-	const inNeutral =
-		!isAtSea && ownerId > 0 && !context.countryToSide.has(ownerId);
-	let baseSpeed = isAtSea ? CONFIG.UNIT_NAVAL_SPEED : CONFIG.UNIT_SPEED;
-	if (unit.kind === "armor") {
-		baseSpeed *= getArmorSpeedMultiplier({ urban, mountain, atSea: isAtSea });
-	}
-
-	let influenceRadius = CONFIG.INFLUENCE_RADIUS;
-	let influenceMultiplier = 1;
-	if (mountain) {
-		influenceRadius *= 1 - mountainIntensity * 0.65;
-		influenceMultiplier *= 1 - mountainIntensity * 0.5;
-	}
-	if (country?.buffState === "buff") influenceMultiplier = 2.5;
-	else if (country?.buffState === "super") influenceMultiplier = 8;
-	else if (country?.buffState === "godly") {
-		influenceMultiplier = 45;
-		influenceRadius *= 0.5;
-	} else if (country?.buffState === "weakened") influenceMultiplier = 0.7;
-	else if (country?.buffState === "crippled") influenceMultiplier = 0.4;
-	if (attackFactor > 0) influenceMultiplier *= attackFactor;
-	if (unit.victoryBoostTicks > 0) {
-		influenceMultiplier *= 3;
-		influenceRadius *= 1.4;
-	}
-	if (isAtSea) influenceMultiplier *= 0.4;
-	if (unit.kind === "armor") {
-		influenceMultiplier *= getArmorInfluenceMultiplier(!!unit._armorSupported);
-	} else {
-		influenceMultiplier *= getLiveFormationStrength(unit);
-	}
-	const temporalSeed = Number(unit.id);
-	if (!Number.isFinite(temporalSeed)) {
-		throw new Error("Unit influence temporal seed must be finite");
-	}
-	let baseInfluence = CONFIG.INFLUENCE_RATE;
-	const sideZero = context.sideFormationCounts.get(0) || 0;
-	const sideOne = context.sideFormationCounts.get(1) || 0;
-	if (sideZero > 0 && sideOne === 0) baseInfluence *= 6;
-	if (sideOne > 0 && sideZero === 0) baseInfluence *= 6;
-	// Native owns the logical-tick ramp and temporal noise. This base delta keeps
-	// stable terrain, formation, equipment, buff, and collapse multipliers.
-	const influenceDelta = baseInfluence * influenceMultiplier;
-	const protectedOwnerIds =
-		(country?.role || "OFFENSE") === "OFFENSE"
-			? Array.from(context.supportCountryIds)
-					.filter(
-						(countryId) =>
-							context.countryToSide.get(countryId) !==
-							context.countryToSide.get(unit.sovereignId),
-					)
-					.sort((left, right) => left - right)
-			: [];
-	const beneficiaryCountryId = unit.beneficiaryId || unit.sovereignId;
-	if (!context.countryToSide.has(beneficiaryCountryId)) {
-		throw new Error(
-			`Unit ${unit.sovereignId} references undeclared beneficiary ${beneficiaryCountryId}`,
-		);
-	}
-
-	return {
-		isAtSea,
-		encircled,
-		commandPolicy,
-		aiPolicy: {
-			baseSpeed,
-			terrainSpeedMultiplier,
-			speedMultiplier: landSpeedMultiplier * Number(aiProfile.speedMult || 1),
-			planSpeedMultiplier: 1,
-			neutralPenalty: inNeutral ? 0.15 : 1,
-			pushReadiness: 1,
-			dealtMultiplier,
-			takenMultiplier,
-			defenseBonus,
-			longWarDefense: simFrameCount > 6000 ? 0.75 : 1,
-			mountain,
-			urban,
-			isReserve: unit._taskForceRole === "RESERVE",
-			reinforcementEligible:
-				unit.health / Math.max(1, unit.maxHealth || CONFIG.UNIT_HEALTH) < 0.45,
-			encircled,
-			deployUntilTick:
-				_simTickCount + Math.max(0, Math.ceil(Number(unit.deployTicks) || 0)),
-			garrisonExcluded: unit._occupationGarrisonVictimId != null,
-		},
-		influencePolicy: {
-			radius: influenceRadius,
-			delta: influenceDelta,
-			temporalSeed,
-			concentrationBonus: Math.min(2.5, (unit.lastAllyCount || 1) / 5),
-			beneficiaryCountryId,
-			protectedOwnerIds,
-			rebelDeJure: context.rebelDeJureByCountry.get(unit.sovereignId) || null,
-			creditDeJure: null,
-			creditDeJureByCountry: Object.fromEntries(
-				Array.from(context.rebelDeJureByCountry.entries()).sort(
-					([left], [right]) => left - right,
-				),
-			),
-			refusesOffense: commandPolicy.refusesOffense,
-		},
-	};
-}
-
-function serializeNativeRuntimeUnit(
-	unit,
-	id,
-	context,
-	includeLiveCommand = false,
-) {
-	const side = context.browserToNativeSide.get(unit.sideIndex);
-	if (side === undefined) {
-		throw new Error(`Unit for country ${unit.sovereignId} has no active side`);
-	}
-	if (context.countryToSide.get(unit.sovereignId) !== side) {
-		throw new Error(
-			`Unit for country ${unit.sovereignId} disagrees with its active side`,
-		);
-	}
-	const resolved = resolveNativeRuntimeUnitPolicy(unit, context);
-	const discipline = getUnitDiscipline(unit);
-	if (!Number.isFinite(discipline) || discipline < 0 || discipline >= 1) {
-		throw new Error(`Unit ${unit.sovereignId} has invalid command discipline`);
-	}
-	let commandHomeTarget = null;
-	if (unit._economyHomeTarget) {
-		const lat = Number(unit._economyHomeTarget.lat);
-		const lng = Number(unit._economyHomeTarget.lng);
-		const cell = getGridIndex(lat, lng);
-		if (!Number.isFinite(lat) || !Number.isFinite(lng) || cell < 0) {
-			throw new Error(
-				`Unit ${unit.sovereignId} has invalid command home target`,
-			);
-		}
-		commandHomeTarget = { cell, lat, lng };
-	}
-	const commandTransitionCycle = Number(unit._commandTransitionCycle || 0);
-	if (
-		!Number.isSafeInteger(commandTransitionCycle) ||
-		commandTransitionCycle < 0 ||
-		commandTransitionCycle > economyPayCycle
-	) {
-		throw new Error(
-			`Unit ${unit.sovereignId} has invalid command transition cycle`,
-		);
-	}
-	const maxHealth =
-		unit.maxHealth ||
-		CONFIG.UNIT_HEALTH * (unit.isAlpenjager ? CONFIG.ALPEN_HEALTH_MULT : 1);
-	const equipment =
-		unit.kind === "armor" ? Math.max(0, Math.round(unit.equipment || 0)) : 0;
-	const maxEquipment =
-		unit.kind === "armor"
-			? Math.max(equipment, Math.round(unit.maxEquipment || equipment))
-			: 0;
-	const personnel =
-		unit.kind === "armor"
-			? equipment * COMBINED_ARMS_CONFIG.ARMOR_CREW_PER_VEHICLE
-			: Math.max(0, Math.round(getLiveFormationPersonnel(unit)));
-	const personnelCapacity =
-		unit.kind === "armor"
-			? maxEquipment * COMBINED_ARMS_CONFIG.ARMOR_CREW_PER_VEHICLE
-			: Math.max(
-					personnel,
-					Math.round(unit.personnelCapacity || getUnitPersonnelFallback(unit)),
-				);
-	let allyWeight = Math.max(0, getLiveFormationStrength(unit));
-	const visibleBuff = context.countryById.get(unit.sovereignId)?.buffState;
-	if (visibleBuff === "super") allyWeight *= 200;
-	else if (visibleBuff === "buff") allyWeight *= 50;
-	return {
-		id,
-		side,
-		countryId: unit.sovereignId,
-		kind: unit.kind === "armor" ? "armor" : "army",
-		lat: unit.lat,
-		lng: unit.lng,
-		health: unit.health,
-		maxHealth,
-		personnel,
-		personnelCapacity,
-		equipment,
-		maxEquipment,
-		quality: Number.isFinite(unit.quality) ? unit.quality : 50,
-		transport: !!unit.isTransport,
-		armorSupported: !!unit._armorSupported,
-		landingPenaltyActive:
-			unit.kind === "armor" &&
-			(unit._armorLandingPenaltyUntilTick || 0) > _simTickCount,
-		atSea: resolved.isAtSea,
-		lastCombatTick: Math.max(0, Math.round(unit.lastCombatTick || 0)),
-		victoryBoostTicks: Math.max(0, Math.round(unit.victoryBoostTicks || 0)),
-		dirLat: Number(unit.dirLat || 0),
-		dirLng: Number(unit.dirLng || 0),
-		coastStuckTicks: Math.max(0, Math.round(unit._coastStuckTicks || 0)),
-		armorLandingPenaltyUntilTick: Math.max(
-			0,
-			Math.round(unit._armorLandingPenaltyUntilTick || 0),
-		),
-		isSupport:
-			typeof unit._tickCanSupportArmor === "boolean"
-				? unit._tickCanSupportArmor
-				: unit.kind !== "armor" && !resolved.commandPolicy.refusesOffense,
-		allyWeight,
-		aiPolicy: resolved.aiPolicy,
-		...(includeLiveCommand
-			? {
-					commandPolicy: {
-						band: resolved.commandPolicy.band,
-						discipline,
-						refusesOffense: resolved.commandPolicy.refusesOffense,
-						returnHome: resolved.commandPolicy.returnHome,
-						selfDefenseOnly: resolved.commandPolicy.selfDefenseOnly,
-						homeTarget: commandHomeTarget,
-						transitionCycle: commandTransitionCycle,
-					},
-				}
-			: {}),
-		influencePolicy: resolved.influencePolicy,
-	};
-}
-
-function serializeNativeRuntimeEconomy(state) {
-	return {
-		countryId: state.countryId,
-		economicStrength: state.economicStrength,
-		baseIncome: state.baseIncome,
-		treasury: state.treasury,
-		income: state.income,
-		occupationYield: state.occupationYield,
-		payrollDue: state.payrollDue,
-		occupationDue: state.occupationDue,
-		payrollCoverage: state.payrollCoverage,
-		occupationCoverage: state.occupationCoverage,
-		arrearsCycles: state.arrearsCycles,
-		commandBand: state.commandBand,
-		mutinyRecoveryCycles: state.mutinyRecoveryCycles,
-		initialCoreCells: state.initialCoreCells,
-		initialCityPopulation: state.initialCityPop,
-		coreControlRatio: state.coreControlRatio,
-		cityControlRatio: state.cityControlRatio,
-		capitalHeld: state.capitalHeld,
-		lastEventBand: state.lastEventBand,
-		capitulated: !!state.capitulated,
-	};
-}
-
-function serializeNativeRuntimeOccupation(record) {
-	return {
-		victimId: record.victimId,
-		annexerId: record.annexerId,
-		baseIncome: record.baseIncome,
-		coreCells: record.coreCells,
-		expectedArmyUnits: record.expectedArmyUnits,
-		resistance: record.resistance,
-		occupationCoverage: record.occupationCoverage,
-		garrisonCoverage: record.garrisonCoverage,
-		garrisonAssigned: record.garrisonAssignedCount || 0,
-		requiredGarrison: record.requiredGarrison,
-		heldRatio: record.heldRatio,
-		activeRebellion: activeRebellions.has(record.victimId),
-		queuedAtCycle: record.queuedAtCycle || 0,
-		cooldownUntilCycle: record.cooldownUntilCycle || 0,
-	};
-}
-
-function buildInitialNativeRuntimeCheckpoint() {
-	if (!nativeRuntimeWarIsActive()) {
-		throw new Error("No active war is available for native runtime export");
-	}
-	if (_simTickCount !== 0 || simFrameCount !== 0 || economyPayCycle !== 0) {
-		throw new Error(
-			"The v1 native runtime handoff must be captured before the first simulation tick",
-		);
-	}
-	if (
-		nativeRuntimeScenarioIdentity?.format !== "binary" ||
-		!/^[0-9a-f]{64}$/.test(nativeRuntimeScenarioIdentity.sha256 || "")
-	) {
-		throw new Error(
-			"The loaded scenario has no verified compiled MWSC SHA-256 identity",
-		);
-	}
-	if (!warEconomyEnabled) {
-		throw new Error(
-			"Native runtime v1 requires the browser war economy to be enabled",
-		);
-	}
-	const cellCount = worldControlMap?.length;
-	if (
-		!Number.isSafeInteger(cellCount) ||
-		cellCount <= 0 ||
-		landMask?.length !== cellCount ||
-		deJureMap?.length !== cellCount ||
-		gridWidth * gridHeight !== cellCount
-	) {
-		throw new Error(
-			"Native runtime geography maps must exactly cover the active grid",
-		);
-	}
-	const geography = {
-		// Browser value 2 marks active-theater land; native reconstructs that
-		// transient marker from the declared sides after restoring base geography.
-		landRuns: encodeNativeRuntimeRuns(landMask, "landMask", 1, (value) =>
-			value === 0 ? 0 : 1,
-		),
-		deJureRuns: encodeNativeRuntimeRuns(deJureMap, "deJureMap", 65535),
-		worldControlRuns: encodeNativeRuntimeRuns(
-			worldControlMap,
-			"worldControlMap",
-			65535,
-		),
-	};
-	const topology = nativeRuntimeTopology();
-	const liveUnits = units.filter(
-		(unit) =>
-			unit &&
-			Number.isFinite(unit.health) &&
-			unit.health > 0 &&
-			(unit.kind === "armor" || getLiveFormationStrength(unit) > 0),
-	);
-	const policyContext = nativeRuntimePolicyContext(topology, liveUnits);
-	const checkpointUnits = liveUnits.map((unit, index) =>
-		serializeNativeRuntimeUnit(unit, index + 1, policyContext),
-	);
-	const declaredCountryIds = topology.sides.flatMap((side) => side.countryIds);
-	const economies = declaredCountryIds.map((countryId) => {
-		const state = countryEconomy.get(countryId);
-		if (!state) {
-			throw new Error(`Country ${countryId} has no live war-economy state`);
-		}
-		return serializeNativeRuntimeEconomy(state);
-	});
-	const declared = new Set(declaredCountryIds);
-	const occupations = Array.from(occupationEconomies.values()).map((record) => {
-		if (!declared.has(record.victimId) || !declared.has(record.annexerId)) {
-			throw new Error(
-				`Occupation ${record.victimId}->${record.annexerId} is outside the declared sides`,
-			);
-		}
-		return serializeNativeRuntimeOccupation(record);
-	});
-	const casualties = Object.fromEntries(
-		declaredCountryIds.map((countryId) => [
-			countryId,
-			Math.max(0, Number(countryCasualties.get(countryId) || 0)),
-		]),
-	);
-	return {
-		schema: NATIVE_RUNTIME_CHECKPOINT_SCHEMA,
-		checkpointBoundary: "postStartWar",
-		scenario: {
-			sha256: nativeRuntimeScenarioIdentity.sha256,
-			name: nativeRuntimeScenarioIdentity.name,
-			gridRes: nativeRuntimeScenarioIdentity.gridRes,
-		},
-		geography,
-		sides: topology.sides,
-		activeSides: topology.activeSides,
-		hostilityMatrix: topology.hostilityMatrix,
-		tick: _simTickCount,
-		frame: simFrameCount,
-		warGraceEnd: warGraceEndTick,
-		strategicCycle: economyPayCycle,
-		steps: 1,
-		units: checkpointUnits,
-		economies,
-		occupations,
-		casualties,
-	};
-}
-
-function nativeRuntimeCasualtiesByVictim(declaredCountryIds) {
-	const declared = new Set(declaredCountryIds);
-	return Object.fromEntries(
-		declaredCountryIds.map((victimId) => {
-			const attackers = casualtyByAttacker.get(victimId) || new Map();
-			const entries = Array.from(attackers, ([rawAttackerId, rawLoss]) => {
-				const attackerId = Number(rawAttackerId);
-				const loss = Number(rawLoss);
-				if (!Number.isInteger(attackerId) || !declared.has(attackerId)) {
-					throw new Error(
-						`Victim ${victimId} has casualties attributed outside stable topology`,
-					);
-				}
-				if (!Number.isFinite(loss) || loss < 0) {
-					throw new Error(
-						`Victim ${victimId} has invalid casualties for attacker ${attackerId}`,
-					);
-				}
-				return [attackerId, loss];
-			}).sort(([left], [right]) => left - right);
-			return [victimId, Object.fromEntries(entries)];
-		}),
-	);
-}
-
-function nativeRuntimeV2Territory(topology) {
-	const snapshot = flushTerritoryLedger();
-	const status = _territoryLedger?.getStatus();
-	if (!snapshot || !status) {
-		throw new Error("Native runtime v2 requires a committed territory census");
-	}
-	if (status.lastCommitError) {
-		throw new Error("Native runtime v2 territory census commit failed");
-	}
-	if (
-		status.activeGeneration !== null ||
-		status.dirtyTiles !== 0 ||
-		status.activeProcessedItems !== 0 ||
-		status.activeTotalItems !== 0 ||
-		snapshot.pendingDirtyTilesAtCommit !== 0 ||
-		snapshot.commitSequence !== status.commitSequence ||
-		snapshot.topologyRevision !== status.topologyRevision ||
-		snapshot.worldRevision !== status.worldRevision ||
-		snapshot.cityRevision !== status.cityRevision
-	) {
-		throw new Error(
-			"Native runtime v2 requires a clean, fully committed territory census",
-		);
-	}
-	const cellCount = gridWidth * gridHeight;
-	const denseMaps = [
-		["landMask", landMask],
-		["worldControlMap", worldControlMap],
-		["deJureMap", deJureMap],
-		["primaryOccupierMap", primaryOccupierMap],
-		["dominantSideMap", dominantSideMap],
-		["occupationMap", occupationMap],
-	];
-	if (!Number.isSafeInteger(cellCount) || cellCount <= 0) {
-		throw new Error("Native runtime v2 grid dimensions are invalid");
-	}
-	for (const [label, map] of denseMaps) {
-		if (map?.length !== cellCount) {
-			throw new Error(`${label} does not exactly cover the active grid`);
-		}
-	}
-	const sideInfluenceBitsRuns = topology.stable.map(
-		({ browserSideIndex }, sideIndex) => {
-			const influence = sideInfluenceMaps?.[browserSideIndex];
-			if (influence?.length !== cellCount) {
-				throw new Error(
-					`sideInfluenceMaps[${browserSideIndex}] does not cover the active grid`,
-				);
-			}
-			return encodeNativeRuntimeFloat32BitRuns(
-				influence,
-				`sideInfluenceBitsRuns[${sideIndex}]`,
-			);
-		},
-	);
-	return {
-		encoding: "rle-bits-v1",
-		maps: {
-			landRuns: encodeNativeRuntimeRuns(landMask, "landMask", 2),
-			worldControlRuns: encodeNativeRuntimeRuns(
-				worldControlMap,
-				"worldControlMap",
-				65535,
-			),
-			deJureRuns: encodeNativeRuntimeRuns(deJureMap, "deJureMap", 65535),
-			primaryOccupierRuns: encodeNativeRuntimeRuns(
-				primaryOccupierMap,
-				"primaryOccupierMap",
-				65535,
-			),
-			dominantSideRuns: encodeNativeRuntimeSignedRuns(
-				dominantSideMap,
-				"dominantSideMap",
-				-1,
-				topology.sides.length - 1,
-				(browserSideIndex) => {
-					if (browserSideIndex === -1) return -1;
-					const nativeSide = topology.browserToNativeSide.get(browserSideIndex);
-					if (nativeSide === undefined) {
-						throw new Error(
-							`dominantSideMap references undeclared browser side ${browserSideIndex}`,
-						);
-					}
-					return nativeSide;
-				},
-			),
-			occupationBitsRuns: encodeNativeRuntimeOccupationBitRuns(
-				occupationMap,
-				dominantSideMap,
-				topology.browserToNativeSide,
-				"occupationBitsRuns",
-			),
-			sideInfluenceBitsRuns,
-		},
-		revisions: {
-			topologyRevision: snapshot.topologyRevision,
-			worldRevision: snapshot.worldRevision,
-			cityRevision: snapshot.cityRevision,
-		},
-		committedCensus: {
-			generation: snapshot.generation,
-			commitSequence: snapshot.commitSequence,
-			mutationSequence: status.mutationSequence,
-			processedTiles: snapshot.processedTiles,
-			processedItems: snapshot.processedItems,
-		},
-	};
-}
-
-function nativeRuntimeV2Battlefield(topology, liveUnits) {
-	const cellCount = gridWidth * gridHeight;
-	if (
-		!Number.isSafeInteger(cellCount) ||
-		cellCount <= 0 ||
-		!(terrainMask instanceof Float32Array) ||
-		terrainMask.length !== cellCount
-	) {
-		throw new Error(
-			"Native runtime battlefield terrain must exactly cover the active grid",
-		);
-	}
-	const terrainIntensityBitsRuns = encodeNativeRuntimeFiniteFloat32BitRuns(
-		terrainMask,
-		"terrainIntensityBitsRuns",
-	);
-
-	const declaredCountryIds = topology.sides.flatMap((side) => side.countryIds);
-	const declaredCountryIdSet = new Set(declaredCountryIds);
-	if (declaredCountryIdSet.size !== declaredCountryIds.length) {
-		throw new Error("Native runtime battlefield countries must be unique");
-	}
-	const browserSideByCountryId = new Map();
-	for (const stableSide of topology.stable) {
-		for (const countryId of stableSide.countryIds) {
-			browserSideByCountryId.set(countryId, stableSide.browserSideIndex);
-		}
-	}
-	const liveCountryById = new Map();
-	for (const side of sides) {
-		for (const country of side || []) {
-			if (country) liveCountryById.set(country.id, country);
-		}
-	}
-
-	const urbanCenterIds = new Set();
-	const urbanCenters = activeTheaterCities
-		.map((city, index) => {
-			const id = Number(city?.id);
-			const countryId = Number(city?.sovereignId || city?.ownerId);
-			const lat = Number(city?.lat);
-			const lng = Number(city?.lng);
-			const cell = getGridIndex(lat, lng);
-			if (!Number.isSafeInteger(id) || id <= 0) {
-				throw new Error(`Battlefield urban center ${index} has an invalid id`);
-			}
-			if (urbanCenterIds.has(id)) {
-				throw new Error(`Battlefield urban center id ${id} is duplicated`);
-			}
-			urbanCenterIds.add(id);
-			if (
-				!Number.isInteger(countryId) ||
-				countryId <= 0 ||
-				!declaredCountryIdSet.has(countryId)
-			) {
-				throw new Error(
-					`Battlefield urban center ${id} references undeclared country ${countryId}`,
-				);
-			}
-			if (!Number.isFinite(lat) || !Number.isFinite(lng) || cell < 0) {
-				throw new Error(`Battlefield urban center ${id} is outside the grid`);
-			}
-			return { id, countryId, cell, lat, lng };
-		})
-		.sort((left, right) => left.cell - right.cell || left.id - right.id);
-
-	const config = {
-		unitSpeed: CONFIG.UNIT_SPEED,
-		unitNavalSpeed: CONFIG.UNIT_NAVAL_SPEED,
-		influenceRate: CONFIG.INFLUENCE_RATE,
-		influenceRadius: CONFIG.INFLUENCE_RADIUS,
-		encirclementRadius: CONFIG.ENCIRCLEMENT_RADIUS,
-		alpenMountainSpeedMultiplier: CONFIG.ALPEN_MTN_SPEED_MULT,
-		alpenCombatMultiplier: CONFIG.ALPEN_COMBAT_MULT,
-		// Native movement applies the browser's final 0.8 scale in its kernel.
-		nativeSpeedScale: 1,
-		activeCombatExclusionFrames: 5,
-		longWarFrameThreshold: 6000,
-		longWarDefenseMultiplier: 0.75,
-		armorSupportRadius: COMBINED_ARMS_CONFIG.ARMOR_SUPPORT_RADIUS_DEG,
-		armorSupportMemoryTicks: 12,
-	};
-	for (const [field, value] of Object.entries(config)) {
-		if (!Number.isFinite(value) || value < 0) {
-			throw new Error(`Native runtime battlefield config ${field} is invalid`);
-		}
-	}
-
-	const countries = declaredCountryIds.map((countryId) => {
-		const country = liveCountryById.get(countryId) || null;
-		const meta = countryMetadata[countryId - 1] || null;
-		const combatBuff = getEffectiveBuffState(country, meta);
-		const influenceBuff = country?.buffState || "none";
-		if (
-			!BUFF_STATES.includes(combatBuff) ||
-			!BUFF_STATES.includes(influenceBuff)
-		) {
-			throw new Error(`Country ${countryId} has an invalid battlefield buff`);
-		}
-		const attackBuffPercent = Number(country?.attackBuffPercent || 0);
-		const defenseBuffPercent = Number(country?.defenseBuffPercent || 0);
-		const aiSpeedMultiplier = Number(
-			aiCountryState.get(countryId)?.speedMult || 1,
-		);
-		if (
-			!Number.isFinite(attackBuffPercent) ||
-			!Number.isFinite(defenseBuffPercent) ||
-			!Number.isFinite(aiSpeedMultiplier) ||
-			aiSpeedMultiplier < 0
-		) {
-			throw new Error(`Country ${countryId} has invalid battlefield modifiers`);
-		}
-		const browserSideIndex = browserSideByCountryId.get(countryId);
-		if (browserSideIndex === undefined) {
-			throw new Error(`Country ${countryId} has no stable battlefield side`);
-		}
-		return {
-			countryId,
-			combatBuff,
-			influenceBuff,
-			attackBuffPercent,
-			defenseBuffPercent,
-			capitalLost: capitalLostCountries.has(countryId),
-			warPhase: _sideWarPhase[browserSideIndex] || "STALEMATE",
-			conquestMode: gameMode === "CONQUEST",
-			aiSpeedMultiplier,
-		};
-	});
-	if (countries.length !== declaredCountryIds.length) {
-		throw new Error(
-			"Native runtime battlefield country coverage is incomplete",
-		);
-	}
-
-	const battlefieldUnits = liveUnits.map((unit, index) => {
-		const unitId = index + 1;
-		const cohesionSeed = Number(unit.id);
-		if (!Number.isFinite(cohesionSeed) || cohesionSeed < 0) {
-			throw new Error(
-				`Battlefield unit ${unitId} has an invalid cohesion seed`,
-			);
-		}
-		const encircledTicks = Number(unit.encircledTicks || 0);
-		if (!Number.isSafeInteger(encircledTicks) || encircledTicks < 0) {
-			throw new Error(
-				`Battlefield unit ${unitId} has invalid encirclement history`,
-			);
-		}
-		let armorSupportLastTick = null;
-		if (unit._armorSupportLastTick != null) {
-			const supportTick = Number(unit._armorSupportLastTick);
-			if (
-				Number.isFinite(supportTick) &&
-				Number.isSafeInteger(supportTick) &&
-				supportTick >= 0
-			) {
-				armorSupportLastTick = supportTick;
-			} else if (supportTick !== Number.NEGATIVE_INFINITY) {
-				throw new Error(
-					`Battlefield unit ${unitId} has invalid armor support history`,
-				);
-			}
-		}
-		const lastAllyCount =
-			unit.lastAllyCount === undefined ? 1 : Number(unit.lastAllyCount);
-		if (!Number.isFinite(lastAllyCount) || lastAllyCount < 0) {
-			throw new Error(`Battlefield unit ${unitId} has an invalid ally count`);
-		}
-		return {
-			unitId,
-			isAlpenjager: !!unit.isAlpenjager,
-			cohesionSeed,
-			localTacticsExcluded: !!(
-				unit.navalAssigned ||
-				unit.supplyAssigned ||
-				unit.coastalAssigned
-			),
-			encircledTicks,
-			armorSupportLastTick,
-			lastAllyCount,
-		};
-	});
-	if (battlefieldUnits.length !== liveUnits.length) {
-		throw new Error("Native runtime battlefield unit coverage is incomplete");
-	}
-
-	return {
-		schema: NATIVE_RUNTIME_BATTLEFIELD_SCHEMA,
-		mountainsEnabled: !!mountainsEnabled,
-		terrainIntensityBitsRuns,
-		urbanCenters,
-		config,
-		countries,
-		units: battlefieldUnits,
-	};
-}
-
-function buildMidWarNativeRuntimeCheckpoint({ steps = 1 } = {}) {
-	if (!nativeRuntimeWarIsActive()) {
-		throw new Error("No active war is available for native runtime export");
-	}
-	if (_simTickCount <= 0 && simFrameCount <= 0 && economyPayCycle <= 0) {
-		throw new Error(
-			"Native runtime v2 requires a mid-war state after simulation has advanced",
-		);
-	}
-	if (!Number.isSafeInteger(steps) || steps < 1) {
-		throw new TypeError("steps must be a positive safe integer");
-	}
-	if (
-		nativeRuntimeScenarioIdentity?.format !== "binary" ||
-		!/^[0-9a-f]{64}$/.test(nativeRuntimeScenarioIdentity.sha256 || "")
-	) {
-		throw new Error(
-			"The loaded scenario has no verified compiled MWSC SHA-256 identity",
-		);
-	}
-	if (!warEconomyEnabled) {
-		throw new Error("Native runtime v2 requires the browser war economy");
-	}
-	const topology = nativeRuntimeStableTopology();
-	const territory = nativeRuntimeV2Territory(topology);
-	const liveUnits = units.filter(
-		(unit) =>
-			unit &&
-			Number.isFinite(unit.health) &&
-			unit.health > 0 &&
-			(unit.kind === "armor" || getLiveFormationStrength(unit) > 0),
-	);
-	const policyContext = nativeRuntimePolicyContext(topology, liveUnits);
-	const checkpointUnits = liveUnits.map((unit, index) =>
-		serializeNativeRuntimeUnit(unit, index + 1, policyContext, true),
-	);
-	const declaredCountryIds = topology.sides.flatMap((side) => side.countryIds);
-	const battlefield = nativeRuntimeV2Battlefield(topology, liveUnits);
-	const declared = new Set(declaredCountryIds);
-	const economies = declaredCountryIds.map((countryId) => {
-		const state = countryEconomy.get(countryId);
-		if (!state) {
-			throw new Error(`Country ${countryId} has no live war-economy state`);
-		}
-		return serializeNativeRuntimeEconomy(state);
-	});
-	const occupations = Array.from(occupationEconomies.values())
-		.map((record) => {
-			if (!declared.has(record.victimId) || !declared.has(record.annexerId)) {
-				throw new Error(
-					`Occupation ${record.victimId}->${record.annexerId} is outside stable topology`,
-				);
-			}
-			return serializeNativeRuntimeOccupation(record);
-		})
-		.sort((left, right) => left.victimId - right.victimId);
-	const casualties = Object.fromEntries(
-		declaredCountryIds.map((countryId) => {
-			const loss = Number(countryCasualties.get(countryId) || 0);
-			if (!Number.isFinite(loss) || loss < 0) {
-				throw new Error(`Country ${countryId} has invalid live casualties`);
-			}
-			return [countryId, loss];
-		}),
-	);
-	return {
-		schema: NATIVE_RUNTIME_CHECKPOINT_V2_SCHEMA,
-		checkpointBoundary: "midWar",
-		scenario: {
-			sha256: nativeRuntimeScenarioIdentity.sha256,
-			name: nativeRuntimeScenarioIdentity.name,
-			gridRes: nativeRuntimeScenarioIdentity.gridRes,
-		},
-		geography:
-			typeof structuredClone === "function"
-				? structuredClone(_nativeRuntimeInitialCheckpoint.geography)
-				: JSON.parse(JSON.stringify(_nativeRuntimeInitialCheckpoint.geography)),
-		sides: topology.sides,
-		activeSides: topology.activeSides,
-		hostilityMatrix: topology.hostilityMatrix,
-		tick: _simTickCount,
-		frame: simFrameCount,
-		warGraceEnd: warGraceEndTick,
-		strategicCycle: economyPayCycle,
-		steps,
-		units: checkpointUnits,
-		economies,
-		occupations,
-		casualties,
-		casualtiesByVictim: nativeRuntimeCasualtiesByVictim(declaredCountryIds),
-		territory,
-		battlefield,
-	};
-}
-
-function captureInitialNativeRuntimeCheckpoint() {
-	try {
-		_nativeRuntimeInitialCheckpoint = buildInitialNativeRuntimeCheckpoint();
-		_nativeRuntimeCheckpointError = null;
-	} catch (error) {
-		_nativeRuntimeInitialCheckpoint = null;
-		_nativeRuntimeCheckpointError = error?.message || String(error);
-		console.info(
-			`[MW] Native runtime checkpoint unavailable: ${_nativeRuntimeCheckpointError}`,
-		);
-	}
-}
-
-function cloneInitialNativeRuntimeCheckpoint({ steps = 1 } = {}) {
-	if (!nativeRuntimeWarIsActive()) {
-		throw new Error("No active war is available for native runtime export");
-	}
-	if (!_nativeRuntimeInitialCheckpoint) {
-		throw new Error(
-			`Native runtime checkpoint unavailable: ${_nativeRuntimeCheckpointError}`,
-		);
-	}
-	if (!Number.isSafeInteger(steps) || steps < 1) {
-		throw new TypeError("steps must be a positive safe integer");
-	}
-	const checkpoint =
-		typeof structuredClone === "function"
-			? structuredClone(_nativeRuntimeInitialCheckpoint)
-			: JSON.parse(JSON.stringify(_nativeRuntimeInitialCheckpoint));
-	checkpoint.steps = steps;
-	return checkpoint;
-}
-
-function nativeRuntimeV3InfluenceRuntime() {
-	ensureInfluenceFrontierQueue();
-	const cellCount = gridWidth * gridHeight;
-	if (
-		!Number.isSafeInteger(cellCount) ||
-		cellCount <= 0 ||
-		_influenceFrontierQueued.length !== cellCount
-	) {
-		throw new Error(
-			"Native influence runtime queue does not match the active grid",
-		);
-	}
-	if (
-		!Number.isSafeInteger(_influenceFrontierCursor) ||
-		_influenceFrontierCursor < 0 ||
-		_influenceFrontierCursor > _influenceFrontierQueue.length ||
-		!Number.isSafeInteger(_influenceFrontierPriorityCursor) ||
-		_influenceFrontierPriorityCursor < 0 ||
-		_influenceFrontierPriorityCursor > _influenceFrontierPriorityQueue.length
-	) {
-		throw new Error("Native influence runtime queue cursor is invalid");
-	}
-	const regularQueue = _influenceFrontierQueue.slice(_influenceFrontierCursor);
-	const priorityQueue = _influenceFrontierPriorityQueue.slice(
-		_influenceFrontierPriorityCursor,
-	);
-	for (const [label, queue] of [
-		["regularQueue", regularQueue],
-		["priorityQueue", priorityQueue],
-	]) {
-		for (let position = 0; position < queue.length; position++) {
-			const cell = queue[position];
-			if (!Number.isSafeInteger(cell) || cell < 0 || cell >= cellCount) {
-				throw new Error(
-					`Native influence runtime ${label}[${position}] is outside the active grid`,
-				);
-			}
-		}
-	}
-	const queuedCells = [];
-	for (let cell = 0; cell < _influenceFrontierQueued.length; cell++) {
-		const state = _influenceFrontierQueued[cell];
-		if (state > 2) {
-			throw new Error(
-				`Native influence runtime queued cell ${cell} has invalid state ${state}`,
-			);
-		}
-		if (state !== 0) queuedCells.push([cell, state]);
-	}
-	return {
-		schema: NATIVE_INFLUENCE_RUNTIME_SCHEMA,
-		regularQueue,
-		priorityQueue,
-		queuedCells,
-	};
-}
-
-function buildMidWarNativeRuntimeCheckpointV3(options = {}) {
-	const checkpoint = buildMidWarNativeRuntimeCheckpoint(options);
-	return {
-		...checkpoint,
-		schema: NATIVE_RUNTIME_CHECKPOINT_V3_SCHEMA,
-		influenceRuntime: nativeRuntimeV3InfluenceRuntime(),
-	};
-}
-
-function nativeRuntimeV4SideDynamics(topology) {
-	const records = topology.stable.map(
-		({ browserSideIndex }, nativeSideIndex) => {
-			if (
-				topology.browserToNativeSide.get(browserSideIndex) !== nativeSideIndex
-			) {
-				throw new Error(
-					"Native side dynamics stable-side mapping is inconsistent",
-				);
-			}
-			const sideUid =
-				sideUids[browserSideIndex] || `side-${browserSideIndex + 1}`;
-			const retired = _retiredSidePersonnelByUid.get(sideUid) || null;
-			const currentPersonnel = retired
-				? Number(retired.personnel)
-				: Number(sideSoldiers[browserSideIndex]);
-			const initialPersonnel = retired
-				? Number(retired.initialPersonnel)
-				: Number(initialSideSoldiers[browserSideIndex]);
-			const history = (_sideMomentumHistory[browserSideIndex] || []).map(
-				(entry) => ({
-					frame: Number(entry.tick),
-					controlled: Number(entry.controlled),
-				}),
-			);
-			if (history.length > 10)
-				throw new Error("Native side dynamics history exceeds 10 entries");
-			for (let index = 0; index < history.length; index++) {
-				const entry = history[index];
-				if (
-					!Number.isSafeInteger(entry.frame) ||
-					entry.frame < 0 ||
-					entry.frame > simFrameCount
-				)
-					throw new Error("Native side dynamics history has an invalid frame");
-				if (!Number.isSafeInteger(entry.controlled) || entry.controlled < 0)
-					throw new Error(
-						"Native side dynamics history has invalid controlled cells",
-					);
-				if (index > 0 && entry.frame < history[index - 1].frame)
-					throw new Error("Native side dynamics history is not ordered");
-			}
-			if (!Number.isFinite(currentPersonnel) || currentPersonnel < 0)
-				throw new Error("Native side dynamics personnel is invalid");
-			if (!Number.isFinite(initialPersonnel) || initialPersonnel < 0)
-				throw new Error("Native side dynamics initial personnel is invalid");
-			const warPhase = _sideWarPhase[browserSideIndex] || "STALEMATE";
-			const posture = _sidePosture[browserSideIndex] || "BALANCED";
-			const activeCountries = sides[browserSideIndex] || [];
-			let hasLastStand = false;
-			let hasOffensiveDesperation = false;
-			for (const country of activeCountries) {
-				const mode = aiCountryState.get(country.id)?.mode;
-				if (mode === AI_POSTURE.LAST_STAND) hasLastStand = true;
-				if (mode === AI_POSTURE.OFFENSIVE_DESPERATION)
-					hasOffensiveDesperation = true;
-			}
-			const postureOverride = hasLastStand
-				? "DEFENSIVE"
-				: hasOffensiveDesperation
-					? "OFFENSIVE"
-					: activeCountries.length > 0 &&
-							_defenderReactionPlan[browserSideIndex]
-						? "DEFENSIVE"
-						: null;
-			if (
-				!["ADVANCING", "STALEMATE", "RETREATING", "COLLAPSING"].includes(
-					warPhase,
-				)
-			)
-				throw new Error("Native side dynamics phase is invalid");
-			if (!["OFFENSIVE", "BALANCED", "DEFENSIVE"].includes(posture))
-				throw new Error("Native side dynamics posture is invalid");
-			return {
-				sideIndex: nativeSideIndex,
-				initialPersonnel,
-				personnel: currentPersonnel,
-				momentumHistory: history,
-				warPhase,
-				posture,
-				postureOverride,
-			};
-		},
-	);
-	return { schema: NATIVE_SIDE_DYNAMICS_SCHEMA, sides: records };
-}
-
-function nativeRuntimeV4BaseAiSpeedMultiplier(countryId) {
-	const mode = aiCountryState.get(countryId)?.mode;
-	if (mode === AI_POSTURE.OFFENSIVE_DESPERATION) return 1.08;
-	if (mode === AI_POSTURE.DEFENSIVE_DESPERATION) return 0.96;
-	if (mode === AI_POSTURE.LAST_STAND) return 0.92;
-	return 1;
-}
-
-function buildMidWarNativeRuntimeCheckpointV4(options = {}) {
-	const checkpoint = buildMidWarNativeRuntimeCheckpointV3(options);
-	const topology = nativeRuntimeStableTopology();
-	// V2/v3 intentionally freeze the currently resolved speed. V4 recomputes
-	// side posture, so carry the country-mode base and let native apply/remove
-	// the posture cap each tick instead of baking the export-time cap forever.
-	const battlefield = {
-		...checkpoint.battlefield,
-		countries: checkpoint.battlefield.countries.map((country) => ({
-			...country,
-			aiSpeedMultiplier: nativeRuntimeV4BaseAiSpeedMultiplier(
-				country.countryId,
-			),
-		})),
-	};
-	return {
-		...checkpoint,
-		schema: NATIVE_RUNTIME_CHECKPOINT_V4_SCHEMA,
-		battlefield,
-		sideDynamics: nativeRuntimeV4SideDynamics(topology),
-	};
-}
-
-function buildMidWarNativeRuntimeCheckpointV5(options = {}) {
-	const checkpoint = buildMidWarNativeRuntimeCheckpointV4(options);
-	const topology = nativeRuntimeStableTopology();
-	const liveUnits = units.filter(
-		(unit) =>
-			unit &&
-			Number.isFinite(unit.health) &&
-			unit.health > 0 &&
-			(unit.kind === "armor" || getLiveFormationStrength(unit) > 0),
-	);
-	const nativeUnitId = new Map(
-		liveUnits.map((unit, index) => [String(unit.id), index + 1]),
-	);
-	const browserToNative = topology.browserToNativeSide;
-	const nativeSide = (browserIndex) => browserToNative.get(browserIndex);
-	const safe = (value, label, fallback = null) => {
-		const result = Number(value);
-		if (Number.isFinite(result)) return result;
-		if (fallback !== null) return fallback;
-		throw new Error(`${label} is not finite`);
-	};
-	const unsigned = (value, label, fallback = null) => {
-		const result = Number(value);
-		if (Number.isSafeInteger(result) && result >= 0) return result;
-		if (fallback !== null) return fallback;
-		throw new Error(`${label} is not an unsigned safe integer`);
-	};
-	const checkpointTick = unsigned(checkpoint.tick, "checkpoint.tick");
-	const historicalTick = (value, label, fallback = null) => {
-		const result = unsigned(value, label, fallback);
-		if (result > checkpointTick)
-			throw new Error(`${label} is newer than the checkpoint`);
-		return result;
-	};
-	const compareText = (left, right) =>
-		left < right ? -1 : left > right ? 1 : 0;
-	const requiredText = (value, label) => {
-		if (value == null || String(value).trim() === "")
-			throw new Error(`${label} is missing`);
-		return String(value);
-	};
-	const nonNegative = (value, label) => {
-		const result = safe(value, label);
-		if (result < 0) throw new Error(`${label} is negative`);
-		return result;
-	};
-	const fraction = (value, label) => {
-		const result = safe(value, label);
-		if (result < 0 || result > 1) throw new Error(`${label} is outside [0, 1]`);
-		return result;
-	};
-	const knownCountryIds = new Set(
-		checkpoint.economies.map((economy) => Number(economy.countryId)),
-	);
-	const nativeUnitSide = new Map(
-		checkpoint.units.map((unit) => [unit.id, Number(unit.side)]),
-	);
-	const point = (value, label) => {
-		if (value == null) return null;
-		const lat = safe(value.lat, `${label}.lat`);
-		const lng = safe(value.lng, `${label}.lng`);
-		if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-			throw new Error(`${label} is outside renderer-safe world bounds`);
-		}
-		return { lat, lng };
-	};
-	const sideRecords = topology.stable
-		.map(({ browserSideIndex }, sideIndex) => {
-			const intel = _aiIntelBySide.get(sideUids[browserSideIndex]);
-			const contacts = Object.values(intel?.contacts || [])
-				.map((contact) => {
-					const enemyIndex = sideUids.indexOf(contact.enemySideUid);
-					const unitId = nativeUnitId.get(String(contact.unitId));
-					if (
-						enemyIndex < 0 ||
-						unitId == null ||
-						nativeSide(enemyIndex) == null ||
-						!areSidesHostile(browserSideIndex, enemyIndex)
-					)
-						return null;
-					const contactPoint = point(contact, "intel contact");
-					const countryId =
-						contact.countryId == null
-							? null
-							: unsigned(contact.countryId, "intel.countryId");
-					if (
-						countryId != null &&
-						(countryId > 65535 || !knownCountryIds.has(countryId))
-					)
-						throw new Error("Native intel contact country is not declared");
-					const observedTick = unsigned(
-						contact.observedTick,
-						"intel.observedTick",
-					);
-					if (observedTick > checkpointTick)
-						throw new Error(
-							"Native intel contact is newer than the checkpoint",
-						);
-					const baseConfidence = safe(
-						contact.baseConfidence,
-						"intel.baseConfidence",
-					);
-					const confidence = safe(contact.confidence, "intel.confidence");
-					if (
-						baseConfidence < 0 ||
-						baseConfidence > 1 ||
-						confidence < 0 ||
-						confidence > 1
-					)
-						throw new Error("Native intel confidence is outside [0, 1]");
-					if (!["FRESH", "STALE", "DEGRADED"].includes(contact.status))
-						throw new Error("Native intel contact status is invalid");
-					const ageTicks = unsigned(contact.ageTicks, "intel.ageTicks");
-					if (ageTicks > checkpointTick - observedTick)
-						throw new Error("Native intel contact age exceeds elapsed time");
-					return {
-						key: String(contact.key),
-						enemySideIndex: nativeSide(enemyIndex),
-						sectorId: String(contact.sectorId),
-						unitId,
-						countryId,
-						domain: String(contact.domain),
-						kind: String(contact.kind),
-						lat: contactPoint.lat,
-						lng: contactPoint.lng,
-						velocityLat: safe(contact.velocityLat, "intel.velocityLat"),
-						velocityLng: safe(contact.velocityLng, "intel.velocityLng"),
-						observedPower: nonNegative(
-							contact.observedPower,
-							"intel.observedPower",
-						),
-						baseConfidence,
-						confidence,
-						observedTick,
-						ageTicks,
-						status: contact.status,
-						source: String(contact.source),
-					};
-				})
-				.filter(Boolean)
-				.sort((a, b) => compareText(a.key, b.key));
-			const prewarEnemyPower = [];
-			for (const enemy of topology.stable) {
-				const enemyBrowser = enemy.browserSideIndex;
-				if (!areSidesHostile(browserSideIndex, enemyBrowser)) continue;
-				const power =
-					_aiPrewarEnemyPowerBySide.get(
-						`${sideUids[browserSideIndex]}|${sideUids[enemyBrowser]}`,
-					) ?? 0;
-				const numericPower = nonNegative(power, "prewarEnemyPower");
-				prewarEnemyPower.push({
-					sideIndex: nativeSide(enemyBrowser),
-					power: numericPower,
-				});
-			}
-			const rawIntelConfig = intel?.config || {
-				scanIntervalTicks: 150,
-				freshTicks: 300,
-				staleTicks: 1200,
-				expireTicks: 1800,
-			};
-			const intelConfig = {
-				scanIntervalTicks: Math.max(
-					1,
-					unsigned(rawIntelConfig.scanIntervalTicks, "intel.scanIntervalTicks"),
-				),
-				freshTicks: Math.max(
-					1,
-					unsigned(rawIntelConfig.freshTicks, "intel.freshTicks"),
-				),
-				staleTicks: unsigned(rawIntelConfig.staleTicks, "intel.staleTicks"),
-				expireTicks: unsigned(rawIntelConfig.expireTicks, "intel.expireTicks"),
-			};
-			if (
-				intelConfig.freshTicks > intelConfig.staleTicks ||
-				intelConfig.staleTicks > intelConfig.expireTicks
-			)
-				throw new Error("Native intel decay windows are not ordered");
-			const dynamics = checkpoint.sideDynamics.sides[sideIndex];
-			const hasLastStand = (sides[browserSideIndex] || []).some(
-				(country) =>
-					aiCountryState.get(country.id)?.mode === AI_POSTURE.LAST_STAND,
-			);
-			const hasDefensiveDesperation = (sides[browserSideIndex] || []).some(
-				(country) =>
-					aiCountryState.get(country.id)?.mode ===
-					AI_POSTURE.DEFENSIVE_DESPERATION,
-			);
-			const override = dynamics?.postureOverride
-				? {
-						posture: dynamics.postureOverride,
-						source:
-							dynamics.postureOverride === "OFFENSIVE"
-								? "OFFENSIVE_DESPERATION"
-								: hasLastStand
-									? "LAST_STAND"
-									: hasDefensiveDesperation
-										? "DEFENSIVE_DESPERATION"
-										: "DEFENDER_REACTION",
-						startedTick: checkpointTick,
-						expiresTick: null,
-						sequence: sideIndex + 1,
-					}
-				: null;
-			return {
-				sideIndex,
-				hostileSideIndices: prewarEnemyPower.map((entry) => entry.sideIndex),
-				intel: {
-					lastScanTick:
-						Number(intel?.lastScanTick) < 0
-							? 0
-							: historicalTick(intel?.lastScanTick, "intel.lastScanTick", 0),
-					revision: unsigned(intel?.revision, "intel.revision", 0),
-					config: intelConfig,
-					prewarEnemyPower,
-					contacts,
-				},
-				override,
-			};
-		})
-		.sort((a, b) => a.sideIndex - b.sideIndex);
-	const taskForces = [];
-	const claimedTaskForceUnits = new Set();
-	for (const entry of topology.stable) {
-		const browserIndex = entry.browserSideIndex;
-		for (const force of _aiTaskForcesBySide.get(sideUids[browserIndex]) || []) {
-			const forceProgress = safe(force.progress, "taskForce.progress");
-			if (forceProgress < 0 || forceProgress > 1)
-				throw new Error(`Native task force ${force.id} progress is invalid`);
-			const members = (force.assignedUnitIds || [])
-				.map((id) => {
-					const unitId = nativeUnitId.get(String(id));
-					if (unitId == null) return null;
-					const role = force.unitRoles?.[String(id)]?.role || "LINE";
-					if (nativeUnitSide.get(unitId) !== nativeSide(browserIndex))
-						return null;
-					let routeProgress = forceProgress;
-					if (force.phase === "ATTACKING")
-						routeProgress =
-							role === "SPEARHEAD"
-								? Math.min(1, 0.35 + forceProgress * 0.75)
-								: role === "LINE"
-									? Math.min(1, 0.2 + forceProgress * 0.85)
-									: role === "SUPPORT"
-										? Math.min(0.72, 0.1 + forceProgress * 0.58)
-										: forceProgress >= 0.4
-											? Math.min(0.45, forceProgress * 0.5)
-											: 0;
-					return {
-						unitId,
-						role,
-						assignedTick: historicalTick(
-							force.unitRoles?.[String(id)]?.assignedTick ?? force.createdTick,
-							"taskForce.member.assignedTick",
-						),
-						routeProgress,
-					};
-				})
-				.filter(Boolean)
-				.sort((a, b) => a.unitId - b.unitId);
-			for (const member of members) {
-				if (!["SPEARHEAD", "LINE", "RESERVE", "SUPPORT"].includes(member.role))
-					throw new Error(
-						`Native task force member ${member.unitId} has invalid role`,
-					);
-				if (claimedTaskForceUnits.has(member.unitId))
-					throw new Error(
-						`Native unit ${member.unitId} belongs to multiple task forces`,
-					);
-				claimedTaskForceUnits.add(member.unitId);
-			}
-			if (!members.length) continue;
-			if (
-				![
-					"ASSEMBLING",
-					"ATTACKING",
-					"CONSOLIDATING",
-					"CULMINATED",
-					"WITHDRAWING",
-					"REGROUPING",
-					"COMPLETE",
-				].includes(force.phase) ||
-				!["AGGRESSIVE", "BALANCED", "DEFENSIVE"].includes(force.posture)
-			)
-				throw new Error(`Native task force ${force.id} has invalid state`);
-			const memberIds = new Set(members.map((member) => member.unitId));
-			const reserveUnitIds = (force.reserveUnitIds || [])
-				.map((id) => nativeUnitId.get(String(id)))
-				.filter((id) => id != null && memberIds.has(id))
-				.sort((a, b) => a - b);
-			if (new Set(reserveUnitIds).size !== reserveUnitIds.length)
-				throw new Error(`Native task force ${force.id} repeats a reserve unit`);
-			const maxAssignedUnits = unsigned(
-				force.maxAssignedUnits,
-				"taskForce.maxAssignedUnits",
-			);
-			if (maxAssignedUnits === 0)
-				throw new Error(`Native task force ${force.id} has zero capacity`);
-			taskForces.push({
-				id: requiredText(force.id, "taskForce.id"),
-				signature: requiredText(force.signature, "taskForce.signature"),
-				sideIndex: nativeSide(browserIndex),
-				planSignature: requiredText(
-					force.planSignature,
-					"taskForce.planSignature",
-				),
-				planType: requiredText(force.planType, "taskForce.planType"),
-				theaterId: force.theaterId == null ? null : String(force.theaterId),
-				target: point(force.target, `taskForce ${force.id}.target`),
-				stagingAnchor: point(
-					force.stagingAnchor,
-					`taskForce ${force.id}.stagingAnchor`,
-				),
-				route: (force.route || []).map((anchor, index) => {
-					const routePoint = point(
-						anchor,
-						`taskForce ${force.id}.route[${index}]`,
-					);
-					if (routePoint == null)
-						throw new Error(
-							`Native task force ${force.id} route has null point`,
-						);
-					return routePoint;
-				}),
-				phase: force.phase,
-				posture: force.posture,
-				members,
-				reserveUnitIds,
-				desiredPower: nonNegative(force.desiredPower, "taskForce.desiredPower"),
-				launchPower: nonNegative(force.launchPower, "taskForce.launchPower"),
-				currentPower: nonNegative(force.currentPower, "taskForce.currentPower"),
-				peakPower: nonNegative(force.peakPower, "taskForce.peakPower"),
-				readiness: fraction(force.readiness, "taskForce.readiness"),
-				maxAssignedUnits,
-				createdTick: historicalTick(force.createdTick, "taskForce.createdTick"),
-				phaseStartedTick: historicalTick(
-					force.phaseStartedTick,
-					"taskForce.phaseStartedTick",
-				),
-				lastProgressTick: historicalTick(
-					force.lastProgressTick,
-					"taskForce.lastProgressTick",
-				),
-				lastRecoveryTick: historicalTick(
-					force.lastRecoveryTick,
-					"taskForce.lastRecoveryTick",
-				),
-				recoveryPower: nonNegative(
-					force.recoveryPower,
-					"taskForce.recoveryPower",
-				),
-				progress: forceProgress,
-				withdrawalAnchor: point(
-					force.withdrawalAnchor,
-					`taskForce ${force.id}.withdrawalAnchor`,
-				),
-				completionReason:
-					force.completionReason == null
-						? null
-						: String(force.completionReason),
-				outcome: force.outcome == null ? null : String(force.outcome),
-				severeSurprise: !!force.severeSurprise,
-				parentTaskForceId:
-					force.parentTaskForceId == null
-						? null
-						: String(force.parentTaskForceId),
-				supplyInvalidatedTick:
-					force.supplyInvalidatedTick == null
-						? null
-						: historicalTick(
-								force.supplyInvalidatedTick,
-								"taskForce.supplyInvalidatedTick",
-							),
-				intentRevision: unsigned(
-					force.intentRevision,
-					"taskForce.intentRevision",
-					0,
-				),
-			});
-		}
-	}
-	taskForces.sort((a, b) => compareText(a.id, b.id));
-	for (let index = 1; index < taskForces.length; index++)
-		if (taskForces[index - 1].id === taskForces[index].id)
-			throw new Error(`Native task force id ${taskForces[index].id} repeats`);
-	const countryDesperation = [];
-	for (const entry of topology.stable)
-		for (const country of sides[entry.browserSideIndex] || []) {
-			const state = aiCountryState.get(country.id) || {};
-			const countryId = unsigned(country.id, "desperation.countryId");
-			if (countryId > 65535 || !knownCountryIds.has(countryId))
-				throw new Error(
-					`Native desperation country ${countryId} is not declared`,
-				);
-			const mode = state.mode || "NORMAL";
-			if (
-				![
-					"NORMAL",
-					"LAST_STAND",
-					"DEFENSIVE_DESPERATION",
-					"OFFENSIVE_DESPERATION",
-					"UNDER_MOBILIZED",
-				].includes(mode)
-			)
-				throw new Error(
-					`Native country ${countryId} desperation mode is invalid`,
-				);
-			countryDesperation.push({
-				countryId,
-				mode,
-				initialCities:
-					country._aiInitialCities == null
-						? null
-						: unsigned(country._aiInitialCities, "desperation.initialCities"),
-				initialManpower:
-					country._aiInitialManpower == null
-						? null
-						: nonNegative(
-								country._aiInitialManpower,
-								"desperation.initialManpower",
-							),
-				previousControlled:
-					country._aiPrevControlled == null
-						? null
-						: unsigned(
-								country._aiPrevControlled,
-								"desperation.previousControlled",
-							),
-				stallTicks: unsigned(
-					country._aiStallTicks,
-					"desperation.stallTicks",
-					0,
-				),
-			});
-		}
-	countryDesperation.sort((a, b) => a.countryId - b.countryId);
-	const overrideEvents = sideRecords
-		.filter((side) => side.override)
-		.map((side) => ({ ...side.override, sideIndex: side.sideIndex }))
-		.sort((a, b) => a.sequence - b.sequence);
-	return {
-		...checkpoint,
-		schema: NATIVE_RUNTIME_CHECKPOINT_V5_SCHEMA,
-		operationalAi: {
-			schema: NATIVE_OPERATIONAL_AI_SCHEMA,
-			sides: sideRecords,
-			taskForces,
-			countryDesperation,
-			overrideEvents,
-			nextOverrideSequence:
-				overrideEvents.reduce(
-					(maximum, event) => Math.max(maximum, event.sequence),
-					0,
-				) + 1,
-		},
-	};
-}
-
-function buildMidWarNativeRuntimeCheckpointV6(options = {}) {
-	const checkpoint = buildMidWarNativeRuntimeCheckpointV5(options);
-	const topology = nativeRuntimeStableTopology();
-	const liveUnits = units.filter(
-		(unit) =>
-			unit &&
-			Number.isFinite(unit.health) &&
-			unit.health > 0 &&
-			(unit.kind === "armor" || getLiveFormationStrength(unit) > 0),
-	);
-	const nativeUnitId = new Map(
-		liveUnits.map((unit, index) => [String(unit.id), index + 1]),
-	);
-	const checkpointUnitById = new Map(
-		checkpoint.units.map((unit) => [unit.id, unit]),
-	);
-	const nativeSide = (browserSideIndex, label) => {
-		const side = topology.browserToNativeSide.get(browserSideIndex);
-		if (side === undefined)
-			throw new Error(`${label} has no stable native side`);
-		return side;
-	};
-	const noIntegerFallback = Symbol("no-integer-fallback");
-	const safeInteger = (value, label, fallback = noIntegerFallback) => {
-		if (value == null && fallback !== noIntegerFallback) return fallback;
-		if (value == null)
-			throw new Error(`${label} is not an unsigned safe integer`);
-		const result = Number(value);
-		if (!Number.isSafeInteger(result) || result < 0)
-			throw new Error(`${label} is not an unsigned safe integer`);
-		return result;
-	};
-	const safeNumber = (value, label) => {
-		const result = Number(value);
-		if (!Number.isFinite(result)) throw new Error(`${label} is not finite`);
-		return result;
-	};
-	const boundedFraction = (value, label, fallback) => {
-		const result = value == null ? fallback : safeNumber(value, label);
-		if (result < 0 || result > 1) throw new Error(`${label} is outside [0, 1]`);
-		return result;
-	};
-	const requiredText = (value, label) => {
-		const text = String(value ?? "").trim();
-		const hasControlCharacter = Array.from(text).some((character) => {
-			const code = character.charCodeAt(0);
-			return code < 32 || code === 127;
-		});
-		if (!text || text.length > 256 || hasControlCharacter)
-			throw new Error(`${label} is invalid`);
-		return text;
-	};
-	const point = (value, label) => {
-		if (!value) throw new Error(`${label} is missing`);
-		const lat = safeNumber(value.lat, `${label}.lat`);
-		const lng = safeNumber(value.lng, `${label}.lng`);
-		if (lat < -90 || lat > 90 || lng < -180 || lng > 180)
-			throw new Error(`${label} is outside renderer-safe world bounds`);
-		return { lat, lng };
-	};
-	const distanceSquared = (left, right) => {
-		const dLat = right.lat - left.lat;
-		let dLng = right.lng - left.lng;
-		if (dLng > 180) dLng -= 360;
-		else if (dLng < -180) dLng += 360;
-		return dLat * dLat + dLng * dLng;
-	};
-	const frameTickToNativeTick = (value, label, fallbackFrame = null) => {
-		const frameTick = safeInteger(value, label, fallbackFrame);
-		if (frameTick > checkpoint.frame)
-			throw new Error(`${label} is newer than the checkpoint frame`);
-		const elapsedFrames = checkpoint.frame - frameTick;
-		return checkpoint.tick - Math.min(checkpoint.tick, elapsedFrames);
-	};
-	const sideForTarget = (plan, ownBrowserSide) => {
-		if (plan.targetSideUid != null) {
-			const browserIndex = sideUids.indexOf(plan.targetSideUid);
-			if (browserIndex >= 0 && browserIndex !== ownBrowserSide)
-				return topology.browserToNativeSide.get(browserIndex) ?? null;
-		}
-		const targetCountry = Number(plan.targetCountryId || 0);
-		if (targetCountry > 0) {
-			const targetNativeSide = checkpoint.sides.findIndex((side) =>
-				side.countryIds.includes(targetCountry),
-			);
-			const ownNativeSide = topology.browserToNativeSide.get(ownBrowserSide);
-			if (targetNativeSide >= 0 && targetNativeSide !== ownNativeSide)
-				return targetNativeSide;
-		}
-		const ownNativeSide = topology.browserToNativeSide.get(ownBrowserSide);
-		if (ownNativeSide == null) return null;
-		for (let candidate = 0; candidate < checkpoint.sides.length; candidate++) {
-			if (
-				candidate !== ownNativeSide &&
-				checkpoint.hostilityMatrix[
-					ownNativeSide * checkpoint.sides.length + candidate
-				] === 1
-			)
-				return candidate;
-		}
-		return null;
-	};
-
-	const claimedUnitIds = new Set(
-		checkpoint.units
-			.filter((unit) => unit.aiPolicy?.garrisonExcluded)
-			.map((unit) => unit.id),
-	);
-	for (const taskForce of checkpoint.operationalAi.taskForces)
-		for (const member of taskForce.members || [])
-			claimedUnitIds.add(member.unitId);
-	const navalOperations = [];
-	const operationByBrowserPlan = new Map();
-	const planDefinitions = [
-		{
-			plans: _navalPlan,
-			kind: "INVASION",
-			idKind: "invasion",
-			role: "NAVAL_INVASION",
-			matches: (unit, plan) =>
-				unit.navalAssigned && unit.sideIndex === plan.browserSideIndex,
-		},
-		{
-			plans: _navalSupplyPlan,
-			kind: "SUPPLY",
-			idKind: "supply",
-			role: "NAVAL_SUPPLY",
-			matches: (unit, plan) =>
-				unit.supplyAssigned && unit.sideIndex === plan.browserSideIndex,
-		},
-		{
-			plans: _transportPlan,
-			kind: "FAST_TRANSPORT",
-			idKind: "transport",
-			role: "FAST_TRANSPORT",
-			matches: (unit, plan) =>
-				unit.sideIndex === plan.browserSideIndex &&
-				unit._transportPlanSignature === plan.signature,
-		},
-	];
-	for (const definition of planDefinitions) {
-		for (const entry of topology.stable) {
-			const browserSideIndex = entry.browserSideIndex;
-			const rawPlan = definition.plans[browserSideIndex];
-			if (!rawPlan) continue;
-			const side = nativeSide(
-				browserSideIndex,
-				`Native ${definition.idKind} plan`,
-			);
-			const target = point(
-				rawPlan.target,
-				`Native ${definition.idKind} plan target`,
-			);
-			const signature = requiredText(
-				rawPlan.signature ||
-					`${side}:${rawPlan.type || definition.kind}:${target.lat}:${target.lng}`,
-				`Native ${definition.idKind} plan signature`,
-			);
-			const memberUnits = liveUnits
-				.filter((unit) =>
-					definition.matches(unit, {
-						...rawPlan,
-						browserSideIndex,
-						signature,
-					}),
-				)
-				.map((unit) => ({ unit, unitId: nativeUnitId.get(String(unit.id)) }))
-				.filter(({ unitId }) => unitId != null && !claimedUnitIds.has(unitId))
-				.sort((left, right) => left.unitId - right.unitId);
-			const startedTick = frameTickToNativeTick(
-				rawPlan.startedTick,
-				`Native ${definition.idKind} plan startedTick`,
-				checkpoint.frame,
-			);
-			const members = memberUnits.map(({ unitId }) => {
-				claimedUnitIds.add(unitId);
-				return {
-					unitId,
-					role: definition.role,
-					assignedTick: startedTick,
-				};
-			});
-			const firstMemberCountry = members.length
-				? checkpointUnitById.get(members[0].unitId)?.countryId
-				: null;
-			const country = safeInteger(
-				firstMemberCountry || sides[browserSideIndex]?.[0]?.id,
-				`Native ${definition.idKind} plan country`,
-			);
-			if (country <= 0 || country > 65535)
-				throw new Error(`Native ${definition.idKind} plan country is invalid`);
-			const stagingSource =
-				rawPlan.stagingPoint ||
-				rawPlan.arrowPoints?.[0] ||
-				memberUnits[0]?.unit ||
-				rawPlan.target;
-			const staging = point(
-				stagingSource,
-				`Native ${definition.idKind} plan staging`,
-			);
-			const routeSource = Array.isArray(rawPlan.route)
-				? rawPlan.route
-				: Array.isArray(rawPlan._waypoints) && rawPlan._waypoints.length
-					? rawPlan._waypoints
-					: Array.isArray(rawPlan.arrowPoints)
-						? rawPlan.arrowPoints.slice(1, -1)
-						: [];
-			const route = routeSource.map((routePoint, index) =>
-				point(routePoint, `Native ${definition.idKind} route[${index}]`),
-			);
-			const routeIndex = safeInteger(
-				rawPlan.routeIndex ?? rawPlan._routeIndex,
-				`Native ${definition.idKind} routeIndex`,
-				0,
-			);
-			if (routeIndex > route.length)
-				throw new Error(`Native ${definition.idKind} routeIndex exceeds route`);
-			let phase;
-			if (definition.kind === "FAST_TRANSPORT") {
-				phase = "TRANSIT";
-			} else {
-				phase = String(rawPlan.phase || "GATHERING").toUpperCase();
-				const allowed =
-					definition.kind === "INVASION"
-						? ["GATHERING", "EMBARKATION", "TRANSIT", "LANDING"]
-						: ["GATHERING", "EMBARKATION", "TRANSIT", "DELIVERED"];
-				if (!allowed.includes(phase))
-					throw new Error(`Native ${definition.idKind} phase is invalid`);
-			}
-			const fallbackProgress = {
-				GATHERING: 0,
-				EMBARKATION: 0.2,
-				TRANSIT: 0.45,
-				LANDING: 0.75,
-				DELIVERED: 0.75,
-			}[phase];
-			const lastProgressTick = frameTickToNativeTick(
-				rawPlan.lastProgressTick,
-				`Native ${definition.idKind} plan lastProgressTick`,
-				rawPlan.startedTick ?? checkpoint.frame,
-			);
-			const phaseStartedTick = frameTickToNativeTick(
-				rawPlan.phaseStartedTick,
-				`Native ${definition.idKind} plan phaseStartedTick`,
-				rawPlan.lastProgressTick ?? rawPlan.startedTick ?? checkpoint.frame,
-			);
-			const operation = {
-				id: `execution-${side}-${definition.idKind}`,
-				signature,
-				kind: definition.kind,
-				phase,
-				side,
-				country,
-				enemySide:
-					definition.kind === "INVASION"
-						? sideForTarget(rawPlan, browserSideIndex)
-						: null,
-				maxAssignedUnits: Math.max(
-					1,
-					safeInteger(
-						rawPlan.maxAssignedUnits,
-						`Native ${definition.idKind} maxAssignedUnits`,
-						5,
-					),
-					members.length,
-				),
-				members,
-				staging,
-				target,
-				route,
-				routeIndex,
-				progress: boundedFraction(
-					rawPlan.progress,
-					`Native ${definition.idKind} progress`,
-					fallbackProgress,
-				),
-				startedTick,
-				phaseStartedTick: Math.max(startedTick, phaseStartedTick),
-				lastProgressTick: Math.max(startedTick, lastProgressTick),
-				completionReason: null,
-			};
-			navalOperations.push(operation);
-			operationByBrowserPlan.set(rawPlan, operation);
-		}
-	}
-	if (
-		new Set(navalOperations.map((operation) => operation.signature)).size !==
-		navalOperations.length
-	)
-		throw new Error("Native operational execution repeats a plan signature");
-	navalOperations.sort((left, right) =>
-		left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
-	);
-
-	const defenderReactions = [];
-	for (const entry of topology.stable) {
-		const browserSideIndex = entry.browserSideIndex;
-		const rawReaction = _defenderReactionPlan[browserSideIndex];
-		if (!rawReaction) continue;
-		const enemyBrowserSide = safeInteger(
-			rawReaction.enemySideIdx,
-			"Native defender reaction enemySideIdx",
-		);
-		const side = nativeSide(browserSideIndex, "Native defender reaction");
-		const enemySide = nativeSide(
-			enemyBrowserSide,
-			"Native defender reaction enemy",
-		);
-		if (side === enemySide)
-			throw new Error("Native defender reaction targets its own side");
-		const target = point(rawReaction.target, "Native defender reaction target");
-		const enemyNavalPlan = _navalPlan[enemyBrowserSide];
-		const enemyNavalOperation = enemyNavalPlan
-			? operationByBrowserPlan.get(enemyNavalPlan)
-			: null;
-		let kind;
-		let threatSignature;
-		if (enemyNavalOperation?.phase === "TRANSIT") {
-			kind = "NAVAL_TRANSIT";
-			threatSignature = enemyNavalOperation.signature;
-		} else if (enemyNavalOperation?.phase === "LANDING") {
-			kind = "LANDING";
-			threatSignature = enemyNavalOperation.signature;
-		} else {
-			const matchingTaskForce = checkpoint.operationalAi.taskForces
-				.filter(
-					(force) =>
-						force.sideIndex === enemySide &&
-						force.phase === "ATTACKING" &&
-						force.target &&
-						distanceSquared(force.target, target) <= 1e-6,
-				)
-				.sort((left, right) =>
-					left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
-				)[0];
-			if (!matchingTaskForce) continue;
-			kind = "LAND_OFFENSIVE";
-			threatSignature = requiredText(
-				matchingTaskForce.planSignature,
-				"Native land defender threat signature",
-			);
-		}
-		const unitIds = liveUnits
-			.filter(
-				(unit) =>
-					unit.sideIndex === browserSideIndex && unit._defenderReactTarget,
-			)
-			.map((unit) => nativeUnitId.get(String(unit.id)))
-			.filter((unitId) => unitId != null && !claimedUnitIds.has(unitId))
-			.sort((left, right) => left - right);
-		for (const unitId of unitIds) claimedUnitIds.add(unitId);
-		const rawMaxUnits = safeInteger(
-			rawReaction.maxUnits,
-			"Native defender reaction maxUnits",
-			0,
-		);
-		const maxUnits =
-			kind === "LANDING"
-				? Math.max(rawMaxUnits, unitIds.length)
-				: Math.max(1, rawMaxUnits, unitIds.length);
-		const startedTick = frameTickToNativeTick(
-			rawReaction.startedTick,
-			"Native defender reaction startedTick",
-			checkpoint.frame,
-		);
-		const lastProgressTick = frameTickToNativeTick(
-			rawReaction.lastProgressTick,
-			"Native defender reaction lastProgressTick",
-			rawReaction.startedTick ?? checkpoint.frame,
-		);
-		const assignedDistances = unitIds.map((unitId) => {
-			const unit = liveUnits[unitId - 1];
-			return distanceSquared(unit, target);
-		});
-		const sequence = defenderReactions.length + 1;
-		defenderReactions.push({
-			id: `reaction-${side}-${sequence}`,
-			sequence,
-			threatSignature,
-			side,
-			enemySide,
-			kind,
-			target,
-			unitIds,
-			maxUnits,
-			startedTick,
-			lastProgressTick: Math.max(startedTick, lastProgressTick),
-			bestDistanceSquared: assignedDistances.length
-				? Math.min(...assignedDistances)
-				: null,
-			landingDefeatedTick:
-				kind === "LANDING" && Number(rawReaction._landingDefeatedTick) > 0
-					? frameTickToNativeTick(
-							rawReaction._landingDefeatedTick,
-							"Native defender reaction landingDefeatedTick",
-						)
-					: null,
-		});
-	}
-	defenderReactions.sort(
-		(left, right) =>
-			left.side - right.side ||
-			left.sequence - right.sequence ||
-			(left.id < right.id ? -1 : left.id > right.id ? 1 : 0),
-	);
-	const countryCoverage = checkpoint.economies
-		.map((economy) => {
-			const countryId = safeInteger(
-				economy.countryId,
-				"Native air coverage countryId",
-			);
-			if (countryId <= 0 || countryId > 65535)
-				throw new Error(`Native air coverage country ${countryId} is invalid`);
-			const operationsCoverage = safeNumber(
-				countryEquipment.get(countryId)?.airOperationsCoverage ?? 1,
-				`Native air coverage for country ${countryId}`,
-			);
-			if (operationsCoverage < 0 || operationsCoverage > 1)
-				throw new Error(
-					`Native air coverage for country ${countryId} is outside [0, 1]`,
-				);
-			return { countryId, operationsCoverage };
-		})
-		.sort((left, right) => left.countryId - right.countryId);
-	if (
-		new Set(countryCoverage.map((coverage) => coverage.countryId)).size !==
-		countryCoverage.length
-	)
-		throw new Error("Native air coverage repeats a country");
-
-	const sortedAirfields = [...airfields].sort((left, right) =>
-		String(left.id) < String(right.id)
-			? -1
-			: String(left.id) > String(right.id)
-				? 1
-				: 0,
-	);
-	const airfieldId = new Map();
-	for (let index = 0; index < sortedAirfields.length; index++) {
-		const key = String(sortedAirfields[index].id);
-		if (airfieldId.has(key)) throw new Error(`Duplicate airfield id ${key}`);
-		airfieldId.set(key, index + 1);
-	}
-	const serializedAirfields = sortedAirfields.map((field) => {
-		const health = safeNumber(field.health, `Airfield ${field.id} health`);
-		if (health < 0 || health > 100)
-			throw new Error(`Airfield ${field.id} health is outside [0, 100]`);
-		const disabled = !!field.disabled;
-		if (health === 0 && !disabled)
-			throw new Error(`Airfield ${field.id} has zero health but is enabled`);
-		const ownerCountryId = safeInteger(
-			field.ownerId,
-			`Airfield ${field.id} ownerId`,
-		);
-		const controllerCountryId = safeInteger(
-			field.controllerId || field.ownerId,
-			`Airfield ${field.id} controllerId`,
-		);
-		if (
-			ownerCountryId <= 0 ||
-			ownerCountryId > 65535 ||
-			controllerCountryId <= 0 ||
-			controllerCountryId > 65535
-		)
-			throw new Error(`Airfield ${field.id} has an invalid country`);
-		const location = point(field, `Airfield ${field.id}`);
-		return {
-			id: airfieldId.get(String(field.id)),
-			side: nativeSide(field.sideIndex, `Airfield ${field.id}`),
-			ownerCountryId,
-			controllerCountryId,
-			lat: location.lat,
-			lng: location.lng,
-			capacity: field.isCapital ? 3 : 2,
-			health,
-			disabled,
-			captureRepairCycles: safeInteger(
-				field.captureRepairCycles,
-				`Airfield ${field.id} captureRepairCycles`,
-				0,
-			),
-			capital: !!field.isCapital,
-		};
-	});
-	const sortedWings = airWings
-		.filter((wing) => Number(wing.equipment) > 0)
-		.sort((left, right) =>
-			String(left.id) < String(right.id)
-				? -1
-				: String(left.id) > String(right.id)
-					? 1
-					: 0,
-		);
-	const airWingId = new Map();
-	for (let index = 0; index < sortedWings.length; index++) {
-		const key = String(sortedWings[index].id);
-		if (airWingId.has(key)) throw new Error(`Duplicate air wing id ${key}`);
-		airWingId.set(key, index + 1);
-	}
-	const serializedWings = sortedWings.map((wing) => {
-		const id = airWingId.get(String(wing.id));
-		const role = String(wing.role || "").toUpperCase();
-		if (!["FIGHTER", "STRIKE"].includes(role))
-			throw new Error(`Air wing ${wing.id} role is invalid`);
-		let state = String(wing.state || "GROUNDED").toUpperCase();
-		if (
-			![
-				"GROUNDED",
-				"PATROL",
-				"INTERCEPT",
-				"ATTACKING",
-				"RETURNING",
-				"REARMING",
-				"EVACUATED",
-			].includes(state)
-		)
-			throw new Error(`Air wing ${wing.id} state is invalid`);
-		const basedFieldId = airfieldId.get(String(wing.airfieldId));
-		if (basedFieldId == null)
-			throw new Error(`Air wing ${wing.id} references a missing airfield`);
-		let returnAirfieldId = null;
-		let targetKind = null;
-		let targetId = null;
-		if (state === "INTERCEPT") {
-			if (role !== "FIGHTER")
-				throw new Error(`Air wing ${wing.id} has an invalid intercept role`);
-			targetKind = "AIR_WING";
-			targetId = airWingId.get(String(wing.targetId));
-			if (targetId == null || targetId === id) state = "RETURNING";
-		} else if (state === "ATTACKING") {
-			if (role !== "STRIKE")
-				throw new Error(`Air wing ${wing.id} has an invalid strike role`);
-			targetKind = String(wing.targetType || "").toUpperCase();
-			if (targetKind === "AIRFIELD") {
-				targetId = airfieldId.get(String(wing.targetId));
-			} else if (targetKind === "ARMY" || targetKind === "ARMOR") {
-				targetId = nativeUnitId.get(String(wing.targetId));
-			} else {
-				throw new Error(`Air wing ${wing.id} target type is invalid`);
-			}
-			if (targetId == null) state = "RETURNING";
-		}
-		if (state === "RETURNING") {
-			returnAirfieldId =
-				airfieldId.get(String(wing.returnFieldId || wing.airfieldId)) ||
-				basedFieldId;
-			targetKind = null;
-			targetId = null;
-		} else if (state !== "INTERCEPT" && state !== "ATTACKING") {
-			returnAirfieldId = null;
-			targetKind = null;
-			targetId = null;
-		}
-		const count = safeInteger(wing.equipment, `Air wing ${wing.id} equipment`);
-		const maxCount = safeInteger(
-			wing.maxEquipment,
-			`Air wing ${wing.id} maxEquipment`,
-			count,
-		);
-		if (count <= 0 || maxCount <= 0 || count > maxCount)
-			throw new Error(`Air wing ${wing.id} equipment is invalid`);
-		const quality = safeNumber(
-			wing.quality ?? 50,
-			`Air wing ${wing.id} quality`,
-		);
-		if (quality < 0 || quality > 100)
-			throw new Error(`Air wing ${wing.id} quality is outside [0, 100]`);
-		const location = point(wing, `Air wing ${wing.id}`);
-		const rawRearmTicks = safeInteger(
-			wing.rearmTicks,
-			`Air wing ${wing.id} rearmTicks`,
-			0,
-		);
-		const rearmTicks = state === "REARMING" ? rawRearmTicks : 0;
-		if (state === "REARMING" && rearmTicks === 0)
-			throw new Error(`Air wing ${wing.id} is rearming without a timer`);
-		const enduranceTicks = safeInteger(
-			wing.enduranceTicks,
-			`Air wing ${wing.id} enduranceTicks`,
-			0,
-		);
-		if (enduranceTicks >= 600)
-			throw new Error(`Air wing ${wing.id} enduranceTicks is invalid`);
-		let nextMissionTick = null;
-		if (wing.nextMissionTick != null) {
-			nextMissionTick = safeInteger(
-				wing.nextMissionTick,
-				`Air wing ${wing.id} nextMissionTick`,
-			);
-			if (nextMissionTick % 6 !== 0)
-				throw new Error(`Air wing ${wing.id} nextMissionTick is not aligned`);
-		}
-		const sovereignCountryId = safeInteger(
-			wing.sovereignId,
-			`Air wing ${wing.id} sovereignId`,
-		);
-		if (sovereignCountryId <= 0 || sovereignCountryId > 65535)
-			throw new Error(`Air wing ${wing.id} sovereign country is invalid`);
-		return {
-			id,
-			side: nativeSide(wing.sideIndex, `Air wing ${wing.id}`),
-			sovereignCountryId,
-			airfieldId: basedFieldId,
-			returnAirfieldId,
-			role,
-			quality,
-			maxCount,
-			count,
-			lat: location.lat,
-			lng: location.lng,
-			state,
-			targetKind,
-			targetId,
-			rearmTicks,
-			cooldownTicks: safeInteger(
-				wing.cooldownTicks,
-				`Air wing ${wing.id} cooldownTicks`,
-				0,
-			),
-			enduranceTicks,
-			nextMissionTick,
-			forceMission: !!wing.forceMission,
-		};
-	});
-
-	return {
-		...checkpoint,
-		schema: NATIVE_RUNTIME_CHECKPOINT_V6_SCHEMA,
-		operationalExecution: {
-			schema: NATIVE_OPERATIONAL_EXECUTION_SCHEMA,
-			navalOperations,
-			defenderReactions,
-			nextReactionSequence:
-				defenderReactions.reduce(
-					(maximum, reaction) => Math.max(maximum, reaction.sequence),
-					0,
-				) + 1,
-		},
-		airPower: {
-			schema: NATIVE_AIR_POWER_SCHEMA,
-			countryCoverage,
-			airfields: serializedAirfields,
-			wings: serializedWings,
-		},
-	};
-}
-
-function createNativeRuntimeCheckpoint(options = {}) {
-	const version = options.version ?? 1;
-	if (version === 1) return cloneInitialNativeRuntimeCheckpoint(options);
-	if (version === 2) return buildMidWarNativeRuntimeCheckpoint(options);
-	if (version === 3) return buildMidWarNativeRuntimeCheckpointV3(options);
-	if (version === 4) return buildMidWarNativeRuntimeCheckpointV4(options);
-	if (version === 5) return buildMidWarNativeRuntimeCheckpointV5(options);
-	if (version === 6) return buildMidWarNativeRuntimeCheckpointV6(options);
-	throw new RangeError(
-		"Native runtime checkpoint version must be 1, 2, 3, 4, 5, or 6",
-	);
-}
-
-window.nativeRuntimeCheckpoint = async (options = {}) =>
-	createNativeRuntimeCheckpoint(options);
-
-window.downloadNativeRuntimeCheckpoint = async (options = {}) => {
-	const checkpoint = createNativeRuntimeCheckpoint(options);
-	const blob = new Blob([`${JSON.stringify(checkpoint, null, 2)}\n`], {
-		type: "application/json",
-	});
-	const url = URL.createObjectURL(blob);
-	const link = document.createElement("a");
-	const scenarioSlug =
-		checkpoint.scenario.name
-			.toLowerCase()
-			.replace(/[^a-z0-9]+/g, "-")
-			.replace(/^-|-$/g, "") || "scenario";
-	link.href = url;
-	link.download = `${scenarioSlug}.native-runtime-checkpoint.json`;
-	link.click();
-	setTimeout(() => URL.revokeObjectURL(url), 0);
-	return checkpoint;
-};
 
 export function setGameTimeFromInputs() {
 	if (!timeSystemCheckbox?.checked) {
@@ -13209,7 +7859,6 @@ export async function startOperation(operationId) {
 		timeYearInput.value = String(definition.startDate.year);
 		timeMonthInput.value = String(definition.startDate.month);
 		timeDayInput.value = String(definition.startDate.day);
-		setWarEconomyEnabled(false);
 		noPeaceCheckbox.checked = true;
 		disableBombsCheckbox.checked = true;
 		disablePuppetsCheckbox.checked = true;
@@ -13222,7 +7871,7 @@ export async function startOperation(operationId) {
 		setupPanel.style.display = "none";
 		casualtyPanel.style.display = "none";
 		statsPanel.style.display = "none";
-		economyPanel.style.display = "none";
+
 		godModeBtn.style.display = "none";
 		forcePeaceBtn.style.display = "none";
 		quickRestartBtn.style.display = "none";
@@ -13292,522 +7941,12 @@ export function deepClone(obj) {
 	}
 }
 
-function getExperimentBuildId() {
-	return document.title?.replace(/^MW-/i, "") || "development";
-}
-
-function getExperimentDateValue() {
-	return gameTimeDate
-		? {
-				year: gameTimeDate.year,
-				month: gameTimeDate.month,
-				day: gameTimeDate.day,
-			}
-		: null;
-}
-
-function getExperimentDateLabel() {
-	const value = getExperimentDateValue();
-	return value
-		? `${String(value.year).padStart(4, "0")}-${String(value.month).padStart(2, "0")}-${String(value.day).padStart(2, "0")}`
-		: null;
-}
-
-function getExperimentScenarioHash() {
-	const world = initialWorldControlMapSnapshot || worldControlMap;
-	const deJure = initialDeJureMapSnapshot || deJureMap;
-	const scenarioCities = initialCitiesSnapshot || cities || [];
-	const scenarioCountries =
-		initialCountryMetadataSnapshot || countryMetadata || [];
-	return hashScenarioContent({
-		gridResolution: CONFIG.GRID_RES,
-		world: world ? hashScenarioContent(world) : "missing",
-		deJure: deJure ? hashScenarioContent(deJure) : "missing",
-		cities: scenarioCities.map((city) => ({
-			id: city?.id ?? null,
-			name: city?.name ?? null,
-			lat: city?.lat ?? null,
-			lng: city?.lng ?? null,
-			pop: city?.pop ?? 0,
-			isCapital: !!city?.isCapital,
-			ownerId: city?.ownerId ?? null,
-		})),
-		countries: scenarioCountries.filter(Boolean).map((country) => ({
-			id: country.id,
-			name: country.name,
-			pop: country.pop ?? 0,
-			overlordId: country.overlordId ?? null,
-			releasableBy: country.releasableBy ?? null,
-		})),
-	});
-}
-
 function getSideDisplayName(sideIndex, sideCountries = sides[sideIndex] || []) {
 	const first = sideCountries[0];
 	if (!first) return `Side ${String.fromCharCode(65 + sideIndex)}`;
 	return sideCountries.length > 1
 		? `${first.name} Allies`
 		: first.name || `Side ${String.fromCharCode(65 + sideIndex)}`;
-}
-
-function readExperimentSeedFromSetup() {
-	const input = document.getElementById("experiment-seed-input");
-	const raw =
-		input?.value?.trim() ?? _experimentUi?.getSetupValues().seed ?? "";
-	const seed = raw === "" ? createRandomSeed() : normalizeSeed(raw);
-	setExperimentSeed(seed);
-	_experimentUi?.setSetupSeed(
-		seed,
-		`Seed ${seed} is locked for comparable starting conditions.`,
-		"ready",
-	);
-	return seed;
-}
-
-function captureExperimentOptions() {
-	const manpower = [];
-	for (let sideIndex = 0; sideIndex < sides.length; sideIndex++) {
-		const value = Number(
-			document.getElementById(`manpower-side-${sideIndex}`)?.value,
-		);
-		manpower.push(Number.isFinite(value) && value > 0 ? value : null);
-	}
-	return {
-		airPower: false,
-		armor: false,
-		cinematic: !!document.getElementById("cinematic-mode-checkbox")?.checked,
-		disableMountains: !!setupDisableMountainsCheckbox?.checked,
-		disablePuppets: !!disablePuppetsCheckbox?.checked,
-		ffa: ffaMode,
-		forceMode: manpower.some((value) => value > 0) ? "CUSTOM" : "AUTO",
-		gameTime: {
-			enabled: !!timeSystemCheckbox?.checked,
-			year: Number(timeYearInput?.value) || null,
-			month: Number(timeMonthInput?.value) || null,
-			day: Number(timeDayInput?.value) || null,
-		},
-		invisibleBuffs: invisibleBuffsEnabled,
-		manpower,
-		mapResolution: document.getElementById("map-res-select")?.value || null,
-		gridResolution: document.getElementById("grid-res-select")?.value || null,
-		missiles: !disableBombsCheckbox?.checked,
-		noPeace: !!noPeaceCheckbox?.checked,
-		posture:
-			document.getElementById("setup-posture-select")?.value || "ADAPTIVE",
-		randomWar: randomWarMode,
-		recruitModel:
-			document.getElementById("recruit-model-select")?.value || null,
-		simulationSpeed: simSpeed,
-		unitLimit: document.getElementById("unit-limit-select")?.value || null,
-		warEconomy: false,
-	};
-}
-
-function serializeExperimentSides() {
-	ensureSideIdentities();
-	return sides.map((side, sideIndex) => ({
-		uid: sideUids[sideIndex],
-		label: getSideDisplayName(sideIndex, side),
-		color: sideColors[sideIndex],
-		countries: side.filter(Boolean).map((country) => ({
-			countryId: country.id,
-			name: country.name,
-			role: country.role || "OFFENSE",
-			strategy: country.strategy || "BALANCED",
-			buffState: country.buffState || "none",
-			hiddenBuffState: country.hiddenBuffState || "none",
-		})),
-	}));
-}
-
-function createCurrentExperimentSpec(seed) {
-	const scenarioHash = getExperimentScenarioHash();
-	const serializedSides = serializeExperimentSides();
-	const hostilities = Array.from(hostileSidePairs, (pair) => {
-		const [attackerSideUid, defenderSideUid] = pair.split("|");
-		return { attackerSideUid, defenderSideUid };
-	});
-	return {
-		schemaVersion: 1,
-		buildVersion: getExperimentBuildId(),
-		scenarioId:
-			currentScenarioContext?.id || activeScenarioId || mapName || "local-map",
-		scenarioName: currentScenarioContext?.name || mapName || "Local Scenario",
-		scenarioHash,
-		scenario: {
-			id:
-				currentScenarioContext?.id ||
-				activeScenarioId ||
-				mapName ||
-				"local-map",
-			name: currentScenarioContext?.name || mapName || "Local Scenario",
-			hash: scenarioHash,
-		},
-		sides: serializedSides,
-		hostilities,
-		options: captureExperimentOptions(),
-		seed: normalizeSeed(seed),
-		parentReportId: _experimentParentReport?.id || null,
-		runMode: _experimentParentReport
-			? normalizeSeed(seed) === normalizeSeed(_experimentParentReport.seed)
-				? "REPEAT_SEED"
-				: "REMATCH"
-			: "FRESH",
-		createdAt: new Date().toISOString(),
-	};
-}
-
-function experimentSideDefinitions(spec = activeExperimentSpec) {
-	const initialDefinitions = Array.isArray(spec?.sides) ? spec.sides : [];
-	const definitions = initialDefinitions.map((side, sideIndex) => {
-		const runtimeSideIndex = sideUids.indexOf(side.uid);
-		return {
-			...side,
-			initialSideIndex: sideIndex,
-			runtimeSideIndex: runtimeSideIndex >= 0 ? runtimeSideIndex : null,
-		};
-	});
-	const knownUids = new Set(
-		definitions.map((side) => side.uid).filter(Boolean),
-	);
-	for (
-		let runtimeSideIndex = 0;
-		runtimeSideIndex < sides.length;
-		runtimeSideIndex++
-	) {
-		const runtimeSide = sides[runtimeSideIndex] || [];
-		const uid =
-			sideUids[runtimeSideIndex] ||
-			initialDefinitions[runtimeSideIndex]?.uid ||
-			`side-${runtimeSideIndex + 1}`;
-		if (knownUids.has(uid)) continue;
-		definitions.push({
-			uid,
-			label: getSideDisplayName(runtimeSideIndex, runtimeSide),
-			color: sideColors[runtimeSideIndex],
-			countries: runtimeSide.filter(Boolean).map((country) => ({
-				countryId: country.id,
-				name: country.name,
-				role: country.role || "OFFENSE",
-				strategy: country.strategy || "BALANCED",
-			})),
-			initialSideIndex: null,
-			runtimeSideIndex,
-		});
-		knownUids.add(uid);
-	}
-	const observedSides = new Map();
-	for (const event of activeExperimentRecorder?.events || []) {
-		for (const [uid, countryId] of [
-			[event.actorSideUid, event.actorCountryId],
-			[event.targetSideUid, event.targetCountryId],
-		]) {
-			if (!uid || knownUids.has(uid)) continue;
-			let observed = observedSides.get(uid);
-			if (!observed) {
-				observed = { uid, countryIds: new Set() };
-				observedSides.set(uid, observed);
-			}
-			if (Number.isInteger(countryId) && countryId > 0) {
-				observed.countryIds.add(countryId);
-			}
-		}
-	}
-	for (const observed of observedSides.values()) {
-		const observedCountries = Array.from(observed.countryIds, (countryId) => {
-			const meta = countryMetadata[countryId - 1];
-			return {
-				countryId,
-				name: meta?.name || `Country ${countryId}`,
-				role: "OFFENSE",
-				strategy: "BALANCED",
-			};
-		});
-		definitions.push({
-			uid: observed.uid,
-			label: observedCountries[0]?.name || observed.uid,
-			color: null,
-			countries: observedCountries,
-			initialSideIndex: null,
-			runtimeSideIndex: null,
-		});
-		knownUids.add(observed.uid);
-	}
-	return definitions.length ? definitions : serializeExperimentSides();
-}
-
-function countryIdsForExperimentSide(side) {
-	return (side?.countries || [])
-		.map((country) => Number(country?.countryId ?? country?.id))
-		.filter((countryId) => Number.isInteger(countryId) && countryId > 0);
-}
-
-function captureExperimentMetrics({ scanWorld = true } = {}) {
-	// Combat mutates unit and wing equipment between economy cycles. Refresh the
-	// combined active-plus-reserve ledger at the exact checkpoint/report boundary.
-	summarizeLiveEquipment();
-	const definitions = experimentSideDefinitions();
-	const countryToMetric = new Map();
-	const runtimeSideToMetric = new Map();
-	for (const [metricIndex, side] of definitions.entries()) {
-		for (const countryId of countryIdsForExperimentSide(side)) {
-			countryToMetric.set(countryId, metricIndex);
-		}
-	}
-	const sideUidToMetric = new Map(
-		definitions.map((side, metricIndex) => [side.uid, metricIndex]),
-	);
-	for (const event of activeExperimentRecorder?.events || []) {
-		for (const [uid, countryId] of [
-			[event.actorSideUid, event.actorCountryId],
-			[event.targetSideUid, event.targetCountryId],
-		]) {
-			const metricIndex = sideUidToMetric.get(uid);
-			if (
-				metricIndex !== undefined &&
-				Number.isInteger(countryId) &&
-				countryId > 0
-			) {
-				countryToMetric.set(countryId, metricIndex);
-			}
-		}
-	}
-	const metrics = definitions.map((side, metricIndex) => {
-		const runtimeSideIndex = Number.isInteger(side.runtimeSideIndex)
-			? side.runtimeSideIndex
-			: sideUids.indexOf(side.uid);
-		const runtimeSide =
-			runtimeSideIndex >= 0 ? sides[runtimeSideIndex] || [] : [];
-		const retiredPersonnel = _retiredSidePersonnelByUid.get(side.uid) || null;
-		const usesActiveLedger = runtimeSideIndex >= 0 && runtimeSide.length > 0;
-		if (runtimeSideIndex >= 0)
-			runtimeSideToMetric.set(runtimeSideIndex, metricIndex);
-		for (const country of runtimeSide) {
-			if (country?.id > 0) countryToMetric.set(country.id, metricIndex);
-		}
-		const activeCountries = runtimeSide.length;
-		const initialSideIndex = Number.isInteger(side.initialSideIndex)
-			? side.initialSideIndex
-			: runtimeSideIndex;
-		return {
-			sideUid:
-				side.uid ||
-				sideUids[runtimeSideIndex] ||
-				`side-${runtimeSideIndex + 1}`,
-			sideIndex: runtimeSideIndex >= 0 ? runtimeSideIndex : initialSideIndex,
-			name:
-				activeCountries > 0
-					? getSideDisplayName(runtimeSideIndex, runtimeSide)
-					: side.label || `Side ${String.fromCharCode(65 + metricIndex)}`,
-			territory: 0,
-			territoryPercent: 0,
-			cities: 0,
-			capitals: 0,
-			personnel: activeCountries
-				? Math.max(0, sideSoldiers[runtimeSideIndex] || 0)
-				: Math.max(0, retiredPersonnel?.personnel || 0),
-			initialPersonnel: usesActiveLedger
-				? Math.max(0, initialSideSoldiers[runtimeSideIndex] || 0)
-				: Math.max(0, retiredPersonnel?.initialPersonnel || 0),
-			casualties: usesActiveLedger
-				? Math.max(0, sideCasualties[runtimeSideIndex] || 0)
-				: Math.max(0, retiredPersonnel?.casualties || 0),
-			formations: 0,
-			economy: 0,
-			income: 0,
-			arrears: 0,
-			equipment: 0,
-			armor: 0,
-			fighters: 0,
-			strikeAircraft: 0,
-			phase:
-				runtimeSideIndex >= 0
-					? _sideWarPhase[runtimeSideIndex] || "STALEMATE"
-					: "ELIMINATED",
-			warPhase:
-				runtimeSideIndex >= 0
-					? _sideWarPhase[runtimeSideIndex] || "STALEMATE"
-					: "ELIMINATED",
-			activeCountries,
-		};
-	});
-
-	for (const unit of units) {
-		const metricIndex = Number.isInteger(unit.sideIndex)
-			? runtimeSideToMetric.get(unit.sideIndex)
-			: countryToMetric.get(unit.sovereignId);
-		if (metrics[metricIndex]) metrics[metricIndex].formations++;
-	}
-	for (const [countryId, economy] of countryEconomy) {
-		const metric = metrics[countryToMetric.get(countryId)];
-		if (!metric) continue;
-		metric.economy += Number(economy.treasury) || 0;
-		metric.income +=
-			(Number(economy.income) || 0) + (Number(economy.occupationYield) || 0);
-		metric.arrears += Number(economy.arrearsCycles) || 0;
-	}
-	for (const [countryId, equipment] of countryEquipment) {
-		const metric = metrics[countryToMetric.get(countryId)];
-		if (!metric) continue;
-		// summarizeLiveEquipment() stores active markers plus reserves in current*.
-		// Adding reserve* again would double-count every undeployed vehicle/aircraft.
-		metric.armor += Number(equipment.currentArmor) || 0;
-		metric.fighters += Number(equipment.currentFighters) || 0;
-		metric.strikeAircraft += Number(equipment.currentStrike) || 0;
-		metric.equipment = metric.armor + metric.fighters + metric.strikeAircraft;
-	}
-
-	if (scanWorld && worldControlMap) {
-		for (let index = 0; index < worldControlMap.length; index++) {
-			let metricIndex = countryToMetric.get(worldControlMap[index]);
-			if (
-				landMask?.[index] === 2 &&
-				dominantSideMap?.[index] >= 0 &&
-				runtimeSideToMetric.has(dominantSideMap[index])
-			) {
-				metricIndex = runtimeSideToMetric.get(dominantSideMap[index]);
-			}
-			if (metrics[metricIndex]) metrics[metricIndex].territory++;
-		}
-	} else {
-		for (const [runtimeSideIndex, metricIndex] of runtimeSideToMetric) {
-			metrics[metricIndex].territory =
-				_cachedSideTerritoryCounts[runtimeSideIndex] || 0;
-		}
-	}
-
-	for (const city of activeTheaterCities.length
-		? activeTheaterCities
-		: cities) {
-		const index = getGridIndex(city.lat, city.lng);
-		if (index < 0) continue;
-		let controllerId = worldControlMap[index];
-		if (landMask[index] === 2 && primaryOccupierMap[index] > 0) {
-			controllerId = primaryOccupierMap[index];
-		}
-		let metricIndex = countryToMetric.get(controllerId);
-		if (landMask[index] === 2 && dominantSideMap[index] >= 0) {
-			metricIndex = runtimeSideToMetric.get(dominantSideMap[index]);
-		}
-		if (!metrics[metricIndex]) continue;
-		metrics[metricIndex].cities++;
-		if (city.isCapital) metrics[metricIndex].capitals++;
-	}
-
-	const totalTerritory = metrics.reduce(
-		(total, metric) => total + metric.territory,
-		0,
-	);
-	for (const metric of metrics) {
-		metric.territoryPercent =
-			totalTerritory > 0 ? (metric.territory / totalTerritory) * 100 : 0;
-		metric.economy = Math.round(metric.economy);
-		metric.income = Math.round(metric.income);
-		metric.equipment = Math.round(metric.equipment);
-	}
-	return metrics;
-}
-
-function createExperimentSnapshot(reason, options = {}, sideMetrics = null) {
-	return {
-		reason,
-		tick: _simTickCount,
-		date: getExperimentDateValue(),
-		rngState: getGameplayRngState(),
-		sides: sideMetrics || captureExperimentMetrics(options),
-	};
-}
-
-export function recordExperimentCheckpoint(reason, details = {}) {
-	if (!activeExperimentRecorder) return null;
-	const evidence =
-		details.evidence ||
-		Object.fromEntries(
-			Object.entries(details).filter(
-				([key]) => !["sideMetrics", "metrics", "date", "tick"].includes(key),
-			),
-		);
-	const sideMetrics =
-		details.sideMetrics ||
-		details.metrics ||
-		captureExperimentMetrics({ scanWorld: false });
-	const checkpoint = {
-		...createExperimentSnapshot(reason, { scanWorld: false }, sideMetrics),
-		date: getExperimentDateLabel(),
-		sideMetrics,
-		...details,
-		evidence,
-	};
-	return appendWarCheckpoint(activeExperimentRecorder, checkpoint);
-}
-
-export function recordExperimentEvent(type, details = {}) {
-	if (!activeExperimentRecorder) return null;
-	const actorCountryId = Number(details.actorCountryId) || null;
-	const targetCountryId = Number(details.targetCountryId) || null;
-	const findSideUid = (countryId, explicitSideIndex) => {
-		if (Number.isInteger(explicitSideIndex)) {
-			return (
-				sideUids[explicitSideIndex] ||
-				activeExperimentSpec?.sides?.[explicitSideIndex]?.uid ||
-				null
-			);
-		}
-		if (!countryId) return null;
-		const runtimeSideIndex = sides.findIndex((side) =>
-			side?.some((country) => country.id === countryId),
-		);
-		if (runtimeSideIndex >= 0) return sideUids[runtimeSideIndex] || null;
-		const initialSideIndex = activeExperimentSpec?.sides?.findIndex((side) =>
-			countryIdsForExperimentSide(side).includes(countryId),
-		);
-		return initialSideIndex >= 0
-			? activeExperimentSpec.sides[initialSideIndex].uid
-			: null;
-	};
-	const event = {
-		type,
-		source: details.source || "simulation",
-		tick: _simTickCount,
-		date: getExperimentDateLabel(),
-		actorCountryId,
-		targetCountryId,
-		actorSideUid:
-			details.actorSideUid ||
-			findSideUid(actorCountryId, details.actorSideIndex),
-		targetSideUid:
-			details.targetSideUid ||
-			findSideUid(targetCountryId, details.targetSideIndex),
-		location: details.location || null,
-		evidence: details.evidence || {},
-		summary: details.message || details.summary || type,
-		intervention: type === "INTERVENTION" || !!details.intervention,
-		major: !!details.major,
-	};
-	const recorded = appendWarEvent(activeExperimentRecorder, event);
-	if (type === "INTERVENTION" || details.intervention) {
-		activeExperimentRecorder.modified = true;
-		activeExperimentRecorder.interventions ||= [];
-		if (!activeExperimentRecorder.interventions.includes(recorded)) {
-			activeExperimentRecorder.interventions.push(recorded || event);
-		}
-	}
-	if (details.major) recordExperimentCheckpoint(type, details.checkpoint || {});
-	return recorded;
-}
-
-function preserveSetupManpowerValues() {
-	return sides.map(
-		(_, sideIndex) =>
-			document.getElementById(`manpower-side-${sideIndex}`)?.value ?? "",
-	);
-}
-
-function restoreSetupManpowerValues(values = []) {
-	for (let sideIndex = 0; sideIndex < sides.length; sideIndex++) {
-		const input = document.getElementById(`manpower-side-${sideIndex}`);
-		if (input) input.value = values[sideIndex] ?? "";
-	}
 }
 
 function applyBroadSetupPosture(posture) {
@@ -13827,724 +7966,110 @@ function applyBroadSetupPosture(posture) {
 		});
 }
 
-function prepareExperimentSetupForStart() {
-	if (gameMode !== "CONQUEST") return getExperimentSeed();
-	const values = _experimentUi?.getSetupValues() || {};
-	applyBroadSetupPosture(values.posture || "ADAPTIVE");
-	_experimentUi?.hideAfterActionReport();
-	_experimentUi?.hideReportReopenButton();
-	_experimentUi?.hideWarArchive();
-	latestWarReport = null;
-	activeExperimentRecorder = null;
-	activeExperimentSpec = null;
-	return readExperimentSeedFromSetup();
-}
-
-export function getAiObserverSnapshot(
-	sideUid = aiObserverSideUid,
-	{ includeContacts = true } = {},
+export function getAiOperationsSnapshot(
+	sideUid = sideUids.find((uid) => _aiTaskForcesBySide.has(uid)),
 ) {
 	if (gameMode !== "CONQUEST" || !sideUid) return null;
-	if (gameState === "WAR_OVER" && _frozenAiObserverSnapshots.has(sideUid)) {
-		const snapshot = _frozenAiObserverSnapshots.get(sideUid);
-		return includeContacts ? snapshot : { ...snapshot, contacts: [] };
-	}
 	const sideIndex = sideUids.indexOf(sideUid);
-	const intelState = _aiIntelBySide.get(sideUid);
-	if (sideIndex < 0 || !intelState) return null;
-	const intelSnapshot = includeContacts
-		? createAiIntelObserverSnapshot(intelState, _simTickCount)
-		: null;
-	const taskSnapshot = createAiTaskForceObserverSnapshot(
-		_aiTaskForcesBySide.get(sideUid) || [],
-		includeContacts ? intelState : null,
-		_simTickCount,
-	);
-	const taskForcesById = new Map(
-		(_aiTaskForcesBySide.get(sideUid) || []).map((taskForce) => [
-			taskForce.id,
-			taskForce,
-		]),
-	);
+	if (sideIndex < 0) return null;
 	return {
 		sideUid,
 		sideIndex,
-		label: getSideDisplayName(sideIndex),
-		tick: _simTickCount,
-		taskForces: taskSnapshot.taskForces.map((snapshot) => {
-			const runtime = taskForcesById.get(snapshot.id) || snapshot;
-			return {
-				uid: snapshot.id,
-				id: snapshot.id,
-				label: runtime.target?.name || runtime.planType,
-				phase: snapshot.phase,
-				readiness: snapshot.readiness,
-				objective: runtime.target
-					? {
-							...runtime.target,
-							label: runtime.target.name || runtime.planType,
-						}
-					: null,
-				assemblyArea: runtime.assemblyArea || runtime.stagingAnchor || null,
-				frontage: runtime.frontage || [],
-				corridor: runtime.corridor || runtime.route || [],
-				withdrawalAnchor: runtime.withdrawalAnchor || null,
-				committedStrength: runtime.currentPower || 0,
-				progress: runtime.progress || 0,
-				unitRoles: runtime.unitRoles || {},
-			};
-		}),
-		contacts: (intelSnapshot?.contacts || []).map((contact) => ({
-			uid: contact.key,
-			hostileSideUid: contact.enemySideUid,
-			sectorId: contact.sectorId,
-			position: { lat: contact.lat, lng: contact.lng },
-			estimatedCombatPower:
-				contact.estimatedPower ?? contact.observedPower ?? 0,
-			confidence: contact.confidence,
-			ageTicks: contact.ageTicks,
-			stale: contact.status !== "FRESH",
-			status: contact.status,
-			source: contact.source,
+		taskForces: (_aiTaskForcesBySide.get(sideUid) || []).map((task) => ({
+			uid: task.id,
+			id: task.id,
+			label: task.target?.name || task.planType,
+			phase: task.phase,
+			readiness: task.readiness,
+			objective: task.target,
+			assemblyArea: task.assemblyArea || task.stagingAnchor,
+			frontage: task.frontage || [],
+			corridor: task.corridor || task.route || [],
+			withdrawalAnchor: task.withdrawalAnchor,
 		})),
 	};
 }
 
-export function setAiObserverSideUid(sideUid) {
-	if (!sideUid || !_aiIntelBySide.has(sideUid)) return false;
-	aiObserverSideUid = sideUid;
-	window.__mwAiOperationReveal = null;
-	updateExperimentWarDesk(true);
-	if (influenceLayer) {
-		influenceLayer._forceRender = true;
-		if (typeof influenceLayer._update === "function") influenceLayer._update();
-		else influenceLayer.render();
-	}
-	return true;
-}
-
-function freezeOperationalAiObserverSnapshots() {
-	_frozenAiObserverSnapshots = new Map();
-	for (const sideUid of _aiIntelBySide.keys()) {
-		const snapshot = getAiObserverSnapshot(sideUid);
-		if (snapshot) _frozenAiObserverSnapshots.set(sideUid, snapshot);
-	}
-	_aiPendingLandingHandoffs.clear();
+function warDeskOverviewRows() {
+	const personnel = new Map();
 	for (const unit of units) {
-		unit._taskForceOrder = null;
+		if (unit.health > 0)
+			personnel.set(
+				unit.sovereignId,
+				(personnel.get(unit.sovereignId) || 0) +
+					getLiveFormationPersonnel(unit),
+			);
 	}
-}
-
-function warDeskOverviewRows(metrics) {
-	const definitions = experimentSideDefinitions();
 	const rows = [];
-	const territoryDetail = (held, total) =>
+	const detail = (held, total) =>
 		total > 0
 			? `${((held / total) * 100).toFixed(1)}% original territory retained`
 			: "Original territory unavailable";
-	for (const metric of metrics) {
-		const definition = definitions.find((side) => side.uid === metric.sideUid);
-		const sideIndex = sideUids.indexOf(metric.sideUid);
-		const countries = new Map();
-		for (const country of definition?.countries || []) {
-			countries.set(country.countryId ?? country.id, country);
-		}
-		for (const country of sides[sideIndex] || []) {
-			countries.set(country.id, country);
-		}
-		let total = 0;
-		let held = 0;
+	for (const definition of _warOverviewSides) {
+		const sideIndex = sideUids.indexOf(definition.uid);
+		let held = 0,
+			total = 0,
+			casualties = 0;
 		const countryRows = [];
-		for (const [countryId, country] of countries) {
-			const ledger = getCountryLedger(_territoryLedgerSnapshot, countryId);
-			const countryTotal = ledger?.deJureTotal || 0;
-			const countryHeld =
+		for (const country of definition.countries) {
+			const ledger = getCountryLedger(_territoryLedgerSnapshot, country.id);
+			const original = ledger?.deJureTotal || 0;
+			const retained =
 				sideIndex >= 0 ? ledger?.deJureControlBySide?.[sideIndex] || 0 : 0;
-			total += countryTotal;
-			held += countryHeld;
+			const losses = Math.round(countryCasualties.get(country.id) || 0);
+			held += retained;
+			total += original;
+			casualties += losses;
 			countryRows.push({
 				kind: "country",
-				color:
-					country.color ||
-					countryMetadata[countryId - 1]?.color ||
-					definition?.color,
-				label: country.name || countryMetadata[countryId - 1]?.name,
-				key: "manpower",
+				color: country.color,
+				label: country.name,
 				primaryLabel: "Deployed manpower",
-				value: Math.round(getCountryLivePersonnel(countryId)),
-				secondaryKey: "casualties",
-				secondaryLabel: "Casualties",
-				secondaryValue: Math.round(countryCasualties.get(countryId) || 0),
-				detail: territoryDetail(countryHeld, countryTotal),
+				value: Math.round(personnel.get(country.id) || 0),
+				secondaryValue: losses,
+				detail: detail(retained, original),
 			});
 		}
 		rows.push({
 			kind: "side",
 			color:
-				countries.size === 1
+				definition.countries.length === 1
 					? countryRows[0].color
-					: definition?.color || sideColors[sideIndex],
-			label: metric.name,
-			key: "manpower",
+					: definition.color,
+			label: definition.name,
 			primaryLabel: "Manpower",
-			value: Math.round(metric.personnel),
-			secondaryKey: "casualties",
-			secondaryLabel: "Casualties",
-			secondaryValue: Math.round(metric.casualties),
-			detail: territoryDetail(held, total),
+			value: sideIndex >= 0 ? Math.round(sideSoldiers[sideIndex] || 0) : 0,
+			secondaryValue: casualties,
+			detail: detail(held, total),
 		});
-		if (countries.size > 1) rows.push(...countryRows);
+		if (countryRows.length > 1) rows.push(...countryRows);
 	}
 	return rows;
 }
 
-function updateExperimentWarDesk(force = false) {
-	if (!activeExperimentRecorder || gameMode !== "CONQUEST") return;
+function updateWarOverview(force = false) {
+	if (gameMode !== "CONQUEST" || !_warOverviewSides.length) return;
 	const now = performance.now();
-	if (!force && now - _experimentWarDeskLastUpdate < 500) return;
-	_experimentWarDeskLastUpdate = now;
-	if (!force && document.getElementById("war-desk-body")?.hidden) return;
-	const metrics = captureExperimentMetrics({ scanWorld: false });
-	_experimentUi?.updateWarDesk({ metrics: warDeskOverviewRows(metrics) });
-}
-
-function endingReasonForTreaty(type, winnerName = "") {
-	const reasons = {
-		ANNEXATION: winnerName
-			? `${winnerName} completed a total annexation.`
-			: "The conflict ended in total annexation.",
-		FULL_CAPITULATION: winnerName
-			? `${winnerName} was the final hostile side standing.`
-			: "All hostile opposition capitulated.",
-		PEACE_TREATY: "The remaining combatants accepted a negotiated peace.",
-		WHITE_PEACE: "The conflict ended without a surviving military resolution.",
-	};
-	return (
-		reasons[type] ||
-		`The simulation ended with ${String(type).replaceAll("_", " ").toLowerCase()}.`
-	);
+	if (
+		!force &&
+		(now - _warOverviewLastUpdate < 500 ||
+			document.getElementById("war-desk-body")?.hidden)
+	)
+		return;
+	_warOverviewLastUpdate = now;
+	renderWarOverview(warDeskOverviewRows());
 }
 
 function reopenConflictSetupAfterWar() {
 	if (gameMode !== "CONQUEST") return;
-	activeExperimentRecorder = null;
-	activeExperimentSpec = null;
-	_experimentParentReport = null;
-	document.body.classList.remove("experiment-loop-active");
-
 	const setupAlreadyOpen =
 		gameState.startsWith("SELECTING") && setupPanel.style.display !== "none";
 	if (setupAlreadyOpen) return;
-
 	resetToSelection();
-	const nextSeed = createRandomSeed();
-	setExperimentSeed(nextSeed);
-	_experimentUi?.setSetupSeed(
-		nextSeed,
-		`Fresh seed ${nextSeed} generated for the next war.`,
-		"ready",
-	);
 	if (influenceLayer) {
 		influenceLayer.invalidate(RENDER_LAYERS.ALL);
 		influenceLayer.render();
 	}
-}
-
-function finalizeActiveExperiment({
-	type,
-	winnerSideIndex,
-	winnerName,
-	endingReason,
-	preTreaty,
-	postTreaty,
-}) {
-	if (!activeExperimentRecorder) return null;
-	const finalMetrics = captureExperimentMetrics({ scanWorld: true });
-	recordExperimentEvent("FINAL_STATE_CAPTURED", {
-		source: "experiment",
-		message: "Final side metrics captured before runtime cleanup.",
-		evidence: { sideMetrics: finalMetrics },
-	});
-	recordExperimentEvent("WAR_ENDED", {
-		source: "treaty",
-		message: endingReason,
-		major: true,
-		evidence: {
-			endingType: type,
-			preTreaty,
-			postTreaty,
-			winnerSideIndex,
-		},
-	});
-	appendWarCheckpoint(activeExperimentRecorder, {
-		date: getExperimentDateLabel(),
-		reason: "FINAL",
-		sideMetrics: finalMetrics,
-		tick: _simTickCount,
-	});
-	const isCompetitiveVictory =
-		type === "FULL_CAPITULATION" || type === "ANNEXATION";
-	const winnerSideUid = isCompetitiveVictory
-		? sideUids[winnerSideIndex] ||
-			activeExperimentSpec?.sides?.[winnerSideIndex]?.uid ||
-			null
-		: null;
-	const survivingSideUids = sides
-		.map((side, sideIndex) =>
-			side?.length
-				? sideUids[sideIndex] ||
-					activeExperimentSpec?.sides?.[sideIndex]?.uid ||
-					null
-				: null,
-		)
-		.filter(Boolean);
-	const report = finalizeWarReport(activeExperimentRecorder, {
-		durationTicks: _simTickCount,
-		finalMetrics,
-		outcome: {
-			type,
-			endingReason,
-			winnerSideUid,
-			survivingSideUids,
-		},
-		parentReport: _experimentParentReport,
-	});
-	report.buildVersion =
-		activeExperimentSpec?.buildVersion || getExperimentBuildId();
-	report.completedAt = report.finishedAt;
-	report.exactEndingReason = endingReason;
-	report.scenarioName =
-		activeExperimentSpec?.scenarioName ||
-		currentScenarioContext?.name ||
-		mapName;
-	report.outcome.winnerSideName = winnerSideUid ? winnerName : null;
-	report.preTreatySnapshot = preTreaty;
-	report.postTreatySnapshot = postTreaty;
-	latestWarReport = report;
-	persistWarReport(report);
-	const autoOpenReport = autoAfterActionReportCheckbox?.checked !== false;
-	reopenConflictSetupAfterWar();
-	if (autoOpenReport) {
-		_experimentUi?.hideReportReopenButton();
-		_experimentUi?.showAfterActionReport(report);
-	} else {
-		_experimentUi?.renderAfterActionReport(report);
-		_experimentUi?.hideAfterActionReport();
-		_experimentUi?.showReportReopenButton();
-	}
-	return report;
-}
-
-function applyExperimentOptionsToSetup(spec) {
-	const options = spec?.options || {};
-	const setChecked = (id, checked) => {
-		const element = document.getElementById(id);
-		if (element && typeof checked === "boolean") element.checked = checked;
-	};
-	setChecked("war-economy-checkbox", options.warEconomy);
-	setChecked("armor-enabled-checkbox", options.armor);
-	setChecked("air-power-enabled-checkbox", options.airPower);
-	setChecked("cinematic-mode-checkbox", options.cinematic);
-	setChecked("no-peace-checkbox", options.noPeace);
-	setChecked("disable-bombs-checkbox", options.missiles === false);
-	setChecked("setup-disable-mountains-checkbox", options.disableMountains);
-	setChecked("disable-puppets-checkbox", options.disablePuppets);
-	setChecked("enable-time-checkbox", options.gameTime?.enabled);
-	if (typeof options.invisibleBuffs === "boolean") {
-		invisibleBuffsEnabled = options.invisibleBuffs;
-		if (disableInvisibleBuffsCheckbox) {
-			disableInvisibleBuffsCheckbox.checked = !invisibleBuffsEnabled;
-		}
-	}
-	if (timeYearInput) timeYearInput.value = options.gameTime?.year ?? "";
-	if (timeMonthInput) timeMonthInput.value = options.gameTime?.month ?? "";
-	if (timeDayInput) timeDayInput.value = options.gameTime?.day ?? "";
-	const forceMode = document.getElementById("force-mode-select");
-	if (forceMode) forceMode.value = options.forceMode || "AUTO";
-	const posture = document.getElementById("setup-posture-select");
-	if (posture) posture.value = options.posture || "ADAPTIVE";
-	for (const [id, value] of [
-		["map-res-select", options.mapResolution],
-		["grid-res-select", options.gridResolution],
-		["unit-limit-select", options.unitLimit],
-		["recruit-model-select", options.recruitModel],
-	]) {
-		const select = document.getElementById(id);
-		if (select && value != null) select.value = String(value);
-	}
-	ffaMode = !!options.ffa;
-	randomWarMode = !!options.randomWar;
-	updateRandomWarButton();
-	updateFfaSetupUi();
-	setWarEconomyEnabled(false);
-	setArmorEnabled(false);
-	setAirPowerEnabled(false);
-	peaceTreatiesDisabled = !!options.noPeace;
-	missilesEnabled = options.missiles !== false;
-	mountainsEnabled = !options.disableMountains;
-}
-
-function restoreExperimentSides(spec) {
-	const definitions = spec?.sides || [];
-	sides = definitions.map((side) =>
-		(side.countries || []).map((country) => {
-			const countryId = Number(country.id ?? country.countryId);
-			const meta = countryMetadata[countryId - 1];
-			return {
-				id: countryId,
-				name: meta?.name || country.name || `Country ${countryId}`,
-				color: meta?.color || country.color || "rgba(128,128,128,0.5)",
-				role: country.role || "OFFENSE",
-				strategy: country.strategy || "BALANCED",
-				buffState: country.buffState || "none",
-				hiddenBuffState: country.hiddenBuffState || "none",
-				overlordId: meta?.overlordId || null,
-				flag: meta?.tempFlag || null,
-			};
-		}),
-	);
-	while (sides.length < 2) sides.push([]);
-	_attackers = sides[0];
-	_defenders = sides[1];
-	sideUids = definitions.map((side, index) => side.uid || `side-${index + 1}`);
-	synchronizeSideUidCounter();
-	hostileSidePairs.clear();
-	for (const hostility of spec.hostilities || []) {
-		const attacker = hostility.attackerSideUid || hostility.attacker;
-		const defender = hostility.defenderSideUid || hostility.defender;
-		if (attacker && defender)
-			hostileSidePairs.add(sidePairKey(attacker, defender));
-	}
-	if (!hostileSidePairs.size) {
-		for (let left = 0; left < sides.length; left++) {
-			for (let right = left + 1; right < sides.length; right++) {
-				if (sides[left]?.length && sides[right]?.length) {
-					hostileSidePairs.add(sidePairKey(sideUids[left], sideUids[right]));
-				}
-			}
-		}
-	}
-	_experimentRestoredSideUids = [...sideUids];
-	_experimentRestoredHostilities = Array.from(hostileSidePairs);
-	rebuildHostilityMatrix();
-	activeSideIndex = 0;
-	updateSidesUI();
-	applyExperimentOptionsToSetup(spec);
-	restoreSetupManpowerValues(spec.options?.manpower || []);
-	_experimentUi?.setSetupSeed(
-		spec.seed,
-		`Seed ${spec.seed} preserved. Repeat-seed runs compare starting conditions; they are not exact replays.`,
-		"ready",
-	);
-}
-
-function pristineScenarioMatchesReport(report) {
-	const expected = report?.configuration?.scenarioHash;
-	if (!expected || expected === "unknown") return true;
-	return getExperimentScenarioHash() === expected;
-}
-
-async function restoreReportConfiguration(
-	report,
-	{ start = false, freshSeed = false } = {},
-) {
-	if (!report?.configuration) return false;
-	if (!pristineScenarioMatchesReport(report)) {
-		alert(
-			"This scenario has changed since the report was created. Load the matching scenario before rerunning it.",
-		);
-		return false;
-	}
-	quickRestartBtn?.click();
-	const spec = deepClone(report.configuration);
-	spec.parentReportId = report.id;
-	spec.seed = freshSeed ? createRandomSeed() : normalizeSeed(report.seed);
-	spec.runMode = freshSeed ? "REMATCH" : "REPEAT_SEED";
-	_experimentParentReport = report;
-	activeExperimentRecorder = null;
-	activeExperimentSpec = null;
-	latestWarReport = null;
-	_experimentUi?.hideWarArchive();
-	_experimentUi?.hideAfterActionReport();
-	_experimentUi?.hideReportReopenButton();
-	restoreExperimentSides(spec);
-	if (start) await startWar();
-	return true;
-}
-
-function populateExperimentInterventionOptions() {
-	if (!_experimentUi) return;
-	const countries = countryMetadata
-		.filter((meta) => meta?.id > 0)
-		.map((meta) => {
-			const sideIndex = sides.findIndex((side) =>
-				side.some((country) => country.id === meta.id),
-			);
-			return {
-				countryId: meta.id,
-				countryName: meta.name || `Country ${meta.id}`,
-				sideName:
-					sideIndex >= 0 ? getSideDisplayName(sideIndex) : "Not in conflict",
-			};
-		})
-		.sort((left, right) => left.countryName.localeCompare(right.countryName));
-	const sideOptions = sides.flatMap((side, sideIndex) =>
-		side?.length
-			? [
-					{
-						sideUid: sideUids[sideIndex],
-						sideName: getSideDisplayName(sideIndex, side),
-					},
-				]
-			: [],
-	);
-	_experimentUi.setInterventionOptions({ countries, sides: sideOptions });
-}
-
-function pauseForExperimentIntervention() {
-	if (gameState !== "SIMULATING") return;
-	_experimentInterventionPauseState = isPaused;
-	isPaused = true;
-	if (pauseBtn) {
-		pauseBtn.innerText = "Resume";
-		pauseBtn.style.background = "#27ae60";
-	}
-	statusText.innerText = "Experiment paused for director intervention";
-	populateExperimentInterventionOptions();
-	_experimentUi?.setInterventionStatus(
-		"Paused. Applying any action will mark this report Modified.",
-		"warning",
-	);
-}
-
-function selectedInterventionCountry(values) {
-	const countryId = Number(values?.countryId);
-	if (!Number.isInteger(countryId) || countryId <= 0) return null;
-	const sideIndex = sides.findIndex((side) =>
-		side.some((country) => country.id === countryId),
-	);
-	return {
-		countryId,
-		meta: countryMetadata[countryId - 1],
-		sideIndex,
-		country:
-			sideIndex >= 0
-				? sides[sideIndex].find((candidate) => candidate.id === countryId)
-				: null,
-	};
-}
-
-function finishExperimentIntervention(action, selected, evidence = {}) {
-	const countryName =
-		selected?.meta?.name || selected?.country?.name || "Selected country";
-	const message = `${action}: ${countryName}`;
-	recordExperimentEvent("INTERVENTION", {
-		source: "war-desk",
-		actorCountryId: selected?.countryId || null,
-		actorSideIndex: selected?.sideIndex,
-		message,
-		evidence: { action, ...evidence },
-		intervention: true,
-		major: true,
-	});
-	requestOperationalAiReassessment(
-		Number.isInteger(selected?.sideIndex) && selected.sideIndex >= 0
-			? selected.sideIndex
-			: null,
-	);
-	_experimentUi?.setInterventionStatus(message, "modified");
-	populateExperimentInterventionOptions();
-	updateEconomyPanel();
-	updateExperimentWarDesk(true);
-}
-
-function requireInterventionCountry(values) {
-	const selected = selectedInterventionCountry(values);
-	if (!selected?.meta) {
-		_experimentUi?.setInterventionStatus("Select a country first.", "danger");
-		return null;
-	}
-	return selected;
-}
-
-function handlePostureIntervention(values) {
-	const selected = requireInterventionCountry(values);
-	if (!selected?.country) {
-		_experimentUi?.setInterventionStatus(
-			"That country is not currently in the conflict.",
-			"danger",
-		);
-		return;
-	}
-	const posture = values.posture || "ADAPTIVE";
-	selected.country.strategy =
-		{
-			ADAPTIVE: "BALANCED",
-			AGGRESSIVE: "AGGRESSIVE",
-			DEFENSIVE: "DEFENSIVE",
-			RETREAT: "TURTLE",
-		}[posture] || "BALANCED";
-	const profile = aiCountryState.get(selected.countryId);
-	if (profile && posture === "RETREAT") profile.forceDefensive = true;
-	finishExperimentIntervention("POSTURE_CHANGED", selected, { posture });
-}
-
-function handleFundsIntervention(values) {
-	const selected = requireInterventionCountry(values);
-	if (!selected) return;
-	const state = countryEconomy.get(selected.countryId);
-	if (!state) {
-		_experimentUi?.setInterventionStatus(
-			"War economy is disabled or unavailable for that country.",
-			"danger",
-		);
-		return;
-	}
-	const amount = Math.max(
-		1,
-		Number(values.amount) || state.baseIncome * 3 || 1,
-	);
-	state.treasury += amount;
-	finishExperimentIntervention("FUNDS_GRANTED", selected, { amount });
-}
-
-function handleClearArrearsIntervention(values) {
-	const selected = requireInterventionCountry(values);
-	if (!selected) return;
-	const state = countryEconomy.get(selected.countryId);
-	if (!state) {
-		_experimentUi?.setInterventionStatus(
-			"No arrears state is available.",
-			"danger",
-		);
-		return;
-	}
-	const previousBand = state.commandBand;
-	state.arrearsCycles = 0;
-	state.mutinyRecoveryCycles = 0;
-	state.commandBand = COMMAND_BANDS.PAID;
-	state.payrollCoverage = 1;
-	updateUnitCommandState(selected.countryId, previousBand, state.commandBand);
-	finishExperimentIntervention("ARREARS_CLEARED", selected, { previousBand });
-}
-
-function handleManpowerIntervention(values) {
-	const selected = requireInterventionCountry(values);
-	if (!selected || selected.sideIndex < 0) {
-		_experimentUi?.setInterventionStatus(
-			"The country must be in the conflict to receive manpower.",
-			"danger",
-		);
-		return;
-	}
-	const amount = Math.max(1, Math.round(Number(values.amount) || 100000));
-	sideSoldiers[selected.sideIndex] += amount;
-	sideRecruitableManpower[selected.sideIndex] += amount;
-	finishExperimentIntervention("MANPOWER_GRANTED", selected, { amount });
-}
-
-function handleEquipmentIntervention(values, category, defaultAmount, action) {
-	const selected = requireInterventionCountry(values);
-	if (!selected) return;
-	const amount = Math.max(
-		1,
-		Math.round(Number(values.amount) || defaultAmount),
-	);
-	if (!adjustCountryEquipment(selected.countryId, category, amount)) {
-		_experimentUi?.setInterventionStatus(
-			"Equipment is disabled or unavailable for that country.",
-			"danger",
-		);
-		return;
-	}
-	finishExperimentIntervention(action, selected, { amount, category });
-}
-
-function handleJoinSideIntervention(values) {
-	const selected = requireInterventionCountry(values);
-	if (!selected) return;
-	const targetSideIndex = sideUids.indexOf(values.sideUid);
-	if (targetSideIndex < 0) {
-		_experimentUi?.setInterventionStatus(
-			"Select a destination side.",
-			"danger",
-		);
-		return;
-	}
-	const oldSideIndex = selected.sideIndex;
-	if (oldSideIndex === targetSideIndex) {
-		_experimentUi?.setInterventionStatus(
-			"That country already belongs to the selected side.",
-			"danger",
-		);
-		return;
-	}
-	recruitNeutralMidWar(selected.countryId, targetSideIndex);
-	selected.sideIndex = targetSideIndex;
-	finishExperimentIntervention("SIDE_JOINED", selected, {
-		fromSideUid: oldSideIndex >= 0 ? sideUids[oldSideIndex] : null,
-		toSideUid: sideUids[targetSideIndex],
-	});
-}
-
-function handleWithdrawIntervention(values) {
-	const selected = requireInterventionCountry(values);
-	if (!selected?.country || selected.sideIndex < 0) {
-		_experimentUi?.setInterventionStatus(
-			"That country is not currently in the conflict.",
-			"danger",
-		);
-		return;
-	}
-	const sideUid = sideUids[selected.sideIndex];
-	recordExperimentEvent("INTERVENTION", {
-		source: "war-desk",
-		actorCountryId: selected.countryId,
-		actorSideIndex: selected.sideIndex,
-		message: `WITHDREW_FROM_WAR: ${selected.meta?.name || selected.country.name}`,
-		evidence: { action: "WITHDREW_FROM_WAR", sideUid },
-		intervention: true,
-		major: true,
-	});
-	unilateralExitConflict(selected.country, selected.sideIndex);
-	_experimentUi?.setInterventionStatus(
-		"Country withdrawn; report marked Modified.",
-		"modified",
-	);
-	populateExperimentInterventionOptions();
-	updateExperimentWarDesk(true);
-}
-
-function handleRebellionIntervention(values) {
-	const selected = requireInterventionCountry(values);
-	if (!selected) return;
-	const occupation = occupationEconomies.get(selected.countryId);
-	if (!occupation) {
-		_experimentUi?.setInterventionStatus(
-			"That country has no active occupation capable of rebellion.",
-			"danger",
-		);
-		return;
-	}
-	occupation.resistance = 100;
-	occupation.cooldownUntilCycle = 0;
-	occupation.queuedAtCycle = economyPayCycle;
-	finishExperimentIntervention("REBELLION_FORCED", selected, {
-		annexerCountryId: occupation.annexerId,
-	});
-	processRebellionStates(flushTerritoryLedger());
-}
-
-function handlePeaceIntervention() {
-	if (gameState !== "SIMULATING") return;
-	recordExperimentEvent("INTERVENTION", {
-		source: "war-desk",
-		message: "PEACE_ENFORCED: Director imposed a negotiated peace.",
-		evidence: { action: "PEACE_ENFORCED" },
-		intervention: true,
-		major: true,
-	});
-	applyTreaty("PEACE_TREATY");
 }
 
 export async function startWar() {
@@ -14572,13 +8097,10 @@ export async function startWar() {
 
 export async function _startWarInner() {
 	invalidateWarLifecycleTimers();
-	_nativeRuntimeInitialCheckpoint = null;
-	_nativeRuntimeCheckpointError =
-		"War initialization has not reached the native runtime handoff boundary";
-	const experimentSeed =
-		gameMode === "CONQUEST"
-			? prepareExperimentSetupForStart()
-			: getExperimentSeed();
+	if (gameMode === "CONQUEST")
+		applyBroadSetupPosture(
+			document.getElementById("setup-posture-select")?.value || "ADAPTIVE",
+		);
 	initAudio().then(() => {
 		playWarAmbiance();
 	});
@@ -14598,33 +8120,14 @@ export async function _startWarInner() {
 
 	const _attackers = sides[0] || [];
 	const _defenders = sides[1] || [];
-	setWarEconomyEnabled(false);
-	setArmorEnabled(false);
-	setAirPowerEnabled(false);
-	countryEconomy.clear();
-	clearCombinedArmsState();
 	resetOperationalAiRuntime();
+	document.body.classList.remove("conflict-active");
+	document.getElementById("war-desk").style.display = "none";
+	_warOverviewSides = [];
+	_warOverviewLastUpdate = -Infinity;
 	resetSimulationOptimizationRuntime();
-	occupationEconomies.clear();
-	clearOccupationGarrisonAssignments();
-	_occupationGarrisonPlans.clear();
-	activeRebellions.clear();
-	economyEvents.length = 0;
-	economyPayCycle = 0;
 	capitalLostCountries = new Set();
-	if (_experimentRestoredSideUids) {
-		sideUids = [..._experimentRestoredSideUids];
-		hostileSidePairs.clear();
-		for (const pair of _experimentRestoredHostilities || []) {
-			hostileSidePairs.add(pair);
-		}
-		ensureSideIdentities();
-		rebuildHostilityMatrix();
-		_experimentRestoredSideUids = null;
-		_experimentRestoredHostilities = null;
-	} else {
-		resetSideHostilities();
-	}
+	resetSideHostilities();
 
 	// Initialize time system for this war
 	setGameTimeFromInputs();
@@ -14693,8 +8196,7 @@ export async function _startWarInner() {
 	});
 
 	// Cinematic Mode logic
-	cinematicMode =
-		document.getElementById("cinematic-mode-checkbox")?.checked || false;
+	cinematicMode = document.getElementById("cinematic-mode-checkbox")?.checked;
 	if (cinematicMode) {
 		document.getElementById("game-status").style.display = "none";
 		document.getElementById("stats-panel").style.display = "none";
@@ -14956,13 +8458,10 @@ export async function _startWarInner() {
 
 		// Base plan quality; underdogs get a small bias towards better plans.
 		// Overall values are kept modest so "cracked" generals are rare.
-		let planQuality = gameplayRandom();
+		let planQuality = Math.random();
 		if (gameMode !== "CONQUEST" && isUnderdog) {
 			// Pull slightly towards the upper half but keep a lot of randomness.
-			planQuality = Math.min(
-				1,
-				planQuality * 0.3 + 0.3 + gameplayRandom() * 0.2,
-			);
+			planQuality = Math.min(1, planQuality * 0.3 + 0.3 + Math.random() * 0.2);
 		}
 
 		const general = {
@@ -15067,9 +8566,7 @@ export async function _startWarInner() {
 			}
 		}
 	}
-
 	// Efficient spawn based on pre-collected indices
-	initializeCombinedArms(countryToSideMap, countryIndices, frontlineIndices);
 
 	sides.forEach((side, sideIdx) => {
 		// Track how many units this side already has so we can enforce CONFIG.MAX_UNITS_PER_SIDE strictly.
@@ -15121,7 +8618,7 @@ export async function _startWarInner() {
 				if (
 					fronts &&
 					fronts.length > 0 &&
-					gameplayRandom() < AI_MOBILIZATION.START_FROM_FRONT_CHANCE
+					Math.random() < AI_MOBILIZATION.START_FROM_FRONT_CHANCE
 				) {
 					// Cycle-based frontline distribution
 					const fIdx = j % fronts.length;
@@ -15131,16 +8628,12 @@ export async function _startWarInner() {
 					// Prefer spawning near friendly cities if available
 					if (friendlyCities.length > 0) {
 						const pick =
-							friendlyCities[
-								Math.floor(gameplayRandom() * friendlyCities.length)
-							];
+							friendlyCities[Math.floor(Math.random() * friendlyCities.length)];
 						const cIdx = getGridIndex(pick.lat, pick.lng);
 						fData = { idx: cIdx, vx: 0, vy: 0 };
 					} else {
 						const tidx =
-							theaterIndices[
-								Math.floor(gameplayRandom() * theaterIndices.length)
-							];
+							theaterIndices[Math.floor(Math.random() * theaterIndices.length)];
 						fData = { idx: tidx, vx: 0, vy: 0 };
 					}
 				}
@@ -15155,12 +8648,12 @@ export async function _startWarInner() {
 				let lat =
 					py * CONFIG.GRID_RES -
 					90 +
-					(gameplayRandom() - 0.5) * jitterRange +
+					(Math.random() - 0.5) * jitterRange +
 					fData.vy * pushBack;
 				let lng =
 					px * CONFIG.GRID_RES -
 					180 +
-					(gameplayRandom() - 0.5) * jitterRange +
+					(Math.random() - 0.5) * jitterRange +
 					fData.vx * pushBack;
 
 				// Validation: Ensure final coordinate is within the country's sovereign grid
@@ -15171,10 +8664,10 @@ export async function _startWarInner() {
 				}
 
 				const isMountainCell = terrainMask && terrainMask[fData.idx] > 0.35;
-				const isAlpen = isMountainCell && gameplayRandom() < 0.4;
+				const isAlpen = isMountainCell && Math.random() < 0.4;
 
 				units.push({
-					id: gameplayRandom(),
+					id: Math.random(),
 					kind: "army",
 					lat,
 					lng,
@@ -15257,7 +8750,7 @@ export async function _startWarInner() {
 
 					// Pick a random cell belonging to the weaker ally
 					const cellIdx =
-						weakCells[Math.floor(gameplayRandom() * weakCells.length)];
+						weakCells[Math.floor(Math.random() * weakCells.length)];
 					const cy = Math.floor(cellIdx / gridWidth);
 					const cx = cellIdx % gridWidth;
 					const baseLat = cy * CONFIG.GRID_RES - 90;
@@ -15266,9 +8759,9 @@ export async function _startWarInner() {
 					// Slight jitter inside the target cell, but keep the unit firmly inside ally territory
 					const jitter = CONFIG.GRID_RES * 0.4;
 					unit.lat =
-						baseLat + CONFIG.GRID_RES / 2 + (gameplayRandom() - 0.5) * jitter;
+						baseLat + CONFIG.GRID_RES / 2 + (Math.random() - 0.5) * jitter;
 					unit.lng =
-						baseLng + CONFIG.GRID_RES / 2 + (gameplayRandom() - 0.5) * jitter;
+						baseLng + CONFIG.GRID_RES / 2 + (Math.random() - 0.5) * jitter;
 
 					// Make sure longitude stays normalized
 					if (unit.lng > 180) unit.lng -= 360;
@@ -15295,7 +8788,7 @@ export async function _startWarInner() {
 			);
 			for (let i = 0; i < baseCount; i++) {
 				const randIdx =
-					validIndices[Math.floor(gameplayRandom() * validIndices.length)];
+					validIndices[Math.floor(Math.random() * validIndices.length)];
 				const y = Math.floor(randIdx / gridWidth);
 				const x = randIdx % gridWidth;
 				bases.push({
@@ -15308,9 +8801,7 @@ export async function _startWarInner() {
 	});
 
 	// Automated performance cases describe an exact personnel budget, not a
-	// request to create that many independently simulated map markers. Apply the
-	// budget before economy, AI, and report baselines initialize so every system
-	// observes the same starting state.
+	// request to create that many independently simulated map markers.
 	applyPendingBenchmarkForceOverride();
 
 	loadingOverlay.style.display = "none";
@@ -15336,39 +8827,11 @@ export async function _startWarInner() {
 	for (let i = 0; i < units.length; i++) {
 		const sIdx = units[i].sideIndex;
 		if (sIdx >= 0 && sIdx < MAX_SIDES) {
-			if (units[i].kind === "armor") {
-				sideDeployedPersonnel[sIdx] += computeEquipmentPersonnel({
-					armoredVehicles: units[i].equipment || 0,
-				});
-			} else {
-				sideArmyFormationCounts[sIdx]++;
-				sideDeployedPersonnel[sIdx] += getLiveFormationPersonnel(units[i]);
-			}
+			sideArmyFormationCounts[sIdx]++;
+			sideDeployedPersonnel[sIdx] += getLiveFormationPersonnel(units[i]);
 		}
 	}
-	for (const wing of airWings) {
-		const sIdx = wing.sideIndex;
-		if (
-			sIdx < 0 ||
-			sIdx >= MAX_SIDES ||
-			wing.equipment <= 0 ||
-			wing.state === AIR_WING_STATES.EVACUATED
-		) {
-			continue;
-		}
-		sideDeployedPersonnel[sIdx] += computeEquipmentPersonnel({
-			fighters: wing.role === "FIGHTER" ? wing.equipment : 0,
-			strikeAircraft: wing.role === "STRIKE" ? wing.equipment : 0,
-		});
-	}
-	const activeWingSideIndices = new Set(
-		airWings
-			.filter(
-				(wing) =>
-					wing.equipment > 0 && wing.state !== AIR_WING_STATES.EVACUATED,
-			)
-			.map((wing) => wing.sideIndex),
-	);
+
 	// Count territory cells and cities per side
 	for (const [countryId, cellArr] of countryIndices) {
 		const sIdx = countryToSideMap.get(countryId);
@@ -15403,8 +8866,7 @@ export async function _startWarInner() {
 				Math.round(sideCellCounts[sIdx] * 200) +
 				Math.round(sideCityCounts[sIdx] * 10000);
 		}
-		const hasActiveForce =
-			sideArmyFormationCounts[sIdx] > 0 || activeWingSideIndices.has(sIdx);
+		const hasActiveForce = sideArmyFormationCounts[sIdx] > 0;
 		const autoPool = hasActiveForce
 			? Math.max(initialArmyPool, populationPool)
 			: initialArmyPool;
@@ -15474,60 +8936,23 @@ export async function _startWarInner() {
 		});
 	}
 
-	initializeWarEconomy();
-
 	if (gameMode === "CONQUEST") {
 		initializeOperationalAiRuntime();
-		activeExperimentSpec = createCurrentExperimentSpec(experimentSeed);
-		const baseline = captureExperimentMetrics({ scanWorld: true });
-		activeExperimentRecorder = createExperimentRecorder(activeExperimentSpec, {
-			initialMetrics: baseline,
-		});
-		activeExperimentSpec = activeExperimentRecorder.spec;
-		appendWarCheckpoint(activeExperimentRecorder, {
-			baseline: true,
-			date: getExperimentDateLabel(),
-			reason: "BASELINE",
-			rngState: getGameplayRngState(),
-			sideMetrics: baseline,
-			tick: 0,
-		});
-		recordExperimentEvent("CONFIGURATION_LOCKED", {
-			source: "experiment",
-			message: `${activeExperimentSpec.sides.length} sides locked with seed ${experimentSeed}.`,
-			evidence: {
-				sideUids: activeExperimentSpec.sides.map((side) => side.uid),
-				hostilities: activeExperimentSpec.hostilities,
-				options: activeExperimentSpec.options,
-			},
-		});
-		recordExperimentEvent("BASELINE_RECORDED", {
-			source: "experiment",
-			message:
-				"Baseline recorded after economy, equipment, allies, and deployments initialized.",
-			evidence: { sideMetrics: baseline },
-		});
-		recordExperimentEvent("WAR_STARTED", {
-			source: "experiment",
-			message: `Experiment started with seed ${experimentSeed}.`,
-			evidence: {
-				buildVersion: activeExperimentSpec.buildVersion,
-				scenarioHash: activeExperimentSpec.scenarioHash,
-				seed: experimentSeed,
-			},
-		});
-		_experimentPreviousPhases = [..._sideWarPhase];
-		_experimentPreviousCapitalLosses = new Set(capitalLostCountries);
-		_experimentPreviousCityControllers.clear();
-		document.body.classList.add("experiment-loop-active");
-		_experimentUi?.showWarDesk();
-		populateExperimentInterventionOptions();
-		updateExperimentWarDesk(true);
+		_warOverviewSides = sides.map((countries, index) => ({
+			uid: sideUids[index],
+			name: getSideDisplayName(index),
+			color: sideColors[index],
+			countries: countries.map((country) => ({
+				id: country.id,
+				name: country.name,
+				color: country.color,
+			})),
+		}));
+		document.getElementById("war-desk").style.display = "block";
+		document.body.classList.add("conflict-active");
+		updateWarOverview(true);
 	}
 
-	// Capture the only state-complete v1 handoff: scenario setup, unit deployment,
-	// economy initialization, and AI setup are finished, but territory has not ticked.
-	captureInitialNativeRuntimeCheckpoint();
 	requestAnimationFrame(updateLoop);
 }
 
@@ -15565,13 +8990,6 @@ export function triggerRandomWar() {
 	// Never start a random war while a major conflict is already simulating,
 	// to avoid corrupting existing sides and soft‑locking the game.
 	if (!["SELECTING_P1", "SELECTING_P2"].includes(gameState)) return;
-	const freshSeed = createRandomSeed();
-	setExperimentSeed(freshSeed);
-	_experimentUi?.setSetupSeed(
-		freshSeed,
-		`Fresh Random War seed ${freshSeed} generated.`,
-		"ready",
-	);
 
 	if (!adjacencyCache) adjacencyCache = computeAdjacency();
 
@@ -15596,7 +9014,7 @@ export function triggerRandomWar() {
 		idB = -1;
 	const shuffledEligible = eligibleCountries
 		.slice()
-		.sort(() => gameplayRandom() - 0.5);
+		.sort(() => Math.random() - 0.5);
 
 	for (const candidateA of shuffledEligible) {
 		const neighborsSet = adjacencyCache.get(candidateA);
@@ -15612,7 +9030,7 @@ export function triggerRandomWar() {
 		if (neighborIds.length === 0) continue;
 
 		idA = candidateA;
-		idB = neighborIds[Math.floor(gameplayRandom() * neighborIds.length)];
+		idB = neighborIds[Math.floor(Math.random() * neighborIds.length)];
 		break;
 	}
 
@@ -15645,7 +9063,7 @@ export function triggerRandomWar() {
 	const combatantIds = new Set([idA, idB]);
 	let addProb = 0.5;
 	while (sides.length < MAX_SIDES && addProb > 0.01) {
-		if (gameplayRandom() >= addProb) break;
+		if (Math.random() >= addProb) break;
 		addProb /= 2;
 		const candidates = [];
 		for (const cid of combatantIds) {
@@ -15658,7 +9076,7 @@ export function triggerRandomWar() {
 			}
 		}
 		if (candidates.length === 0) break;
-		const pick = candidates[Math.floor(gameplayRandom() * candidates.length)];
+		const pick = candidates[Math.floor(Math.random() * candidates.length)];
 		const meta = countryMetadata[pick - 1];
 		if (!meta) break;
 		combatantIds.add(pick);
@@ -15731,13 +9149,11 @@ function prepareIsolatedBenchmarkRun() {
 	bases = [];
 	activeBattles = [];
 	_battleHash.clear();
-	activeRebellions.clear();
-	occupationEconomies.clear();
-	clearOccupationGarrisonAssignments();
-	_occupationGarrisonPlans.clear();
-	countryEconomy.clear();
-	clearCombinedArmsState();
 	resetOperationalAiRuntime();
+	document.body.classList.remove("conflict-active");
+	document.getElementById("war-desk").style.display = "none";
+	_warOverviewSides = [];
+	_warOverviewLastUpdate = -Infinity;
 	latestCountryStats.clear();
 	sideSoldiers.fill(0);
 	initialSideSoldiers.fill(0);
@@ -15829,7 +9245,7 @@ export async function startBenchmark(options = {}) {
 	const warmupMs = Number.isFinite(options.warmupMs)
 		? Math.max(0, Math.floor(options.warmupMs))
 		: 3000;
-	const benchmarkSeed = normalizeSeed(options.seed ?? 0x4d575031);
+
 	const benchmarkSpeedIndex = Number.isFinite(options.speedIndex)
 		? Math.max(
 				0,
@@ -15917,9 +9333,6 @@ export async function startBenchmark(options = {}) {
 
 	sides = [[russia], [china]];
 	activeSideIndex = 0;
-	const seedInput = document.getElementById("experiment-seed-input");
-	if (seedInput) seedInput.value = String(benchmarkSeed);
-	_experimentUi?.setSetupSeed(benchmarkSeed);
 	if (noPeaceCheckbox) noPeaceCheckbox.checked = true;
 	// Scenario loading reapplies saved settings, so the programmatic benchmark
 	// cap must be restored immediately before war creation.
@@ -15981,7 +9394,6 @@ export async function startBenchmark(options = {}) {
 	}
 	_benchmarkMetadata = {
 		caseId: String(options.caseId || "benchmark"),
-		seed: benchmarkSeed,
 		speedIndex: benchmarkSpeedIndex,
 		viewMode: benchmarkViewMode,
 		traceMarks: options.traceMarks === true,
@@ -16037,12 +9449,6 @@ export function activateCountryMidWar(country, sideIdx) {
 			u._cachedScanKy = -999;
 		}
 	});
-	for (const wing of airWings) {
-		if (wing.sovereignId === countryId) wing.sideIndex = sideIdx;
-	}
-	for (const field of airfields) {
-		if (field.controllerId === countryId) field.sideIndex = sideIdx;
-	}
 
 	let cellCount = 0;
 	const theaterIndices = [];
@@ -16143,13 +9549,6 @@ export function activateCountryMidWar(country, sideIdx) {
 	// Diminishing Density: Large countries have lower unit density to prevent overcrowding
 	const sizeFactor = Math.max(1, theaterIndices.length / 1500);
 	const densityScale = 1.0 / sizeFactor ** 0.45;
-	initializeMidWarCombinedArms(
-		country,
-		sideIdx,
-		theaterIndices,
-		frontlines,
-		newCities,
-	);
 
 	let count = Math.floor(
 		theaterIndices.length * CONFIG.UNIT_DENSITY_FACTOR * densityScale,
@@ -16172,12 +9571,12 @@ export function activateCountryMidWar(country, sideIdx) {
 	for (let j = 0; j < count; j++) {
 		let fData;
 		let fromFront = false;
-		if (frontlines.length > 0 && gameplayRandom() < 0.95) {
-			fData = frontlines[Math.floor(gameplayRandom() * frontlines.length)];
+		if (frontlines.length > 0 && Math.random() < 0.95) {
+			fData = frontlines[Math.floor(Math.random() * frontlines.length)];
 			fromFront = true;
 		} else {
 			const idx =
-				theaterIndices[Math.floor(gameplayRandom() * theaterIndices.length)];
+				theaterIndices[Math.floor(Math.random() * theaterIndices.length)];
 			fData = { idx, vx: 0, vy: 0 };
 		}
 
@@ -16189,21 +9588,21 @@ export function activateCountryMidWar(country, sideIdx) {
 
 		const spawnIdx = fData.idx;
 		const isMountainCell = terrainMask && terrainMask[spawnIdx] > 0.35;
-		const isAlpen = isMountainCell && gameplayRandom() < 0.4;
+		const isAlpen = isMountainCell && Math.random() < 0.4;
 
-		const unitId = gameplayRandom();
+		const unitId = Math.random();
 		const activatedUnit = {
 			id: unitId,
 			kind: "army",
 			lat:
 				y * CONFIG.GRID_RES -
 				90 +
-				(gameplayRandom() - 0.5) * CONFIG.GRID_RES * 1.2 +
+				(Math.random() - 0.5) * CONFIG.GRID_RES * 1.2 +
 				fData.vy * pushBack,
 			lng:
 				x * CONFIG.GRID_RES -
 				180 +
-				(gameplayRandom() - 0.5) * CONFIG.GRID_RES * 1.2 +
+				(Math.random() - 0.5) * CONFIG.GRID_RES * 1.2 +
 				fData.vx * pushBack,
 			sideIndex: sideIdx,
 			sovereignId: countryId,
@@ -16212,9 +9611,6 @@ export function activateCountryMidWar(country, sideIdx) {
 			health: CONFIG.UNIT_HEALTH * (isAlpen ? CONFIG.ALPEN_HEALTH_MULT : 1),
 			lastAttack: 0,
 			deployTicks: 30,
-			_discipline: getUnitDiscipline({ id: unitId, sovereignId: countryId }),
-			_commandBand: COMMAND_BANDS.PAID,
-			_refusesOffense: false,
 		};
 		setUnitFormationPersonnel(
 			activatedUnit,
@@ -16235,53 +9631,13 @@ export function activateCountryMidWar(country, sideIdx) {
 		sideSoldiers[sideIdx] += unfundedPersonnel;
 		initialSideSoldiers[sideIdx] += unfundedPersonnel;
 	}
-	if (warEconomyEnabled && !countryEconomy.has(countryId)) {
-		const territoryUnits = estimateTerritoryArmyUnits(cellCount);
-		const actualFormations = units.filter(
-			(unit) => unit.sovereignId === countryId,
-		);
-		const state = createEconomyState({
-			countryId,
-			gdp: meta?.gdp || 0,
-			pop: meta?.pop || 0,
-			territoryUnits,
-			initialCoreCells: cellCount,
-			initialCityPop: newCities.reduce(
-				(sum, city) => sum + Math.max(0, city.pop || 0),
-				0,
-			),
-		});
-		const actualArmyEquivalents = actualFormations.reduce(
-			(total, unit) =>
-				total + (unit.kind === "armor" ? 0 : getLiveFormationStrength(unit)),
-			0,
-		);
-		state.expectedArmyUnits = Math.max(territoryUnits, actualArmyEquivalents);
-		const mandatoryPayroll = actualFormations.reduce(
-			(total, unit) =>
-				total +
-				(unit.kind === "armor"
-					? computeArmorPayroll(unit.equipment || 0)
-					: ECONOMY_CONFIG.PAYROLL_PER_UNIT *
-						getFormationCapacityStrength(unit)),
-			0,
-		);
-		state.baseIncome = Math.max(
-			state.baseIncome,
-			mandatoryPayroll / ECONOMY_CONFIG.TARGET_STARTING_PAYROLL_SHARE,
-		);
-		state.income = state.baseIncome;
-		state.treasury = state.baseIncome * ECONOMY_CONFIG.STARTING_RESERVE_CYCLES;
-		countryEconomy.set(countryId, state);
-	}
 	recalculateAllBounds();
-	updateEconomyPanel();
 	reconcileOperationalAiLifecycle("country-activated");
 }
 
 export function launchBomb(fromLat, fromLng, toLat, toLng, sideIdx) {
 	bombs.push({
-		id: gameplayRandom(),
+		id: Math.random(),
 		startLat: fromLat,
 		startLng: fromLng,
 		targetLat: toLat,
@@ -16294,7 +9650,7 @@ export function launchBomb(fromLat, fromLng, toLat, toLng, sideIdx) {
 		sideIndex: sideIdx,
 		state: "rising",
 		trail: [],
-		peakAlt: 1.5 + gameplayRandom() * 2.5,
+		peakAlt: 1.5 + Math.random() * 2.5,
 	});
 }
 
@@ -16416,30 +9772,9 @@ function getSideStrategyProfile(sideIdx) {
 	};
 }
 
-function getOperationalHostileSideUids(sideIndex) {
-	const hostileUids = [];
-	for (let enemyIndex = 0; enemyIndex < sides.length; enemyIndex++) {
-		if (
-			sides[enemyIndex]?.length &&
-			areSidesHostile(sideIndex, enemyIndex) &&
-			sideUids[enemyIndex]
-		) {
-			hostileUids.push(sideUids[enemyIndex]);
-		}
-	}
-	return hostileUids;
-}
-
 function operationalUnitPower(unit) {
 	if (!unit || unit.health <= 0) return 0;
-	let power = Math.max(0, unit.health / Math.max(1, CONFIG.UNIT_HEALTH));
-	if (unit.kind === "armor" && armorEnabled) {
-		power *= unit._armorSupported ? 2.2 : 1.45;
-		const idx = getGridIndex(unit.lat, unit.lng);
-		if (idx !== -1 && mountainsEnabled && terrainMask?.[idx] > 0.2) {
-			power *= 0.65;
-		}
-	}
+	let power = Math.max(0, getLiveFormationStrength(unit));
 	const sideCountry = sides[unit.sideIndex]?.find(
 		(country) => country.id === unit.sovereignId,
 	);
@@ -16462,8 +9797,7 @@ function serializeOperationalUnit(unit) {
 	const country = sides[unit.sideIndex]?.find(
 		(candidate) => candidate.id === unit.sovereignId,
 	);
-	const commandPolicy = getUnitCommandPolicy(unit);
-	const gridIndex = getGridIndex(unit.lat, unit.lng);
+
 	return {
 		id: unit.id,
 		sideUid: sideUids[unit.sideIndex] || "",
@@ -16476,28 +9810,17 @@ function serializeOperationalUnit(unit) {
 		maxHealth:
 			unit.maxHealth ||
 			CONFIG.UNIT_HEALTH * (unit.isAlpenjager ? CONFIG.ALPEN_HEALTH_MULT : 1),
-		equipment: unit.equipment || 0,
-		armorSupported: !!unit._armorSupported,
-		terrainSuitable:
-			!mountainsEnabled ||
-			gridIndex < 0 ||
-			!terrainMask ||
-			terrainMask[gridIndex] <= 0.35,
 		combatPower: operationalUnitPower(unit),
 		deployed: unit.deployTicks <= 0 && !unit.isAtSea,
 		commandEligible:
-			!commandPolicy.returnHome &&
-			!unit.navalAssigned &&
-			!unit.supplyAssigned &&
-			!unit.garrisonAssigned &&
-			unit._occupationGarrisonVictimId == null,
+			!unit.navalAssigned && !unit.supplyAssigned && !unit.garrisonAssigned,
 		taskForceId: unit._taskForceUid || null,
 	};
 }
 
 function reconcileOperationalAiLifecycle(reason = "world-change") {
 	if (gameMode !== "CONQUEST") return;
-	if (_aiIntelBySide.size === 0 && _aiTaskForcesBySide.size === 0) return;
+	if (_aiTaskForcesBySide.size === 0) return;
 	ensureSideIdentities();
 	const activeSideUids = new Set();
 	const sideIndexByUid = new Map();
@@ -16513,45 +9836,9 @@ function reconcileOperationalAiLifecycle(reason = "world-change") {
 			.map((unit) => [String(unit.id), unit]),
 	);
 	const liveUnitIds = new Set(liveUnitsById.keys());
-	const nextIntel = new Map();
-	const nextTaskForces = new Map();
-	for (const [sideUid, sideIndex] of sideIndexByUid) {
-		const hostileSideUids = getOperationalHostileSideUids(sideIndex);
-		let intel =
-			_aiIntelBySide.get(sideUid) ||
-			createAiIntelState(sideUid, { hostileSideUids });
-		intel = setAiIntelHostilities(intel, hostileSideUids);
-		intel = {
-			...intel,
-			contacts: Object.fromEntries(
-				Object.entries(intel.contacts || {}).filter(([, contact]) => {
-					const liveUnit = liveUnitsById.get(String(contact.unitId));
-					return (
-						liveUnit &&
-						sideUids[liveUnit.sideIndex] === contact.enemySideUid &&
-						areSidesHostile(sideIndex, liveUnit.sideIndex)
-					);
-				}),
-			),
-		};
-		nextIntel.set(sideUid, intel);
-		for (let enemyIndex = 0; enemyIndex < sides.length; enemyIndex++) {
-			if (!areSidesHostile(sideIndex, enemyIndex)) continue;
-			const enemyUid = sideUids[enemyIndex];
-			const estimateKey = `${sideUid}|${enemyUid}`;
-			if (_aiPrewarEnemyPowerBySide.has(estimateKey)) continue;
-			_aiPrewarEnemyPowerBySide.set(
-				estimateKey,
-				units.reduce(
-					(sum, unit) =>
-						unit.sideIndex === enemyIndex && unit.health > 0
-							? sum + operationalUnitPower(unit)
-							: sum,
-					0,
-				),
-			);
-		}
 
+	const nextTaskForces = new Map();
+	for (const [sideUid] of sideIndexByUid) {
 		const taskForces = cleanupAiTaskForces(
 			_aiTaskForcesBySide.get(sideUid) || [],
 			{ liveUnitIds, activeSideUids },
@@ -16573,7 +9860,6 @@ function reconcileOperationalAiLifecycle(reason = "world-change") {
 		});
 		nextTaskForces.set(sideUid, taskForces);
 	}
-	_aiIntelBySide = nextIntel;
 	_aiTaskForcesBySide = nextTaskForces;
 
 	const validAssignments = new Map();
@@ -16590,298 +9876,70 @@ function reconcileOperationalAiLifecycle(reason = "world-change") {
 		unit._taskForceRole = null;
 		unit._taskForceOrder = null;
 	}
-	if (!activeSideUids.has(aiObserverSideUid)) {
-		aiObserverSideUid = activeSideUids.values().next().value || null;
-	}
+
 	requestOperationalAiReassessment();
 	if (reason) _aiOperationsDirty = true;
 }
 
 function initializeOperationalAiRuntime() {
 	resetOperationalAiRuntime();
+	document.body.classList.remove("conflict-active");
+	document.getElementById("war-desk").style.display = "none";
+	_warOverviewSides = [];
+	_warOverviewLastUpdate = -Infinity;
 	if (gameMode !== "CONQUEST") return;
 	ensureSideIdentities();
-	for (let observerIndex = 0; observerIndex < sides.length; observerIndex++) {
-		const observerUid = sideUids[observerIndex];
-		if (!observerUid || !sides[observerIndex]?.length) continue;
-		const hostileSideUids = getOperationalHostileSideUids(observerIndex);
-		_aiIntelBySide.set(
-			observerUid,
-			createAiIntelState(observerUid, { hostileSideUids }),
-		);
-		_aiTaskForcesBySide.set(observerUid, []);
-		for (let enemyIndex = 0; enemyIndex < sides.length; enemyIndex++) {
-			if (!areSidesHostile(observerIndex, enemyIndex)) continue;
-			const enemyUid = sideUids[enemyIndex];
-			const prewarPower = units.reduce(
-				(sum, unit) =>
-					unit.sideIndex === enemyIndex && unit.health > 0
-						? sum + operationalUnitPower(unit)
-						: sum,
-				0,
-			);
-			_aiPrewarEnemyPowerBySide.set(`${observerUid}|${enemyUid}`, prewarPower);
-		}
+	for (let sideIndex = 0; sideIndex < sides.length; sideIndex++) {
+		if (sides[sideIndex]?.length)
+			_aiTaskForcesBySide.set(sideUids[sideIndex], []);
 	}
-	aiObserverSideUid = _aiIntelBySide.keys().next().value || null;
+	refreshLiveCombatPower();
 	_aiOperationsDirty = true;
 }
 
-function findOperationalGroundObserver(observerSideIndex, target) {
-	const observerHash = unitHashBySide[observerSideIndex];
-	if (!observerHash) return null;
-	const centerX = Math.floor((target.lng + 180) / UNIT_HASH_CELL_SIZE);
-	const centerY = Math.floor((target.lat + 90) / UNIT_HASH_CELL_SIZE);
-	for (let deltaX = -2; deltaX <= 2; deltaX++) {
-		for (let deltaY = -2; deltaY <= 2; deltaY++) {
-			const bucket = observerHash.get(
-				(centerX + deltaX) * 100 + centerY + deltaY,
-			);
-			if (!bucket) continue;
-			for (const observer of bucket) {
-				if (
-					observer.health > 0 &&
-					observer.deployTicks <= 0 &&
-					!observer.isAtSea &&
-					geoDistSq(observer.lat, observer.lng, target.lat, target.lng) <= 9
-				) {
-					return observer;
-				}
-			}
-		}
-	}
-	return null;
-}
-
-function getOperationalSectorId(observerIndex, enemyIndex) {
-	const observerUid = sideUids[observerIndex] || `side-${observerIndex}`;
-	const enemyUid = sideUids[enemyIndex] || `side-${enemyIndex}`;
-	return observerUid < enemyUid
-		? `${observerUid}|${enemyUid}`
-		: `${enemyUid}|${observerUid}`;
-}
-
-function decayOperationalAiIntelContacts() {
-	if (gameMode !== "CONQUEST" || _aiIntelBySide.size === 0) return false;
-	let changed = false;
-	for (let observerIndex = 0; observerIndex < sides.length; observerIndex++) {
-		const observerUid = sideUids[observerIndex];
-		const state = _aiIntelBySide.get(observerUid);
-		if (!state || !sides[observerIndex]?.length) continue;
-		const next = decayAiIntel(state, _simTickCount);
-		_aiIntelBySide.set(observerUid, next);
-		if (next !== state) changed = true;
-	}
-	if (changed) _aiOperationsDirty = true;
-	return changed;
-}
-
-function refreshOperationalAiIntel(force = false) {
-	if (gameMode !== "CONQUEST" || _aiIntelBySide.size === 0) return false;
-	let refreshedAny = false;
-	const dueObserverIndices = new Set();
-	for (let observerIndex = 0; observerIndex < sides.length; observerIndex++) {
-		const observerUid = sideUids[observerIndex];
-		let state = _aiIntelBySide.get(observerUid);
-		if (!state || !sides[observerIndex]?.length) continue;
-		const hostileSideUids = getOperationalHostileSideUids(observerIndex);
+function estimateLocalForces(sideIdx, lat, lng, radiusSq = 9) {
+	let friendlies = 0,
+		enemies = 0,
+		friendlyHealth = 0,
+		enemyHealth = 0;
+	const visit = (unit) => {
 		if (
-			hostileSideUids.length !== state.hostileSideUids.length ||
-			hostileSideUids.some(
-				(sideUid, index) => sideUid !== state.hostileSideUids[index],
-			)
-		) {
-			state = setAiIntelHostilities(state, hostileSideUids);
+			unit.health <= 0 ||
+			unit.deployTicks > 0 ||
+			geoDistSq(unit.lat, unit.lng, lat, lng) > radiusSq
+		)
+			return;
+		if (unit.sideIndex === sideIdx) {
+			friendlies++;
+			friendlyHealth += operationalUnitPower(unit);
+		} else if (areSidesHostile(sideIdx, unit.sideIndex)) {
+			enemies++;
+			enemyHealth += operationalUnitPower(unit);
 		}
-		if (
-			force ||
-			_simTickCount - state.lastScanTick >= state.config.scanIntervalTicks
-		) {
-			dueObserverIndices.add(observerIndex);
-		}
-		_aiIntelBySide.set(observerUid, state);
-	}
-	if (dueObserverIndices.size === 0) return false;
-	const controlledCitiesBySide = sides.map(() => []);
-	for (const city of activeTheaterCities || []) {
-		const idx = getGridIndex(city.lat, city.lng);
-		const controller = idx === -1 ? -1 : dominantSideMap[idx];
-		if (controller >= 0 && controlledCitiesBySide[controller]) {
-			controlledCitiesBySide[controller].push(city);
-		}
-	}
-	const operatingWingsBySide = sides.map(() => []);
-	for (const wing of airWings) {
-		if (
-			wing.equipment > 0 &&
-			![
-				AIR_WING_STATES.GROUNDED,
-				AIR_WING_STATES.REARMING,
-				AIR_WING_STATES.EVACUATED,
-			].includes(wing.state) &&
-			operatingWingsBySide[wing.sideIndex]
-		) {
-			operatingWingsBySide[wing.sideIndex].push(wing);
-		}
-	}
-
-	for (let observerIndex = 0; observerIndex < sides.length; observerIndex++) {
-		if (!dueObserverIndices.has(observerIndex)) continue;
-		const observerUid = sideUids[observerIndex];
-		let state = _aiIntelBySide.get(observerUid);
-		if (!state || !sides[observerIndex]?.length) continue;
-		const observations = [];
-		for (const enemy of units) {
-			if (
-				enemy.health <= 0 ||
-				enemy.deployTicks > 0 ||
-				!areSidesHostile(observerIndex, enemy.sideIndex)
-			) {
-				continue;
-			}
-			const enemyIdx = getGridIndex(enemy.lat, enemy.lng);
-			const insideControlledTerritory =
-				enemyIdx !== -1 && dominantSideMap[enemyIdx] === observerIndex;
-			const groundObserver = findOperationalGroundObserver(
-				observerIndex,
-				enemy,
-			);
-			const cityObserver = controlledCitiesBySide[observerIndex].find(
-				(city) => geoDistSq(city.lat, city.lng, enemy.lat, enemy.lng) <= 16,
-			);
-			const airObserver = operatingWingsBySide[observerIndex].find(
-				(wing) => geoDistSq(wing.lat, wing.lng, enemy.lat, enemy.lng) <= 36,
-			);
-			let source = null;
-			let confidence = 0;
-			let errorRadiusDeg = 0;
-			let detectionChance = 1;
-			if (insideControlledTerritory) {
-				source = "territory";
-				confidence = 0.94;
-				errorRadiusDeg = 0.06;
-			} else if (groundObserver) {
-				source = "ground";
-				confidence = 0.88;
-				errorRadiusDeg = 0.12;
-				detectionChance = 0.96;
-			} else if (cityObserver) {
-				source = "city";
-				confidence = 0.76;
-				errorRadiusDeg = 0.2;
-				detectionChance = 0.86;
-			} else if (airObserver) {
-				source = "air";
-				confidence = 0.7;
-				errorRadiusDeg = 0.32;
-				detectionChance = 0.78;
-			}
-			if (!source) continue;
-			observations.push({
-				unitId: enemy.id,
-				enemySideUid: sideUids[enemy.sideIndex],
-				sectorId: getOperationalSectorId(observerIndex, enemy.sideIndex),
-				countryId: enemy.sovereignId,
-				lat: enemy.lat,
-				lng: enemy.lng,
-				kind: enemy.kind || "army",
-				domain: enemy.isAtSea ? "SEA" : "LAND",
-				combatPower: operationalUnitPower(enemy),
-				visible: true,
-				detectionChance,
-				errorRadiusDeg,
-				powerErrorFraction: source === "air" ? 0.35 : 0.22,
-				confidence,
-				source,
-			});
-		}
-		state = refreshAiIntel(state, observations, {
-			tick: _simTickCount,
-			force: true,
-			hostileSideUids: getOperationalHostileSideUids(observerIndex),
-			rng: gameplayRandom,
-			capabilities: { armorEnabled, airPowerEnabled },
-		});
-		_aiIntelBySide.set(observerUid, state);
-		refreshedAny = true;
-	}
-	return refreshedAny;
-}
-
-function getKnownEnemyPowerForSide(sideIndex) {
-	if (gameMode !== "CONQUEST") {
-		return units.reduce(
-			(sum, unit) =>
-				areSidesHostile(sideIndex, unit.sideIndex) &&
-				unit.deployTicks <= 0 &&
-				unit.health > 0
-					? sum + operationalUnitPower(unit)
-					: sum,
+	};
+	if (unitSpatialHash.size) {
+		const radius = Math.sqrt(radiusSq);
+		const columns = Math.ceil(360 / UNIT_HASH_CELL_SIZE);
+		const x0 = Math.floor((lng - radius + 180) / UNIT_HASH_CELL_SIZE);
+		const x1 = Math.floor((lng + radius + 180) / UNIT_HASH_CELL_SIZE);
+		const y0 = Math.max(
 			0,
+			Math.floor((lat - radius + 90) / UNIT_HASH_CELL_SIZE),
 		);
-	}
-	const observerUid = sideUids[sideIndex];
-	const intel = _aiIntelBySide.get(observerUid);
-	let total = 0;
-	for (let enemyIndex = 0; enemyIndex < sides.length; enemyIndex++) {
-		if (!areSidesHostile(sideIndex, enemyIndex)) continue;
-		const enemyUid = sideUids[enemyIndex];
-		const prewar =
-			_aiPrewarEnemyPowerBySide.get(`${observerUid}|${enemyUid}`) || 0;
-		const observed = intel
-			? estimateAiIntelArea(intel, {
-					tick: _simTickCount,
-					enemySideUids: [enemyUid],
-				})
-			: null;
-		total += observed?.contactCount
-			? Math.max(prewar * 0.4, observed.estimatedPower)
-			: prewar;
-	}
-	return total;
-}
-
-function estimateLocalForces(sideIdx, lat, lng, radiusSq = 9.0) {
-	let friendlies = 0;
-	let enemies = 0;
-	let friendlyHealth = 0;
-	let enemyHealth = 0;
-	if (gameMode !== "CONQUEST") {
-		for (const unit of units) {
-			if (unit.deployTicks > 0 || unit.health <= 0) continue;
-			if (geoDistSq(unit.lat, unit.lng, lat, lng) > radiusSq) continue;
-			if (unit.sideIndex === sideIdx) {
-				friendlies++;
-				friendlyHealth += unit.health / CONFIG.UNIT_HEALTH;
-			} else if (areSidesHostile(sideIdx, unit.sideIndex)) {
-				enemies++;
-				enemyHealth += unit.health / CONFIG.UNIT_HEALTH;
+		const y1 = Math.min(
+			Math.floor(180 / UNIT_HASH_CELL_SIZE),
+			Math.floor((lat + radius + 90) / UNIT_HASH_CELL_SIZE),
+		);
+		for (let x = x0; x <= x1; x++)
+			for (let y = y0; y <= y1; y++) {
+				for (const unit of unitSpatialHash.get(
+					(((x % columns) + columns) % columns) * 100 + y,
+				) || [])
+					visit(unit);
 			}
-		}
-		return {
-			friendlies,
-			enemies,
-			friendlyHealth,
-			enemyHealth,
-			ratio: friendlyHealth / Math.max(1, enemyHealth),
-		};
+	} else {
+		for (const unit of units) visit(unit);
 	}
-	for (const u of _tickUnitsBySide[sideIdx] || []) {
-		if (u.deployTicks > 0 || u.health <= 0) continue;
-		if (geoDistSq(u.lat, u.lng, lat, lng) > radiusSq) continue;
-		friendlies++;
-		friendlyHealth += operationalUnitPower(u);
-	}
-	const intel = _aiIntelBySide.get(sideUids[sideIdx]);
-	const known = intel
-		? estimateAiIntelArea(intel, {
-				tick: _simTickCount,
-				center: { lat, lng },
-				radiusSq,
-			})
-		: null;
-	enemies = known?.contactCount || 0;
-	enemyHealth = known?.estimatedPower || 0;
 	return {
 		friendlies,
 		enemies,
@@ -17248,39 +10306,8 @@ function recordPlanOutcome(sideIdx, plan, outcome) {
 		gameMode !== "CONQUEST" ||
 		["NAVAL_INVASION", "NAVAL_SUPPLY"].includes(plan.type);
 	if (eventType && retainLegacyEvent) {
-		const actorCountryId =
-			plan.actorCountryId || plan.countryId || sides[sideIdx]?.[0]?.id || null;
-		const targetCountryId =
+		const _targetCountryId =
 			plan.victimId || plan.target?.sovereignId || plan.target?.ownerId || null;
-		const targetSideIdx = targetCountryId
-			? findCountrySideIndex(targetCountryId)
-			: -1;
-		recordExperimentEvent(eventType, {
-			source: "ai",
-			actorCountryId,
-			actorSideUid: sideUids[sideIdx] || null,
-			targetCountryId,
-			targetSideUid: sideUids[targetSideIdx] || null,
-			location: plan.target
-				? {
-						name: plan.target.name || "",
-						lat: plan.target.lat,
-						lng: plan.target.lng,
-					}
-				: null,
-			evidence: {
-				planType: plan.type || "UNKNOWN",
-				phase: plan.phase || null,
-				signature: key,
-				targetName: plan.target?.name || next.targetName || "",
-				priority: plan.priority || 0,
-				allocatedForce: plan.maxAssignedUnits || 0,
-				activeUnitCount: plan.activeUnitCount || 0,
-				progress: plan.progress || 0,
-				scoreBreakdown: plan.scoreBreakdown || null,
-				riskAssessment: plan.riskAssessment || null,
-			},
-		});
 	}
 }
 
@@ -17331,54 +10358,6 @@ function applyPlanProgressMemory(sideIdx, plan) {
 	plan.progress = Math.max(plan.progress || 0, signal);
 }
 
-function buildOccupationGarrisonProposals(sideIdx) {
-	const proposals = [];
-	for (const record of occupationEconomies.values()) {
-		if (record.active || (record.heldRatio || 0) <= 0) continue;
-		if (findCountrySideIndex(record.annexerId) !== sideIdx) continue;
-		const garrisonPoints = (record.garrisonPoints || []).filter((point) => {
-			const idx = point.idx ?? getGridIndex(point.lat, point.lng);
-			return (
-				idx !== -1 && landMask[idx] > 0 && deJureMap[idx] === record.victimId
-			);
-		});
-		if (garrisonPoints.length === 0) continue;
-		const requiredGarrison =
-			record.requiredGarrison ||
-			computeRequiredGarrison(record.expectedArmyUnits || 0);
-		const currentlyPresent = Math.min(
-			requiredGarrison,
-			Math.round((record.garrisonCoverage || 0) * requiredGarrison),
-		);
-		const garrisonDeficit = Math.max(0, requiredGarrison - currentlyPresent);
-		const victim = countryMetadata[record.victimId - 1];
-		proposals.push({
-			type: "OCCUPATION_GARRISON",
-			target: {
-				lat: garrisonPoints[0].lat,
-				lng: garrisonPoints[0].lng,
-				name: `${victim?.name || `Country ${record.victimId}`} occupation`,
-			},
-			victimId: record.victimId,
-			annexerId: record.annexerId,
-			garrisonPoints,
-			requiredGarrison,
-			garrisonDeficit,
-			garrisonCoverage: record.garrisonCoverage || 0,
-			resistance: record.resistance || 0,
-			heldRatio: record.heldRatio || 0,
-			estimatedForceNeeded: requiredGarrison,
-			geographicData: {
-				frontlineDistSq: 0,
-				reachesTarget: true,
-				minSeaDist: Infinity,
-				minLandDist: 0,
-			},
-		});
-	}
-	return proposals;
-}
-
 function selectEvenlySpaced(items, limit) {
 	if (items.length <= limit) return items;
 	const selected = new Array(limit);
@@ -17402,7 +10381,7 @@ export function generateAllProposals(sideIdx) {
 
 	const sideUnits = _tickUnitsBySide[sideIdx] || [];
 	const unitCount = sideUnits.filter((u) => u.deployTicks === 0).length;
-	proposals.push(...buildOccupationGarrisonProposals(sideIdx));
+
 	if (unitCount < 3) return proposals;
 
 	const myAllyIds = new Set(sideCountries.map((c) => c.id));
@@ -17524,7 +10503,7 @@ export function generateAllProposals(sideIdx) {
 			continue;
 		enemyCities.push({
 			city,
-			isCapital: city.isCapital || false,
+			isCapital: city.isCapital,
 			idx: cIdx,
 		});
 	}
@@ -18171,35 +11150,14 @@ export function generateAllProposals(sideIdx) {
 			threatScore = Math.min(1, threatScore / 50);
 
 			let enemyNavalThreat = 0;
-			if (gameMode === "CONQUEST") {
-				const intel = _aiIntelBySide.get(sideUids[sideIdx]);
-				const knownContacts = intel
-					? estimateAiIntelArea(intel, {
-							tick: _simTickCount,
-							center: { lat: zLat, lng: zLng },
-							radiusSq: 100,
-						}).contacts
-					: [];
-				enemyNavalThreat = Math.min(
-					0.6,
-					knownContacts
-						.filter((contact) => contact.domain === "SEA")
-						.reduce((sum, contact) => sum + 0.08 * contact.confidence, 0),
-				);
-			} else {
-				for (let ei = 0; ei < sides.length; ei++) {
-					if (!areSidesHostile(sideIdx, ei)) continue;
-					const enp = _navalPlan[ei];
-					if (enp?.phase && enp.target) {
-						const dLat2 = zLat - enp.target.lat;
-						let dLng2 = zLng - enp.target.lng;
-						if (dLng2 > 180) dLng2 -= 360;
-						else if (dLng2 < -180) dLng2 += 360;
-						if (dLat2 * dLat2 + dLng2 * dLng2 < 100) {
-							enemyNavalThreat += 0.3;
-						}
-					}
-				}
+			for (let ei = 0; ei < sides.length; ei++) {
+				if (!areSidesHostile(sideIdx, ei)) continue;
+				const plan = _navalPlan[ei];
+				if (
+					plan?.target &&
+					geoDistSq(zLat, zLng, plan.target.lat, plan.target.lng) < 100
+				)
+					enemyNavalThreat += 0.3;
 			}
 
 			const zonePolyline = zone.map((c) => ({ lat: c.lat, lng: c.lng }));
@@ -18596,21 +11554,6 @@ export function generateAllProposals(sideIdx) {
 export function scoreProposal(proposal, sideIdx) {
 	const strategyProfile = getSideStrategyProfile(sideIdx);
 	const strategy = strategyProfile.dominant;
-	if (proposal.type === "OCCUPATION_GARRISON") {
-		const score = computeOccupationGarrisonPriority({
-			resistance: proposal.resistance,
-			garrisonCoverage: proposal.garrisonCoverage,
-			heldRatio: proposal.heldRatio,
-			requiredGarrison: proposal.requiredGarrison,
-		});
-		proposal.scoreBreakdown = {
-			strategy,
-			garrisonDeficit: proposal.garrisonDeficit,
-			garrisonCoverage: proposal.garrisonCoverage,
-			resistance: proposal.resistance,
-		};
-		return Math.round(score * 100) / 100;
-	}
 	const sideUnits = _tickUnitsBySide[sideIdx] || [];
 	const unitCount = sideUnits.filter((u) => u.deployTicks === 0).length;
 	const friendlyCombatPower =
@@ -18723,30 +11666,20 @@ export function scoreProposal(proposal, sideIdx) {
 	// ── Urgency (0–10) ──
 	// Enemy naval landing on our territory boosts COASTAL_DEFENSE
 	let enemyLandedOnUs = false;
-	if (gameMode === "CONQUEST") {
-		const intel = _aiIntelBySide.get(sideUids[sideIdx]);
-		enemyLandedOnUs =
-			!!intel &&
-			Object.values(intel.contacts || {}).some((contact) => {
-				const index = getGridIndex(contact.lat, contact.lng);
-				return index !== -1 && dominantSideMap[index] === sideIdx;
-			});
-	} else {
-		for (let enemyIndex = 0; enemyIndex < sides.length; enemyIndex++) {
-			if (!areSidesHostile(sideIdx, enemyIndex)) continue;
-			const enemyPlan = _navalPlan[enemyIndex];
-			if (enemyPlan?.phase === "LANDING" && enemyPlan.target) {
-				const targetIndex = getGridIndex(
-					enemyPlan.target.lat,
-					enemyPlan.target.lng,
-				);
-				if (targetIndex !== -1 && dominantSideMap[targetIndex] === sideIdx) {
-					enemyLandedOnUs = true;
-					break;
-				}
-			}
-		}
+	for (let ei = 0; ei < sides.length; ei++) {
+		if (!areSidesHostile(sideIdx, ei)) continue;
+		const plan = _navalPlan[ei];
+		const idx = plan?.target
+			? getGridIndex(plan.target.lat, plan.target.lng)
+			: -1;
+		if (
+			plan?.phase === "LANDING" &&
+			idx >= 0 &&
+			dominantSideMap[idx] === sideIdx
+		)
+			enemyLandedOnUs = true;
 	}
+
 	if (enemyLandedOnUs && proposal.type === "COASTAL_DEFENSE") {
 		score += 20;
 	}
@@ -18927,9 +11860,7 @@ export function selectPlans(sideIdx, scoredProposals) {
 	const garrisons = sorted.filter(
 		(p) => p.type === "NEUTRAL_GARRISON" && (p.priority || 0) > 0,
 	);
-	const occupationGarrisons = sorted.filter(
-		(p) => p.type === "OCCUPATION_GARRISON" && (p.priority || 0) > 0,
-	);
+
 	const transports = sorted.filter(
 		(p) => p.type === "TRANSPORT" && (p.priority || 0) > 0,
 	);
@@ -19004,7 +11935,6 @@ export function selectPlans(sideIdx, scoredProposals) {
 	// ── Neutral garrisons ──
 	const selectedGarr = garrisons;
 	// ── Occupation garrisons ──
-	const selectedOccupationGarr = occupationGarrisons;
 
 	// ── Force allocation ──
 	const selectedOff = [
@@ -19067,9 +11997,6 @@ export function selectPlans(sideIdx, scoredProposals) {
 	}
 	for (const p of selectedDef) {
 		if (p.allocatedForce < 3) p.allocatedForce = Math.min(3, defensiveForce);
-	}
-	for (const p of selectedOccupationGarr) {
-		p.allocatedForce = Math.max(1, p.requiredGarrison || 3);
 	}
 
 	// ── Convert to plan objects ──
@@ -19143,9 +12070,7 @@ export function selectPlans(sideIdx, scoredProposals) {
 	if (defend1) result.defend = makePlan(defend1, "EXECUTION");
 	result.coastal = selectedCoastal.map((p) => makePlan(p, "EXECUTION"));
 	result.garrisons = selectedGarr.map((p) => makePlan(p, "EXECUTION"));
-	result.occupationGarrisons = selectedOccupationGarr.map((p) =>
-		makePlan(p, "EXECUTION"),
-	);
+
 	if (transports[0]) result.transport = makePlan(transports[0], "EXECUTION");
 
 	return result;
@@ -19289,12 +12214,6 @@ function operationalPlanInput(sideIndex, plan, landingHandoff = null) {
 			landingHandoff?.unitIds?.length || 0,
 		),
 		priority: plan.priority || 0,
-		supportRequest: {
-			fighter: airPowerEnabled,
-			strike: airPowerEnabled,
-			sectorId: plan.theaterId || null,
-			target: plan.target ? { ...plan.target } : null,
-		},
 	};
 }
 
@@ -19426,10 +12345,17 @@ function findOperationalWithdrawalAnchor(sideIndex, taskForce, members) {
 			controlStrength: city.isCapital ? 1.5 : 1.1,
 		});
 	}
-	const intel = _aiIntelBySide.get(sideUid);
-	const enemyEstimates = intel
-		? estimateAiIntelArea(intel, { tick: _simTickCount }).contacts
-		: [];
+
+	const enemyEstimates = units
+		.filter(
+			(unit) => unit.health > 0 && areSidesHostile(sideIndex, unit.sideIndex),
+		)
+		.map((unit) => ({
+			lat: unit.lat,
+			lng: unit.lng,
+			estimatedPower: operationalUnitPower(unit),
+			confidence: 1,
+		}));
 	return (
 		selectWithdrawalAnchor(taskForce, candidates, {
 			origin,
@@ -19440,7 +12366,7 @@ function findOperationalWithdrawalAnchor(sideIndex, taskForce, members) {
 	);
 }
 
-function taskForceLocation(taskForce) {
+function _taskForceLocation(taskForce) {
 	const target = taskForce.target || taskForce.stagingAnchor;
 	return target
 		? {
@@ -19449,39 +12375,6 @@ function taskForceLocation(taskForce) {
 				lng: target.lng,
 			}
 		: null;
-}
-
-function recordOperationalAiTransition(
-	sideIndex,
-	taskForce,
-	previousPhase,
-	eventType,
-	extraEvidence = {},
-) {
-	const opposition = _aiIntelEstimateByTaskForce.get(taskForce.id) || null;
-	recordExperimentEvent(eventType, {
-		source: "ai-operations",
-		actorCountryId: sides[sideIndex]?.[0]?.id || null,
-		actorSideUid: sideUids[sideIndex] || null,
-		location: taskForceLocation(taskForce),
-		major: true,
-		message: `${taskForce.planType.replaceAll("_", " ")} task force ${taskForce.id} entered ${taskForce.phase}.`,
-		evidence: {
-			taskForceUid: taskForce.id,
-			objective: taskForce.target?.name || taskForce.planType,
-			previousPhase,
-			phase: taskForce.phase,
-			committedStrength: taskForce.currentPower,
-			launchStrength: taskForce.launchPower,
-			readiness: taskForce.readiness,
-			confidence: opposition?.confidence ?? null,
-			estimatedOpposition: opposition?.estimatedPower ?? null,
-			losses: Math.max(0, taskForce.launchPower - taskForce.currentPower),
-			progress: taskForce.progress,
-			transitionTrigger: taskForce.completionReason || eventType,
-			...extraEvidence,
-		},
-	});
 }
 
 function clearOperationalPlanForTaskForce(sideIndex, taskForce) {
@@ -19605,7 +12498,7 @@ function assignOperationalTaskForceOrders(
 	return { assembly, objective, frontage, members };
 }
 
-function updateOperationalAiTaskForces(intelRefreshed = false) {
+function updateOperationalAiTaskForces() {
 	if (gameMode !== "CONQUEST" || _aiTaskForcesBySide.size === 0) return;
 	if (!_aiOperationsDirty && _simTickCount - _aiLastOperationsTick < 15) {
 		return;
@@ -19757,7 +12650,6 @@ function updateOperationalAiTaskForces(intelRefreshed = false) {
 			operationalUnits,
 			{
 				tick: _simTickCount,
-				capabilities: { armorEnabled, airPowerEnabled },
 			},
 		);
 		taskForces.push(...retiring);
@@ -19769,8 +12661,7 @@ function updateOperationalAiTaskForces(intelRefreshed = false) {
 					taskForce.planSignature,
 			);
 			const runtime = _aiTaskForceTransitionById.get(taskForce.id) || {};
-			const wasNew = !runtime.lastPhase;
-			const previousPhase = runtime.lastPhase || taskForce.phase;
+
 			const members = taskForce.assignedUnitIds
 				.map((unitId) => unitsById.get(String(unitId)))
 				.filter(Boolean);
@@ -19779,7 +12670,6 @@ function updateOperationalAiTaskForces(intelRefreshed = false) {
 				readinessUnits,
 				{
 					assemblyRadiusSq: 9,
-					capabilities: { armorEnabled, airPowerEnabled },
 				},
 			);
 			const targetIdx = taskForce.target
@@ -19823,47 +12713,17 @@ function updateOperationalAiTaskForces(intelRefreshed = false) {
 								taskForce.progress,
 								1 - closestObjectiveDistance / Math.max(0.5, initialDistance),
 							);
-			const intel = _aiIntelBySide.get(sideUid);
-			const opposition =
-				intel && taskForce.target
-					? estimateAiIntelArea(intel, {
-							tick: _simTickCount,
-							center: taskForce.target,
-							radiusSq: 16,
-						})
-					: { estimatedPower: 0, confidence: 0, contactCount: 0 };
-			const priorOpposition = _aiIntelEstimateByTaskForce.get(taskForce.id);
-			const severeSurprise = !!(
-				intelRefreshed &&
-				priorOpposition?.estimatedPower > 0 &&
-				opposition.contactCount > 0 &&
-				opposition.estimatedPower >= priorOpposition.estimatedPower * 1.5 &&
-				opposition.estimatedPower - priorOpposition.estimatedPower >= 0.5
-			);
-			if (severeSurprise) {
-				recordExperimentEvent("INTEL_SURPRISE", {
-					source: "ai-operations",
-					actorCountryId: sides[sideIndex]?.[0]?.id || null,
-					actorSideUid: sideUid,
-					location: taskForceLocation(taskForce),
-					major: true,
-					message: `Fresh contact revised opposition against ${taskForce.id} sharply upward.`,
-					evidence: {
-						taskForceUid: taskForce.id,
-						objective: taskForce.target?.name || taskForce.planType,
-						confidence: opposition.confidence,
-						estimatedOpposition: priorOpposition.estimatedPower,
-						newlyObservedOpposition: opposition.estimatedPower,
-						transitionTrigger: "FRESH_CONTACT_1_5X",
-					},
-				});
-			}
-			if (intelRefreshed || !priorOpposition) {
-				_aiIntelEstimateByTaskForce.set(taskForce.id, {
-					estimatedPower: opposition.estimatedPower,
-					confidence: opposition.confidence,
-				});
-			}
+
+			const opposition = {
+				estimatedPower: taskForce.target
+					? estimateLocalForces(
+							sideIndex,
+							taskForce.target.lat,
+							taskForce.target.lng,
+							16,
+						).enemyHealth
+					: 0,
+			};
 			const supplyCollapsed =
 				members.length > 0 &&
 				members.filter(
@@ -19918,7 +12778,7 @@ function updateOperationalAiTaskForces(intelRefreshed = false) {
 					readinessResult,
 					progress,
 					objectiveAchieved,
-					severeSurprise,
+
 					supplyCollapsed,
 					encirclementRiskSevere,
 					forceRatio:
@@ -19928,55 +12788,7 @@ function updateOperationalAiTaskForces(intelRefreshed = false) {
 					withdrawalArrived,
 				});
 			}
-			if (wasNew) {
-				recordOperationalAiTransition(
-					sideIndex,
-					taskForce,
-					null,
-					"TASK_FORCE_FORMED",
-					{
-						roleCounts: Object.values(taskForce.unitRoles).reduce(
-							(counts, assignment) => {
-								counts[assignment.role] = (counts[assignment.role] || 0) + 1;
-								return counts;
-							},
-							{},
-						),
-						capability: {
-							armorSupport: members.some(
-								(unit) => unit.kind === "armor" && unit._armorSupported,
-							),
-							airSupport:
-								!airPowerEnabled ||
-								airWings.some(
-									(wing) => wing.sideIndex === sideIndex && wing.equipment > 0,
-								),
-						},
-					},
-				);
-			}
-			if (taskForce.phase !== previousPhase) {
-				const eventType =
-					taskForce.phase === "ATTACKING"
-						? "OFFENSIVE_LAUNCHED"
-						: taskForce.phase === "CONSOLIDATING"
-							? "OBJECTIVE_SECURED"
-							: taskForce.phase === "CULMINATED"
-								? "OFFENSIVE_CULMINATED"
-								: taskForce.phase === "WITHDRAWING"
-									? "TASK_FORCE_WITHDREW"
-									: taskForce.phase === "REGROUPING"
-										? "TASK_FORCE_REGROUPED"
-										: null;
-				if (eventType) {
-					recordOperationalAiTransition(
-						sideIndex,
-						taskForce,
-						previousPhase,
-						eventType,
-					);
-				}
-			}
+
 			if (taskForce.phase === "COMPLETE") {
 				clearOperationalPlanForTaskForce(sideIndex, taskForce);
 				for (const unit of members) {
@@ -20007,7 +12819,6 @@ function updateOperationalAiTaskForces(intelRefreshed = false) {
 			}
 			liveTaskForceIds.add(taskForce.id);
 			_aiTaskForceTransitionById.set(taskForce.id, {
-				lastPhase: taskForce.phase,
 				initialObjectiveDistance:
 					runtime.initialObjectiveDistance || initialDistance,
 			});
@@ -20045,202 +12856,6 @@ function updateOperationalAiTaskForces(intelRefreshed = false) {
 	for (const taskForceId of Array.from(_aiTaskForceTransitionById.keys())) {
 		if (!liveTaskForceIds.has(taskForceId)) {
 			_aiTaskForceTransitionById.delete(taskForceId);
-			_aiIntelEstimateByTaskForce.delete(taskForceId);
-		}
-	}
-}
-
-function clearOccupationGarrisonAssignments(victimId = null) {
-	if (victimId == null) {
-		for (const record of occupationEconomies.values()) {
-			record.garrisonAssignedCount = 0;
-		}
-	} else {
-		const record = occupationEconomies.get(Number(victimId));
-		if (record) record.garrisonAssignedCount = 0;
-	}
-	for (const unit of units) {
-		if (
-			victimId == null ||
-			unit._occupationGarrisonVictimId === Number(victimId)
-		) {
-			unit._occupationGarrisonVictimId = null;
-			unit._occupationGarrisonPointIndex = null;
-		}
-	}
-}
-
-function reconcileOccupationGarrisonPlans(sideIdx, selectedPlans = []) {
-	const selectedVictims = new Set(
-		selectedPlans.map((plan) => Number(plan.victimId)),
-	);
-	for (const [victimId, plan] of _occupationGarrisonPlans) {
-		if (plan.sideIdx !== sideIdx || selectedVictims.has(victimId)) continue;
-		_occupationGarrisonPlans.delete(victimId);
-		clearOccupationGarrisonAssignments(victimId);
-	}
-	for (const selected of selectedPlans) {
-		const victimId = Number(selected.victimId);
-		const existing = _occupationGarrisonPlans.get(victimId);
-		const samePlan =
-			existing &&
-			existing.sideIdx === sideIdx &&
-			existing.signature === selected.signature;
-		_occupationGarrisonPlans.set(victimId, {
-			...(samePlan ? existing : {}),
-			...selected,
-			sideIdx,
-			startedTick: samePlan ? existing.startedTick : selected.startedTick,
-			activeUnitCount: 0,
-			assignedUnitIds: samePlan ? existing.assignedUnitIds || [] : [],
-		});
-	}
-}
-
-export function syncOccupationGarrisonAssignments(sideIdx = null) {
-	for (const [victimId, plan] of Array.from(_occupationGarrisonPlans)) {
-		const record = occupationEconomies.get(victimId);
-		const controllerSide = record ? findCountrySideIndex(record.annexerId) : -1;
-		if (
-			!record ||
-			record.active ||
-			(record.heldRatio || 0) <= 0 ||
-			controllerSide !== plan.sideIdx
-		) {
-			_occupationGarrisonPlans.delete(victimId);
-			clearOccupationGarrisonAssignments(victimId);
-			if (record && !record.active && controllerSide >= 0) {
-				_planReassessNeeded[controllerSide] = true;
-			}
-		}
-	}
-
-	const sideIndices =
-		sideIdx == null
-			? [
-					...new Set(
-						Array.from(_occupationGarrisonPlans.values()).map(
-							(plan) => plan.sideIdx,
-						),
-					),
-				]
-			: [sideIdx];
-	for (const currentSideIdx of sideIndices) {
-		const sidePlans = Array.from(_occupationGarrisonPlans.values())
-			.filter((plan) => plan.sideIdx === currentSideIdx)
-			.sort(
-				(a, b) =>
-					(b.priority || 0) - (a.priority || 0) ||
-					(b.resistance || 0) - (a.resistance || 0) ||
-					(a.victimId || 0) - (b.victimId || 0),
-			);
-		const sideUnits = units.filter(
-			(unit) => unit.sideIndex === currentSideIdx && unit.health > 0,
-		);
-		const previousVictim = new Map();
-		const previousPoint = new Map();
-		for (const unit of sideUnits) {
-			previousVictim.set(unit, unit._occupationGarrisonVictimId ?? null);
-			previousPoint.set(unit, unit._occupationGarrisonPointIndex ?? null);
-			unit._occupationGarrisonVictimId = null;
-			unit._occupationGarrisonPointIndex = null;
-		}
-		const eligibleUnits = sideUnits.filter((unit) => {
-			if (!unitCountsAsOccupationGarrison(unit)) return false;
-			if (unit.deployTicks > 0 || getRebellionForUnit(unit)) return false;
-			if (getUnitCommandPolicy(unit).returnHome) return false;
-			if (gameMode === "CONQUEST" && unit._taskForceUid) return false;
-			return !(
-				unit.navalAssigned ||
-				unit.supplyAssigned ||
-				unit.coastalAssigned ||
-				unit.isTransport ||
-				unit._defenderReactTarget
-			);
-		});
-		const usedUnits = new Set();
-		for (const plan of sidePlans) {
-			const points = plan.garrisonPoints || [];
-			const desired = Math.max(1, plan.requiredGarrison || 3);
-			const distanceToPlan = (unit) => {
-				let best = Infinity;
-				for (const point of points) {
-					best = Math.min(
-						best,
-						geoDistSq(unit.lat, unit.lng, point.lat, point.lng),
-					);
-				}
-				return Number.isFinite(best)
-					? best
-					: geoDistSq(
-							unit.lat,
-							unit.lng,
-							plan.target?.lat || 0,
-							plan.target?.lng || 0,
-						);
-			};
-			const candidates = eligibleUnits
-				.filter((unit) => !usedUnits.has(unit))
-				.sort((a, b) => {
-					const stickyA = previousVictim.get(a) === plan.victimId ? -100000 : 0;
-					const stickyB = previousVictim.get(b) === plan.victimId ? -100000 : 0;
-					const neutralPenaltyA = a.garrisonAssigned ? 25 : 0;
-					const neutralPenaltyB = b.garrisonAssigned ? 25 : 0;
-					return (
-						stickyA +
-							neutralPenaltyA +
-							distanceToPlan(a) -
-							(stickyB + neutralPenaltyB + distanceToPlan(b)) ||
-						(a.id || 0) - (b.id || 0)
-					);
-				});
-			const assigned = [];
-			let assignedStrength = 0;
-			for (const candidate of candidates) {
-				if (assignedStrength >= desired) break;
-				assigned.push(candidate);
-				assignedStrength += getLiveFormationStrength(candidate);
-			}
-			const pointLoads = new Array(Math.max(1, points.length)).fill(0);
-			for (const unit of assigned) {
-				usedUnits.add(unit);
-				let pointIndex = 0;
-				const oldPoint = previousPoint.get(unit);
-				if (
-					previousVictim.get(unit) === plan.victimId &&
-					Number.isInteger(oldPoint) &&
-					oldPoint >= 0 &&
-					oldPoint < points.length
-				) {
-					pointIndex = oldPoint;
-				} else if (points.length > 0) {
-					let bestScore = Infinity;
-					for (let pi = 0; pi < points.length; pi++) {
-						const point = points[pi];
-						const score =
-							geoDistSq(unit.lat, unit.lng, point.lat, point.lng) +
-							pointLoads[pi] * 25;
-						if (score < bestScore) {
-							bestScore = score;
-							pointIndex = pi;
-						}
-					}
-				}
-				pointLoads[pointIndex]++;
-				unit._occupationGarrisonVictimId = plan.victimId;
-				unit._occupationGarrisonPointIndex = pointIndex;
-				unit._assignedPlanSignature = null;
-				unit._transportPlanSignature = null;
-				unit._planWaypointSignature = null;
-				unit._planWaypointIndex = 0;
-				unit.garrisonAssigned = false;
-				unit.frontSlot = null;
-				unit.mopUpTarget = null;
-			}
-			plan.assignedUnitIds = assigned.map((unit) => unit.id);
-			plan.activeUnitCount = 0;
-			const record = occupationEconomies.get(plan.victimId);
-			if (record) record.garrisonAssignedCount = assignedStrength;
 		}
 	}
 }
@@ -20461,9 +13076,6 @@ export function evaluateAllPlans() {
 				}
 			}
 
-			reconcileOccupationGarrisonPlans(si, selected.occupationGarrisons || []);
-			syncOccupationGarrisonAssignments(si);
-
 			// Apply transport plan
 			if (selected.transport) {
 				if (!_transportPlan[si] || forceReplace) {
@@ -20482,7 +13094,6 @@ export function evaluateAllPlans() {
 				selected.naval,
 				selected.defend,
 				selected.transport,
-				...(selected.occupationGarrisons || []),
 			].filter(Boolean);
 			const selectedDebugSignatures = new Set(
 				selectedDebugPlans.map((p) => p.signature || getPlanSignature(si, p)),
@@ -20496,7 +13107,6 @@ export function evaluateAllPlans() {
 					naval: selected.naval || null,
 					defend: selected.defend || null,
 					transport: selected.transport || null,
-					occupationGarrisons: selected.occupationGarrisons || [],
 				},
 				topRejected: proposals
 					.filter((p) => !selectedDebugSignatures.has(getPlanSignature(si, p)))
@@ -20523,9 +13133,6 @@ export function evaluateAllPlans() {
 			_commanderPlanReplacePending[si] = false;
 		}
 	}
-	for (const plan of _occupationGarrisonPlans.values()) {
-		plan.activeUnitCount = 0;
-	}
 	window.__perf.proposals =
 		(window.__perf.proposals || 0) + performance.now() - _tp;
 
@@ -20537,7 +13144,6 @@ export function evaluateAllPlans() {
 		if (_warPlan[_l2]) _warPlan[_l2].activeUnitCount = 0;
 		if (_navalPlan[_ri]) {
 			_navalPlan[_ri].activeUnitCount = 0;
-			_navalPlan[_ri].activeArmorCount = 0;
 		}
 		if (_navalSupplyPlan[_ri]) _navalSupplyPlan[_ri].activeUnitCount = 0;
 		if (_transportPlan[_ri]) _transportPlan[_ri].activeUnitCount = 0;
@@ -21505,23 +14111,7 @@ function applyLandUnitDamage(targetUnit, damage, attacker = null) {
 	const effectiveDamage = Math.min(targetUnit.health, damage);
 	const attackerId = attacker?.sovereignId || Number(attacker) || null;
 	let personnelLoss = 0;
-	if (targetUnit.kind === "armor") {
-		const beforeEquipment = Math.max(0, targetUnit.equipment || 0);
-		const nextHealth = Math.max(0, targetUnit.health - effectiveDamage);
-		const nextEquipment = Math.min(
-			beforeEquipment,
-			Math.max(
-				0,
-				Math.ceil(
-					(targetUnit.maxEquipment || beforeEquipment) *
-						(nextHealth / CONFIG.UNIT_HEALTH),
-				),
-			),
-		);
-		const vehiclesLost = beforeEquipment - nextEquipment;
-		targetUnit.equipment = nextEquipment;
-		personnelLoss = vehiclesLost * COMBINED_ARMS_CONFIG.ARMOR_CREW_PER_VEHICLE;
-	} else {
+	{
 		const beforePersonnel = getLiveFormationPersonnel(targetUnit);
 		const maxHealth = Math.max(1, targetUnit.maxHealth || CONFIG.UNIT_HEALTH);
 		const personnelCapacity = Math.max(
@@ -21552,198 +14142,6 @@ function applyLandUnitDamage(targetUnit, damage, attacker = null) {
 	return personnelLoss;
 }
 
-function combinedArmsDamage(
-	baseDamage,
-	attacker,
-	target,
-	{ mountain = false, urban = false } = {},
-) {
-	const landingMultiplier =
-		attacker?.kind === "armor" &&
-		(attacker._armorLandingPenaltyUntilTick || 0) > _simTickCount
-			? 0.3
-			: 1;
-	const formationStrength =
-		attacker?.kind === "army"
-			? Math.max(0, getLiveFormationStrength(attacker))
-			: 1;
-	return (
-		baseDamage *
-		getArmorCombatMultiplier(attacker?.kind, target?.kind, {
-			mountain,
-			urban,
-			supported: !!attacker?._armorSupported,
-		}) *
-		(attacker?.kind === "armor" ? getQualityMultiplier(attacker.quality) : 1) *
-		landingMultiplier *
-		formationStrength
-	);
-}
-
-function applyAirEquipmentLoss(wing, loss, attackerId = null) {
-	const equipmentLoss = Math.min(
-		Math.max(0, wing.equipment || 0),
-		Math.max(0, Math.round(loss || 0)),
-	);
-	if (equipmentLoss <= 0) return;
-	wing.equipment -= equipmentLoss;
-	const personnelLoss =
-		equipmentLoss * COMBINED_ARMS_CONFIG.AIRCREW_PER_AIRCRAFT;
-	if (wing.sideIndex >= 0 && wing.sideIndex < MAX_SIDES) {
-		sideCasualties[wing.sideIndex] += personnelLoss;
-		sideSoldiers[wing.sideIndex] = Math.max(
-			0,
-			sideSoldiers[wing.sideIndex] - personnelLoss,
-		);
-	}
-	recordCountryCombatLoss(wing.sovereignId, personnelLoss, attackerId);
-}
-
-function applyStrategicStrike(target, damage, wing) {
-	if (target.unit) {
-		applyLandUnitDamage(target.unit, damage, wing);
-		return;
-	}
-	if (!target.field) return;
-	const field = target.field;
-	const healthBefore = field.health;
-	const wasOperational = field.health > 0;
-	field.health = Math.max(0, field.health - damage);
-	field.disabled = field.health <= 0;
-	if (field.disabled && wasOperational) {
-		emitEconomyEvent(`${field.name}: airfield destroyed`, "danger");
-		recordExperimentEvent("AIRFIELD_DESTROYED", {
-			source: "air_power",
-			actorCountryId: wing.sovereignId,
-			actorSideUid: sideUids[wing.sideIndex] || null,
-			targetCountryId: field.controllerId || field.ownerId || null,
-			targetSideUid: sideUids[field.sideIndex] || null,
-			location: {
-				name: field.name || "Airfield",
-				lat: field.lat,
-				lng: field.lng,
-			},
-			evidence: {
-				airfieldId: field.id,
-				damage,
-				healthBefore,
-				healthAfter: field.health,
-				wingRole: wing.role,
-				wingEquipment: wing.equipment,
-			},
-		});
-		for (const basedWing of airWings) {
-			if (basedWing.airfieldId !== field.id || basedWing.equipment <= 0)
-				continue;
-			applyAirEquipmentLoss(
-				basedWing,
-				Math.max(1, Math.round(damage * 0.25)),
-				wing.sovereignId,
-			);
-		}
-	}
-}
-
-function updateAirfieldControllers() {
-	for (const field of airfields) {
-		const idx = getGridIndex(field.lat, field.lng);
-		if (idx < 0 || landMask[idx] === 0) continue;
-		const nextSide = dominantSideMap[idx];
-		if (nextSide < 0 || nextSide === field.sideIndex) continue;
-		const previousControllerId = field.controllerId;
-		const previousSideIdx = field.sideIndex;
-		const physicalOccupierId = primaryOccupierMap[idx];
-		const controllerId =
-			findCountrySideIndex(physicalOccupierId) === nextSide
-				? physicalOccupierId
-				: sides[nextSide]?.[0]?.id || field.controllerId;
-		Object.assign(
-			field,
-			captureAirfield(field, {
-				controllerId,
-				sideIndex: nextSide,
-			}),
-		);
-		emitEconomyEvent(
-			`${field.name}: airfield captured and disabled`,
-			"warning",
-		);
-		recordExperimentEvent("AIRFIELD_CAPTURED", {
-			source: "territory",
-			actorCountryId: controllerId,
-			actorSideUid: sideUids[nextSide] || null,
-			targetCountryId: previousControllerId || field.ownerId || null,
-			targetSideUid: sideUids[previousSideIdx] || null,
-			location: {
-				name: field.name || "Airfield",
-				lat: field.lat,
-				lng: field.lng,
-				gridIndex: idx,
-			},
-			evidence: {
-				airfieldId: field.id,
-				ownerCountryId: field.ownerId,
-				previousControllerCountryId: previousControllerId,
-				controllerCountryId: controllerId,
-				previousSideUid: sideUids[previousSideIdx] || null,
-				controllerSideUid: sideUids[nextSide] || null,
-				disabled: field.disabled,
-				captureRepairCycles: field.captureRepairCycles,
-			},
-		});
-	}
-}
-
-function getOperationalAirPriorityAreas() {
-	if (gameMode !== "CONQUEST") return null;
-	const areas = new Map();
-	for (let sideIndex = 0; sideIndex < sides.length; sideIndex++) {
-		const sideUid = sideUids[sideIndex];
-		const taskForces = _aiTaskForcesBySide.get(sideUid) || [];
-		const sideAreas = taskForces
-			.filter((taskForce) =>
-				["ASSEMBLING", "ATTACKING", "CONSOLIDATING"].includes(taskForce.phase),
-			)
-			.map((taskForce) => taskForce.target || taskForce.stagingAnchor)
-			.filter(Boolean)
-			.map((point) => ({ lat: point.lat, lng: point.lng, radiusKm: 300 }));
-		if (sideAreas.length) areas.set(sideIndex, sideAreas);
-	}
-	return areas;
-}
-
-function runCombinedArmsSimulationTick() {
-	if (!airPowerEnabled) return;
-	if (
-		isSimulationPhaseDue(
-			_simTickCount,
-			COMBINED_ARMS_CONFIG.AIR_MISSION_INTERVAL,
-			47,
-		)
-	) {
-		updateAirfieldControllers();
-	}
-	if (airWings.length === 0) return;
-	runAirPowerTick({
-		tick: _simTickCount,
-		wings: airWings,
-		airfields,
-		units,
-		countryEquipment,
-		countryEconomy,
-		areSidesHostile,
-		applyStrikeDamage: applyStrategicStrike,
-		applyAirLoss: applyAirEquipmentLoss,
-		onEvent: emitEconomyEvent,
-		runtime: _airPowerRuntime,
-		priorityAreasBySide: getOperationalAirPriorityAreas(),
-	});
-	if (window.__perf) {
-		window.__perf.airPower =
-			(window.__perf.airPower || 0) + (_airPowerRuntime.lastUpdateMs || 0);
-	}
-}
-
 export function performSimulationTick() {
 	// PERF PROFILER - check window.__perf in console
 	if (!window.__perf) window.__perf = createPerfState();
@@ -21755,7 +14153,6 @@ export function performSimulationTick() {
 	const _perfKeys = [
 		"plans",
 		"legacyPlans",
-		"operationalIntel",
 		"operationalTaskForces",
 		"proposals",
 		"eval",
@@ -21796,9 +14193,6 @@ export function performSimulationTick() {
 		"unitCityObjective",
 		"unitGarrisonTarget",
 		"unitCombatMove",
-		"economy",
-		"armor",
-		"airPower",
 	];
 	if (_perfEnabled) {
 		for (const k of _perfKeys) _perfSnap[k] = window.__perf[k] || 0;
@@ -21853,8 +14247,6 @@ export function performSimulationTick() {
 	if (gameState === "WAR_OVER") return false;
 	// If in God Mode but the war hasn't started yet, don't tick simulation mechanics
 	if (godModeActive && preGodModeState !== "SIMULATING") return false;
-	runWarEconomyCycle();
-	runCombinedArmsSimulationTick();
 
 	_tickAllCombatants = sides.flat();
 	const _allCombatants = _tickAllCombatants;
@@ -21926,7 +14318,7 @@ export function performSimulationTick() {
 	let p2UnitsCount = 0;
 	for (let i = 0; i < units.length; i++) {
 		const u = units[i];
-		const countsAsLandFormation = unitCountsForCapitulation(u);
+		const countsAsLandFormation = u.kind === "army";
 		const formationEquivalent = countsAsLandFormation
 			? getLiveFormationStrength(u)
 			: 0;
@@ -21949,7 +14341,7 @@ export function performSimulationTick() {
 		const sampleCount = 5000;
 		const modified = [];
 		for (let s = 0; s < sampleCount; s++) {
-			const idx = Math.floor(gameplayRandom() * primaryOccupierMap.length);
+			const idx = Math.floor(Math.random() * primaryOccupierMap.length);
 			if (landMask[idx] !== 2 || primaryOccupierMap[idx] === 0) continue;
 
 			const myId = primaryOccupierMap[idx];
@@ -22025,7 +14417,7 @@ export function performSimulationTick() {
 			Math.floor(integBase / optimizationFactor),
 		);
 		for (let s = 0; s < integSamples; s++) {
-			const idx = Math.floor(gameplayRandom() * landMask.length);
+			const idx = Math.floor(Math.random() * landMask.length);
 			if (landMask[idx] !== 2) continue;
 			const dsIdx = dominantSideMap[idx];
 			if (dsIdx < 0) continue;
@@ -22069,8 +14461,7 @@ export function performSimulationTick() {
 		window.__perf.phase67 += performance.now() - _tP0;
 	} // end territorial integrity
 
-	// 2. Statistics & Soldiers (Dynamic based on units). One shared ledger now
-	// feeds surrender, economy, reports, rebellion and HUD territory consumers.
+	// 2. Statistics & Soldiers: shared territory ledger and direct manpower counts.
 	const _tP133 = performance.now();
 	_simulationJobs.step(160_000);
 	stepTerritoryLedger(countryToSideMap, 160_000);
@@ -22119,10 +14510,6 @@ export function performSimulationTick() {
 			? Math.max(0, getLiveFormationStrength(u))
 			: 1;
 		u._tickHasNearbyHostile = false;
-		u._tickCanSupportArmor =
-			u.kind !== "armor" &&
-			getLiveFormationStrength(u) > 0 &&
-			!getUnitCommandPolicy(u).refusesOffense;
 		u.repulsionVector = null;
 		const kx = Math.floor((u.lng + 180) / HASH_SIZE);
 		const ky = Math.floor((u.lat + 90) / HASH_SIZE);
@@ -22148,13 +14535,11 @@ export function performSimulationTick() {
 	if (CONFIG.ENABLE_SIDE_HASH_COMBAT) {
 		rebuildTacticalGrid(_tacticalGrid, units, {
 			getSide: (unit) =>
-				unit.health > 0 &&
-				(unit.kind === "armor" || getLiveFormationStrength(unit) > 0)
+				unit.health > 0 && getLiveFormationStrength(unit) > 0
 					? unit.sideIndex
 					: null,
 			getStrength: (unit) => getLiveFormationStrength(unit),
 			getAllyWeight: (unit) => unit._tickAllyWeight || 1,
-			isSupport: (unit) => unit._tickCanSupportArmor === true,
 		});
 		let hostileCellVisits = 0;
 		const tacticalRadiusSq = 0.6 * 0.6;
@@ -22204,8 +14589,6 @@ export function performSimulationTick() {
 		let tacticalAcceptedPairs = 0;
 		let tacticalFriendlyPairs = 0;
 		const repulsionRadiusSq = 0.45 * 0.45;
-		const armorSupportRadiusSq =
-			COMBINED_ARMS_CONFIG.ARMOR_SUPPORT_RADIUS_DEG ** 2;
 		for (let sideIdx = 0; sideIdx < sides.length; sideIdx++) {
 			const pairResult = forEachUnorderedNeighborPair(
 				_tacticalGrid,
@@ -22223,24 +14606,6 @@ export function performSimulationTick() {
 					}
 					if (!rightSkipsLocal) {
 						right._tickLocalAllyCount += left._tickAllyWeight || 1;
-					}
-					if (
-						left.kind === "armor" &&
-						!leftSkipsLocal &&
-						right._tickCanSupportArmor &&
-						distanceSq < armorSupportRadiusSq
-					) {
-						left._armorSupported = true;
-						left._armorSupportLastTick = _simTickCount;
-					}
-					if (
-						right.kind === "armor" &&
-						!rightSkipsLocal &&
-						left._tickCanSupportArmor &&
-						distanceSq < armorSupportRadiusSq
-					) {
-						right._armorSupported = true;
-						right._armorSupportLastTick = _simTickCount;
 					}
 					const slotsReplaceRepulsion =
 						left._taskForceUid &&
@@ -22482,143 +14847,25 @@ export function performSimulationTick() {
 	const countryToCityCount = _tickCountryToCityCount;
 	_tickCountryCapitalLost.clear();
 	const countryCapitalLost = _tickCountryCapitalLost;
-	const experimentCityControllers = shouldCountLand ? new Map() : null;
-	const experimentCapitalTransitionsRecorded = shouldCountLand
-		? new Set()
-		: null;
 
-	activeTheaterCities.forEach((city) => {
+	for (const city of activeTheaterCities) {
 		const idx = getGridIndex(city.lat, city.lng);
+		if (idx < 0) continue;
 		const ownerId = primaryOccupierMap[idx];
-		const originalSovereignId = city.sovereignId;
-
-		if (ownerId > 0) {
+		if (ownerId > 0)
 			countryToCityCount.set(
 				ownerId,
 				(countryToCityCount.get(ownerId) || 0) + 1,
 			);
-		}
-
-		if (city.isCapital && originalSovereignId > 0) {
-			const originalSide = countryToSideMap.get(originalSovereignId);
-			const ds = dominantSideMap[idx];
-			const isOccupiedByEnemy = areSidesHostile(originalSide, ds);
-			if (isOccupiedByEnemy) {
-				countryCapitalLost.set(originalSovereignId, true);
-			}
-		}
-
-		if (shouldCountLand) {
-			const cityKey =
-				city.id != null
-					? `id:${city.id}`
-					: `${originalSovereignId || 0}:${city.isCapital ? "capital" : "city"}:${city.name || ""}:${Number(city.lat).toFixed(4)}:${Number(city.lng).toFixed(4)}`;
-			const controllerCountryId = ownerId > 0 ? ownerId : null;
-			experimentCityControllers.set(cityKey, controllerCountryId);
-			if (
-				_experimentPreviousCityControllers.has(cityKey) &&
-				_experimentPreviousCityControllers.get(cityKey) !== controllerCountryId
-			) {
-				const previousControllerCountryId =
-					_experimentPreviousCityControllers.get(cityKey);
-				const controllerSideIdx = dominantSideMap[idx];
-				const originalSideIdx = countryToSideMap.get(originalSovereignId) ?? -1;
-				let eventType = "CITY_CONTROLLER_CHANGED";
-				if (city.isCapital) {
-					const wasLost =
-						_experimentPreviousCapitalLosses.has(originalSovereignId);
-					const isLost = countryCapitalLost.has(originalSovereignId);
-					if (!wasLost && isLost) eventType = "CAPITAL_LOST";
-					else if (wasLost && !isLost) eventType = "CAPITAL_RECOVERED";
-					else eventType = "CAPITAL_CONTROLLER_CHANGED";
-					if (wasLost !== isLost) {
-						experimentCapitalTransitionsRecorded.add(originalSovereignId);
-					}
-				}
-				const previousControllerSideIdx = previousControllerCountryId
-					? findCountrySideIndex(previousControllerCountryId)
-					: -1;
-				recordExperimentEvent(eventType, {
-					source: "territory_scan",
-					major:
-						eventType === "CAPITAL_LOST" || eventType === "CAPITAL_RECOVERED",
-					actorCountryId: controllerCountryId,
-					actorSideUid: sideUids[controllerSideIdx] || null,
-					targetCountryId: originalSovereignId || null,
-					targetSideUid: sideUids[originalSideIdx] || null,
-					location: {
-						name: city.name || (city.isCapital ? "Capital" : "City"),
-						lat: city.lat,
-						lng: city.lng,
-						gridIndex: idx,
-					},
-					evidence: {
-						isCapital: !!city.isCapital,
-						population: city.pop || 0,
-						originalSovereignCountryId: originalSovereignId || null,
-						previousControllerCountryId,
-						controllerCountryId,
-						previousControllerSideUid:
-							sideUids[previousControllerSideIdx] || null,
-						controllerSideUid: sideUids[controllerSideIdx] || null,
-					},
-				});
-			}
-		}
-	});
-	if (shouldCountLand) {
-		const hasPreviousCitySnapshot = _experimentPreviousCityControllers.size > 0;
-		if (hasPreviousCitySnapshot) {
-			const capitalTransitions = new Set([
-				..._experimentPreviousCapitalLosses,
-				...countryCapitalLost.keys(),
-			]);
-			for (const countryId of capitalTransitions) {
-				const wasLost = _experimentPreviousCapitalLosses.has(countryId);
-				const isLost = countryCapitalLost.has(countryId);
-				if (
-					wasLost === isLost ||
-					experimentCapitalTransitionsRecorded.has(countryId)
-				)
-					continue;
-				const capital = activeTheaterCities.find(
-					(city) => city.isCapital && city.sovereignId === countryId,
-				);
-				const capitalIdx = capital
-					? getGridIndex(capital.lat, capital.lng)
-					: -1;
-				const controllerCountryId =
-					capitalIdx >= 0 && primaryOccupierMap[capitalIdx] > 0
-						? primaryOccupierMap[capitalIdx]
-						: null;
-				const controllerSideIdx =
-					capitalIdx >= 0 ? dominantSideMap[capitalIdx] : -1;
-				const originalSideIdx = countryToSideMap.get(countryId) ?? -1;
-				recordExperimentEvent(isLost ? "CAPITAL_LOST" : "CAPITAL_RECOVERED", {
-					source: "territory_scan",
-					major: true,
-					actorCountryId: controllerCountryId,
-					actorSideUid: sideUids[controllerSideIdx] || null,
-					targetCountryId: countryId,
-					targetSideUid: sideUids[originalSideIdx] || null,
-					location: capital
-						? {
-								name: capital.name || "Capital",
-								lat: capital.lat,
-								lng: capital.lng,
-								gridIndex: capitalIdx,
-							}
-						: null,
-					evidence: {
-						originalSovereignCountryId: countryId,
-						controllerCountryId,
-						controllerSideUid: sideUids[controllerSideIdx] || null,
-					},
-				});
-			}
-		}
-		_experimentPreviousCityControllers = experimentCityControllers;
-		_experimentPreviousCapitalLosses = new Set(countryCapitalLost.keys());
+		if (
+			city.isCapital &&
+			city.sovereignId > 0 &&
+			areSidesHostile(
+				countryToSideMap.get(city.sovereignId),
+				dominantSideMap[idx],
+			)
+		)
+			countryCapitalLost.set(city.sovereignId, true);
 	}
 	// Expose capital-loss state globally so recruitment/spawn logic can react to supply failure
 	capitalLostCountries = new Set(countryCapitalLost.keys());
@@ -22838,44 +15085,8 @@ export function performSimulationTick() {
 				_sideWarPhase[si] = "STALEMATE";
 			}
 		}
-
-		for (let si = 0; si < sides.length; si++) {
-			if (!sides[si] || sides[si].length === 0) continue;
-			const nextPhase = _sideWarPhase[si] || "STALEMATE";
-			const previousPhase = _experimentPreviousPhases[si];
-			if (previousPhase && previousPhase !== nextPhase) {
-				const history = _sideMomentumHistory[si] || [];
-				const controlledBefore = history[0]?.controlled || 0;
-				const controlledNow = history.at(-1)?.controlled || 0;
-				recordExperimentEvent("WAR_PHASE_CHANGED", {
-					source: "territory_scan",
-					actorCountryId: sides[si][0]?.id || null,
-					actorSideUid: sideUids[si] || null,
-					evidence: {
-						previousPhase,
-						nextPhase,
-						countryIds: sides[si].map((country) => country.id),
-						controlledBefore,
-						controlledNow,
-						controlledDelta: controlledNow - controlledBefore,
-						personnel: sideSoldiers[si] || 0,
-						initialPersonnel: initialSideSoldiers[si] || 0,
-					},
-				});
-			}
-			_experimentPreviousPhases[si] = nextPhase;
-		}
 	}
-
-	const _tOperationalIntel = performance.now();
-	const operationalIntelRefreshed = refreshOperationalAiIntel();
-	const operationalIntelMs = performance.now() - _tOperationalIntel;
-	window.__perf.operationalIntel += operationalIntelMs;
-	recordPerfMeasure(
-		"Operational AI · Intel",
-		_tOperationalIntel,
-		operationalIntelMs,
-	);
+	refreshLiveCombatPower();
 
 	// ── Auto Posture: per-side strength ratio → OFFENSIVE/BALANCED/DEFENSIVE ──
 	const _tpo = performance.now();
@@ -22990,7 +15201,7 @@ export function performSimulationTick() {
 	evaluateAllPlans();
 	window.__perf.legacyPlans += performance.now() - _tLegacyPlans;
 	const _tOperationalTaskForces = performance.now();
-	updateOperationalAiTaskForces(operationalIntelRefreshed);
+	updateOperationalAiTaskForces();
 	const operationalTaskForceMs = performance.now() - _tOperationalTaskForces;
 	window.__perf.operationalTaskForces += operationalTaskForceMs;
 	recordPerfMeasure(
@@ -23254,7 +15465,7 @@ export function performSimulationTick() {
 					spawnsThisTick = 3;
 				}
 				for (let sp = 0; sp < spawnsThisTick; sp++) {
-					if (gameplayRandom() < recruitmentChance) {
+					if (Math.random() < recruitmentChance) {
 						spawnSingleUnit(sIdx, country.id);
 					}
 				}
@@ -23331,10 +15542,7 @@ export function performSimulationTick() {
 			units.splice(i, 1);
 			continue;
 		}
-		if (
-			u.health <= 0 ||
-			(u.kind !== "armor" && getLiveFormationStrength(u) <= 0)
-		) {
+		if (u.health <= 0 || getLiveFormationStrength(u) <= 0) {
 			units.splice(i, 1);
 			continue;
 		}
@@ -23364,7 +15572,7 @@ export function performSimulationTick() {
 		if (!sideList) continue;
 
 		const countryObj = _countryById.get(u.sovereignId);
-		const commandPolicy = getUnitCommandPolicy(u);
+
 		const aiProfile = aiCountryState.get(u.sovereignId) || {
 			mode: "NORMAL",
 			retreatTriggerMultiple: 8.0,
@@ -23376,8 +15584,7 @@ export function performSimulationTick() {
 			peacePressure: 0.0,
 		};
 		const isDefensive = countryObj?.strategy === "DEFENSIVE";
-		const effectiveDefensive =
-			isDefensive || aiProfile.forceDefensive || commandPolicy.refusesOffense;
+		const effectiveDefensive = isDefensive || aiProfile.forceDefensive;
 		const metaForBuff = _metadataById.get(u.sovereignId) || null;
 		const effectiveBuff = getEffectiveBuffState(countryObj, metaForBuff);
 
@@ -23479,7 +15686,7 @@ export function performSimulationTick() {
 		if (isAtSea && countryObj) {
 			const stats = countryStats.get(u.sovereignId);
 			if (stats && stats.controlled === 0) {
-				if (gameplayRandom() < 0.02) {
+				if (Math.random() < 0.02) {
 					returnUnitPersonnelToReserve(u);
 					units.splice(i, 1);
 					continue;
@@ -23644,14 +15851,14 @@ export function performSimulationTick() {
 				) {
 					u.beneficiaryId =
 						offensiveAllies[
-							Math.floor(gameplayRandom() * offensiveAllies.length)
+							Math.floor(Math.random() * offensiveAllies.length)
 						].id;
 				}
 			} else if (alliesMetadata.length > 0) {
 				if (!u.beneficiaryId || u.beneficiaryId === u.sovereignId) {
 					u.beneficiaryId =
 						alliesMetadata[
-							Math.floor(gameplayRandom() * alliesMetadata.length)
+							Math.floor(Math.random() * alliesMetadata.length)
 						].id;
 				}
 			} else {
@@ -23669,14 +15876,12 @@ export function performSimulationTick() {
 			// Significantly reduced probability to wander to an ally's territory (0.02% per frame)
 			if (
 				!beingOverrun &&
-				gameplayRandom() < 0.0002 &&
+				Math.random() < 0.0002 &&
 				alliesMetadata.length > 0
 			) {
 				u.beneficiaryId =
-					alliesMetadata[
-						Math.floor(gameplayRandom() * alliesMetadata.length)
-					].id;
-			} else if (gameplayRandom() < 0.12 || !u.beneficiaryId) {
+					alliesMetadata[Math.floor(Math.random() * alliesMetadata.length)].id;
+			} else if (Math.random() < 0.12 || !u.beneficiaryId) {
 				// High chance to reset to sovereign target to ensure focus on the main theater
 				u.beneficiaryId = u.sovereignId;
 			}
@@ -23706,8 +15911,6 @@ export function performSimulationTick() {
 			idleTicks < 600 && // force re-scan after 600 idle frames to break perpetual idle loop
 			u.mopUpTargetId === 0;
 
-		const unitRebellion = getRebellionForUnit(u);
-		const isRebelUnit = !!unitRebellion;
 		const _isAlpen = !!u.isAlpenjager;
 		const hasOperationalAssignment =
 			gameMode === "CONQUEST" && !!u._taskForceUid;
@@ -23721,11 +15924,6 @@ export function performSimulationTick() {
 		if (operationalFastLane) {
 			target = u._taskForceOrder.target;
 			window.__perf.tacticalFastLaneUnits++;
-		}
-		if (u.kind === "armor") {
-			u._armorSupported =
-				_simTickCount - (u._armorSupportLastTick ?? Number.NEGATIVE_INFINITY) <=
-				12;
 		}
 
 		const kx = Math.floor((u.lng + 180) / HASH_SIZE);
@@ -23825,7 +16023,7 @@ export function performSimulationTick() {
 								}
 								recordDamage(
 									cached,
-									combinedArmsDamage(proximityDamage, u, cached, {
+									formationDamage(proximityDamage, u, cached, {
 										mountain: isMountain || cached.mountainIntensity > 0,
 										urban:
 											_cityIdxSetTick.has(gridIdxNow) ||
@@ -23835,7 +16033,7 @@ export function performSimulationTick() {
 								);
 								recordDamage(
 									u,
-									combinedArmsDamage(
+									formationDamage(
 										proximityDamage * 0.8 * damageTakenMult,
 										cached,
 										u,
@@ -23920,12 +16118,9 @@ export function performSimulationTick() {
 								// (enemy — no isEnemy check; bucket is enemy-only)
 								const eIdx = _unitGridIdx.get(e) ?? -1;
 								const eAtSea = e._isAtSea;
-								if ((effectiveDefensive || isRebelUnit) && !isAtSea) {
+								if (effectiveDefensive && !isAtSea) {
 									const isEnemyInMyMandatedLand =
-										eIdx !== -1 &&
-										(isRebelUnit
-											? deJureMap[eIdx] === u.sovereignId
-											: worldControlMap[eIdx] === u.sovereignId);
+										eIdx !== -1 && worldControlMap[eIdx] === u.sovereignId;
 									if (!isEnemyInMyMandatedLand && dSq > 0.25) continue;
 								}
 								const distMult = eAtSea && !isAtSea ? 50.0 : 1.0;
@@ -24006,7 +16201,7 @@ export function performSimulationTick() {
 										}
 										recordDamage(
 											e,
-											combinedArmsDamage(proximityDamage, u, e, {
+											formationDamage(proximityDamage, u, e, {
 												mountain: isMountain || e.mountainIntensity > 0,
 												urban:
 													_cityIdxSetTick.has(gridIdxNow) ||
@@ -24016,7 +16211,7 @@ export function performSimulationTick() {
 										);
 										recordDamage(
 											u,
-											combinedArmsDamage(
+											formationDamage(
 												proximityDamage * 0.8 * damageTakenMult,
 												e,
 												u,
@@ -24095,7 +16290,6 @@ export function performSimulationTick() {
 
 			// ── Garrison (moved out of neighbor loop — runs once per unit) ──
 			if (
-				u._occupationGarrisonVictimId == null &&
 				!hasOperationalAssignment &&
 				!u.navalAssigned &&
 				!u.supplyAssigned &&
@@ -24256,7 +16450,6 @@ export function performSimulationTick() {
 					_tEnemyDone;
 			}
 
-			// Fine-grid allied density, armor support, and pair-once repulsion were
 			// precomputed once above instead of rescanning 9–25 coarse buckets per unit.
 		} else {
 			// ═══ Legacy scan (flag off): iterates global unitSpatialHash ═══
@@ -24290,12 +16483,9 @@ export function performSimulationTick() {
 							const eIdx = _unitGridIdx.get(e) ?? -1;
 							const eAtSea = e._isAtSea;
 
-							if ((effectiveDefensive || isRebelUnit) && !isAtSea) {
+							if (effectiveDefensive && !isAtSea) {
 								const isEnemyInMyMandatedLand =
-									eIdx !== -1 &&
-									(isRebelUnit
-										? deJureMap[eIdx] === u.sovereignId
-										: worldControlMap[eIdx] === u.sovereignId);
+									eIdx !== -1 && worldControlMap[eIdx] === u.sovereignId;
 								if (!isEnemyInMyMandatedLand && dSq > 0.25) continue;
 							}
 
@@ -24382,7 +16572,7 @@ export function performSimulationTick() {
 
 									recordDamage(
 										e,
-										combinedArmsDamage(proximityDamage, u, e, {
+										formationDamage(proximityDamage, u, e, {
 											mountain: isMountain || e.mountainIntensity > 0,
 											urban:
 												_cityIdxSetTick.has(gridIdxNow) ||
@@ -24392,7 +16582,7 @@ export function performSimulationTick() {
 									);
 									recordDamage(
 										u,
-										combinedArmsDamage(
+										formationDamage(
 											proximityDamage * 0.8 * damageTakenMult,
 											e,
 											u,
@@ -24446,11 +16636,7 @@ export function performSimulationTick() {
 									}
 								}
 							}
-						} else if (
-							!hasOperationalAssignment &&
-							!skipAllyScan &&
-							u._occupationGarrisonVictimId == null
-						) {
+						} else if (!hasOperationalAssignment && !skipAllyScan) {
 							// Neutral garrison: station along borders with neutrals
 							let bestGP = null;
 							let bestGPDist = Infinity;
@@ -24619,16 +16805,6 @@ export function performSimulationTick() {
 						} else {
 							// Allies logic
 							if (dSq < tacticalRadiusSq) {
-								if (
-									u.kind === "armor" &&
-									e.kind !== "armor" &&
-									e.sideIndex === u.sideIndex &&
-									!getUnitCommandPolicy(e).refusesOffense &&
-									dSq < COMBINED_ARMS_CONFIG.ARMOR_SUPPORT_RADIUS_DEG ** 2
-								) {
-									u._armorSupported = true;
-									u._armorSupportLastTick = _simTickCount;
-								}
 								let aWeight = 1;
 								const aSideIdx = countryToSideMap.get(e.sovereignId);
 								const aCountry =
@@ -24731,8 +16907,8 @@ export function performSimulationTick() {
 						if (dSq < bestCentroidDist) {
 							bestCentroidDist = dSq;
 							// Add scatter to avoid blob: ±1° random offset
-							const scatterLat = (gameplayRandom() - 0.5) * 2;
-							const scatterLng = (gameplayRandom() - 0.5) * 2;
+							const scatterLat = (Math.random() - 0.5) * 2;
+							const scatterLng = (Math.random() - 0.5) * 2;
 							target = {
 								lat: c.lat + scatterLat,
 								lng: c.lng + scatterLng,
@@ -24903,16 +17079,8 @@ export function performSimulationTick() {
 		if (shouldMopUp) {
 			// Mop-up mode: Enemy has no units or target is far and collapsed nations exist
 			let enemyId = -1;
-			const rebellion = getRebellionForUnit(u);
-			const isRebel = !!rebellion;
 
-			if (isRebel) {
-				// REBELS: Target their own de jure land exclusively
-				enemyId = u.sovereignId;
-			} else if (commandPolicy.refusesOffense || commandPolicy.returnHome) {
-				// Unpaid or mutinous units may reclaim home territory but cannot mop up abroad.
-				enemyId = u.sovereignId;
-			} else if (u._mopUpAssignedCountryId > 0) {
+			if (u._mopUpAssignedCountryId > 0) {
 				enemyId = u._mopUpAssignedCountryId;
 			}
 
@@ -24942,9 +17110,7 @@ export function performSimulationTick() {
 			if (needsNewTarget && canRefreshStrategicTarget) {
 				const targetId = activeSupportTarget ? activeSupportTarget.id : enemyId;
 				u.lastMopUpId = targetId;
-				const cellCache = isRebel
-					? _mopUpDeJureCellCache
-					: _mopUpOwnedCellCache;
+				const cellCache = _mopUpOwnedCellCache;
 				const cachedCells = cellCache.get(targetId)?.cells;
 				const bestCellIdx = selectNearestMopUpCell(cachedCells, {
 					unitLat: u.lat,
@@ -24953,9 +17119,7 @@ export function performSimulationTick() {
 					gridRes: CONFIG.GRID_RES,
 					isEligible: (cellIndex) => {
 						if (landMask[cellIndex] !== 2) return false;
-						if (isRebel) {
-							if (deJureMap[cellIndex] !== rebellion.rebelId) return false;
-						} else if (worldControlMap[cellIndex] !== targetId) {
+						if (worldControlMap[cellIndex] !== targetId) {
 							return false;
 						}
 						const occupierSide = dominantSideMap[cellIndex];
@@ -24974,7 +17138,7 @@ export function performSimulationTick() {
 						lng: x * CONFIG.GRID_RES - 180 + CONFIG.GRID_RES * 0.5,
 					};
 					u.mopUpTargetId = targetId;
-					u.targetSearchCooldown = 15 + Math.floor(gameplayRandom() * 20);
+					u.targetSearchCooldown = 15 + Math.floor(Math.random() * 20);
 				} else {
 					u.mopUpTarget = null;
 					u.mopUpTargetId = 0;
@@ -25088,47 +17252,13 @@ export function performSimulationTick() {
 		}
 
 		const _u3GarrisonStart = _detailedPerfEnabled ? performance.now() : 0;
-		let occupationGarrisonPlan =
-			u._occupationGarrisonVictimId != null
-				? _occupationGarrisonPlans.get(u._occupationGarrisonVictimId)
-				: null;
-		let occupationGarrisonPoint = null;
-		let occupationGarrisonActive = !!(
-			occupationGarrisonPlan &&
-			occupationGarrisonPlan.sideIdx === u.sideIndex &&
-			!commandPolicy.returnHome &&
-			!isAtSea
-		);
-		if (occupationGarrisonActive) {
-			const points = occupationGarrisonPlan.garrisonPoints || [];
-			const pointIndex = Math.max(
-				0,
-				Math.min(points.length - 1, u._occupationGarrisonPointIndex || 0),
-			);
-			occupationGarrisonPoint = points[pointIndex] || null;
-			if (occupationGarrisonPoint) {
-				target = {
-					lat: occupationGarrisonPoint.lat,
-					lng: occupationGarrisonPoint.lng,
-				};
-				u.mopUpTarget = null;
-			}
-		}
-		if (!occupationGarrisonPoint) {
-			occupationGarrisonActive = false;
-			occupationGarrisonPlan = null;
-		}
 
 		const _u3d = _detailedPerfEnabled ? performance.now() : 0;
 		if (_detailedPerfEnabled) {
 			window.__perf.unitGarrisonTarget += _u3d - _u3GarrisonStart;
 			window.__perf.unitMopUpSearch += _u3d - _u3c;
 		}
-		if (
-			gameMode === "CONQUEST" &&
-			u._taskForceOrder?.target &&
-			!occupationGarrisonActive
-		) {
+		if (gameMode === "CONQUEST" && u._taskForceOrder?.target) {
 			target = u._taskForceOrder.target;
 		}
 
@@ -25182,15 +17312,7 @@ export function performSimulationTick() {
 
 			if (dist > 0.05) {
 				// Movement logic
-				let baseSpeed = isAtSea ? CONFIG.UNIT_NAVAL_SPEED : CONFIG.UNIT_SPEED;
-				if (u.kind === "armor") {
-					const isUrban = _cityIdxSetTick.has(gridIdxNow);
-					baseSpeed *= getArmorSpeedMultiplier({
-						urban: isUrban,
-						mountain: isMountain,
-						atSea: isAtSea,
-					});
-				}
+				const baseSpeed = isAtSea ? CONFIG.UNIT_NAVAL_SPEED : CONFIG.UNIT_SPEED;
 
 				// Roaming Prevention: Removed exploratory wiggle to force a focused linear push
 				const landSpeedBuff =
@@ -25251,40 +17373,13 @@ export function performSimulationTick() {
 				}
 				const isCommanderCityPlan =
 					!!activeOperationRuntime && activePlan?.type === "DEFEND_CITY";
-				if (
-					commandPolicy.refusesOffense &&
-					activePlan?.type !== "DEFEND" &&
-					!isCommanderCityPlan
-				) {
-					activePlan = null;
-					activePlanSignature = null;
-				}
-				if (
-					u.kind === "armor" &&
-					!u._armorSupported &&
-					["CAPTURE_CITY", "ENCIRCLE", "PUSH_FRONT"].includes(activePlan?.type)
-				) {
-					activePlan = null;
-					activePlanSignature = null;
-				}
-				if (occupationGarrisonActive) {
-					activePlan = null;
-					activePlanSignature = null;
-					u._assignedPlanSignature = null;
-				}
-				const navalPlan =
-					commandPolicy.refusesOffense || occupationGarrisonActive
-						? null
-						: _navalPlan[u.sideIndex];
-				const supplyPlan =
-					commandPolicy.refusesOffense || occupationGarrisonActive
-						? null
-						: _navalSupplyPlan[u.sideIndex];
+				const navalPlan = _navalPlan[u.sideIndex];
+				const supplyPlan = _navalSupplyPlan[u.sideIndex];
 
 				// Naval plan assignment: if this unit is close to staging coast and
 				// the naval plan needs units, recruit it
 				let isNavalUnit = false;
-				let occupationGarrisonHolding = false;
+
 				if (
 					navalPlan &&
 					navalPlan.type === "NAVAL_INVASION" &&
@@ -25293,11 +17388,7 @@ export function performSimulationTick() {
 					!retreatVector &&
 					!isEngaged &&
 					!u.garrisonAssigned &&
-					(navalPlan.activeUnitCount || 0) <
-						(navalPlan.maxAssignedUnits || 0) &&
-					(u.kind !== "armor" ||
-						(navalPlan.activeArmorCount || 0) <
-							Math.floor((navalPlan.maxAssignedUnits || 0) * 0.2))
+					(navalPlan.activeUnitCount || 0) < (navalPlan.maxAssignedUnits || 0)
 				) {
 					if (u.navalAssigned) {
 						isNavalUnit = true;
@@ -25317,36 +17408,13 @@ export function performSimulationTick() {
 					}
 				}
 
-				if (occupationGarrisonActive && occupationGarrisonPoint) {
-					isPlanUnit = true;
-					occupationGarrisonPlan.activeUnitCount =
-						(occupationGarrisonPlan.activeUnitCount || 0) + 1;
-					u.navalAssigned = false;
-					u.supplyAssigned = false;
-					u.isTransport = false;
-					const gdLat = occupationGarrisonPoint.lat - u.lat;
-					let gdLng = occupationGarrisonPoint.lng - u.lng;
-					if (gdLng > 180) gdLng -= 360;
-					else if (gdLng < -180) gdLng += 360;
-					const gd = Math.sqrt(gdLat * gdLat + gdLng * gdLng);
-					occupationGarrisonHolding = gd <= 0.15;
-					if (!occupationGarrisonHolding && gd > 0.01) {
-						planDirLat = gdLat / gd;
-						planDirLng = gdLng / gd;
-					}
-					planSpeedMult = occupationGarrisonHolding ? 0.25 : 1.25;
-					moveDirLat = 0;
-					moveDirLng = 0;
-				} else if (
+				if (
 					isNavalUnit &&
 					navalPlan &&
 					(navalPlan.activeUnitCount || 0) < (navalPlan.maxAssignedUnits || 0)
 				) {
 					isPlanUnit = true;
 					navalPlan.activeUnitCount = (navalPlan.activeUnitCount || 0) + 1;
-					if (u.kind === "armor") {
-						navalPlan.activeArmorCount = (navalPlan.activeArmorCount || 0) + 1;
-					}
 					u.isTransport = true;
 
 					if (navalPlan.phase === "GATHERING") {
@@ -25472,9 +17540,6 @@ export function performSimulationTick() {
 							if (uGI !== -1 && landMask[uGI] !== 0) {
 								u.navalAssigned = false;
 								u._landedAt = simFrameCount;
-								if (u.kind === "armor") {
-									u._armorLandingPenaltyUntilTick = _simTickCount + 600;
-								}
 							}
 						}
 						planSpeedMult = 1.5;
@@ -25677,7 +17742,6 @@ export function performSimulationTick() {
 					if (
 						transportPlan &&
 						!hasOperationalAssignment &&
-						!commandPolicy.refusesOffense &&
 						!shouldMopUp &&
 						!retreatVector &&
 						!isEngaged &&
@@ -25719,14 +17783,8 @@ export function performSimulationTick() {
 					// DEFEND plan and land plan execution — skip if unit is in transport mode
 					if (!u.isTransport) {
 						const taskForceOrder =
-							gameMode === "CONQUEST" && !occupationGarrisonActive
-								? u._taskForceOrder
-								: null;
-						if (
-							taskForceOrder?.target &&
-							!shouldMopUp &&
-							!commandPolicy.returnHome
-						) {
+							gameMode === "CONQUEST" ? u._taskForceOrder : null;
+						if (taskForceOrder?.target && !shouldMopUp) {
 							isPlanUnit = true;
 							activePlan = null;
 							activePlanSignature = null;
@@ -26169,7 +18227,6 @@ export function performSimulationTick() {
 				// Disabled during staging phases and for DEFEND plans (they hold the line)
 				if (
 					u.frontSlot &&
-					!commandPolicy.refusesOffense &&
 					!isPlanUnit &&
 					!shouldMopUp &&
 					!retreatVector &&
@@ -26203,7 +18260,6 @@ export function performSimulationTick() {
 				// Pull towards nearby frontline — disabled when plan is driving the unit
 				if (
 					borderDir &&
-					!commandPolicy.refusesOffense &&
 					!isAtSea &&
 					!isPlanUnit &&
 					!shouldMopUp &&
@@ -26230,10 +18286,8 @@ export function performSimulationTick() {
 				if (
 					_overwhelmingForce[sideIndex] &&
 					(!isPlanUnit || gameMode !== "CONQUEST") &&
-					!occupationGarrisonActive &&
 					borderDir &&
-					!isAtSea &&
-					!commandPolicy.refusesOffense
+					!isAtSea
 				) {
 					moveDirLat = borderDir.lat;
 					moveDirLng = borderDir.lng;
@@ -26271,12 +18325,7 @@ export function performSimulationTick() {
 				}
 
 				// Hive Cohesion & Alignment: Units stick with their squad and move in unison
-				if (
-					groupCentroid &&
-					!isAtSea &&
-					!activeRetreat &&
-					!occupationGarrisonHolding
-				) {
+				if (groupCentroid && !isAtSea && !activeRetreat) {
 					// 1. Cohesion: Pull towards squad center
 					const dCentLat = groupCentroid.lat - u.lat;
 					const dCentLng = groupCentroid.lng - u.lng;
@@ -26310,7 +18359,7 @@ export function performSimulationTick() {
 
 				// Apply allied repulsion to ensure units spread out to borders
 				// Suppression check: Repulsion is disabled during active retreats to prioritize survival
-				if (u.repulsionVector && !activeRetreat && !occupationGarrisonHolding) {
+				if (u.repulsionVector && !activeRetreat) {
 					const rMag = Math.sqrt(
 						u.repulsionVector.lat ** 2 + u.repulsionVector.lng ** 2,
 					);
@@ -26509,8 +18558,8 @@ export function performSimulationTick() {
 						const desperationLat = moveDirLat * 0.3;
 						const desperationLng = moveDirLng * 0.3;
 						// Add jitter to avoid all units trying the same blocked path
-						moveDirLat = desperationLat + (gameplayRandom() - 0.5) * 0.4;
-						moveDirLng = desperationLng + (gameplayRandom() - 0.5) * 0.4;
+						moveDirLat = desperationLat + (Math.random() - 0.5) * 0.4;
+						moveDirLng = desperationLng + (Math.random() - 0.5) * 0.4;
 						const dMag = Math.sqrt(moveDirLat ** 2 + moveDirLng ** 2);
 						if (dMag > 0) {
 							moveDirLat /= dMag;
@@ -26611,29 +18660,6 @@ export function performSimulationTick() {
 
 					if (countryObj && !countryObj.isSaturated) {
 						pushReadiness = 0.3;
-					}
-				}
-
-				if (
-					commandPolicy.returnHome &&
-					!isEngaged &&
-					localEnemyCount === 0 &&
-					u._economyHomeTarget
-				) {
-					const homeLat = u._economyHomeTarget.lat - u.lat;
-					let homeLng = u._economyHomeTarget.lng - u.lng;
-					if (homeLng > 180) homeLng -= 360;
-					else if (homeLng < -180) homeLng += 360;
-					const homeDist = Math.sqrt(homeLat * homeLat + homeLng * homeLng);
-					if (homeDist > 0.15) {
-						moveDirLat = homeLat / homeDist;
-						moveDirLng = homeLng / homeDist;
-						planSpeedMult = 0.8;
-						pushReadiness = 1;
-					} else if (commandPolicy.selfDefenseOnly) {
-						moveDirLat = 0;
-						moveDirLng = 0;
-						pushReadiness = 0;
 					}
 				}
 
@@ -26740,7 +18766,6 @@ export function performSimulationTick() {
 
 				// Strategic Depth: Units defending their own de jure (historical) territory get a defense boost.
 				let defenseBonus = 1.0;
-				let isUrbanCombat = false;
 				const currentIdx = gridIdxNow;
 				const isDeJureLand =
 					currentIdx !== -1 && deJureMap[currentIdx] === u.sovereignId;
@@ -26768,42 +18793,17 @@ export function performSimulationTick() {
 					}
 					if (nearbyCity) {
 						defenseBonus *= 0.45; // Significant defense boost in urban centers
-						isUrbanCombat = true;
 					}
 				}
-				const targetGridIdx = getGridIndex(target.lat, target.lng);
-				if (_cityIdxSetTick.has(targetGridIdx)) isUrbanCombat = true;
-				const armorTerrain = {
-					urban: isUrbanCombat,
-					mountain:
-						isMountain ||
-						(targetGridIdx >= 0 && terrainMask[targetGridIdx] > 0),
-				};
 
 				// War of Attrition: In long wars, units defending "dig in", taking less damage
 				// but making it harder for the attacker to break through without high losses.
 				const longWarDefense = simFrameCount > 6000 ? 0.75 : 1.0;
-				const attackerLandingMultiplier =
-					u.kind === "armor" &&
-					(u._armorLandingPenaltyUntilTick || 0) > _simTickCount
-						? 0.3
-						: 1;
-				const defenderLandingMultiplier =
-					target.kind === "armor" &&
-					(target._armorLandingPenaltyUntilTick || 0) > _simTickCount
-						? 0.3
-						: 1;
 
 				const tDmg =
 					CONFIG.COMBAT_DAMAGE *
 					damageDealtMult *
 					0.7 *
-					getArmorCombatMultiplier(u.kind, target.kind, {
-						...armorTerrain,
-						supported: !!u._armorSupported,
-					}) *
-					(u.kind === "armor" ? getQualityMultiplier(u.quality) : 1) *
-					attackerLandingMultiplier *
 					(u.kind === "army" ? Math.max(0, getLiveFormationStrength(u)) : 1);
 				const uDmg =
 					CONFIG.COMBAT_DAMAGE *
@@ -26811,12 +18811,6 @@ export function performSimulationTick() {
 					damageTakenMult *
 					defenseBonus *
 					longWarDefense *
-					getArmorCombatMultiplier(target.kind, u.kind, {
-						...armorTerrain,
-						supported: !!target._armorSupported,
-					}) *
-					(target.kind === "armor" ? getQualityMultiplier(target.quality) : 1) *
-					defenderLandingMultiplier *
 					(target.kind === "army"
 						? Math.max(0, getLiveFormationStrength(target))
 						: 1);
@@ -26935,24 +18929,16 @@ export function performSimulationTick() {
 			u.lastCombatTick = 0;
 		}
 
-		if (u.health <= 0 || (u.kind === "armor" && (u.equipment || 0) <= 0)) {
+		if (u.health <= 0) {
 			// Units are already being counted for casualties per-hit during simulation.
 			// This just cleans them up when they reach 0 health.
-			if (u.kind === "armor") {
-				emitEconomyEvent(
-					`${countryMetadata[u.sovereignId - 1]?.name || "Country"}: armored formation destroyed`,
-					"danger",
-				);
-			}
+
 			units.splice(i, 1);
 		}
 
 		// ── unitLoop sub-timer: end combatMove ──
 		if (_detailedPerfEnabled && _u4 !== undefined)
 			window.__perf.unitCombatMove += performance.now() - _u4;
-		if (_detailedPerfEnabled && u.kind === "armor") {
-			window.__perf.armor += performance.now() - _u1;
-		}
 	}
 
 	// A side can keep fighting at zero reserve, but it cannot recruit new formations.
@@ -26979,40 +18965,13 @@ export function performSimulationTick() {
 				if (!stats) continue;
 				const decision = evaluateCountryCapitulation({
 					hasFreshTerritoryData: true,
-					isRebel: country.isRebel || activeRebellions.has(country.id),
 					unitCount: stats.units,
 					ownedCells: stats.owned,
 					controlledCells: stats.controlled,
 					initialCells: country.initialCells,
 				});
 				if (!decision.capitulate) continue;
-				const capitulatingSideUid = sideUids[sIdx] || null;
-				const capitulationEvidence = {
-					reason: decision.reason,
-					units: stats.units,
-					controlledCells: stats.controlled,
-					controlledPercent: Number(decision.controlPercent.toFixed(2)),
-					ownedCells: stats.owned,
-					initialCells: country.initialCells,
-					threshold: decision.threshold ?? 0,
-					personnel: sideSoldiers[sIdx] || 0,
-					initialPersonnel: initialSideSoldiers[sIdx] || 0,
-					warPhase: _sideWarPhase[sIdx] || "STALEMATE",
-				};
-				recordExperimentCheckpoint("PRE_CAPITULATION", {
-					countryId: country.id,
-					sideUid: capitulatingSideUid,
-					decision: capitulationEvidence,
-				});
-				recordExperimentEvent("CAPITULATION_TRIGGERED", {
-					source: "surrender",
-					actorCountryId: country.id,
-					actorSideUid: capitulatingSideUid,
-					evidence: {
-						...capitulationEvidence,
-						preMutation: true,
-					},
-				});
+
 				console.warn("[MW] CAPITULATION:", country.name, {
 					reason: decision.reason,
 					units: stats.units,
@@ -27022,12 +18981,6 @@ export function performSimulationTick() {
 					threshold: decision.threshold ?? 0,
 				});
 				if (capitulateCountry(country, sIdx)) {
-					recordExperimentEvent("COUNTRY_CAPITULATED", {
-						source: "surrender",
-						actorCountryId: country.id,
-						actorSideUid: capitulatingSideUid,
-						evidence: capitulationEvidence,
-					});
 					// Exit tick early to re-evaluate state with updated sides and units.
 					return false;
 				}
@@ -27058,12 +19011,6 @@ export function performSimulationTick() {
 		// The last atomically committed ledger generation is coherent. Avoid the
 		// former multi-million-cell scan on every 200-tick report boundary.
 		sideTerritoryCounts = _cachedSideTerritoryCounts;
-		if (activeExperimentRecorder) {
-			recordExperimentCheckpoint("TERRITORY_SCAN", {
-				sideMetrics: captureExperimentMetrics({ scanWorld: false }),
-			});
-			updateExperimentWarDesk();
-		}
 	}
 	const totalTerritory = sideTerritoryCounts.reduce((a, b) => a + b, 0);
 	const side0Pct =
@@ -27122,8 +19069,8 @@ export function performSimulationTick() {
 						maxPressure * 5,
 					));
 
-			if (gameplayRandom() < proposalChance) {
-				const proposerSideIdx = Math.floor(gameplayRandom() * sides.length);
+			if (Math.random() < proposalChance) {
+				const proposerSideIdx = Math.floor(Math.random() * sides.length);
 				if (sides[proposerSideIdx] && sides[proposerSideIdx].length > 0) {
 					const receiverSideIdx = sides.findIndex(
 						(s, i) =>
@@ -27145,7 +19092,7 @@ export function performSimulationTick() {
 						acceptChance = Math.max(0.05, Math.min(0.95, acceptChance));
 						showTreatyOffer(
 							proposerSideIdx,
-							gameplayRandom() < acceptChance,
+							Math.random() < acceptChance,
 							proposerSideIdx,
 						);
 					}
@@ -27237,24 +19184,24 @@ export function performSimulationTick() {
 			.filter((x) => x.s.length > 0);
 
 		if (activeSideList.length >= 2) {
-			if (bases.length > 0 && gameplayRandom() < 0.01) {
+			if (bases.length > 0 && Math.random() < 0.01) {
 				const launcherEntry =
-					activeSideList[Math.floor(gameplayRandom() * activeSideList.length)];
+					activeSideList[Math.floor(Math.random() * activeSideList.length)];
 				const launcherSideIdx = launcherEntry.idx;
 				const enemyEntries = activeSideList.filter((x) =>
 					areSidesHostile(launcherSideIdx, x.idx),
 				);
 				if (enemyEntries.length > 0) {
 					const targetEntry =
-						enemyEntries[Math.floor(gameplayRandom() * enemyEntries.length)];
+						enemyEntries[Math.floor(Math.random() * enemyEntries.length)];
 					const targetSideIdx = targetEntry.idx;
 					const myBases = bases.filter((b) => b.sideIndex === launcherSideIdx);
 					const enemyUnits = _tickUnitsBySide[targetSideIdx] || [];
 					if (myBases.length > 0 && enemyUnits.length > 0) {
 						const launcher =
-							myBases[Math.floor(gameplayRandom() * myBases.length)];
+							myBases[Math.floor(Math.random() * myBases.length)];
 						const target =
-							enemyUnits[Math.floor(gameplayRandom() * enemyUnits.length)];
+							enemyUnits[Math.floor(Math.random() * enemyUnits.length)];
 						launchBomb(
 							launcher.lat,
 							launcher.lng,
@@ -27278,46 +19225,16 @@ export function performSimulationTick() {
 	const numSides = sides.length;
 	const unitCounts = new Array(numSides).fill(0);
 	const soldierEsts = new Array(numSides).fill(0);
-	const armorCounts = new Array(numSides).fill(0);
-	const fighterCounts = new Array(numSides).fill(0);
-	const strikeCounts = new Array(numSides).fill(0);
-	const activeFighterCrew = new Array(numSides).fill(0);
-	const activeStrikeCrew = new Array(numSides).fill(0);
 	for (let i = 0; i < units.length; i++) {
 		const u = units[i];
 		const si = u.sideIndex;
 		if (si >= 0 && si < numSides) {
 			unitCounts[si]++;
-			if (u.kind === "armor") {
-				const vehicles = Math.max(0, Math.round(u.equipment || 0));
-				armorCounts[si] += vehicles;
-			} else {
-				soldierEsts[si] += getLiveFormationPersonnel(u);
-			}
+			soldierEsts[si] += getLiveFormationPersonnel(u);
 		}
-	}
-	for (const wing of airWings) {
-		const si = wing.sideIndex;
-		if (si < 0 || si >= numSides || wing.equipment <= 0) continue;
-		const aircraft = Math.max(0, Math.round(wing.equipment));
-		if (wing.role === "FIGHTER") fighterCounts[si] += aircraft;
-		else strikeCounts[si] += aircraft;
-		if (wing.state === AIR_WING_STATES.EVACUATED) continue;
-		if (wing.role === "FIGHTER") activeFighterCrew[si] += aircraft;
-		else activeStrikeCrew[si] += aircraft;
-	}
-	for (let si = 0; si < numSides; si++) {
-		soldierEsts[si] += computeEquipmentPersonnel({
-			armoredVehicles: armorCounts[si],
-			fighters: activeFighterCrew[si],
-			strikeAircraft: activeStrikeCrew[si],
-		});
 	}
 	_cachedSideUnitCounts = unitCounts;
 	_cachedSideSoldierEsts = soldierEsts;
-	_cachedSideArmorCounts = armorCounts;
-	_cachedSideFighterCounts = fighterCounts;
-	_cachedSideStrikeCounts = strikeCounts;
 
 	window.__perf.post += performance.now() - _t4;
 	const _tickMs = performance.now() - _t0;
@@ -27421,7 +19338,6 @@ function getRenderSkipCadence() {
 function getPerfConfigSnapshot() {
 	return {
 		build: document.title || null,
-		seed: getExperimentSeed(),
 		gridRes: CONFIG.GRID_RES,
 		mapResolution: mapResSelect?.value || null,
 		maxUnitsPerSide: CONFIG.MAX_UNITS_PER_SIDE,
@@ -27442,9 +19358,6 @@ function getPerfConfigSnapshot() {
 		frontlinePolyUpdateInterval: FRONTLINE_POLY_UPDATE_INTERVAL,
 		operationalAi: gameMode === "CONQUEST",
 		traceMarksEnabled: window.__perf?._traceMarksEnabled === true,
-		warEconomyEnabled,
-		armorEnabled,
-		airPowerEnabled,
 	};
 }
 
@@ -27774,9 +19687,7 @@ function getPerfReportData() {
 			"DOM/HUD updates dominate measured work; reduce update frequency and avoid rebuilding unchanged War Desk or casualty nodes.",
 		);
 	}
-	const operationalAiAverage =
-		(categories.operationalIntel?.avg || 0) +
-		(categories.operationalTaskForces?.avg || 0);
+	const operationalAiAverage = categories.operationalTaskForces?.avg || 0;
 	if (operationalAiAverage > tickSummary.avg * 0.1) {
 		recommendations.push(
 			"Operational AI exceeds 10% of tick time; inspect contact refresh breadth and task-force reassessment frequency.",
@@ -28077,7 +19988,6 @@ async function runPerfSuite(options = {}) {
 		maxUnitsPerSide: options.maxUnitsPerSide || 250,
 		durationMs: options.durationMs || 15_000,
 		warmupMs: options.warmupMs ?? 3000,
-		seed: options.seed ?? 0x4d575031,
 		perfMode: options.perfMode || "detailed",
 		speedIndex: options.speedIndex ?? SPEED_STEPS.length - 1,
 		viewMode: options.viewMode || "POLITICAL",
@@ -28477,12 +20387,6 @@ export function updateLoop(now) {
 			mel.style.setProperty("--momentum-color", pc.color);
 			mel.textContent = `${pc.symbol} ${phase}`;
 		}
-		const armorEl = _cachedArmorEls[si];
-		if (armorEl) armorEl.textContent = _cachedSideArmorCounts[si] || 0;
-		const fighterEl = _cachedFighterEls[si];
-		if (fighterEl) fighterEl.textContent = _cachedSideFighterCounts[si] || 0;
-		const strikeEl = _cachedStrikeEls[si];
-		if (strikeEl) strikeEl.textContent = _cachedSideStrikeCounts[si] || 0;
 	}
 
 	if (_cachedUnitCountSpans.length) {
@@ -28514,7 +20418,7 @@ export function updateLoop(now) {
 	// Throttled Combatants UI update
 	if (simFrameCount % 30 === 0) {
 		updateCombatantsUI();
-		updateExperimentWarDesk();
+		updateWarOverview();
 	}
 
 	// Update Casualty UI (Every 5 frames for "live" counting effect)
@@ -28724,129 +20628,36 @@ export function openLeaderboard() {
 
 export function showTreatyOffer(proposerSideIdx, willAccept) {
 	lastTreatyTime = Date.now();
-	let name;
-	if (sides[proposerSideIdx]?.[0]) {
-		const side = sides[proposerSideIdx];
-		name = side.length > 1 ? `${side[0].name} Allies` : side[0].name;
-	} else {
-		const nameEl = document.querySelector(
-			`[data-sidename="${proposerSideIdx}"]`,
-		);
-		name = nameEl
-			? nameEl.innerText
-			: `Side ${String.fromCharCode(65 + proposerSideIdx)}`;
-	}
-
+	const name = getSideDisplayName(proposerSideIdx);
 	treatyMsg.innerText = `${name} requests peace`;
 	treatyAlert.style.display = "block";
 	document.getElementById("treaty-status").innerText =
 		"Considering proposal...";
-	recordExperimentEvent("PEACE_OFFERED", {
-		source: "diplomacy",
-		actorCountryId: sides[proposerSideIdx]?.[0]?.id || null,
-		actorSideIndex: proposerSideIdx,
-		message: `${name} requested peace.`,
-		evidence: {
-			proposerSideIndex: proposerSideIdx,
-			anticipatedAcceptance: !!willAccept,
-		},
-	});
-
-	const lifecycleToken = _warLifecycleToken;
+	const token = _warLifecycleToken;
 	scheduleWarLifecycleCallback(
 		() => {
 			if (gameState !== "SIMULATING") return;
-			if (willAccept) {
-				recordExperimentEvent("PEACE_ACCEPTED", {
-					source: "diplomacy",
-					actorCountryId: sides[proposerSideIdx]?.[0]?.id || null,
-					actorSideIndex: proposerSideIdx,
-					message: `${name}'s peace proposal was accepted.`,
-					major: true,
-				});
-				document.getElementById("treaty-status").innerText = "Treaty Accepted";
-				scheduleWarLifecycleCallback(
-					() => {
-						if (gameState !== "SIMULATING") return;
-						// Multi-side war: proposer's side exits, war continues for remaining sides
-						if (sides.length > 2) {
-							_signSelectiveSideExit(proposerSideIdx);
-						} else {
-							applyTreaty("PEACE_TREATY");
-						}
-					},
-					1500,
-					lifecycleToken,
-				);
-			} else {
-				recordExperimentEvent("PEACE_REJECTED", {
-					source: "diplomacy",
-					actorCountryId: sides[proposerSideIdx]?.[0]?.id || null,
-					actorSideIndex: proposerSideIdx,
-					message: `${name}'s peace proposal was rejected.`,
-				});
-				document.getElementById("treaty-status").innerText =
-					"Proposal Rejected";
-				scheduleWarLifecycleCallback(
-					() => {
-						if (gameState !== "SIMULATING") return;
+			document.getElementById("treaty-status").innerText = willAccept
+				? "Treaty Accepted"
+				: "Proposal Rejected";
+			scheduleWarLifecycleCallback(
+				() => {
+					if (gameState !== "SIMULATING") return;
+					if (willAccept) {
+						if (sides.length > 2) _signSelectiveSideExit(proposerSideIdx);
+						else applyTreaty("PEACE_TREATY");
+					} else {
 						treatyAlert.style.display = "none";
 						lastTreatyTime = Date.now();
-					},
-					1500,
-					lifecycleToken,
-				);
-			}
+					}
+				},
+				1500,
+				token,
+			);
 		},
 		2000,
-		lifecycleToken,
+		token,
 	);
-}
-
-function resolveCapitulatedEquipment(countryId, sideIndex) {
-	const state = countryEquipment.get(countryId);
-	if (state) state.reserveArmor = 0;
-	const reserveAircraftLost = Math.max(
-		0,
-		(state?.reserveFighters || 0) + (state?.reserveStrike || 0),
-	);
-	if (state) {
-		state.reserveFighters = 0;
-		state.reserveStrike = 0;
-	}
-	const evacuation = evacuateDefeatedWings({
-		countryId,
-		sideIndex,
-		wings: airWings,
-		airfields,
-	});
-	const evacuatedAircraft = evacuation.evacuatedAircraft;
-	const lostAircraft = reserveAircraftLost + evacuation.lostAircraft;
-	if (state) {
-		state.currentArmor = 0;
-		state.currentFighters = airWings
-			.filter(
-				(wing) => wing.sovereignId === countryId && wing.role === "FIGHTER",
-			)
-			.reduce((sum, wing) => sum + Math.max(0, wing.equipment || 0), 0);
-		state.currentStrike = airWings
-			.filter(
-				(wing) => wing.sovereignId === countryId && wing.role === "STRIKE",
-			)
-			.reduce((sum, wing) => sum + Math.max(0, wing.equipment || 0), 0);
-	}
-	if (evacuatedAircraft > 0) {
-		emitEconomyEvent(
-			`${countryMetadata[countryId - 1]?.name || "Country"}: ${evacuatedAircraft} aircraft evacuated into allied storage`,
-			"warning",
-		);
-	}
-	if (lostAircraft > 0) {
-		emitEconomyEvent(
-			`${countryMetadata[countryId - 1]?.name || "Country"}: ${lostAircraft} aircraft lost during capitulation`,
-			"danger",
-		);
-	}
 }
 
 export function capitulateCountry(country, sideIndex) {
@@ -29184,16 +20995,11 @@ export function capitulateCountry(country, sideIndex) {
 		}
 	}
 
-	// Preserve the defeated nation's economic identity. The annexer receives a
-	// partial occupation yield and owes occupation costs through the war economy.
-	if (primaryAnnexerId > 0) registerOccupation(country.id, primaryAnnexerId);
 	releaseCountryPersonnelFromSide(country.id, sideIndex);
-	resolveCapitulatedEquipment(country.id, sideIndex);
 
 	// Remove the country from its alliance list
 	const cIdx = side.indexOf(country);
 	if (cIdx > -1) side.splice(cIdx, 1);
-	if (side.length === 0) preserveRetiredSidePersonnel(sideIndex);
 
 	// Clear targets for any units that were focusing on this specific country's theater
 	units.forEach((u) => {
@@ -29228,7 +21034,7 @@ export function capitulateCountry(country, sideIndex) {
 export function applyTreaty(
 	type,
 	winnerPoleOverride = null,
-	endingReasonOverride = null,
+	_endingReasonOverride = null,
 ) {
 	if (
 		gameMode === "OPERATION" &&
@@ -29243,25 +21049,7 @@ export function applyTreaty(
 	}
 	if (gameState === "WAR_OVER") return;
 	invalidateWarLifecycleTimers();
-	const preTreatySnapshot = activeExperimentRecorder
-		? createExperimentSnapshot("PRE_TREATY", { scanWorld: true })
-		: null;
-	if (activeExperimentRecorder) {
-		appendWarCheckpoint(activeExperimentRecorder, {
-			date: getExperimentDateLabel(),
-			reason: "PRE_TREATY",
-			sideMetrics: preTreatySnapshot.sides,
-			tick: _simTickCount,
-		});
-		recordExperimentEvent("ENDING_TRIGGERED", {
-			source: "treaty",
-			message: `Ending sequence triggered: ${type.replaceAll("_", " ").toLowerCase()}.`,
-			evidence: { endingType: type, preTreaty: preTreatySnapshot },
-		});
-	}
-	freezeOperationalAiObserverSnapshots();
 	gameState = "WAR_OVER";
-	updateEconomyPanel();
 	playPeaceSound();
 
 	// Stop recording if active
@@ -29479,37 +21267,15 @@ export function applyTreaty(
 	animationFrameId = null;
 	stopWarAmbiance();
 	treatyAlert.style.display = "none";
-	const postTreatySnapshot = activeExperimentRecorder
-		? createExperimentSnapshot("POST_TREATY", { scanWorld: true })
-		: null;
-	const endingReason =
-		endingReasonOverride || endingReasonForTreaty(type, winnerName);
-	finalizeActiveExperiment({
-		type,
-		winnerSideIndex: winnerSideIdx,
-		winnerName,
-		endingReason,
-		preTreaty: preTreatySnapshot,
-		postTreaty: postTreatySnapshot,
-	});
-}
 
-export function handleRebellionPeace(rebelId = null) {
-	const rebellion = rebelId
-		? activeRebellions.get(rebelId)
-		: activeRebellions.values().next().value;
-	if (rebellion) resolveRebellionSuccess(rebellion);
+	updateWarOverview(true);
+	scheduleWarLifecycleCallback(reopenConflictSetupAfterWar, 1500);
 }
 
 export function resetToSelection() {
 	invalidateWarLifecycleTimers();
 	countryLabelAnchors.clear();
 	stopWarAmbiance();
-	_experimentUi?.hideWarDesk();
-	document.body.classList.remove("experiment-loop-active");
-	_experimentPreviousPhases = [];
-	_experimentPreviousCapitalLosses = new Set();
-	_experimentPreviousCityControllers = new Map();
 	// Stop in‑game time progression but keep the last war date visible in the setup
 	gameTimeEnabled = false;
 	gameTimeAccumulatorMs = 0;
@@ -29562,14 +21328,11 @@ export function resetToSelection() {
 	bombs = [];
 	explosions = [];
 	bases = [];
-	activeRebellions.clear();
-	occupationEconomies.clear();
-	clearOccupationGarrisonAssignments();
-	_occupationGarrisonPlans.clear();
-	countryEconomy.clear();
-	economyEvents.length = 0;
-	economyPayCycle = 0;
 	resetOperationalAiRuntime();
+	document.body.classList.remove("conflict-active");
+	document.getElementById("war-desk").style.display = "none";
+	_warOverviewSides = [];
+	_warOverviewLastUpdate = -Infinity;
 	resetSideHostilities();
 	setSpeed(0);
 	frameAccumulator = 0;
@@ -29595,7 +21358,6 @@ export function resetToSelection() {
 	godBombBtn.classList.remove("active");
 	forcePeaceBtn.style.display = "none";
 	unitCountsDiv.style.display = "none";
-	updateEconomyPanel();
 }
 
 export async function resetGame() {
@@ -29673,7 +21435,7 @@ map.on("click", (e) => {
 		showWarPlans &&
 		window.innerWidth < 480
 	) {
-		const snapshot = getAiObserverSnapshot();
+		const snapshot = getAiOperationsSnapshot();
 		let nearestTaskForce = null;
 		let nearestDistanceSq = Infinity;
 		for (const taskForce of snapshot?.taskForces || []) {
@@ -29956,96 +21718,6 @@ if (noPeaceCheckbox) {
 	});
 }
 
-if (minimizeEconomyBtn && economyPanel) {
-	minimizeEconomyBtn.addEventListener("click", () => {
-		const minimized = economyPanel.classList.toggle("minimized");
-		minimizeEconomyBtn.innerText = minimized ? "+" : "−";
-	});
-}
-
-document
-	.getElementById("economy-force-cycle-btn")
-	?.addEventListener("click", () => {
-		if (godModeActive) runWarEconomyCycle(true);
-	});
-
-if (economyPanelBody) {
-	economyPanelBody.addEventListener("click", (event) => {
-		if (!godModeActive) return;
-		const button = event.target.closest("button[data-economy-action]");
-		if (!button) return;
-		const countryId = Number(button.dataset.countryId);
-		const action = button.dataset.economyAction;
-		const state = countryEconomy.get(countryId);
-		const occupation = occupationEconomies.get(countryId);
-		if (action === "fund" && state) {
-			state.treasury += state.baseIncome * 3;
-			emitEconomyEvent(
-				`${countryMetadata[countryId - 1]?.name || "Country"}: emergency funds granted`,
-				"recovery",
-			);
-		} else if (action === "clear" && state) {
-			const previousBand = state.commandBand;
-			state.arrearsCycles = 0;
-			state.mutinyRecoveryCycles = 0;
-			state.commandBand = COMMAND_BANDS.PAID;
-			state.payrollCoverage = 1;
-			updateUnitCommandState(countryId, previousBand, state.commandBand);
-		} else if (action === "armor-add") {
-			adjustCountryEquipment(countryId, "armor", 100);
-		} else if (action === "armor-remove") {
-			adjustCountryEquipment(countryId, "armor", -100);
-		} else if (action === "fighter-add") {
-			adjustCountryEquipment(countryId, "fighter", 24);
-		} else if (action === "fighter-remove") {
-			adjustCountryEquipment(countryId, "fighter", -24);
-		} else if (action === "strike-add") {
-			adjustCountryEquipment(countryId, "strike", 24);
-		} else if (action === "strike-remove") {
-			adjustCountryEquipment(countryId, "strike", -24);
-		} else if (action === "replacement-cycle" && state) {
-			settleCombinedArmsCycle(countryId, state, summarizeLiveEquipment());
-		} else if (action === "restore-equipment") {
-			restoreCountryEquipmentCapacity(countryId);
-		} else if (action === "repair-field") {
-			const field = airfields.find(
-				(candidate) =>
-					candidate.controllerId === countryId && candidate.health < 100,
-			);
-			if (field) {
-				field.health = 100;
-				field.disabled = false;
-				field.captureRepairCycles =
-					COMBINED_ARMS_CONFIG.AIRFIELD_CAPTURE_REPAIR_CYCLES;
-			}
-		} else if (action === "disable-field") {
-			const field = airfields.find(
-				(candidate) =>
-					candidate.controllerId === countryId && candidate.health > 0,
-			);
-			if (field) {
-				field.health = 0;
-				field.disabled = true;
-			}
-		} else if (action === "strike-now") {
-			if (forceCountryStrike(countryId)) {
-				emitEconomyEvent(
-					`${countryMetadata[countryId - 1]?.name || "Country"}: strike mission forced`,
-					"info",
-				);
-			}
-		} else if (action === "resist" && occupation) {
-			occupation.resistance = Math.min(100, occupation.resistance + 25);
-		} else if (action === "rebel" && occupation) {
-			occupation.resistance = 100;
-			occupation.cooldownUntilCycle = 0;
-			occupation.queuedAtCycle = economyPayCycle;
-			processRebellionStates(flushTerritoryLedger());
-		}
-		updateEconomyPanel();
-	});
-}
-
 // Secret Sounds checkbox
 const useSecretSoundsCheckbox = document.getElementById(
 	"use-secret-sounds-checkbox",
@@ -30084,219 +21756,9 @@ mainDisableMountainsCheckbox.addEventListener("change", (e) => {
 restartScenarioBtn.addEventListener("click", resetGame);
 
 // QUICK RESTART: instant in‑memory reset back to scenario start without loading overlay
-if (quickRestartBtn) {
-	quickRestartBtn.addEventListener("click", () => {
-		invalidateWarLifecycleTimers();
-		_experimentUi?.hideWarDesk();
-		_experimentUi?.hideAfterActionReport();
-		if (latestWarReport) _experimentUi?.showReportReopenButton();
-		document.body.classList.remove("experiment-loop-active");
-		activeExperimentRecorder = null;
-		activeExperimentSpec = null;
-		_experimentParentReport = null;
-		// If we never captured a snapshot (e.g. user hits quick restart before a war),
-		// just fall back to the heavy reset.
-		if (
-			!initialWorldControlMapSnapshot ||
-			!initialDeJureMapSnapshot ||
-			!initialProvinceMapSnapshot ||
-			!initialLandMaskSnapshot
-		) {
-			resetGame();
-			return;
-		}
-
-		// Stop any running simulation loops and sounds but do NOT show the loading overlay.
-		if (animationFrameId !== null) {
-			cancelAnimationFrame(animationFrameId);
-			animationFrameId = null;
-		}
-		if (backgroundTickId) {
-			clearInterval(backgroundTickId);
-			backgroundTickId = null;
-		}
-		stopWarAmbiance();
-
-		// Restore core grid state
-		worldControlMap.set(initialWorldControlMapSnapshot);
-		deJureMap.set(initialDeJureMapSnapshot);
-		provinceMap.set(initialProvinceMapSnapshot);
-		landMask.set(initialLandMaskSnapshot);
-		if (initialBiomeMaskSnapshot) biomeMask.set(initialBiomeMaskSnapshot);
-
-		// Restore metadata and cities from snapshots
-		// structuredClone preserves Infinity, NaN, and typed arrays correctly.
-		if (initialCountryMetadataSnapshot) {
-			countryMetadata = initialCountryMetadataSnapshot.map((m) => {
-				if (!m) return null;
-				// Create a fresh shallow copy to avoid mutating the snapshot
-				const newMeta = { ...m };
-				// Re-initialize bounds correctly if they were lost or corrupted
-				newMeta.bounds = {
-					minX: Infinity,
-					maxX: -Infinity,
-					minY: Infinity,
-					maxY: -Infinity,
-				};
-
-				// Restore the Drawable Image object for flags
-				if (newMeta.flagUrl) {
-					const img = new Image();
-					img.crossOrigin = "anonymous";
-					img.onload = () => {
-						if (influenceLayer) influenceLayer.render();
-					};
-					img.src = newMeta.flagUrl;
-					newMeta.tempFlag = img;
-				}
-				return newMeta;
-			});
-		}
-
-		if (initialCitiesSnapshot) {
-			cities = initialCitiesSnapshot.map((c) => ({ ...c }));
-		}
-
-		// Hide loading screen just in case it was triggered by a fallback
-		loadingOverlay.style.display = "none";
-
-		// Clear all dynamic war state
-		occupationMap.fill(0);
-		resetSideInfluenceMaps();
-		primaryOccupierMap.fill(0);
-		units = [];
-		unitSpatialHash.clear();
-		for (const sideHash of unitHashBySide) sideHash.clear();
-		bombs = [];
-		explosions = [];
-		bases = [];
-		activeBattles = [];
-		_battleHash.clear();
-		capitalLostCountries = new Set();
-		activeRebellions.clear();
-		occupationEconomies.clear();
-		clearOccupationGarrisonAssignments();
-		_occupationGarrisonPlans.clear();
-		countryEconomy.clear();
-		clearCombinedArmsState();
-		resetOperationalAiRuntime();
-		economyEvents.length = 0;
-		economyPayCycle = 0;
-		countryCasualties.clear();
-		casualtyByAttacker.clear();
-		latestCountryStats.clear();
-		selectedCountryIds.clear();
-
-		// Reset time system and manpower to pristine state
-		gameTimeEnabled = false;
-		gameTimeDate = null;
-		gameTimeAccumulatorMs = 0;
-		if (gameDateDisplay) {
-			gameDateDisplay.style.display = "none";
-		}
-		sideSoldiers.fill(0);
-		initialSideSoldiers.fill(0);
-		sideRecruitableManpower.fill(0);
-		soldiersPerUnit.fill(CONFIG.UNIT_TO_SOLDIER_RATIO);
-		sideCasualties.fill(0);
-
-		// Reset sides / selection but keep the active scenario context
-		sides = [[], []];
-		_attackers = sides[0];
-		_defenders = sides[1];
-		activeSideIndex = 0;
-		ffaMode = false;
-		resetSideHostilities();
-
-		// Reset UI back to conflict setup with no loading screen
-		gameState = "SELECTING_P1";
-		statusText.innerText = getTranslation("SELECT_P1");
-		setupPanel.style.display = "block";
-		setupOptions.style.display = "none";
-		statsPanel.style.display = "none";
-		casualtyPanel.style.display = "none";
-		if (economyPanel) economyPanel.style.display = "none";
-		document.getElementById("speed-controls").style.display = "none";
-		godModeBtn.style.display = gameMode === "CONQUEST" ? "block" : "none";
-		forcePeaceBtn.style.display = "none";
-		unitCountsDiv.style.display = "none";
-		treatyAlert.style.display = "none";
-		frameAccumulator = 0;
-		simFrameCount = 0;
-		setSpeed(0);
-		updateSidesUI();
-		updateRestartVisibility();
-		recalculateAllBounds();
-
-		// Force an immediate high-priority redraw of the canvas layer
-		if (influenceLayer) {
-			influenceLayer._forceRender = true;
-			if (typeof influenceLayer._update === "function") {
-				influenceLayer._update();
-			} else {
-				influenceLayer.render();
-			}
-		}
-	});
-}
 
 resetBtn.addEventListener("click", resetGame);
-
 // In‑game MENU button: return to main menu without full page reload
-mainMenuBtn.addEventListener("click", () => {
-	invalidateWarLifecycleTimers();
-	// Stop any running simulation loops
-	if (animationFrameId !== null) {
-		cancelAnimationFrame(animationFrameId);
-		animationFrameId = null;
-	}
-	if (backgroundTickId) {
-		clearInterval(backgroundTickId);
-		backgroundTickId = null;
-	}
-	stopWarAmbiance();
-	clearOperationUi();
-	_experimentUi?.hideWarDesk();
-	_experimentUi?.hideAfterActionReport();
-	_experimentUi?.hideReportReopenButton();
-	document.body.classList.remove("experiment-loop-active");
-	activeExperimentRecorder = null;
-	activeExperimentSpec = null;
-	_experimentParentReport = null;
-	resetOperationalAiRuntime();
-
-	// Reset high‑level state to menu
-	gameState = "MAIN_MENU";
-	gameMode = "CONQUEST";
-	isPaused = false;
-
-	// Hide in‑game UI and show main menu
-	mapUi.style.display = "none";
-	settingsOverlay.style.display = "none";
-	loadingOverlay.style.display = "none";
-	scenarioHubModal.style.display = "none";
-	tutorialOverlay.style.display = "none";
-	if (leaderboardOverlay) leaderboardOverlay.style.display = "none";
-	mainMenu.style.display = "flex";
-
-	// Ensure background music resumes when returning to the main menu
-	initAudio();
-
-	// Make sure restart/menu visibility is updated for when you re‑enter a scenario
-	updateRestartVisibility();
-});
-
-startBtn.addEventListener("click", () => {
-	activeRebellions.clear();
-	startWar();
-});
-
-if (rebellionBtn) {
-	// Rebellions are disabled; keep this button inert.
-	rebellionBtn.addEventListener("click", () => {
-		alert("Rebellions have been disabled in this build.");
-	});
-}
 
 editorUpdateBtn.addEventListener("click", async () => {
 	if (!activeScenarioId) return;
@@ -30359,130 +21821,6 @@ editorUpdateBtn.addEventListener("click", async () => {
 	}
 });
 
-godModeBtn.addEventListener("click", () => {
-	if (!godModeActive) {
-		// Activate God Mode
-		godModeActive = true;
-		godBombActive = false;
-		if (godBombBtn) {
-			godBombBtn.innerText = "GOD BOMB: OFF";
-			godBombBtn.classList.remove("active");
-		}
-		preGodModeState = gameState;
-		gameState = "EDITOR_ACTIVE";
-
-		godModeBtn.innerText = getTranslation("GOD_ACTIVE");
-		godModeBtn.style.background = "#27ae60";
-
-		// Setup UI
-		editorToolbox.style.display = "flex";
-		setupPanel.style.display = "none";
-		statsPanel.style.display = "none";
-		// Allow sharing and saving any current map state from God Mode, including official presets
-		editorShareBtn.style.display = "block";
-		editorSaveBtn.style.display = "block";
-		editorHubBtn.style.display = "block";
-		editorLibraryBtn.style.display = "block";
-		shareFlagBtn.style.display = "block";
-		editorExitBtn.style.display = "none";
-		editorTestBtn.style.display = "none";
-		editorUpdateBtn.style.display = activeScenarioId ? "block" : "none";
-		editorUnclaimBtn.style.display = "block";
-
-		if (preGodModeState === "SIMULATING") {
-			godBombBtn.style.display = "block";
-		}
-
-		// Ensure alliance view toggle always remains visible while in God Mode
-		if (allianceViewCheckbox?.parentElement) {
-			allianceViewCheckbox.style.display = "inline-block";
-			allianceViewCheckbox.parentElement.style.display = "inline-flex";
-		}
-
-		statusText.innerText = currentScenarioContext
-			? `GOD MODE // REMIXING: ${currentScenarioContext.name}`
-			: "GOD MODE: Map Editing Active";
-		updateRestartVisibility();
-	} else {
-		// Deactivate God Mode
-		godModeActive = false;
-		godBombActive = false;
-		godBombSourceId = -1;
-
-		// Sanitize state: ensure that exiting from an active editor tool (like painting)
-		// doesn't leave the engine in an "EDITOR" state if we were previously in selection mode.
-		if (gameMode === "CONQUEST" && preGodModeState !== "SIMULATING") {
-			gameState = "SELECTING_P1";
-		} else {
-			gameState = preGodModeState;
-		}
-
-		godModeBtn.innerText = getTranslation("GOD_MODE");
-		godModeBtn.style.background = "#d35400";
-
-		// Hide editor UI & Reset Tool Classes to prevent sticky sub-states
-		editorToolbox.style.display = "none";
-		[
-			editorPaintBtn,
-			editorFillBtn,
-			editorUnclaimBtn,
-			editorTerrainBtn,
-			editorPlaceDivisionBtn,
-		].forEach((btn) => {
-			if (btn) btn.classList.remove("active");
-		});
-		if (brushControls) brushControls.style.display = "none";
-		if (terrainControls) terrainControls.style.display = "none";
-
-		godBombBtn.style.display = "none";
-		godBombBtn.innerText = "GOD BOMB: OFF";
-		godBombBtn.classList.remove("active");
-		countryInspector.style.display = "none";
-		shareFlagBtn.style.display = "none";
-		map.getContainer().classList.remove("painting-cursor");
-
-		// Make sure the alliance view checkbox + label are visible again when returning to normal play
-		if (allianceViewCheckbox?.parentElement) {
-			allianceViewCheckbox.style.display = "inline-block";
-			allianceViewCheckbox.parentElement.style.display = "inline-flex";
-		}
-
-		// Refresh simulation caches in case land changed
-		if (gameState === "SIMULATING") {
-			statsPanel.style.display = "block";
-			activeTheaterCities = cities.filter((c) => {
-				const idx = getGridIndex(c.lat, c.lng);
-				return idx !== -1 && landMask[idx] === 2;
-			});
-			// Ensure loop restarts if it was stopped
-			cancelAnimationFrame(animationFrameId);
-			requestAnimationFrame(updateLoop);
-		}
-
-		if (gameState.startsWith("SELECTING") || gameState === "WAR_OVER") {
-			if (gameState === "WAR_OVER") gameState = "SELECTING_P1";
-			setupPanel.style.display = "block";
-			statusText.innerText = currentScenarioContext
-				? `PLAYING: ${currentScenarioContext.name}`
-				: getTranslation("SELECT_P1");
-			updateSidesUI();
-		} else if (gameState === "SIMULATING") {
-			statsPanel.style.display = "block";
-			statusText.innerText = ffaMode
-				? "Free For All Active"
-				: "Global Conflict Active";
-		} else {
-			// Safety fallback: transition any orphaned state to setup mode
-			gameState = "SELECTING_P1";
-			setupPanel.style.display = "block";
-			statusText.innerText = getTranslation("SELECT_P1");
-			updateSidesUI();
-		}
-		updateRestartVisibility();
-	}
-	updateEconomyPanel();
-});
-
 godBombBtn.addEventListener("click", () => {
 	godBombActive = !godBombActive;
 	godBombBtn.innerText = godBombActive ? "GOD BOMB: ON" : "GOD BOMB: OFF";
@@ -30521,17 +21859,6 @@ forcePeaceBtn.addEventListener("click", () => {
 
 export function unilateralExitConflict(country, sideIdx) {
 	if (sideIdx === -1) return;
-	recordExperimentCheckpoint("PRE_SEPARATE_EXIT", {
-		countryId: country.id,
-		sideUid: sideUids[sideIdx] || null,
-	});
-	recordExperimentEvent("COUNTRY_WITHDREW", {
-		source: "diplomacy",
-		actorCountryId: country.id,
-		actorSideIndex: sideIdx,
-		message: `${country.name} withdrew from the conflict.`,
-		major: true,
-	});
 	releaseCountryPersonnelFromSide(country.id, sideIdx);
 
 	for (let i = 0; i < worldControlMap.length; i++) {
@@ -30561,15 +21888,9 @@ export function unilateralExitConflict(country, sideIdx) {
 	const side = sides[sideIdx];
 	const idx = side.findIndex((c) => c.id === country.id);
 	if (idx > -1) side.splice(idx, 1);
-	if (side.length === 0) preserveRetiredSidePersonnel(sideIdx);
 
 	// Purge units
 	units = units.filter((u) => u.sovereignId !== country.id);
-	for (let wingIndex = airWings.length - 1; wingIndex >= 0; wingIndex--) {
-		if (airWings[wingIndex].sovereignId === country.id) {
-			airWings.splice(wingIndex, 1);
-		}
-	}
 	units.forEach((u) => {
 		if (u.beneficiaryId === country.id) u.beneficiaryId = u.sovereignId;
 	});
@@ -30610,26 +21931,12 @@ export function unilateralExitConflict(country, sideIdx) {
 export function _signSelectiveSideExit(sideIdx) {
 	const side = sides[sideIdx];
 	if (!side || side.length === 0) return;
-	recordExperimentCheckpoint("PRE_SEPARATE_SIDE_PEACE", {
-		sideUid: sideUids[sideIdx] || null,
-		countryIds: side.map((country) => country.id),
-	});
-	recordExperimentEvent("SIDE_SIGNED_SEPARATE_PEACE", {
-		source: "diplomacy",
-		actorCountryId: side[0]?.id || null,
-		actorSideIndex: sideIdx,
-		message: `${getSideDisplayName(sideIdx, side)} signed a separate peace.`,
-		evidence: { countryIds: side.map((country) => country.id) },
-		major: true,
-	});
 
 	_lastCapitulationTick = _simTickCount;
 	const exitingIds = new Set(side.map((c) => c.id));
 	// The formations and reserves leave the active war, while initial strength
-	// and accumulated casualties remain available to the after-action report.
 	sideSoldiers[sideIdx] = 0;
 	sideRecruitableManpower[sideIdx] = 0;
-	preserveRetiredSidePersonnel(sideIdx);
 
 	// Clean up territory controlled by exiting side
 	for (let i = 0; i < worldControlMap.length; i++) {
@@ -30675,11 +21982,6 @@ export function _signSelectiveSideExit(sideIdx) {
 
 	// Purge units belonging to exiting nations
 	units = units.filter((u) => !exitingIds.has(u.sovereignId));
-	for (let wingIndex = airWings.length - 1; wingIndex >= 0; wingIndex--) {
-		if (exitingIds.has(airWings[wingIndex].sovereignId)) {
-			airWings.splice(wingIndex, 1);
-		}
-	}
 	units.forEach((u) => {
 		if (exitingIds.has(u.beneficiaryId)) u.beneficiaryId = u.sovereignId;
 	});
@@ -30722,20 +22024,6 @@ export function _signSelectivePeace(exiter, target) {
 		requestAnimationFrame(updateLoop);
 		return;
 	}
-	recordExperimentCheckpoint("PRE_SEPARATE_PEACE", {
-		exiterCountryId: exiter.id,
-		targetCountryId: target.id,
-		targetSideUid: sideUids[targetSideIdx] || null,
-	});
-	recordExperimentEvent("COUNTRY_SIGNED_SEPARATE_PEACE", {
-		source: "diplomacy",
-		actorCountryId: target.id,
-		actorSideIndex: targetSideIdx,
-		targetCountryId: exiter.id,
-		targetSideIndex: exiterSideIdx,
-		message: `${target.name} signed a separate peace with ${exiter.name}.`,
-		major: true,
-	});
 	releaseCountryPersonnelFromSide(target.id, targetSideIdx);
 
 	// The 'target' (second nation clicked) is the one exiting the specific conflict engagement
@@ -30772,15 +22060,9 @@ export function _signSelectivePeace(exiter, target) {
 	const targetSide = sides[targetSideIdx];
 	const idx = targetSide.findIndex((c) => c.id === target.id);
 	if (idx > -1) targetSide.splice(idx, 1);
-	if (targetSide.length === 0) preserveRetiredSidePersonnel(targetSideIdx);
 
 	// 3. Purge units belonging to the target nation
 	units = units.filter((u) => u.sovereignId !== target.id);
-	for (let wingIndex = airWings.length - 1; wingIndex >= 0; wingIndex--) {
-		if (airWings[wingIndex].sovereignId === target.id) {
-			airWings.splice(wingIndex, 1);
-		}
-	}
 
 	// Reset beneficiary IDs for units that were supporting the leaving nation
 	units.forEach((u) => {
@@ -31316,7 +22598,7 @@ export function saveCountryLocally(countryId) {
 		name: meta.name,
 		color: meta.color,
 		flagUrl: meta.flagUrl,
-		isCustom: meta.isCustom || false,
+		isCustom: meta.isCustom,
 		role: meta.role || "OFFENSE",
 		overlordId: meta.overlordId || null,
 	};
@@ -32583,14 +23865,10 @@ export function recruitNeutralMidWar(id, sideIdx) {
 	const oldSideIdx = findCountrySideIndex(id);
 	if (oldSideIdx === sideIdx) return;
 	prepareEmptySideForNewMembership(sideIdx);
-	const oldSideName =
-		oldSideIdx >= 0 ? getSideDisplayName(oldSideIdx) : "Not in conflict";
+
 	if (oldSideIdx >= 0) {
 		const country = sides[oldSideIdx].find((candidate) => candidate.id === id);
-		const countryFormationCount = units.reduce(
-			(count, unit) => count + Number(unit.sovereignId === id),
-			0,
-		);
+
 		const transfer = releaseCountryPersonnelFromSide(id, oldSideIdx, {
 			transferHistory: true,
 		}) || {
@@ -32625,12 +23903,6 @@ export function recruitNeutralMidWar(id, sideIdx) {
 			unit._cachedScanKx = -999;
 			unit._cachedScanKy = -999;
 		}
-		for (const wing of airWings) {
-			if (wing.sovereignId === id) wing.sideIndex = sideIdx;
-		}
-		for (const field of airfields) {
-			if (field.controllerId === id) field.sideIndex = sideIdx;
-		}
 		for (let index = 0; index < worldControlMap.length; index++) {
 			if (
 				dominantSideMap[index] !== oldSideIdx ||
@@ -32657,23 +23929,9 @@ export function recruitNeutralMidWar(id, sideIdx) {
 		invalidateFrontlineField();
 		recalculateAllBounds();
 		updateSidesUI();
-		updateEconomyPanel();
 		influenceLayer.render();
 		reconcileOperationalAiLifecycle("country-changed-side");
 		statusText.innerText = `${country?.name || meta.name} HAS SWITCHED TO ${getSideDisplayName(sideIdx)}`;
-		recordExperimentEvent("SIDE_CHANGED", {
-			source: "diplomacy",
-			actorCountryId: id,
-			actorSideIndex: sideIdx,
-			message: `${country?.name || meta.name} switched from ${oldSideName} to ${getSideDisplayName(sideIdx)}.`,
-			evidence: {
-				previousSideUid: sideUids[oldSideIdx] || null,
-				newSideUid: sideUids[sideIdx] || null,
-				transferredFormations: countryFormationCount,
-				transferredPersonnel: transfer.surviving,
-			},
-			major: true,
-		});
 		playWarStartSound();
 		return;
 	}
@@ -32698,17 +23956,6 @@ export function recruitNeutralMidWar(id, sideIdx) {
 
 	const sideLabel = String.fromCharCode(65 + sideIdx);
 	statusText.innerText = `${newCountry.name} HAS DEPLOYED TO SIDE ${sideLabel}`;
-	recordExperimentEvent("COUNTRY_JOINED_WAR", {
-		source: "diplomacy",
-		actorCountryId: id,
-		actorSideIndex: sideIdx,
-		message: `${newCountry.name} joined ${getSideDisplayName(sideIdx)}.`,
-		evidence: {
-			previousSideUid: null,
-			newSideUid: sideUids[sideIdx] || null,
-		},
-		major: true,
-	});
 
 	// Play sound if possible
 	playWarStartSound();
@@ -32902,14 +24149,6 @@ export function openInspector(id) {
 	inspectNameInput.value = inspectorDisplayName;
 	inspectNameInput.disabled = isWar;
 	inspectColorSwatch.style.backgroundColor = meta.color;
-	const setOptionalNumberInput = (input, value) => {
-		if (input) input.value = Number.isFinite(value) ? String(value) : "";
-	};
-	setOptionalNumberInput(inspectArmoredVehiclesInput, meta.armoredVehicles);
-	setOptionalNumberInput(inspectArmorQualityInput, meta.armorQuality);
-	setOptionalNumberInput(inspectFightersInput, meta.fighters);
-	setOptionalNumberInput(inspectStrikeAircraftInput, meta.strikeAircraft);
-	setOptionalNumberInput(inspectAirQualityInput, meta.airQuality);
 
 	// Initialize Buff button state for this country (visible + hidden)
 	if (inspectBuffBtn) {
@@ -32966,10 +24205,10 @@ export function _placeDivisionAt(latlng, sovereignId) {
 
 	const idx = getGridIndex(latlng.lat, latlng.lng);
 	const isMountainCell = idx !== -1 && terrainMask && terrainMask[idx] > 0.35;
-	const isAlpen = isMountainCell && gameplayRandom() < 0.4;
+	const isAlpen = isMountainCell && Math.random() < 0.4;
 
 	const placedUnit = {
-		id: gameplayRandom(),
+		id: Math.random(),
 		kind: "army",
 		lat: latlng.lat,
 		lng: latlng.lng,
@@ -33409,38 +24648,6 @@ inspectColorPicker.addEventListener("input", (e) => {
 		influenceLayer.render();
 	}
 });
-
-function bindCombinedArmsMetadataInput(
-	input,
-	key,
-	max = Number.POSITIVE_INFINITY,
-) {
-	input?.addEventListener("input", (event) => {
-		if (editingCountryId <= 0) return;
-		const meta = countryMetadata[editingCountryId - 1];
-		if (!meta) return;
-		if (event.target.value === "") {
-			delete meta[key];
-			return;
-		}
-		const value = Number(event.target.value);
-		if (!Number.isFinite(value)) return;
-		meta[key] = Math.max(0, Math.min(max, Math.round(value)));
-		const state = countryEquipment.get(editingCountryId);
-		if (!state) return;
-		if (key === "armoredVehicles") state.armorCapacity = meta[key];
-		else if (key === "fighters") state.fighterCapacity = meta[key];
-		else if (key === "strikeAircraft") state.strikeCapacity = meta[key];
-		else if (key === "armorQuality") state.armorQuality = meta[key];
-		else if (key === "airQuality") state.airQuality = meta[key];
-	});
-}
-
-bindCombinedArmsMetadataInput(inspectArmoredVehiclesInput, "armoredVehicles");
-bindCombinedArmsMetadataInput(inspectArmorQualityInput, "armorQuality", 100);
-bindCombinedArmsMetadataInput(inspectFightersInput, "fighters");
-bindCombinedArmsMetadataInput(inspectStrikeAircraftInput, "strikeAircraft");
-bindCombinedArmsMetadataInput(inspectAirQualityInput, "airQuality", 100);
 
 shareCountryBtn.addEventListener("click", () => {
 	if (editingCountryId <= 0) return;
@@ -34283,14 +25490,6 @@ editorSaveBtn.addEventListener("click", () => {
 
 export function resetConflictSetupState() {
 	invalidateWarLifecycleTimers();
-	_experimentUi?.hideWarDesk();
-	_experimentUi?.hideAfterActionReport();
-	_experimentUi?.hideReportReopenButton();
-	document.body.classList.remove("experiment-loop-active");
-	activeExperimentRecorder = null;
-	activeExperimentSpec = null;
-	latestWarReport = null;
-	_experimentParentReport = null;
 	sides = [[], []];
 	_attackers = sides[0];
 	_defenders = sides[1];
@@ -34307,14 +25506,11 @@ export function resetConflictSetupState() {
 	activeBattles = [];
 	_battleHash.clear();
 	capitalLostCountries = new Set();
-	activeRebellions.clear();
-	occupationEconomies.clear();
-	clearOccupationGarrisonAssignments();
-	_occupationGarrisonPlans.clear();
-	countryEconomy.clear();
-	economyEvents.length = 0;
-	economyPayCycle = 0;
 	resetOperationalAiRuntime();
+	document.body.classList.remove("conflict-active");
+	document.getElementById("war-desk").style.display = "none";
+	_warOverviewSides = [];
+	_warOverviewLastUpdate = -Infinity;
 	resetSideHostilities();
 	countryCasualties.clear();
 	casualtyByAttacker.clear();
@@ -34335,7 +25531,7 @@ export function resetConflictSetupState() {
 	unitCountsDiv.style.display = "none";
 	statsPanel.style.display = "none";
 	casualtyPanel.style.display = "none";
-	if (economyPanel) economyPanel.style.display = "none";
+
 	document.getElementById("speed-controls").style.display = "none";
 	godModeBtn.style.display = gameMode === "CONQUEST" ? "block" : "none";
 	forcePeaceBtn.style.display = "none";
@@ -34413,7 +25609,7 @@ if (editorSaveMultiBtn) {
 				name: meta.name,
 				color: meta.color,
 				flagUrl: meta.flagUrl,
-				isCustom: meta.isCustom || false,
+				isCustom: meta.isCustom,
 				role: meta.role || "OFFENSE",
 				overlordId: meta.overlordId || null,
 			};
@@ -34491,7 +25687,7 @@ if (editorSaveAllZipBtn) {
 				name: meta.name,
 				color: meta.color,
 				flagUrl: meta.flagUrl,
-				isCustom: meta.isCustom || false,
+				isCustom: meta.isCustom,
 				role: meta.role || "OFFENSE",
 				overlordId: meta.overlordId || null,
 			};
@@ -35988,99 +27184,131 @@ document.addEventListener("visibilitychange", () => {
 	}
 });
 
-_experimentUi = initExperimentUi({
-	onSeedChanged(values) {
-		const seed =
-			values.seed === "" ? createRandomSeed() : normalizeSeed(values.seed);
-		_experimentUi.setSetupSeed(
-			seed,
-			`Seed ${seed} will be used for comparable starting conditions.`,
-			"ready",
-		);
-	},
-	onRandomizeSeed() {
-		const seed = createRandomSeed();
-		_experimentUi.setSetupSeed(seed, `Fresh seed ${seed} generated.`, "ready");
-	},
-	onSetupPostureChanged(values) {
-		const manpower = preserveSetupManpowerValues();
-		applyBroadSetupPosture(values.posture);
-		restoreSetupManpowerValues(manpower);
-	},
-	onAiObserverSideChange(sideUid) {
-		setAiObserverSideUid(sideUid);
-	},
-	onOpenArchive() {
-		const archive = readWarArchive();
-		_experimentUi.showWarArchive(archive, latestWarReport?.id);
-	},
-	onInterventionOpened() {
-		pauseForExperimentIntervention();
-	},
-	onApplyPosture: handlePostureIntervention,
-	onAddFunds: handleFundsIntervention,
-	onClearArrears: handleClearArrearsIntervention,
-	onAddManpower: handleManpowerIntervention,
-	onAddArmor(values) {
-		handleEquipmentIntervention(values, "armor", 100, "ARMOR_GRANTED");
-	},
-	onAddFighters(values) {
-		handleEquipmentIntervention(values, "fighter", 24, "FIGHTERS_GRANTED");
-	},
-	onAddStrikeAircraft(values) {
-		handleEquipmentIntervention(
-			values,
-			"strike",
-			24,
-			"STRIKE_AIRCRAFT_GRANTED",
-		);
-	},
-	onJoinSide: handleJoinSideIntervention,
-	onWithdraw: handleWithdrawIntervention,
-	onStartRebellion: handleRebellionIntervention,
-	onEnforcePeace: handlePeaceIntervention,
-	onInspectFinalMap(report) {
-		if (!report) return;
-		_experimentUi.hideAfterActionReport();
-		_experimentUi.showReportReopenButton();
-	},
-	onFreshRematch(report) {
-		restoreReportConfiguration(report, { freshSeed: true, start: true });
-	},
-	onRepeatSeed(report) {
-		restoreReportConfiguration(report, { freshSeed: false, start: true });
-	},
-	onModifySetup(report) {
-		restoreReportConfiguration(report, { freshSeed: false, start: false });
-	},
-	onContinueWorld() {
-		_experimentUi.hideAfterActionReport();
-		if (latestWarReport) _experimentUi.showReportReopenButton();
-		const continueRandomWars = randomWarMode;
-		reopenConflictSetupAfterWar();
-		if (continueRandomWars) {
-			scheduleWarLifecycleCallback(() => triggerRandomWar(), 500);
+godModeBtn.addEventListener("click", () => {
+	if (!godModeActive) {
+		// Activate God Mode
+		godModeActive = true;
+		godBombActive = false;
+		if (godBombBtn) {
+			godBombBtn.innerText = "GOD BOMB: OFF";
+			godBombBtn.classList.remove("active");
 		}
-	},
-	onAfterActionMainMenu() {
-		_experimentUi.hideAfterActionReport();
-		_experimentUi.hideReportReopenButton();
-		activeExperimentRecorder = null;
-		activeExperimentSpec = null;
-		latestWarReport = null;
-		_experimentParentReport = null;
-		document.body.classList.remove("experiment-loop-active");
-		mainMenuBtn.click();
-	},
-	onReopenReport(report) {
-		if (report) _experimentUi.showAfterActionReport(report);
-	},
+		preGodModeState = gameState;
+		gameState = "EDITOR_ACTIVE";
+
+		godModeBtn.innerText = getTranslation("GOD_ACTIVE");
+		godModeBtn.style.background = "#27ae60";
+
+		// Setup UI
+		editorToolbox.style.display = "flex";
+		setupPanel.style.display = "none";
+		statsPanel.style.display = "none";
+		// Allow sharing and saving any current map state from God Mode, including official presets
+		editorShareBtn.style.display = "block";
+		editorSaveBtn.style.display = "block";
+		editorHubBtn.style.display = "block";
+		editorLibraryBtn.style.display = "block";
+		shareFlagBtn.style.display = "block";
+		editorExitBtn.style.display = "none";
+		editorTestBtn.style.display = "none";
+		editorUpdateBtn.style.display = activeScenarioId ? "block" : "none";
+		editorUnclaimBtn.style.display = "block";
+
+		if (preGodModeState === "SIMULATING") {
+			godBombBtn.style.display = "block";
+		}
+
+		// Ensure alliance view toggle always remains visible while in God Mode
+		if (allianceViewCheckbox?.parentElement) {
+			allianceViewCheckbox.style.display = "inline-block";
+			allianceViewCheckbox.parentElement.style.display = "inline-flex";
+		}
+
+		statusText.innerText = currentScenarioContext
+			? `GOD MODE // REMIXING: ${currentScenarioContext.name}`
+			: "GOD MODE: Map Editing Active";
+		updateRestartVisibility();
+	} else {
+		// Deactivate God Mode
+		godModeActive = false;
+		godBombActive = false;
+		godBombSourceId = -1;
+
+		// Sanitize state: ensure that exiting from an active editor tool (like painting)
+		// doesn't leave the engine in an "EDITOR" state if we were previously in selection mode.
+		if (gameMode === "CONQUEST" && preGodModeState !== "SIMULATING") {
+			gameState = "SELECTING_P1";
+		} else {
+			gameState = preGodModeState;
+		}
+
+		godModeBtn.innerText = getTranslation("GOD_MODE");
+		godModeBtn.style.background = "#d35400";
+
+		// Hide editor UI & Reset Tool Classes to prevent sticky sub-states
+		editorToolbox.style.display = "none";
+		[
+			editorPaintBtn,
+			editorFillBtn,
+			editorUnclaimBtn,
+			editorTerrainBtn,
+			editorPlaceDivisionBtn,
+		].forEach((btn) => {
+			if (btn) btn.classList.remove("active");
+		});
+		if (brushControls) brushControls.style.display = "none";
+		if (terrainControls) terrainControls.style.display = "none";
+
+		godBombBtn.style.display = "none";
+		godBombBtn.innerText = "GOD BOMB: OFF";
+		godBombBtn.classList.remove("active");
+		countryInspector.style.display = "none";
+		shareFlagBtn.style.display = "none";
+		map.getContainer().classList.remove("painting-cursor");
+
+		// Make sure the alliance view checkbox + label are visible again when returning to normal play
+		if (allianceViewCheckbox?.parentElement) {
+			allianceViewCheckbox.style.display = "inline-block";
+			allianceViewCheckbox.parentElement.style.display = "inline-flex";
+		}
+
+		// Refresh simulation caches in case land changed
+		if (gameState === "SIMULATING") {
+			statsPanel.style.display = "block";
+			activeTheaterCities = cities.filter((c) => {
+				const idx = getGridIndex(c.lat, c.lng);
+				return idx !== -1 && landMask[idx] === 2;
+			});
+			// Ensure loop restarts if it was stopped
+			cancelAnimationFrame(animationFrameId);
+			requestAnimationFrame(updateLoop);
+		}
+
+		if (gameState.startsWith("SELECTING") || gameState === "WAR_OVER") {
+			if (gameState === "WAR_OVER") gameState = "SELECTING_P1";
+			setupPanel.style.display = "block";
+			statusText.innerText = currentScenarioContext
+				? `PLAYING: ${currentScenarioContext.name}`
+				: getTranslation("SELECT_P1");
+			updateSidesUI();
+		} else if (gameState === "SIMULATING") {
+			statsPanel.style.display = "block";
+			statusText.innerText = ffaMode
+				? "Free For All Active"
+				: "Global Conflict Active";
+		} else {
+			// Safety fallback: transition any orphaned state to setup mode
+			gameState = "SELECTING_P1";
+			setupPanel.style.display = "block";
+			statusText.innerText = getTranslation("SELECT_P1");
+			updateSidesUI();
+		}
+		updateRestartVisibility();
+	}
 });
 
-const initialExperimentSeed = createRandomSeed();
-_experimentUi.setSetupSeed(
-	initialExperimentSeed,
-	`Fresh seed ${initialExperimentSeed} generated.`,
-	"ready",
-);
-setExperimentSeed(initialExperimentSeed);
+initWarOverview();
+startBtn.addEventListener("click", () => startWar());
+quickRestartBtn.addEventListener("click", () => {
+	resetGame();
+});

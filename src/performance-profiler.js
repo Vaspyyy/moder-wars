@@ -4,7 +4,6 @@
  * @property {number} maxUnitsPerSide Requested land formations per side.
  * @property {number} durationMs Measured duration after warm-up.
  * @property {number} warmupMs Unmeasured warm-up duration.
- * @property {number} seed Comparable experiment seed.
  * @property {"basic"|"detailed"} perfMode Instrumentation detail.
  * @property {number} speedIndex Simulation speed index.
  * @property {"POLITICAL"|"FLAG"} viewMode Map rendering mode.
@@ -252,7 +251,7 @@ export function normalizePerfSuiteCases(cases, defaults = {}) {
 				0,
 				Math.floor(finite(entry?.warmupMs, defaults.warmupMs ?? 3000)),
 			),
-			seed: Math.floor(finite(entry?.seed, defaults.seed ?? 0x4d575031)) >>> 0,
+
 			perfMode:
 				entry?.perfMode === "detailed" || defaults.perfMode === "detailed"
 					? "detailed"
@@ -314,10 +313,8 @@ export function summarizePerfSuiteRuns(runs, metadata = {}) {
 				reports.map((report) => phaseAverage(report, "unitLoop")),
 			),
 			medianOperationalAiMs: median(
-				reports.map(
-					(report) =>
-						categoryAverage(report, "operationalIntel") +
-						categoryAverage(report, "operationalTaskForces"),
+				reports.map((report) =>
+					categoryAverage(report, "operationalTaskForces"),
 				),
 			),
 			medianCappedSubticks: median(
@@ -381,7 +378,6 @@ const COMPARISON_CONFIG_KEYS = [
 	"maxUnitsPerSide",
 	"durationMs",
 	"warmupMs",
-	"seed",
 	"perfMode",
 	"speedIndex",
 	"viewMode",

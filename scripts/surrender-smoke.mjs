@@ -7,7 +7,6 @@ import {
 	selectEligibleCasualtyAttackers,
 	selectMajorityOwnerTransfers,
 	selectOccupationController,
-	updateRebellionFailureCycles,
 } from "../src/surrender.js";
 
 const evaluate = (overrides = {}) =>
@@ -38,33 +37,9 @@ assert.equal(
 	false,
 );
 assert.equal(
-	evaluate({ isRebel: true, unitCount: 0, ownedCells: 0 }).reason,
-	"REBELLION_RULES",
-);
-assert.equal(
 	evaluate({ role: "SUPPORT", controlledCells: 1 }).reason,
 	"DEFENDED_CONTROL_COLLAPSE",
 );
-
-let failedCycles = updateRebellionFailureCycles(0, {
-	unitCount: 0,
-	controlRatio: 0.04,
-});
-failedCycles = updateRebellionFailureCycles(failedCycles, {
-	unitCount: 0,
-	controlRatio: 0.04,
-});
-assert.equal(failedCycles, 2);
-failedCycles = updateRebellionFailureCycles(failedCycles, {
-	unitCount: 0,
-	controlRatio: 0.04,
-});
-assert.equal(failedCycles, 3);
-failedCycles = updateRebellionFailureCycles(failedCycles, {
-	unitCount: 0,
-	controlRatio: 0.05,
-});
-assert.equal(failedCycles, 0);
 
 const casualtyAttackers = selectEligibleCasualtyAttackers([
 	{ countryId: 1, casualties: 40 },

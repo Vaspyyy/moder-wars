@@ -54,10 +54,8 @@ export const AI_TASK_FORCE_DEFAULTS = Object.freeze({
  * @property {number} recoveryPower Power at the last meaningful recovery.
  * @property {number} progress Highest objective progress.
  * @property {{lat:number,lng:number,name?:string}|null} withdrawalAnchor Chosen friendly fallback.
- * @property {{fighter:boolean,strike:boolean,sectorId:string|null,target:{lat:number,lng:number,name?:string}|null}|null} supportRequest Existing air support requested for this sector.
  * @property {string|null} completionReason Terminal reason.
  * @property {string|null} outcome Final task-force result after completion.
- * @property {boolean} severeSurprise Whether fresh intel forced culmination.
  * @property {number|null} parentTaskForceId Lineage when a task force is replaced.
  */
 
@@ -68,17 +66,14 @@ export const AI_TASK_FORCE_DEFAULTS = Object.freeze({
  * @property {string} sideUid Owning side.
  * @property {string|number|null} [countryId] Sovereign country.
  * @property {string} [countryRole] Coalition role such as PRIMARY or SUPPORT.
- * @property {string} [kind] army, armor, or air.
+ * @property {string} [kind] army.
  * @property {number} [lat] Latitude.
  * @property {number} [lng] Longitude.
  * @property {number} [health] Current health.
  * @property {number} [maxHealth] Maximum health.
- * @property {number} [equipment] Equipment count.
- * @property {boolean} [armorSupported] Whether nearby line formations support armor.
- * @property {boolean} [terrainSuitable] Whether the formation is in suitable spearhead terrain.
  * @property {number} [combatPower] Explicit power override.
  * @property {boolean} [deployed] Whether available for assignment.
- * @property {boolean} [commandEligible] Whether command/economy state permits assignment.
+ * @property {boolean} [commandEligible] Whether current orders permits assignment.
  * @property {string|null} [taskForceId] Existing sticky owner.
  */
 
@@ -129,27 +124,14 @@ export function getAiPostureThresholds(posture) {
 	};
 }
 
-export function estimateUnitCombatPower(
-	unit,
-	{ armorEnabled = true, airPowerEnabled = true } = {},
-) {
-	if (Number.isFinite(Number(unit.combatPower))) {
+export function estimateUnitCombatPower(unit) {
+	if (Number.isFinite(Number(unit.combatPower)))
 		return Math.max(0, Number(unit.combatPower));
-	}
-	const healthRatio = clamp(
+	return clamp(
 		finite(unit.health, 100) / Math.max(1, finite(unit.maxHealth, 100)),
 		0,
 		1,
 	);
-	const kind = String(unit.kind || "army").toLowerCase();
-	const equipment = Math.max(0, finite(unit.equipment));
-	if (kind === "armor" && armorEnabled) {
-		return healthRatio * Math.max(1.5, Math.sqrt(equipment || 1) * 0.55);
-	}
-	if (kind === "air" && airPowerEnabled) {
-		return healthRatio * Math.max(1.25, Math.sqrt(equipment || 1) * 0.45);
-	}
-	return healthRatio;
 }
 
 export function createAiTaskForce(input = {}) {
@@ -221,18 +203,11 @@ export function createAiTaskForce(input = {}) {
 		withdrawalAnchor: input.withdrawalAnchor
 			? { ...input.withdrawalAnchor }
 			: null,
-		supportRequest: input.supportRequest
-			? {
-					...input.supportRequest,
-					target: input.supportRequest.target
-						? { ...input.supportRequest.target }
-						: null,
-				}
-			: null,
+
 		completionReason:
 			input.completionReason == null ? null : String(input.completionReason),
 		outcome: input.outcome == null ? null : String(input.outcome),
-		severeSurprise: Boolean(input.severeSurprise),
+
 		parentTaskForceId:
 			input.parentTaskForceId == null ? null : String(input.parentTaskForceId),
 	};
@@ -254,15 +229,11 @@ export function assignTaskForceRoles(taskForce, units, options = {}) {
 		.filter((unit) => eligibleUnit(unit, taskForce.sideUid));
 	members.sort(
 		(left, right) =>
-			estimateUnitCombatPower(right, options.capabilities) -
-				estimateUnitCombatPower(left, options.capabilities) ||
+			estimateUnitCombatPower(right) - estimateUnitCombatPower(left) ||
 			unitKey(left.id).localeCompare(unitKey(right.id)),
 	);
 	const powerById = new Map(
-		members.map((unit) => [
-			unitKey(unit.id),
-			estimateUnitCombatPower(unit, options.capabilities),
-		]),
+		members.map((unit) => [unitKey(unit.id), estimateUnitCombatPower(unit)]),
 	);
 	const totalPower = [...powerById.values()].reduce(
 		(sum, power) => sum + power,
@@ -329,23 +300,6 @@ export function assignTaskForceRoles(taskForce, units, options = {}) {
 	);
 	const spearheadCandidates = [
 		...members.filter((unit) => oldRole(unit, "SPEARHEAD")),
-		...members
-			.filter(
-				(unit) =>
-					!oldRole(unit, "SPEARHEAD") &&
-					String(unit.kind || "army").toLowerCase() === "armor",
-			)
-			.sort(
-				(left, right) =>
-					Number(Boolean(right.armorSupported && right.terrainSuitable)) -
-						Number(Boolean(left.armorSupported && left.terrainSuitable)) ||
-					Number(Boolean(right.armorSupported)) -
-						Number(Boolean(left.armorSupported)) ||
-					Number(Boolean(right.terrainSuitable)) -
-						Number(Boolean(left.terrainSuitable)) ||
-					estimateUnitCombatPower(right, options.capabilities) -
-						estimateUnitCombatPower(left, options.capabilities),
-			),
 		...members.filter((unit) => !oldRole(unit, "SPEARHEAD")),
 	];
 	claimUntil(
@@ -372,16 +326,12 @@ export function assignTaskForceRoles(taskForce, units, options = {}) {
 	) {
 		const combatMember = [...members].sort(
 			(left, right) =>
-				estimateUnitCombatPower(right, options.capabilities) -
-					estimateUnitCombatPower(left, options.capabilities) ||
+				estimateUnitCombatPower(right) - estimateUnitCombatPower(left) ||
 				unitKey(left.id).localeCompare(unitKey(right.id)),
 		)[0];
 		const key = unitKey(combatMember.id);
 		unitRoles[key] = {
-			role:
-				String(combatMember.kind || "army").toLowerCase() === "armor"
-					? "SPEARHEAD"
-					: "LINE",
+			role: "LINE",
 			assignedTick: tick,
 		};
 	}
@@ -494,13 +444,12 @@ export function reconcileAiTaskForces(
 			.sort(
 				(left, right) =>
 					wrappedDistanceSq(left, anchor) - wrappedDistanceSq(right, anchor) ||
-					estimateUnitCombatPower(right, options.capabilities) -
-						estimateUnitCombatPower(left, options.capabilities) ||
+					estimateUnitCombatPower(right) - estimateUnitCombatPower(left) ||
 					unitKey(left.id).localeCompare(unitKey(right.id)),
 			);
 		const selected = [...sticky];
 		let selectedPower = selected.reduce(
-			(sum, unit) => sum + estimateUnitCombatPower(unit, options.capabilities),
+			(sum, unit) => sum + estimateUnitCombatPower(unit),
 			0,
 		);
 		for (const candidate of candidates) {
@@ -508,14 +457,13 @@ export function reconcileAiTaskForces(
 			if (selectedPower >= taskForce.desiredPower && selected.length > 0) break;
 			selected.push(candidate);
 			usedUnits.add(unitKey(candidate.id));
-			selectedPower += estimateUnitCombatPower(candidate, options.capabilities);
+			selectedPower += estimateUnitCombatPower(candidate);
 		}
 		taskForce.assignedUnitIds = selected.map((unit) => unit.id);
 		taskForce.currentPower = selectedPower;
 		taskForce.peakPower = Math.max(taskForce.peakPower, selectedPower);
 		taskForce = assignTaskForceRoles(taskForce, selected, {
 			tick,
-			capabilities: options.capabilities,
 		});
 		taskForces.push(taskForce);
 	}
@@ -528,7 +476,7 @@ export function calculateTaskForceReadiness(taskForce, units, options = {}) {
 		.map((id) => byId.get(unitKey(id)))
 		.filter((unit) => eligibleUnit(unit, taskForce.sideUid));
 	const currentPower = members.reduce(
-		(sum, unit) => sum + estimateUnitCombatPower(unit, options.capabilities),
+		(sum, unit) => sum + estimateUnitCombatPower(unit),
 		0,
 	);
 	const anchor = taskForce.stagingAnchor || taskForce.target;
@@ -537,16 +485,14 @@ export function calculateTaskForceReadiness(taskForce, units, options = {}) {
 		(sum, unit) =>
 			sum +
 			(wrappedDistanceSq(unit, anchor) <= radiusSq
-				? estimateUnitCombatPower(unit, options.capabilities)
+				? estimateUnitCombatPower(unit)
 				: 0),
 		0,
 	);
 	const commandReadyPower = members.reduce(
 		(sum, unit) =>
 			sum +
-			(unit.commandEligible === false
-				? 0
-				: estimateUnitCombatPower(unit, options.capabilities)),
+			(unit.commandEligible === false ? 0 : estimateUnitCombatPower(unit)),
 		0,
 	);
 	const desiredPower = Math.max(1, taskForce.desiredPower);
@@ -631,7 +577,7 @@ export function advanceAiTaskForce(taskForce, context = {}) {
 		next.lastProgressTick = tick;
 	}
 	const thresholds = getAiPostureThresholds(next.posture);
-	const severeSurprise = Boolean(context.severeSurprise);
+
 	const unfavorable =
 		context.forceRatio == null ? false : finite(context.forceRatio) < 1;
 	const defensivePlan = ["DEFEND", "DEFEND_CITY"].includes(
@@ -667,21 +613,17 @@ export function advanceAiTaskForce(taskForce, context = {}) {
 			(!defensivePlan &&
 				unfavorable &&
 				stalledTicks >= AI_TASK_FORCE_DEFAULTS.UNFAVORABLE_STALL_TICKS) ||
-			severeSurprise ||
 			context.supplyCollapsed ||
 			context.encirclementRiskSevere
 		) {
 			return transition(next, "CULMINATED", tick, {
-				severeSurprise,
-				completionReason: severeSurprise
-					? "SEVERE_SURPRISE"
-					: context.supplyCollapsed
-						? "SUPPLY_COLLAPSE"
-						: context.encirclementRiskSevere
-							? "ENCIRCLEMENT_RISK"
-							: powerRatio < AI_TASK_FORCE_DEFAULTS.CULMINATION_POWER_RATIO
-								? "POWER_LOSS"
-								: "UNFAVORABLE_STALL",
+				completionReason: context.supplyCollapsed
+					? "SUPPLY_COLLAPSE"
+					: context.encirclementRiskSevere
+						? "ENCIRCLEMENT_RISK"
+						: powerRatio < AI_TASK_FORCE_DEFAULTS.CULMINATION_POWER_RATIO
+							? "POWER_LOSS"
+							: "UNFAVORABLE_STALL",
 			});
 		}
 	} else if (next.phase === "CONSOLIDATING") {
@@ -770,51 +712,4 @@ export function cleanupAiTaskForces(taskForces, context = {}) {
 				),
 			};
 		});
-}
-
-export function createAiTaskForceObserverSnapshot(
-	taskForces,
-	intelState = null,
-	tick = 0,
-) {
-	return {
-		tick: Math.max(0, Math.trunc(finite(tick))),
-		taskForces: (taskForces || []).map((taskForce) => ({
-			id: taskForce.id,
-			signature: taskForce.signature,
-			sideUid: taskForce.sideUid,
-			planType: taskForce.planType,
-			theaterId: taskForce.theaterId,
-			target: taskForce.target ? { ...taskForce.target } : null,
-			phase: taskForce.phase,
-			posture: taskForce.posture,
-			assignedUnitIds: [...taskForce.assignedUnitIds],
-			unitRoles: { ...taskForce.unitRoles },
-			reserveUnitIds: [...(taskForce.reserveUnitIds || [])],
-			readiness: taskForce.readiness,
-			currentPower: taskForce.currentPower,
-			launchPower: taskForce.launchPower,
-			progress: taskForce.progress,
-			withdrawalAnchor: taskForce.withdrawalAnchor
-				? { ...taskForce.withdrawalAnchor }
-				: null,
-			completionReason: taskForce.completionReason,
-			supportRequest: taskForce.supportRequest
-				? {
-						...taskForce.supportRequest,
-						target: taskForce.supportRequest.target
-							? { ...taskForce.supportRequest.target }
-							: null,
-					}
-				: null,
-			outcome: taskForce.outcome,
-		})),
-		intel: intelState
-			? {
-					observerSideUid: intelState.observerSideUid,
-					lastScanTick: intelState.lastScanTick,
-					contactCount: Object.keys(intelState.contacts || {}).length,
-				}
-			: null,
-	};
 }

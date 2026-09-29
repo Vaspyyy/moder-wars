@@ -14,8 +14,8 @@ export const FORMATION_STRENGTH_DEFAULTS = Object.freeze({
 });
 
 /**
- * Serializable personnel and materiel carried by one simulated formation.
- * Personnel, equipment, and casualties are whole, non-negative counts.
+ * Personnel carried by one simulated formation.
+ * Personnel counts are whole and non-negative.
  *
  * @typedef {Object} FormationAccounting
  * @property {string|number} [id] Stable formation identity.
@@ -24,8 +24,6 @@ export const FORMATION_STRENGTH_DEFAULTS = Object.freeze({
  * @property {number} [strengthMultiplier] Explicit fallback strength in standard formations.
  * @property {number} [health] Legacy health value used only when personnel is absent.
  * @property {number} [baseHealth] Health representing one nominal formation.
- * @property {number|Record<string,number>} [equipment] Discrete equipment total or totals by type.
- * @property {number} [casualties] Historical casualties attributed to the formation.
  */
 
 /**
@@ -311,169 +309,6 @@ export function getFormationStrengthMultiplier(formation, options = {}) {
 		"referencePersonnel",
 	);
 	return getFormationPersonnel(formation, options) / referencePersonnel;
-}
-
-function isEquipmentRecord(value) {
-	return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function normalizeEquipmentRecord(equipment, name) {
-	const normalized = {};
-	for (const key of Object.keys(equipment).sort()) {
-		normalized[key] = readCount(equipment[key], `${name}.${key}`);
-	}
-	return normalized;
-}
-
-function mergeEquipment(formations, untypedEquipmentKey) {
-	const hasRecord = formations.some((formation) =>
-		isEquipmentRecord(formation?.equipment),
-	);
-	if (!hasRecord) {
-		return formations.reduce(
-			(sum, formation, index) =>
-				sum +
-				readCount(formation?.equipment ?? 0, `formations[${index}].equipment`),
-			0,
-		);
-	}
-	const totals = {};
-	for (let index = 0; index < formations.length; index++) {
-		const equipment = formations[index]?.equipment ?? 0;
-		if (isEquipmentRecord(equipment)) {
-			const record = normalizeEquipmentRecord(
-				equipment,
-				`formations[${index}].equipment`,
-			);
-			for (const [key, count] of Object.entries(record)) {
-				totals[key] = (totals[key] || 0) + count;
-			}
-		} else {
-			const count = readCount(equipment, `formations[${index}].equipment`);
-			if (count > 0) {
-				totals[untypedEquipmentKey] =
-					(totals[untypedEquipmentKey] || 0) + count;
-			}
-		}
-	}
-	return Object.fromEntries(
-		Object.entries(totals).sort(([left], [right]) => left.localeCompare(right)),
-	);
-}
-
-/**
- * Merge accounting totals without mutating any source formation. Numeric and
- * keyed equipment may be mixed; numeric equipment is then retained under the
- * configurable `untyped` key.
- *
- * @param {Array<FormationAccounting>} formations
- * @param {{id?:string|number,referencePersonnel?:number,untypedEquipmentKey?:string,nominalPersonnel?:number,baseHealth?:number}} [options]
- * @returns {FormationAccounting & {sourceIds:Array<string|number>}}
- */
-export function mergeFormationAccounting(formations, options = {}) {
-	if (!Array.isArray(formations)) {
-		throw new TypeError("formations must be an array");
-	}
-	const personnel = formations.reduce(
-		(sum, formation) => sum + getFormationPersonnel(formation, options),
-		0,
-	);
-	const casualties = formations.reduce(
-		(sum, formation, index) =>
-			sum +
-			readCount(formation?.casualties ?? 0, `formations[${index}].casualties`),
-		0,
-	);
-	const equipment = mergeEquipment(
-		formations,
-		String(options.untypedEquipmentKey || "untyped"),
-	);
-	const referencePersonnel = readPositiveCount(
-		options.referencePersonnel ??
-			FORMATION_STRENGTH_DEFAULTS.BASE_PERSONNEL_PER_FORMATION,
-		"referencePersonnel",
-	);
-	return {
-		...(options.id === undefined ? {} : { id: options.id }),
-		personnel,
-		equipment,
-		casualties,
-		nominalPersonnel: referencePersonnel,
-		strengthMultiplier: personnel / referencePersonnel,
-		sourceIds: formations
-			.map((formation) => formation?.id)
-			.filter((id) => id !== undefined),
-	};
-}
-
-function splitEquipment(equipment, weights, rng) {
-	if (isEquipmentRecord(equipment)) {
-		const normalized = normalizeEquipmentRecord(
-			equipment,
-			"formation.equipment",
-		);
-		const parts = weights.map(() => ({}));
-		for (const key of Object.keys(normalized)) {
-			const shares = apportionCount(normalized[key], weights, rng);
-			for (let index = 0; index < shares.length; index++) {
-				parts[index][key] = shares[index];
-			}
-		}
-		return parts;
-	}
-	return apportionCount(
-		readCount(equipment ?? 0, "formation.equipment"),
-		weights,
-		rng,
-	);
-}
-
-/**
- * Split a formation into exact accounting parts. Every discrete total is
- * apportioned independently and re-merges to the original value.
- *
- * @param {FormationAccounting} formation
- * @param {number} partCount
- * @param {{weights?:Array<number>,rng?:()=>number,idPrefix?:string,referencePersonnel?:number,nominalPersonnel?:number,baseHealth?:number}} [options]
- * @returns {Array<FormationStrengthDescriptor>}
- */
-export function splitFormationAccounting(formation, partCount, options = {}) {
-	if (!formation || typeof formation !== "object") {
-		throw new TypeError("formation must be an object");
-	}
-	const count = readPositiveCount(partCount, "partCount");
-	const weights = normalizedWeights(count, options.weights);
-	const personnel = apportionCount(
-		getFormationPersonnel(formation, options),
-		weights,
-		options.rng,
-	);
-	const casualties = apportionCount(
-		readCount(formation.casualties ?? 0, "formation.casualties"),
-		weights,
-		options.rng,
-	);
-	const equipment = splitEquipment(
-		formation.equipment ?? 0,
-		weights,
-		options.rng,
-	);
-	const referencePersonnel = readPositiveCount(
-		options.referencePersonnel ??
-			FORMATION_STRENGTH_DEFAULTS.BASE_PERSONNEL_PER_FORMATION,
-		"referencePersonnel",
-	);
-	const idPrefix = String(options.idPrefix || formation.id || "formation");
-	return personnel.map((share, index) => ({
-		id: `${idPrefix}:${index + 1}`,
-		index,
-		personnel: share,
-		equipment: equipment[index],
-		casualties: casualties[index],
-		nominalPersonnel: referencePersonnel,
-		strengthMultiplier: share / referencePersonnel,
-		sourceId: formation.id ?? null,
-	}));
 }
 
 function badgeTier(multiplier) {

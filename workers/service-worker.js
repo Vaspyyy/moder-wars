@@ -1,6 +1,6 @@
 // Service Worker — versioned offline shell plus persistent runtime data cache
 
-const CACHE_VERSION = "mw-v0.27.34";
+const CACHE_VERSION = "mw-v0.27.35";
 const APP_SHELL_PREFIX = "mw-app-shell-";
 const RUNTIME_PREFIX = "mw-runtime-";
 const LEGACY_CACHE_PREFIX = "mw-cache-";
@@ -13,10 +13,8 @@ const APP_SHELL_PATHS = [
 	"index.html",
 	"src/bootstrap.js",
 	"src/main.js",
-	"src/ai-intel.js",
+	"src/war-overview.js",
 	"src/ai-task-forces.js",
-	"src/experiment.js",
-	"src/experiment-ui.js",
 	"src/formation-strength.js",
 	"src/operations.js",
 	"src/performance-profiler.js",
@@ -25,9 +23,6 @@ const APP_SHELL_PATHS = [
 	"src/tactical-grid.js",
 	"src/territory-ledger.js",
 	"src/config.js",
-	"src/combined-arms.js",
-	"src/air-power.js",
-	"src/economy.js",
 	"src/mop-up.js",
 	"src/editor.js",
 	"src/engine.js",

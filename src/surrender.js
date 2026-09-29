@@ -5,7 +5,6 @@ export const CAPITULATION_THRESHOLDS = Object.freeze({
 
 export function evaluateCountryCapitulation({
 	hasFreshTerritoryData = false,
-	isRebel = false,
 	unitCount = 0,
 	ownedCells = 0,
 	controlledCells = 0,
@@ -20,9 +19,6 @@ export function evaluateCountryCapitulation({
 			reason: "STALE_TERRITORY_DATA",
 			controlPercent,
 		};
-	}
-	if (isRebel) {
-		return { capitulate: false, reason: "REBELLION_RULES", controlPercent };
 	}
 	if ((Number(ownedCells) || 0) <= 0) {
 		return { capitulate: true, reason: "NO_OWNED_CELLS", controlPercent };
@@ -140,15 +136,6 @@ export function evaluateGlobalConflict(activeSideIndices, activeHostilePairs) {
 		return { type: "WHITE_PEACE", winnerSideIdx: null };
 	}
 	return null;
-}
-
-export function updateRebellionFailureCycles(
-	failedCycles,
-	{ unitCount = 0, controlRatio = 0 } = {},
-) {
-	return (Number(unitCount) || 0) === 0 && (Number(controlRatio) || 0) < 0.05
-		? Math.max(0, Number(failedCycles) || 0) + 1
-		: 0;
 }
 
 export function selectMajorityOwnerTransfers(transfers) {

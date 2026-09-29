@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://esm.sh 'sha256-UbZTXngprJmMtanNXRwZ5Pi9M0w7gaPwpxlWfxaufYA='; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.websim.ai https://*.websim.com https://*.arcgisonline.com https://*.google.com wss:; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self';">
-    <title>MW-V0.27.34</title>
+    <title>MW-V0.27.35</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous" />
     <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
@@ -65,9 +65,6 @@
 </label>
 <small>When enabled, hidden buffs are ignored and only visible buffs affect combat.</small>
 </div><div class="setting-group"><label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-<input id="auto-after-action-report-checkbox" style="width: 18px; height: 18px; " type="checkbox"/>
-<span data-i18n="AUTO_AFTER_ACTION_REPORT">Automatically Open After Action Report</span>
-</label></div><div class="setting-group"><label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
 <input id="disable-mountains-checkbox" style="width: 18px; height: 18px; " type="checkbox"/>
 <span data-i18n="DISABLE_MT">Disable Mountains</span>
 </label></div></div>
@@ -468,14 +465,14 @@
                     id="minimize-setup-btn"
                     class="mini-btn experiment-icon-btn"
                     type="button"
-                    aria-label="Collapse experiment setup"
-                    title="Collapse experiment setup"
+                    aria-label="Collapse conflict setup"
+                    title="Collapse conflict setup"
                 >
                     −
                 </button>
             </header>
 
-            <div id="setup-basic" class="experiment-basic" aria-label="Basic experiment setup">
+            <div id="setup-basic" class="experiment-basic" aria-label="Basic conflict setup">
                 <div class="experiment-basic-grid">
                     <label class="experiment-field experiment-field--wide" for="setup-posture-select">
                         <span data-i18n="EXPERIMENT_AI_POSTURE">AI Posture</span>
@@ -585,7 +582,7 @@
                                             type="number"
                                             placeholder="1936"
                                             aria-label="Starting year"
-                                            title="Starting year controls historical armor, aircraft, and missile availability."
+                                            title="Starting year controls historical missile availability."
                                         >
                                         <span>/</span>
                                         <input
@@ -739,20 +736,7 @@
             <div id="casualty-lists-container"></div>
         </div>
 
-        <div id="economy-panel" class="economy-panel hud-surface hud-surface--strong hud-surface--interactive hud-start-hidden">
-            <div class="economy-panel-header hud-panel-header">
-                <span>WAR ECONOMY</span>
-                <div class="economy-panel-actions hud-panel-actions">
-                    <button id="economy-force-cycle-btn" class="mini-btn hud-action hud-start-hidden" title="God Mode: immediately settle one pay cycle">PAY NOW</button>
-                    <button id="minimize-economy-btn" class="mini-btn hud-action hud-action--compact" title="Minimize economy panel">−</button>
-                </div>
-            </div>
-            <div id="economy-panel-content">
-                <div id="economy-panel-body"></div>
-                <div class="economy-events-title">EVENTS</div>
-                <div id="economy-events"></div>
-            </div>
-        </div>
+
 
         <div id="stats-panel" class="stats-panel hud-surface hud-surface--report hud-surface--interactive hud-start-hidden">
             <div id="treaty-alert" class="treaty-alert hud-start-hidden">
@@ -778,97 +762,12 @@
             <div class="coordinates-display hud-surface hud-surface--soft hud-readout" id="coords">0.0000, 0.0000</div>
         </div>
 
-        <button
-            id="reopen-report-btn"
-            class="reopen-report-btn hud-surface hud-surface--interactive hud-start-hidden"
-            type="button"
-            aria-haspopup="dialog"
-        >
-            <span data-i18n="REOPEN_REPORT">Reopen Report</span>
-        </button>
+
     </div>
 
-    <section
-        id="after-action-report"
-        class="experiment-fullscreen-overlay after-action-report"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="after-action-headline"
-        style="display: none"
-    >
-        <div class="experiment-report-shell">
-            <header class="after-action-header">
-                <div>
-                    <span class="experiment-kicker" data-i18n="AFTER_ACTION_REPORT">AFTER ACTION REPORT</span>
-                    <h1 id="after-action-headline" data-i18n="EXPERIMENT_COMPLETE">Experiment Complete</h1>
-                    <div id="after-action-meta" class="after-action-meta"></div>
-                </div>
-            </header>
 
-            <div class="after-action-grid">
-                <section class="report-section report-section--factors" aria-labelledby="after-action-factors-title">
-                    <h2 id="after-action-factors-title" data-i18n="OBSERVED_CONTRIBUTORS">Observed Contributors</h2>
-                    <div id="after-action-factors" class="after-action-factors"></div>
-                </section>
-                <section class="report-section report-section--timeline" aria-labelledby="after-action-timeline-title">
-                    <h2 id="after-action-timeline-title" data-i18n="PIVOTAL_EVENTS">Pivotal Events</h2>
-                    <ol id="after-action-timeline" class="after-action-timeline"></ol>
-                </section>
-                <section class="report-section report-section--metrics" aria-labelledby="after-action-metrics-title">
-                    <h2 id="after-action-metrics-title" data-i18n="FINAL_SIDE_METRICS">Final Side Metrics</h2>
-                    <div id="after-action-side-metrics" class="after-action-side-metrics"></div>
-                </section>
-                <section class="report-section" aria-labelledby="after-action-interventions-title">
-                    <h2 id="after-action-interventions-title" data-i18n="INTERVENTIONS">Interventions</h2>
-                    <div id="after-action-interventions" class="after-action-interventions"></div>
-                </section>
-                <section class="report-section" aria-labelledby="after-action-comparison-title">
-                    <h2 id="after-action-comparison-title" data-i18n="COMPARISON">Comparison</h2>
-                    <div id="after-action-comparison" class="after-action-comparison"></div>
-                </section>
-            </div>
 
-            <footer class="after-action-actions">
-                <button id="inspect-final-map-btn" class="report-secondary-action" type="button" data-i18n="INSPECT_FINAL_MAP">Inspect Final Map</button>
-                <button id="fresh-rematch-btn" type="button" title="Restore the same pre-war scenario and configuration with a new seed." data-i18n="FRESH_REMATCH">Fresh Rematch</button>
-                <button id="repeat-seed-btn" type="button" title="Restore comparable starting conditions with the same seed. Async scheduling means this is not an exact replay." data-i18n="REPEAT_SEED">Repeat Seed</button>
-                <button id="modify-setup-btn" type="button" title="Restore this configuration and seed, then return to setup without starting." data-i18n="MODIFY_SETUP">Modify Setup</button>
-                <button id="continue-world-btn" class="report-secondary-action" type="button" data-i18n="CONTINUE_WORLD">Continue World</button>
-                <button id="after-action-main-menu-btn" class="report-secondary-action" type="button" data-i18n="MAIN_MENU">Main Menu</button>
-            </footer>
-        </div>
-    </section>
 
-    <section
-        id="war-archive-overlay"
-        class="experiment-fullscreen-overlay war-archive-overlay"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="war-archive-title"
-        style="display: none"
-    >
-        <div class="experiment-report-shell war-archive-shell">
-            <header class="war-archive-header">
-                <div>
-                    <span class="experiment-kicker" data-i18n="LOCAL_RECORDS">LOCAL RECORDS</span>
-                    <h1 id="war-archive-title" data-i18n="WAR_ARCHIVE">War Archive</h1>
-                    <p>Latest 25 finalized experiments stored in this browser.</p>
-                </div>
-                <button id="war-archive-close-btn" class="report-secondary-action" type="button" aria-label="Close War Archive">
-                    <span data-i18n="CLOSE">Close</span>
-                </button>
-            </header>
-            <div class="war-archive-layout">
-                <nav id="war-archive-list" class="war-archive-list" aria-label="Archived experiments"></nav>
-                <article id="war-archive-detail" class="war-archive-detail" aria-live="polite">
-                    <div class="war-archive-empty">
-                        <strong>No archived report selected</strong>
-                        <span>Choose an experiment to review its outcome and configuration.</span>
-                    </div>
-                </article>
-            </div>
-        </div>
-    </section>
 
     <!-- Editor Choice Modal -->
     <div id="editor-choice-modal" class="settings-overlay" style="display:none">
@@ -1436,17 +1335,7 @@
                 <button id="inspect-buff-btn" class="mini-btn" style="width: 100%; margin-bottom: 10px; background:#444; font-size: 12px; padding:6px 8px;">
                     BUFF: NONE
                 </button>
-                <div id="combined-arms-editor-section" style="margin-bottom:10px; padding:8px; border-radius:6px; background:rgba(0,0,0,0.25); border:1px solid rgba(255,255,255,0.06);">
-                    <label style="font-size: 12px; color:#888; display:block; margin-bottom:6px; text-transform:uppercase; letter-spacing:1px;">Combined Arms</label>
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px;">
-                        <label style="font-size: 12px; color:#777;">ARMOR<input id="inspect-armored-vehicles" type="number" min="0" placeholder="AUTO" style="width:100%; margin-top:2px; padding:4px; background:#202126; border:1px solid #444; color:#fff; border-radius:3px;"></label>
-                        <label style="font-size: 12px; color:#777;">ARMOR QUALITY<input id="inspect-armor-quality" type="number" min="0" max="100" placeholder="50" style="width:100%; margin-top:2px; padding:4px; background:#202126; border:1px solid #444; color:#fff; border-radius:3px;"></label>
-                        <label style="font-size: 12px; color:#777;">FIGHTERS<input id="inspect-fighters" type="number" min="0" placeholder="AUTO" style="width:100%; margin-top:2px; padding:4px; background:#202126; border:1px solid #444; color:#fff; border-radius:3px;"></label>
-                        <label style="font-size: 12px; color:#777;">STRIKE AIRCRAFT<input id="inspect-strike-aircraft" type="number" min="0" placeholder="AUTO" style="width:100%; margin-top:2px; padding:4px; background:#202126; border:1px solid #444; color:#fff; border-radius:3px;"></label>
-                        <label style="font-size: 12px; color:#777; grid-column:1 / -1;">AIR QUALITY<input id="inspect-air-quality" type="number" min="0" max="100" placeholder="50" style="width:100%; margin-top:2px; padding:4px; background:#202126; border:1px solid #444; color:#fff; border-radius:3px;"></label>
-                    </div>
-                    <small style="display:block; margin-top:5px; color:#666; font-size: 12px;">Blank uses the deterministic scenario fallback. Zero disables that asset.</small>
-                </div>
+
                 <div id="vassal-status-display" style="font-size: 12px; color: #f1c40f; margin-bottom: 8px; text-transform: uppercase; display: none;">
                     Vassal of: <span id="overlord-name-disp">None</span>
                 </div>

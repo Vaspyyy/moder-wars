@@ -42,7 +42,7 @@ const units = [
 		lng: 0.1,
 		combatPower: 4,
 		allyWeight: 2,
-		kind: "armor",
+		kind: "army",
 	},
 	{
 		id: "b",
@@ -93,10 +93,6 @@ assert.equal(homeCell.totalAllyWeight, 3);
 assert.equal(homeCell.weightedStrength, 10);
 assert.ok(Math.abs(homeCell.centroidLat - 1 / 6) < 1e-12);
 assert.ok(Math.abs(homeCell.centroidLng - 1 / 6) < 1e-7);
-assert.equal(homeCell.armorCount, 1);
-assert.equal(homeCell.supportCount, 1);
-assert.equal(homeCell.hasArmor, true);
-assert.equal(homeCell.hasSupport, true);
 assert.equal(getTacticalSideCells(grid, 1)?.size, 1);
 const neighborCells = [];
 assert.equal(

@@ -6,7 +6,6 @@ import {
 	getDeJureControlByCountry,
 	getDeJureControlBySide,
 	getSideLedger,
-	selectOccupationControl,
 } from "../src/territory-ledger.js";
 
 const gridWidth = 4;
@@ -122,15 +121,7 @@ assert.equal(blue.capitalHeld, true);
 assert.deepEqual(blue.cityControlBySide, { 0: 1, 1: 1 });
 assert.equal(getSideLedger(initial, 1).citiesControlled, 2);
 assert.equal(getSideLedger(initial, 1).cityPopulationControlled, 250);
-assert.deepEqual(selectOccupationControl(initial, 1, 2, 1), {
-	victimCountryId: 1,
-	annexerCountryId: 2,
-	annexerSideIndex: 1,
-	total: 4,
-	heldByAnnexerSide: 1,
-	heldByAnnexerCountry: 1,
-	heldRatio: 0.25,
-});
+
 
 // A controller mutation dirties its tile and neighboring tiles. The old
 // snapshot remains fully visible until the replacement generation commits.

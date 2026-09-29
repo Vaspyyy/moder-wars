@@ -10,14 +10,13 @@ import {
 
 const cases = normalizePerfSuiteCases(
 	[{ id: "small", maxUnitsPerSide: 100 }],
-	{ durationMs: 5000, warmupMs: 1000, seed: 123 },
+	{ durationMs: 5000, warmupMs: 1000 },
 );
 assert.deepEqual(cases[0], {
 	id: "small",
 	maxUnitsPerSide: 100,
 	durationMs: 5000,
 	warmupMs: 1000,
-	seed: 123,
 	perfMode: "basic",
 	speedIndex: 2,
 	viewMode: "POLITICAL",
@@ -41,8 +40,7 @@ function report(avgFps, frameMs, tickMs, aiMs) {
 		},
 		phases: { unitLoop: { avg: tickMs * 0.7 } },
 		categories: {
-			operationalIntel: { avg: aiMs * 0.4 },
-			operationalTaskForces: { avg: aiMs * 0.6 },
+			operationalTaskForces: { avg: aiMs },
 		},
 		scheduler: { cappedSubTicks: 2 },
 		browser: { longTasks: { count: 1 } },
@@ -62,7 +60,7 @@ assert.equal(baseline.cases[0].medianAvgFps, 31);
 assert.equal(comparePerfSuites(faster, baseline).verdict, "IMPROVEMENT");
 assert.equal(comparePerfSuites(baseline, faster).verdict, "REGRESSION");
 const incompatible = structuredClone(faster);
-incompatible.cases[0].config = { ...incompatible.cases[0].config, seed: 999 };
+incompatible.cases[0].config = { ...incompatible.cases[0].config, maxUnitsPerSide: 999 };
 assert.equal(comparePerfSuites(incompatible, baseline).verdict, "INCOMPARABLE");
 assert.equal(comparePerfSuites(incompatible, baseline).incompatibleCaseCount, 1);
 assert.equal(perfBaselineStorageKey("before"), "mw_perf_baseline_v1:before");

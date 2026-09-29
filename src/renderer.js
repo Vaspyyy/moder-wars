@@ -1,5 +1,5 @@
 import L from "leaflet";
-import { getAirfieldCapacity } from "./combined-arms.js";
+
 import { CONFIG } from "./config.js";
 import {
 	getFormationPersonnel,
@@ -16,8 +16,6 @@ import {
 	_warPlan,
 	activeBattles,
 	activeTheaterCities,
-	airfields,
-	airWings,
 	allianceViewEnabled,
 	bases,
 	biomeMask,
@@ -34,7 +32,7 @@ import {
 	flagProcessedBuffer,
 	gameMode,
 	gameState,
-	getAiObserverSnapshot,
+	getAiOperationsSnapshot,
 	getCookie,
 	getGridIndex,
 	godModeActive,
@@ -2510,91 +2508,6 @@ const ControlMapLayer = L.Layer.extend({
 			});
 		}
 
-		// Draw destructible airfields and active wings from cached simulation state.
-		if (isWar) {
-			const airZoomScale = Math.max(0.8, 1.15 ** (map.getZoom() - 3));
-			for (const field of airfields) {
-				if (!drawBounds.contains([field.lat, field.lng])) continue;
-				const p = project(field.lat, field.lng);
-				const radius = 6 * airZoomScale;
-				ctx.save();
-				ctx.globalAlpha = field.health > 0 ? 0.9 : 0.45;
-				ctx.strokeStyle =
-					sideColors[field.sideIndex]?.replace(rgbaRe, "1") || "#fff";
-				ctx.fillStyle = "rgba(15, 20, 25, 0.85)";
-				ctx.lineWidth = Math.max(1, airZoomScale);
-				ctx.beginPath();
-				ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
-				ctx.fill();
-				ctx.stroke();
-				ctx.beginPath();
-				ctx.moveTo(p.x - radius * 0.7, p.y);
-				ctx.lineTo(p.x + radius * 0.7, p.y);
-				ctx.moveTo(p.x, p.y - radius * 0.7);
-				ctx.lineTo(p.x, p.y + radius * 0.7);
-				ctx.strokeStyle = field.health > 0 ? "#dce8ef" : "#e74c3c";
-				ctx.stroke();
-				ctx.beginPath();
-				ctx.arc(
-					p.x,
-					p.y,
-					radius + 2,
-					-Math.PI / 2,
-					-Math.PI / 2 + Math.PI * 2 * Math.max(0, field.health / 100),
-				);
-				ctx.strokeStyle = field.health > 50 ? "#2ecc71" : "#f39c12";
-				ctx.stroke();
-				ctx.fillStyle = "#fff";
-				ctx.font = `bold ${Math.max(6, 6 * airZoomScale)}px monospace`;
-				ctx.textAlign = "center";
-				ctx.textBaseline = "top";
-				ctx.fillText(
-					`${getAirfieldCapacity(field)}·${Math.round(field.health)}`,
-					p.x,
-					p.y + radius + 2,
-				);
-				ctx.restore();
-			}
-
-			for (const wing of airWings) {
-				if (
-					wing.equipment <= 0 ||
-					wing.state === "GROUNDED" ||
-					wing.state === "REARMING" ||
-					wing.state === "EVACUATED" ||
-					!drawBounds.contains([wing.lat, wing.lng])
-				)
-					continue;
-				const p = project(wing.lat, wing.lng);
-				const size = 7 * airZoomScale;
-				ctx.save();
-				ctx.translate(p.x, p.y);
-				ctx.fillStyle =
-					sideColors[wing.sideIndex]?.replace(rgbaRe, "1") || "#fff";
-				ctx.strokeStyle = "rgba(0,0,0,0.8)";
-				ctx.lineWidth = 1;
-				ctx.beginPath();
-				ctx.moveTo(size, 0);
-				ctx.lineTo(-size * 0.55, -size * 0.4);
-				ctx.lineTo(-size * 0.2, 0);
-				ctx.lineTo(-size * 0.55, size * 0.4);
-				ctx.closePath();
-				ctx.fill();
-				ctx.stroke();
-				ctx.fillStyle = "#fff";
-				ctx.font = `bold ${Math.max(7, 7 * airZoomScale)}px monospace`;
-				ctx.textAlign = "center";
-				ctx.fillText(String(wing.equipment), 0, -size * 0.75);
-				ctx.font = `bold ${Math.max(6, 6 * airZoomScale)}px monospace`;
-				ctx.fillText(
-					`${wing.role === "FIGHTER" ? "F" : "S"}·${wing.state.slice(0, 1)}`,
-					0,
-					size * 1.25,
-				);
-				ctx.restore();
-			}
-		}
-
 		// Draw cities
 		const zoom = map.getZoom();
 		const citySize = Math.max(2, zoom - 2);
@@ -2778,15 +2691,13 @@ const ControlMapLayer = L.Layer.extend({
 					if (flagMeta) {
 						// In alliance view, prefer a dedicated alliance flag if one exists
 						if (
-							allianceViewEnabled &&
-							flagMeta.allianceFlagTempFlag?.complete
-						) {
-							// nothing to preload
-						} else if (!flagMeta.tempFlag && flagMeta.flagUrl) {
-							flagMeta.tempFlag = new Image();
-							flagMeta.tempFlag.crossOrigin = "anonymous";
-							flagMeta.tempFlag.src = flagMeta.flagUrl;
-						}
+							!(allianceViewEnabled && flagMeta.allianceFlagTempFlag?.complete)
+						)
+							if (!flagMeta.tempFlag && flagMeta.flagUrl) {
+								flagMeta.tempFlag = new Image();
+								flagMeta.tempFlag.crossOrigin = "anonymous";
+								flagMeta.tempFlag.src = flagMeta.flagUrl;
+							}
 					}
 
 					const flag =
@@ -2801,35 +2712,6 @@ const ControlMapLayer = L.Layer.extend({
 					} else {
 						ctx.fillStyle = sideColors[u.sideIndex].replace(rgbaRe, "1)");
 						ctx.fillRect(p.x - sw / 2, p.y - sh / 2, sw, sh);
-					}
-
-					if (u.kind === "armor") {
-						ctx.save();
-						ctx.fillStyle = "rgba(20, 24, 22, 0.62)";
-						ctx.strokeStyle = sideColors[u.sideIndex].replace(rgbaRe, "1");
-						ctx.lineWidth = Math.max(0.8, zoomScale * 0.7);
-						ctx.fillRect(p.x - sw * 0.55, p.y - sh * 0.45, sw * 1.1, sh * 0.9);
-						ctx.strokeRect(
-							p.x - sw * 0.55,
-							p.y - sh * 0.45,
-							sw * 1.1,
-							sh * 0.9,
-						);
-						ctx.beginPath();
-						ctx.arc(p.x, p.y - sh * 0.1, sh * 0.38, 0, Math.PI * 2);
-						ctx.fillStyle = sideColors[u.sideIndex].replace(rgbaRe, "1");
-						ctx.fill();
-						ctx.fillRect(p.x, p.y - sh * 0.18, sw * 0.65, sh * 0.14);
-						ctx.fillStyle = "#fff";
-						ctx.font = `bold ${Math.max(6, 7 * zoomScale)}px monospace`;
-						ctx.textAlign = "center";
-						ctx.textBaseline = "bottom";
-						ctx.fillText(
-							String(Math.max(0, u.equipment || 0)),
-							p.x,
-							p.y - sh * 0.7,
-						);
-						ctx.restore();
 					}
 
 					// Victory Boost Visual (Star)
@@ -2887,7 +2769,7 @@ const ControlMapLayer = L.Layer.extend({
 				const hasVariableStrength =
 					u.personnel !== undefined ||
 					u.strengthMultiplier !== undefined ||
-					(u.kind !== "armor" && u.health > CONFIG.UNIT_HEALTH * 1.15);
+					u.health > CONFIG.UNIT_HEALTH * 1.15;
 				if (currentZoom >= 3 && hasVariableStrength) {
 					const nominalPersonnel =
 						soldiersPerUnit[u.sideIndex] || CONFIG.UNIT_TO_SOLDIER_RATIO;
@@ -3256,21 +3138,19 @@ const ControlMapLayer = L.Layer.extend({
 
 			// Draw war plan arrows between warring sides
 			if (isWar && showWarPlans) {
-				const aiObserverSnapshot = getAiObserverSnapshot(undefined, {
-					includeContacts: false,
-				});
-				if (aiObserverSnapshot) {
+				const operationsSnapshot = getAiOperationsSnapshot();
+				if (operationsSnapshot) {
 					drawAiOperationsOverlay(
 						ctx,
-						aiObserverSnapshot,
+						operationsSnapshot,
 						project,
-						sideColors[aiObserverSnapshot.sideIndex] ||
+						sideColors[operationsSnapshot.sideIndex] ||
 							"rgba(255, 196, 64, 0.9)",
 						window.innerWidth < 480,
 						window.__mwAiOperationReveal?.uid || null,
 					);
 				}
-				for (let si = 0; !aiObserverSnapshot && si < _warPlan.length; si++) {
+				for (let si = 0; !operationsSnapshot && si < _warPlan.length; si++) {
 					const plan = _warPlan[si];
 					if (!plan) continue;
 					const owningSide = si >= sides.length ? si - sides.length : si;
@@ -3414,7 +3294,7 @@ const ControlMapLayer = L.Layer.extend({
 					}
 				}
 
-				if (!aiObserverSnapshot && _aiDebugPlans?.length) {
+				if (!operationsSnapshot && _aiDebugPlans?.length) {
 					for (let si = 0; si < _aiDebugPlans.length; si++) {
 						const debug = _aiDebugPlans[si];
 						if (!debug?.fronts?.length) continue;
@@ -3441,7 +3321,7 @@ const ControlMapLayer = L.Layer.extend({
 				// Draw naval invasion arrows (dashed, country-colored)
 				if (typeof _navalPlan !== "undefined" && _navalPlan) {
 					for (let si = 0; si < _navalPlan.length; si++) {
-						if (aiObserverSnapshot && si !== aiObserverSnapshot.sideIndex)
+						if (operationsSnapshot && si !== operationsSnapshot.sideIndex)
 							continue;
 						const np = _navalPlan[si];
 						if (!np?.arrowPoints || np.arrowPoints.length < 2) continue;
@@ -3487,7 +3367,7 @@ const ControlMapLayer = L.Layer.extend({
 						ctx.fillStyle = sideColor.replace(rgbaRe, "0.85)");
 						ctx.fill();
 
-						if (!aiObserverSnapshot || window.innerWidth >= 480) {
+						if (!operationsSnapshot || window.innerWidth >= 480) {
 							ctx.font = "bold 9px monospace";
 							ctx.fillStyle = sideColor.replace(rgbaRe, "0.9)");
 							ctx.fillText(`NAVAL: ${np.phase}`, midX + 10, midY - 2);
@@ -3498,7 +3378,7 @@ const ControlMapLayer = L.Layer.extend({
 				// Draw naval supply arrows (dashed, country-colored)
 				if (typeof _navalSupplyPlan !== "undefined" && _navalSupplyPlan) {
 					for (let si = 0; si < _navalSupplyPlan.length; si++) {
-						if (aiObserverSnapshot && si !== aiObserverSnapshot.sideIndex)
+						if (operationsSnapshot && si !== operationsSnapshot.sideIndex)
 							continue;
 						const sp = _navalSupplyPlan[si];
 						if (!sp?.arrowPoints || sp.arrowPoints.length < 2) continue;
@@ -3544,7 +3424,7 @@ const ControlMapLayer = L.Layer.extend({
 						ctx.fillStyle = sideColor.replace(rgbaRe, "0.75)");
 						ctx.fill();
 
-						if (!aiObserverSnapshot || window.innerWidth >= 480) {
+						if (!operationsSnapshot || window.innerWidth >= 480) {
 							ctx.font = "bold 8px monospace";
 							ctx.fillStyle = sideColor.replace(rgbaRe, "0.85)");
 							ctx.fillText(`SUPPLY: ${sp.phase}`, midX + 10, midY + 10);
@@ -3554,7 +3434,7 @@ const ControlMapLayer = L.Layer.extend({
 
 				// Draw transport arrows (dashed, side-colored, railway-style)
 				if (
-					!aiObserverSnapshot &&
+					!operationsSnapshot &&
 					typeof _transportPlan !== "undefined" &&
 					_transportPlan
 				) {
@@ -3612,7 +3492,7 @@ const ControlMapLayer = L.Layer.extend({
 
 				// Draw coastal defense zones (passive overlay, subtle)
 				if (
-					!aiObserverSnapshot &&
+					!operationsSnapshot &&
 					typeof _coastalDefensePlan !== "undefined" &&
 					_coastalDefensePlan
 				) {
@@ -3652,7 +3532,7 @@ const ControlMapLayer = L.Layer.extend({
 
 				// Draw neutral garrison zones (passive overlay, subtle)
 				if (
-					!aiObserverSnapshot &&
+					!operationsSnapshot &&
 					typeof _neutralGarrisonPlan !== "undefined" &&
 					_neutralGarrisonPlan
 				) {
@@ -3735,15 +3615,12 @@ const ControlMapLayer = L.Layer.extend({
 		teamUnits.forEach((u) => {
 			avgLat += u.lat;
 			avgLng += u.lng;
-			if (u.kind !== "armor") {
-				clusterManpower += getFormationPersonnel(u, {
-					nominalPersonnel: sp,
-					baseHealth:
-						u.maxHealth ||
-						CONFIG.UNIT_HEALTH *
-							(u.isAlpenjager ? CONFIG.ALPEN_HEALTH_MULT : 1),
-				});
-			}
+			clusterManpower += getFormationPersonnel(u, {
+				nominalPersonnel: sp,
+				baseHealth:
+					u.maxHealth ||
+					CONFIG.UNIT_HEALTH * (u.isAlpenjager ? CONFIG.ALPEN_HEALTH_MULT : 1),
+			});
 		});
 		avgLat /= teamUnits.length;
 		avgLng /= teamUnits.length;
