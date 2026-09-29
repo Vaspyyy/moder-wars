@@ -5444,6 +5444,22 @@ export function updateSidesUI() {
 	);
 	updateFfaSetupUi();
 	sidesContainer.innerHTML = "";
+	let ffaParticipants = null;
+	if (ffaMode) {
+		const heading = document.createElement("div");
+		heading.className = "ffa-participants-heading";
+		const count = sides.filter((side) => side.length > 0).length;
+		heading.textContent = `Free for all · ${count} independent sides`;
+		ffaParticipants = document.createElement("div");
+		ffaParticipants.className = "ffa-participants-grid";
+		sidesContainer.append(heading, ffaParticipants);
+		if (!count) {
+			const empty = document.createElement("p");
+			empty.className = "ffa-participants-empty";
+			empty.textContent = "Select countries on the map to add participants.";
+			ffaParticipants.appendChild(empty);
+		}
+	}
 
 	sides.forEach((sideList, sideIdx) => {
 		const sideCol = document.createElement("div");
@@ -5471,17 +5487,17 @@ export function updateSidesUI() {
 		} else {
 			sideHeader.innerText = `SIDE ${sideLabel}`;
 		}
-		sideHeader.style.color = sideColors[sideIdx].replace(rgbaRe, "0.6)");
-		if (activeSideIndex === sideIdx) {
-			sideHeader.style.backgroundColor = sideColors[sideIdx].replace(
-				/[\d.]+\)$/g,
-				"0.2)",
-			);
-			sideHeader.style.borderColor = sideColors[sideIdx].replace(
-				/[\d.]+\)$/g,
-				"1)",
-			);
-		}
+		const sideColor =
+			sideColors[sideIdx] || DEFAULT_SIDE_COLORS[sideIdx % MAX_SIDES];
+		sideHeader.style.color = sideColor.replace(rgbaRe, "1)");
+		sideHeader.style.backgroundColor = sideColor.replace(
+			rgbaRe,
+			activeSideIndex === sideIdx ? "0.2)" : "0.1)",
+		);
+		sideHeader.style.borderColor = sideColor.replace(
+			rgbaRe,
+			activeSideIndex === sideIdx ? "1)" : "0.5)",
+		);
 
 		sideHeader.onclick = () => {
 			activeSideIndex = sideIdx;
@@ -5497,8 +5513,9 @@ export function updateSidesUI() {
 			const slot = document.createElement("div");
 			slot.className = "setup-slot";
 			slot.dataset.countryId = String(country.id);
-			slot.style.borderColor = sideColors[sideIdx].replace(rgbaRe, "0.4)");
-			slot.style.borderColor = country.color.replace(rgbaRe, "1)");
+			slot.style.borderColor = ffaMode
+				? country.color.replace(rgbaRe, "1)")
+				: sideColor.replace(rgbaRe, "0.7)");
 
 			const buffState = country.buffState || meta?.buffState || "none";
 			const bMeta = BUFF_METADATA[buffState] || BUFF_METADATA.none;
@@ -5720,7 +5737,9 @@ export function updateSidesUI() {
 			}
 
 			listContainer.appendChild(slot);
+			if (ffaParticipants) ffaParticipants.appendChild(slot);
 		});
+		if (ffaMode) return;
 
 		sideCol.appendChild(sideHeader);
 
@@ -5791,13 +5810,20 @@ function updateFfaSetupUi() {
 	ffaToggleBtn.setAttribute("aria-pressed", String(ffaMode));
 	ffaToggleBtn.textContent = `${getTranslation("FFA")}: ${ffaMode ? "ON" : "OFF"}`;
 	setupPanel.classList.toggle("ffa-setup-active", ffaMode);
+	addSideBtn.hidden = ffaMode;
+	const prompt = document.getElementById("setup-prompt");
+	if (prompt) {
+		prompt.textContent = ffaMode
+			? "Click countries on the map to add independent participants."
+			: getTranslation("SETUP_PROMPT");
+	}
 	const note = document.getElementById("ffa-setup-note");
 	if (note) note.hidden = !ffaMode;
 }
 
 ffaToggleBtn.onclick = () => {
 	ffaMode = !ffaMode;
-	updateFfaSetupUi();
+	updateSidesUI();
 };
 
 export const randomWarBtn = document.getElementById("random-war-btn");
