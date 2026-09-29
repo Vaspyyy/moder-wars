@@ -292,65 +292,6 @@ function drawAiOperationsOverlay(
 		}
 		ctx.restore();
 	}
-
-	const contacts = Array.isArray(snapshot.contacts)
-		? snapshot.contacts.slice(0, compact ? 10 : 18)
-		: [];
-	for (const [index, contact] of contacts.entries()) {
-		if (!isMapPoint(contact.position)) continue;
-		const point = project(contact.position.lat, contact.position.lng);
-		const rawConfidence = Number(contact.confidence);
-		const confidence =
-			contact.confidence !== null &&
-			contact.confidence !== undefined &&
-			Number.isFinite(rawConfidence)
-				? Math.max(
-						0.15,
-						Math.min(
-							1,
-							rawConfidence > 1 ? rawConfidence / 100 : rawConfidence,
-						),
-					)
-				: 0.5;
-		const age = Math.max(0, Number(contact.ageTicks) || 0);
-		const ageFade = Math.max(0.18, 1 / (1 + age / 180));
-		const alpha = Math.min(contact.stale ? 0.34 : 0.88, confidence * ageFade);
-		const power = Math.max(0, Number(contact.estimatedCombatPower) || 0);
-		const radius = Math.max(4, Math.min(9, 4 + Math.log10(power + 1)));
-		ctx.save();
-		ctx.translate(point.x, point.y);
-		ctx.globalAlpha = alpha;
-		ctx.strokeStyle = "#ffad42";
-		ctx.fillStyle = "rgba(15, 8, 3, 0.76)";
-		ctx.lineWidth = 1.5;
-		ctx.setLineDash(contact.stale ? [2, 3] : []);
-		ctx.rotate(Math.PI / 4);
-		ctx.beginPath();
-		ctx.rect(-radius, -radius, radius * 2, radius * 2);
-		ctx.fill();
-		ctx.stroke();
-		ctx.rotate(-Math.PI / 4);
-		ctx.beginPath();
-		ctx.moveTo(-radius - 3, 0);
-		ctx.lineTo(radius + 3, 0);
-		ctx.moveTo(0, -radius - 3);
-		ctx.lineTo(0, radius + 3);
-		ctx.stroke();
-		ctx.restore();
-
-		if (!compact && index < 6) {
-			const source = String(contact.source || "CONTACT").toUpperCase();
-			const status = contact.stale
-				? "STALE"
-				: `${Math.round(confidence * 100)}%`;
-			ctx.save();
-			ctx.globalAlpha = Math.max(0.35, alpha);
-			ctx.font = "700 8px monospace";
-			ctx.fillStyle = "#ffbd69";
-			ctx.fillText(`${source} · ${status}`, point.x + radius + 6, point.y + 3);
-			ctx.restore();
-		}
-	}
 }
 
 const _allianceCache = {
@@ -3315,7 +3256,9 @@ const ControlMapLayer = L.Layer.extend({
 
 			// Draw war plan arrows between warring sides
 			if (isWar && showWarPlans) {
-				const aiObserverSnapshot = getAiObserverSnapshot();
+				const aiObserverSnapshot = getAiObserverSnapshot(undefined, {
+					includeContacts: false,
+				});
 				if (aiObserverSnapshot) {
 					drawAiOperationsOverlay(
 						ctx,

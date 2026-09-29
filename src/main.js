@@ -13840,21 +13840,24 @@ function prepareExperimentSetupForStart() {
 	return readExperimentSeedFromSetup();
 }
 
-export function getAiObserverSnapshot(sideUid = aiObserverSideUid) {
+export function getAiObserverSnapshot(
+	sideUid = aiObserverSideUid,
+	{ includeContacts = true } = {},
+) {
 	if (gameMode !== "CONQUEST" || !sideUid) return null;
 	if (gameState === "WAR_OVER" && _frozenAiObserverSnapshots.has(sideUid)) {
-		return _frozenAiObserverSnapshots.get(sideUid);
+		const snapshot = _frozenAiObserverSnapshots.get(sideUid);
+		return includeContacts ? snapshot : { ...snapshot, contacts: [] };
 	}
 	const sideIndex = sideUids.indexOf(sideUid);
 	const intelState = _aiIntelBySide.get(sideUid);
 	if (sideIndex < 0 || !intelState) return null;
-	const intelSnapshot = createAiIntelObserverSnapshot(
-		intelState,
-		_simTickCount,
-	);
+	const intelSnapshot = includeContacts
+		? createAiIntelObserverSnapshot(intelState, _simTickCount)
+		: null;
 	const taskSnapshot = createAiTaskForceObserverSnapshot(
 		_aiTaskForcesBySide.get(sideUid) || [],
-		intelState,
+		includeContacts ? intelState : null,
 		_simTickCount,
 	);
 	const taskForcesById = new Map(
@@ -13891,7 +13894,7 @@ export function getAiObserverSnapshot(sideUid = aiObserverSideUid) {
 				unitRoles: runtime.unitRoles || {},
 			};
 		}),
-		contacts: intelSnapshot.contacts.map((contact) => ({
+		contacts: (intelSnapshot?.contacts || []).map((contact) => ({
 			uid: contact.key,
 			hostileSideUid: contact.enemySideUid,
 			sectorId: contact.sectorId,
