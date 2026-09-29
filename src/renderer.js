@@ -371,6 +371,24 @@ const RENDER_LAYERS = Object.freeze({
 });
 
 const CONTROL_DIRTY_TILE_SIZE = 32;
+
+// Partial redraw clips include a one-cell halo. Sampling blocks that touch it
+// must also be repainted, including blocks starting in a neighboring tile.
+function intersectsControlPaintTiles(x, y, step, tileColumns, dirtyTiles) {
+	const minTileX = Math.max(0, Math.floor((x - 1) / CONTROL_DIRTY_TILE_SIZE));
+	const maxTileX = Math.min(
+		tileColumns - 1,
+		Math.floor((x + step) / CONTROL_DIRTY_TILE_SIZE),
+	);
+	const minTileY = Math.max(0, Math.floor((y - 1) / CONTROL_DIRTY_TILE_SIZE));
+	const maxTileY = Math.floor((y + step) / CONTROL_DIRTY_TILE_SIZE);
+	for (let tileY = minTileY; tileY <= maxTileY; tileY++) {
+		for (let tileX = minTileX; tileX <= maxTileX; tileX++) {
+			if (dirtyTiles.has(tileY * tileColumns + tileX)) return true;
+		}
+	}
+	return false;
+}
 const CONTROL_DIRTY_TILE_LIMIT = 4096;
 
 function createRenderSurface() {
@@ -839,9 +857,13 @@ const ControlMapLayer = L.Layer.extend({
 		const controlTileColumns = Math.ceil(gridWidth / CONTROL_DIRTY_TILE_SIZE);
 		const isStaticCellInPaintTiles = (x, y) => {
 			if (!partialControlRedraw) return true;
-			const tileX = Math.floor(x / CONTROL_DIRTY_TILE_SIZE);
-			const tileY = Math.floor(y / CONTROL_DIRTY_TILE_SIZE);
-			return dirtyControlPaintTiles.has(tileY * controlTileColumns + tileX);
+			return intersectsControlPaintTiles(
+				x,
+				y,
+				step,
+				controlTileColumns,
+				dirtyControlPaintTiles,
+			);
 		};
 		const staticPaintGridBounds = {
 			xMin,
@@ -908,10 +930,10 @@ const ControlMapLayer = L.Layer.extend({
 					);
 					const cornerA = project(cellY0 * res - 90, cellX0 * res - 180);
 					const cornerB = project(cellY1 * res - 90, cellX1 * res - 180);
-					const left = Math.min(cornerA.x, cornerB.x) - 2;
-					const top = Math.min(cornerA.y, cornerB.y) - 2;
-					const width = Math.abs(cornerB.x - cornerA.x) + 4;
-					const height = Math.abs(cornerB.y - cornerA.y) + 4;
+					const left = Math.min(cornerA.x, cornerB.x);
+					const top = Math.min(cornerA.y, cornerB.y);
+					const width = Math.abs(cornerB.x - cornerA.x);
+					const height = Math.abs(cornerB.y - cornerA.y);
 					ctx.rect(left, top, width, height);
 				}
 				ctx.clip();
