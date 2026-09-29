@@ -266,7 +266,6 @@ export const TRANSLATIONS = {
 		EXPERIMENT_RANDOMIZE: "Randomize",
 		EXPERIMENT_FORCE_MODE: "Force Mode",
 		EXPERIMENT_AI_POSTURE: "AI Posture",
-		EXPERIMENT_FORCE_BALANCE: "Estimated Force Balance",
 		EXPERIMENT_ADVANCED_SETUP: "Advanced Setup",
 		EXPERIMENT_SIDES_AI: "Sides & AI",
 		EXPERIMENT_FORCES_DATE: "Forces & Date",
@@ -5773,7 +5772,6 @@ export function updateSidesUI() {
 
 	rebuildManpowerInputs();
 	rebuildStatsPanel();
-	updateEstimatedExperimentBalance();
 }
 
 addSideBtn.onclick = () => {
@@ -13804,31 +13802,6 @@ function estimatedSetupSideStrengths() {
 	}));
 }
 
-function updateEstimatedExperimentBalance() {
-	const strengths = estimatedSetupSideStrengths().filter(
-		(side) => side.value > 0,
-	);
-	if (strengths.length < 2) {
-		_experimentUi?.setEstimatedForceBalance({
-			statement: "Select countries on at least two sides to compare forces.",
-			sides: strengths,
-		});
-		return;
-	}
-	const ordered = [...strengths].sort(
-		(left, right) => right.value - left.value,
-	);
-	const ratio = ordered[0].value / Math.max(1, ordered[1].value);
-	const statement =
-		ratio < 1.1
-			? "The two strongest sides begin near parity."
-			: `${ordered[0].label} is estimated at ${ratio.toFixed(1)}× the force of ${ordered[1].label}.`;
-	_experimentUi?.setEstimatedForceBalance({
-		statement,
-		sides: strengths,
-	});
-}
-
 function applyExperimentForceMode(forceMode) {
 	const inputs = sides.map((_, sideIndex) =>
 		document.getElementById(`manpower-side-${sideIndex}`),
@@ -14350,7 +14323,6 @@ function restoreExperimentSides(spec) {
 		`Seed ${spec.seed} preserved. Repeat-seed runs compare starting conditions; they are not exact replays.`,
 		"ready",
 	);
-	updateEstimatedExperimentBalance();
 }
 
 function pristineScenarioMatchesReport(report) {
@@ -36144,13 +36116,11 @@ _experimentUi = initExperimentUi({
 	},
 	onForceModeChanged(values) {
 		applyExperimentForceMode(values.forceMode);
-		updateEstimatedExperimentBalance();
 	},
 	onSetupPostureChanged(values) {
 		const manpower = preserveSetupManpowerValues();
 		applyBroadSetupPosture(values.posture);
 		restoreSetupManpowerValues(manpower);
-		updateEstimatedExperimentBalance();
 	},
 	onAiObserverSideChange(sideUid) {
 		setAiObserverSideUid(sideUid);
@@ -36229,4 +36199,3 @@ _experimentUi.setSetupSeed(
 	"ready",
 );
 setExperimentSeed(initialExperimentSeed);
-updateEstimatedExperimentBalance();

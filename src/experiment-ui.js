@@ -982,7 +982,6 @@ export function initExperimentUi(
 		archive: byId("war-archive-overlay"),
 		archiveDetail: byId("war-archive-detail"),
 		archiveList: byId("war-archive-list"),
-		forceBalance: byId("estimated-force-balance"),
 		forceMode: byId("force-mode-select"),
 		interventionAmount: byId("intervention-amount-input"),
 		interventionCountry: byId("intervention-country-select"),
@@ -1101,51 +1100,6 @@ export function initExperimentUi(
 				seed === null || seed === undefined ? "" : String(seed);
 		}
 		if (status !== undefined) setSetupSeedStatus(status, tone);
-	}
-
-	function setEstimatedForceBalance(balance) {
-		if (!nodes.forceBalance) return;
-		const normalized =
-			balance && typeof balance === "object"
-				? balance
-				: { statement: asText(balance) };
-		const label = asText(normalized.label, "Estimated Force Balance");
-		const statement = asText(
-			normalized.statement || normalized.summary || normalized.value,
-			"Select countries to compare the sides.",
-		);
-		const children = [
-			createElement(documentRef, "span", "", label),
-			createElement(documentRef, "strong", "", statement),
-		];
-		const sideRows = normalized.sides;
-		if (Array.isArray(sideRows) && sideRows.length > 0) {
-			const list = createElement(documentRef, "div", "force-balance-sides");
-			for (const side of sideRows) {
-				const row = createElement(documentRef, "span", "force-balance-side");
-				row.append(
-					createElement(
-						documentRef,
-						"span",
-						"",
-						optionValue(side, ["label", "name", "sideName"], "Side"),
-					),
-					createElement(
-						documentRef,
-						"strong",
-						"",
-						formatExperimentMetric(
-							side.value ?? side.personnel ?? side.strength,
-							"personnel",
-						),
-					),
-				);
-				list.append(row);
-			}
-			children.push(list);
-		}
-		nodes.forceBalance.replaceChildren(...children);
-		setTone(nodes.forceBalance, asText(normalized.tone));
 	}
 
 	function setWarDeskCollapsed(collapsed, event) {
@@ -1923,7 +1877,6 @@ export function initExperimentUi(
 		renderAfterActionReport,
 		renderWarArchive,
 		selectArchiveReport,
-		setEstimatedForceBalance,
 		setInterventionOptions,
 		setInterventionStatus,
 		setSetupSeed,
@@ -1963,7 +1916,6 @@ function createNoopController() {
 		renderAfterActionReport: noop,
 		renderWarArchive: noop,
 		selectArchiveReport: () => null,
-		setEstimatedForceBalance: noop,
 		setInterventionOptions: noop,
 		setInterventionStatus: noop,
 		setSetupSeed: noop,

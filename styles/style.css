@@ -3483,50 +3483,6 @@ body.commander-active #force-peace-btn {
 	font-size: 8px;
 }
 
-.force-balance-card {
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-	margin-top: 10px;
-	padding: 9px 10px;
-	background: var(--hud-color-surface-raised);
-	border: 1px solid var(--hud-color-border);
-	border-left: 2px solid var(--hud-color-warning);
-	border-radius: var(--hud-radius-sm);
-}
-
-.force-balance-card span {
-	color: var(--hud-color-dim);
-	font: 800 8px var(--hud-font-mono);
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
-}
-
-.force-balance-card strong {
-	font-size: 11px;
-	line-height: 1.35;
-}
-
-.force-balance-sides {
-	display: grid;
-	gap: 3px;
-	margin-top: 3px;
-}
-
-.force-balance-card .force-balance-side {
-	display: flex;
-	align-items: baseline;
-	justify-content: space-between;
-	gap: 10px;
-	letter-spacing: 0;
-	text-transform: none;
-}
-
-.force-balance-card .force-balance-side > strong {
-	flex: 0 0 auto;
-	font: 800 9px var(--hud-font-mono);
-}
-
 .setup-panel .setup-sides {
 	min-height: 88px;
 	margin: 0;
