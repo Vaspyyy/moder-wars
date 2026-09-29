@@ -239,6 +239,7 @@ function metricEntries(value, limit = 8) {
 		return value.slice(0, limit).map((entry, index) => {
 			if (entry && typeof entry === "object") {
 				return {
+					color: asText(entry.color),
 					delta: entry.delta,
 					kind: asText(entry.kind),
 					detail: asText(entry.detail || entry.description),
@@ -308,6 +309,12 @@ function renderMetricCards(documentRef, target, metrics, emptyMessage) {
 	const fragment = documentRef.createDocumentFragment();
 	for (const entry of entries) {
 		const card = createElement(documentRef, "div", "war-desk-metric");
+		if (entry.color) {
+			const color = entry.color.startsWith("rgba(")
+				? entry.color.replace(/[\d.]+\)$/, "1)")
+				: entry.color;
+			card.style.setProperty("--war-accent", color);
+		}
 		setTone(card, entry.tone);
 		if (entry.kind === "country")
 			card.classList.add("war-desk-metric--country");

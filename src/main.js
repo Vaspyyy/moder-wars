@@ -13958,6 +13958,10 @@ function warDeskOverviewRows(metrics) {
 			held += countryHeld;
 			countryRows.push({
 				kind: "country",
+				color:
+					country.color ||
+					countryMetadata[countryId - 1]?.color ||
+					definition?.color,
 				label: country.name || countryMetadata[countryId - 1]?.name,
 				key: "manpower",
 				primaryLabel: "Deployed manpower",
@@ -13970,6 +13974,10 @@ function warDeskOverviewRows(metrics) {
 		}
 		rows.push({
 			kind: "side",
+			color:
+				countries.size === 1
+					? countryRows[0].color
+					: definition?.color || sideColors[sideIndex],
 			label: metric.name,
 			key: "manpower",
 			primaryLabel: "Manpower",

@@ -5290,3 +5290,136 @@ input:focus-visible {
 		animation: none;
 	}
 }
+
+/* Keep the streamlined layout lively: colored controls and faction identity. */
+.ui-overlay .hud-action {
+	--hud-action-background: #224b66;
+	--hud-action-border: #408cba;
+	--hud-action-color: #f1f8ff;
+}
+.ui-overlay .hud-action--info {
+	--hud-action-background: #247db4;
+	--hud-action-border: #65bdf3;
+}
+.ui-overlay .hud-action--warning {
+	--hud-action-background: #c67b16;
+	--hud-action-border: #ffc45f;
+}
+.ui-overlay .hud-action--danger {
+	--hud-action-background: #9b383f;
+	--hud-action-border: #ed747b;
+}
+.ui-overlay .hud-action--god {
+	--hud-action-background: #ad5427;
+	--hud-action-border: #f6a26b;
+}
+.ui-overlay .hud-action--success,
+.ui-overlay .hud-action.active {
+	--hud-action-background: #25834e;
+	--hud-action-border: #6bd793;
+}
+.ui-overlay .hud-action--neutral {
+	--hud-action-background: #465394;
+	--hud-action-border: #909de3;
+}
+.ui-overlay .hud-action--neutral-alt {
+	--hud-action-background: #754398;
+	--hud-action-border: #c38fe8;
+}
+.hud-menu > summary {
+	background: #44335d;
+	border-color: #a080c4;
+	color: #ecdcff;
+}
+.hud-menu-content {
+	background: #181b2b;
+	border-color: #78609b;
+}
+.hud-menu-heading {
+	color: #e9d58d;
+}
+.setup-panel .experiment-setup-header {
+	background: linear-gradient(110deg, #243c49, #242235);
+	border-bottom-color: #588ea4;
+}
+.setup-panel .experiment-kicker {
+	color: #76d3e7;
+}
+.setup-panel .experiment-basic-random-war {
+	background: #754398;
+	border-color: #bf8ce2;
+	color: #f5e9ff;
+}
+.setup-panel .experiment-basic-random-war[aria-pressed="true"] {
+	background: #9654bd;
+	border-color: #e0b1ff;
+}
+.setup-panel .experiment-basic-rule {
+	background: #49302e;
+	border-color: #a35e56;
+	color: #f1c7ae;
+}
+.setup-panel .experiment-advanced > summary {
+	background: #29324b;
+	color: #bfccff;
+}
+.setup-panel .country-configuration > summary {
+	color: #8adccb;
+}
+.war-desk .war-desk-header {
+	background: linear-gradient(110deg, #40322b, #292334);
+	border-bottom-color: #b28e58;
+}
+.war-desk .war-desk-header strong {
+	color: #f0dda1;
+}
+.war-desk .war-desk-metric {
+	--war-accent: #55b9ca;
+	border-color: color-mix(in srgb, var(--war-accent) 45%, #293440);
+	border-left: 4px solid var(--war-accent);
+	background: linear-gradient(
+		110deg,
+		color-mix(in srgb, var(--war-accent) 18%, #18232d),
+		#18232d
+	);
+}
+.war-desk .war-desk-metric > span {
+	color: color-mix(in srgb, var(--war-accent) 55%, white);
+}
+.war-desk .war-desk-metric-value small {
+	color: #b7c7d7;
+}
+.war-desk .war-desk-metric-value:last-child strong {
+	color: #f1b4a1;
+}
+.menu-v2-link {
+	color: #bbcfec;
+}
+.menu-v2-link.primary {
+	color: #f0bb70;
+}
+#main-settings-btn {
+	color: #7cc8ed;
+}
+#commander-mode-btn {
+	color: #c997ef;
+}
+.scroller-card {
+	border-top: 3px solid #5ba7d1;
+}
+.scroller-card:nth-child(3n + 2) {
+	border-top-color: #c591e4;
+}
+.scroller-card:nth-child(3n) {
+	border-top-color: #e4b769;
+}
+#settings-overlay .settings-tab-btn {
+	color: #c4d4ef;
+	border-bottom: 2px solid #5ba7d1;
+}
+#settings-overlay .settings-tab-btn:nth-child(2n) {
+	border-bottom-color: #c591e4;
+}
+#settings-overlay .settings-tab-btn:nth-child(3n) {
+	border-bottom-color: #e4b769;
+}
