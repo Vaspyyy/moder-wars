@@ -6,16 +6,23 @@ import {
 	reconcileAiTaskForces,
 	selectWithdrawalAnchor,
 } from "./ai-task-forces.js";
-import { CONFIG } from "./config.js";
+import { CONFIG as DEFAULT_CONFIG } from "./config.js";
 
 /** createAiRuntime owns AI behavior and receives current world state through explicit accessors. */
 export function createAiRuntime(context) {
-	function operationalUnitPower(unit) {
+	const CONFIG = context.CONFIG || DEFAULT_CONFIG;
+	const unitIndex = new Map();
+	const serializedUnitIndex = new Map();
+	const roleCache = new Map();
+
+	function operationalUnitPower(unit, country = undefined) {
 		if (!unit || unit.health <= 0) return 0;
 		let power = Math.max(0, context.getLiveFormationStrength(unit));
-		const sideCountry = context.sides[unit.sideIndex]?.find(
-			(country) => country.id === unit.sovereignId,
-		);
+		const sideCountry =
+			country ||
+			context.sides[unit.sideIndex]?.find(
+				(candidate) => candidate.id === unit.sovereignId,
+			);
 		const buff = context.getEffectiveBuffState(
 			sideCountry,
 			context.countryMetadata[unit.sovereignId - 1],
@@ -31,12 +38,12 @@ export function createAiRuntime(context) {
 		return power;
 	}
 
-	function serializeOperationalUnit(unit) {
+	function writeOperationalUnit(unit, serialized) {
 		const country = context.sides[unit.sideIndex]?.find(
 			(candidate) => candidate.id === unit.sovereignId,
 		);
 
-		return {
+		return Object.assign(serialized, {
 			id: unit.id,
 			sideUid: context.sideUids[unit.sideIndex] || "",
 			countryId: unit.sovereignId,
@@ -48,11 +55,44 @@ export function createAiRuntime(context) {
 			maxHealth:
 				unit.maxHealth ||
 				CONFIG.UNIT_HEALTH * (unit.isAlpenjager ? CONFIG.ALPEN_HEALTH_MULT : 1),
-			combatPower: operationalUnitPower(unit),
+			combatPower: operationalUnitPower(unit, country),
 			deployed: unit.deployTicks <= 0 && !unit.isAtSea,
 			commandEligible:
 				!unit.navalAssigned && !unit.supplyAssigned && !unit.garrisonAssigned,
 			taskForceId: unit._taskForceUid,
+		});
+	}
+
+	function serializeOperationalUnit(unit) {
+		return writeOperationalUnit(unit, {});
+	}
+
+	function prepareOperationalSide(sideIndex) {
+		const units = [];
+		const unitsById = new Map();
+		let availablePower = 0;
+		let availableCount = 0;
+		for (const unit of context._tickUnitsBySide[sideIndex] || []) {
+			const key = String(unit.id);
+			let serialized = serializedUnitIndex.get(key);
+			if (!serialized) {
+				serialized = {};
+				serializedUnitIndex.set(key, serialized);
+			}
+			writeOperationalUnit(unit, serialized);
+			units.push(serialized);
+			unitsById.set(key, serialized);
+			if (serialized.health > 0 && serialized.deployed) {
+				availablePower += serialized.combatPower;
+				availableCount++;
+			}
+		}
+		return {
+			units,
+			unitsById,
+			availablePower,
+			availableCount,
+			posture: context.getSideStrategyProfile(sideIndex).dominant,
 		};
 	}
 
@@ -120,11 +160,11 @@ export function createAiRuntime(context) {
 	}
 
 	function initializeOperationalAiRuntime() {
+		unitIndex.clear();
+		serializedUnitIndex.clear();
+		roleCache.clear();
 		context.resetOperationalAiRuntime();
-		document.body.classList.remove("conflict-active");
-		document.getElementById("war-desk").style.display = "none";
-		context._warOverviewSides = [];
-		context._warOverviewLastUpdate = -Infinity;
+		context.onOperationalAiReset?.();
 		context.ensureSideIdentities();
 		for (let sideIndex = 0; sideIndex < context.sides.length; sideIndex++) {
 			if (context.sides[sideIndex]?.length)
@@ -227,25 +267,25 @@ export function createAiRuntime(context) {
 		}));
 	}
 
-	function operationalPlanInput(sideIndex, plan, landingHandoff = null) {
+	function operationalPlanInput(
+		sideIndex,
+		plan,
+		landingHandoff = null,
+		sideSummary = null,
+	) {
 		const sideUid = context.sideUids[sideIndex];
-		const availableUnits = (context._tickUnitsBySide[sideIndex] || []).filter(
-			(unit) => unit.health > 0 && unit.deployTicks <= 0 && !unit.isAtSea,
-		);
+		const summary = sideSummary || prepareOperationalSide(sideIndex);
 		const requestedFormationCount = Math.max(1, plan.maxAssignedUnits || 5);
-		const availablePower = availableUnits.reduce(
-			(sum, unit) => sum + operationalUnitPower(unit),
-			0,
-		);
 		const requestedPower =
-			availablePower *
-			Math.min(1, requestedFormationCount / Math.max(1, availableUnits.length));
+			summary.availablePower *
+			Math.min(
+				1,
+				requestedFormationCount / Math.max(1, summary.availableCount),
+			);
 		const landingPower = (landingHandoff?.unitIds || []).reduce(
 			(sum, unitId) => {
-				const unit = availableUnits.find(
-					(candidate) => String(candidate.id) === String(unitId),
-				);
-				return sum + (unit ? operationalUnitPower(unit) : 0);
+				const unit = summary.unitsById.get(String(unitId));
+				return sum + (unit?.health > 0 && unit.deployed ? unit.combatPower : 0);
 			},
 			0,
 		);
@@ -273,7 +313,7 @@ export function createAiRuntime(context) {
 			target: plan.target ? { ...plan.target } : stagingAnchor,
 			stagingAnchor: stagingAnchor ? { ...stagingAnchor } : null,
 			route,
-			posture: context.getSideStrategyProfile(sideIndex).dominant,
+			posture: summary.posture,
 			assignedUnitIds: landingHandoff?.unitIds || [],
 			desiredPower: Math.max(1, requestedPower, landingPower),
 			maxAssignedUnits: Math.max(
@@ -497,10 +537,16 @@ export function createAiRuntime(context) {
 				String(left.id).localeCompare(String(right.id)),
 			);
 		}
+		const roleIndexByUnit = new Map();
+		for (const roleMembers of byRole.values()) {
+			for (let index = 0; index < roleMembers.length; index++) {
+				roleIndexByUnit.set(roleMembers[index], index);
+			}
+		}
 		for (const unit of members) {
 			const role = taskForce.unitRoles[String(unit.id)]?.role || "LINE";
 			const roleMembers = byRole.get(role) || [unit];
-			const roleIndex = roleMembers.indexOf(unit);
+			const roleIndex = roleIndexByUnit.get(unit);
 			const centeredIndex = roleIndex - (roleMembers.length - 1) / 2;
 			const lateralSpacing =
 				role === "LINE" ? 0.16 : role === "RESERVE" ? 0.12 : 0.1;
@@ -645,9 +691,12 @@ export function createAiRuntime(context) {
 		}
 		context._aiLastOperationsTick = context._simTickCount;
 		context._aiOperationsDirty = false;
-		const unitsById = new Map(
-			context.units.map((unit) => [String(unit.id), unit]),
-		);
+		unitIndex.clear();
+		for (const unit of context.units) unitIndex.set(String(unit.id), unit);
+		const unitsById = unitIndex;
+		for (const id of serializedUnitIndex.keys()) {
+			if (!unitsById.has(id)) serializedUnitIndex.delete(id);
+		}
 		const allAssignedUnitIds = new Set();
 		const liveTaskForceIds = new Set();
 
@@ -758,6 +807,7 @@ export function createAiRuntime(context) {
 						),
 				);
 			}
+			const sideSummary = prepareOperationalSide(sideIndex);
 			const planInputs = selectedPlans.map((plan) => {
 				const signature =
 					plan.signature || context.getPlanSignature(sideIndex, plan);
@@ -765,6 +815,7 @@ export function createAiRuntime(context) {
 					sideIndex,
 					plan,
 					signature === handoffPlanSignature ? landingHandoff : null,
+					sideSummary,
 				);
 			});
 			const selectedSignatures = new Set(
@@ -801,16 +852,14 @@ export function createAiRuntime(context) {
 			const reservedUnitIds = new Set(
 				retiring.flatMap((taskForce) => taskForce.assignedUnitIds.map(String)),
 			);
-			const readinessUnits = (context._tickUnitsBySide[sideIndex] || []).map(
-				(unit) => serializeOperationalUnit(unit),
-			);
-			const operationalUnits = readinessUnits.map((serialized) => {
-				const allocationUnit = { ...serialized };
-				if (reservedUnitIds.has(String(serialized.id))) {
-					allocationUnit.commandEligible = false;
-				}
-				return allocationUnit;
-			});
+			const readinessUnits = sideSummary.units;
+			const operationalUnits = reservedUnitIds.size
+				? readinessUnits.map((serialized) =>
+						reservedUnitIds.has(String(serialized.id))
+							? { ...serialized, commandEligible: false }
+							: serialized,
+					)
+				: readinessUnits;
 			const taskForces = reconcileAiTaskForces(
 				existing.filter((taskForce) =>
 					selectedSignatures.has(taskForce.signature),
@@ -819,6 +868,7 @@ export function createAiRuntime(context) {
 				operationalUnits,
 				{
 					tick: context._simTickCount,
+					roleCache,
 				},
 			);
 			taskForces.push(...retiring);
@@ -845,6 +895,7 @@ export function createAiRuntime(context) {
 					readinessUnits,
 					{
 						assemblyRadiusSq: 9,
+						unitsById: sideSummary.unitsById,
 					},
 				);
 				const targetIdx = taskForce.target
@@ -1037,6 +1088,9 @@ export function createAiRuntime(context) {
 			if (!liveTaskForceIds.has(taskForceId)) {
 				context._aiTaskForceTransitionById.delete(taskForceId);
 			}
+		}
+		for (const id of roleCache.keys()) {
+			if (!liveTaskForceIds.has(id)) roleCache.delete(id);
 		}
 	}
 	return {

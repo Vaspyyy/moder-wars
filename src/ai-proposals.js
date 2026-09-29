@@ -1,7 +1,34 @@
-import { CONFIG } from "./config.js";
+import { CONFIG as DEFAULT_CONFIG } from "./config.js";
 import { normalizeLongitudeDelta } from "./geographic-math.js";
+
+/** Reuse one reachability workspace and clear only cells touched by its last BFS. */
+export function createAiReachabilityScratch() {
+	let seen = new Uint8Array(0);
+	let queue = new Int32Array(0);
+	let touchedCount = 0;
+	return {
+		acquire(cellCount) {
+			if (seen.length !== cellCount) {
+				seen = new Uint8Array(cellCount);
+				queue = new Int32Array(cellCount);
+			} else {
+				for (let index = 0; index < touchedCount; index++) {
+					seen[queue[index]] = 0;
+				}
+			}
+			touchedCount = 0;
+			return { seen, queue };
+		},
+		release(count) {
+			touchedCount = count;
+		},
+	};
+}
+
 /** createAiProposalPipeline owns AI behavior and receives current world state through explicit accessors. */
 export function createAiProposalPipeline(context) {
+	const CONFIG = context.CONFIG || DEFAULT_CONFIG;
+	const reachabilityScratch = createAiReachabilityScratch();
 	function buildFrontIntel(sideIdx) {
 		const fronts = [];
 		const keys = Object.keys(context._frontlinePolys || {});
@@ -893,8 +920,8 @@ export function createAiProposalPipeline(context) {
 			proposals.length < 12
 		) {
 			const totalCells = context.landMask.length;
-			const reachable = new Uint8Array(totalCells);
-			const bfsq = new Int32Array(totalCells);
+			const { seen: reachable, queue: bfsq } =
+				reachabilityScratch.acquire(totalCells);
 			let qTail = 0;
 			const MAX_BFS = 80000;
 			for (const c of sideCountries) {
@@ -934,6 +961,7 @@ export function createAiProposalPipeline(context) {
 						}
 					}
 				}
+				reachabilityScratch.release(qTail);
 				// Sample-scan for unreachable exclaves with enemy adjacency
 				for (const country of sideCountries) {
 					const exclaveCells = [];
@@ -1038,8 +1066,8 @@ export function createAiProposalPipeline(context) {
 		// Compute which cells are reachable from side capitals through friendly-only
 		// territory (not neutral/enemy). Used to route units around neutral blocks.
 		const friendlyTotal = context.landMask.length;
-		const friendlyOnly = new Uint8Array(friendlyTotal);
-		const fq = new Int32Array(friendlyTotal);
+		const { seen: friendlyOnly, queue: fq } =
+			reachabilityScratch.acquire(friendlyTotal);
 		let fqTail = 0;
 		for (const c of sideCountries) {
 			const capLat = c.capital?.lat;
@@ -1076,6 +1104,7 @@ export function createAiProposalPipeline(context) {
 				}
 			}
 		}
+		reachabilityScratch.release(fqTail);
 		// Add waypoints for land proposals whose targets are blocked by neutral territory
 		for (const p of proposals) {
 			if (

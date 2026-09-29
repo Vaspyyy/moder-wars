@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {createEngine} from '../src/simulation-engine.js';
+const state={CONFIG:{GRID_RES:90},MAX_SIDES:8,sides:[[],[]],gridWidth:4,gridHeight:2,sideInfluenceMaps:[],dominantSideMap:null,occupationMap:new Float32Array(8),landMask:new Uint8Array(8).fill(2),worldControlMap:new Uint16Array(8),areSidesHostile:(a,b)=>a>=0&&b>=0&&a!==b};
+const engine=createEngine(state);engine.initSideInfluenceMaps();assert.equal(state.sideInfluenceMaps.length,2);assert.equal(state.sideInfluenceMaps.reduce((n,map)=>n+map.byteLength,0),64);
+const first=state.sideInfluenceMaps[0];first[3]=.7;engine.syncOccupationFromSideInfluence(3);assert.equal(state.dominantSideMap[3],0);state.sideInfluenceMaps[1][3]=.8;engine.syncOccupationFromSideInfluence(3);assert.equal(state.dominantSideMap[3],0,'hysteresis retains old occupier');state.sideInfluenceMaps[1][3]=.9;engine.syncOccupationFromSideInfluence(3);assert.equal(state.dominantSideMap[3],1);
+engine.ensureSideInfluenceMaps(3);assert.equal(state.sideInfluenceMaps[0],first);assert.equal(first[3],Math.fround(.7));state.sideInfluenceMaps[2][3]=1.1;engine.syncOccupationFromSideInfluence(3);assert.equal(state.dominantSideMap[3],2,'late added side can occupy territory');
+engine.resetSideInfluenceMaps();assert.equal(state.sideInfluenceMaps.length,2,'reset retires unused side buffers');assert.equal(first[3],0);assert.equal(state.dominantSideMap[3],-1);
+state.sides=[];engine.initSideInfluenceMaps();assert.equal(state.sideInfluenceMaps.length,0);engine.clearCellInfluence(0);assert.equal(engine.myInfluenceAt(0,0),0);assert.throws(()=>engine.ensureSideInfluenceMaps(9),RangeError);
+assert.equal(engine.getGridIndex(-45,-135),0);assert.equal(engine.getGridIndex(-45,225),0,'longitude wrap preserved');
+console.log('Worker-compatible engine and active-side allocation checks passed.');

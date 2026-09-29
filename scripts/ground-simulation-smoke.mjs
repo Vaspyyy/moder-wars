@@ -1,21 +1,14 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import vm from "node:vm";
 import { createAiPlanner } from "../src/ai-planning.js";
 import { createAiRuntime } from "../src/ai-runtime.js";
+import { createSimulationWorld } from "../src/simulation-world.js";
 import { normalizeLongitudeDelta } from "../src/geographic-math.js";
+import { getFormationPersonnel, getFormationStrengthMultiplier } from "../src/formation-strength.js";
 
-const main = readFileSync(new URL("../src/main.js", import.meta.url), "utf8");
-// These accounting helpers remain top-level functions until their state owner is extracted.
-// Matching the top-level closing brace avoids relying on the location of the tick executor.
-function sourceFunction(name) {
- const match = main.match(new RegExp(`^function ${name}\\([\\s\\S]*?^}`, "m"));
- assert.ok(match, `Missing accounting helper: ${name}`);
- return match[0];
-}
 const runtime = {
  CONFIG: { UNIT_HEALTH: 100, UNIT_TO_SOLDIER_RATIO: 1000 }, MAX_SIDES: 8,
- UNIT_HASH_CELL_SIZE: 2.5,
+ UNIT_HASH_CELL_SIZE: 2.5, soldiersPerUnit: new Float64Array(8),
+ getFormationPersonnel, getFormationStrengthMultiplier,
  sides: [[{ id: 1 }], [{ id: 2 }], [{ id: 3 }]], countryMetadata: [],
  getLiveFormationStrength: unit => unit.personnel / 1000,
  getLiveFormationPersonnel: unit => unit.personnel,
@@ -30,9 +23,8 @@ const runtime = {
 const { operationalUnitPower } = createAiRuntime(runtime);
 runtime.operationalUnitPower = operationalUnitPower;
 const { estimateLocalForces } = createAiPlanner(runtime);
-const context = vm.createContext(runtime);
-for (const name of ["refreshLiveCombatPower", "getKnownEnemyPowerForSide", "formationDamage", "createHostilityMatrix", "recordCountryCombatLoss", "applyLandUnitDamage"])
- vm.runInContext(sourceFunction(name), context);
+const context = createSimulationWorld(runtime);
+runtime.hostilityMatrix = context.createHostilityMatrix(3, new Set(["a|b"]), ["a", "b", "c"]);
 const makeUnit = (id, side, personnel, lng) => ({ id, sovereignId: side + 1, sideIndex: side, personnel, personnelCapacity: personnel, health: 100, maxHealth: 100, lat: 0, lng, deployTicks: 0, kind: "army" });
 const friendly = makeUnit(1, 0, 5000, 179.8), enemy = makeUnit(2, 1, 2000, -179.8), neutral = makeUnit(3, 2, 9000, 179.9);
 runtime.units = [friendly, enemy, neutral, { ...enemy, id: 4, health: 0 }, { ...enemy, id: 5, deployTicks: 30 }];
@@ -49,8 +41,8 @@ assert.equal(context.getKnownEnemyPowerForSide(0), 2, "exclude neutral, dead, an
 assert.equal(context.formationDamage(10, friendly), 50, "compressed formations retain combat power");
 assert.equal(context.applyLandUnitDamage(friendly, 10, enemy), 500);
 assert.equal(friendly.health, 90); assert.equal(friendly.personnel, 4500);
-assert.equal(context.sideSoldiers[0], 9500); assert.equal(context.sideCasualties[0], 500);
-assert.equal(context.countryCasualties.get(1), 500); assert.equal(context.casualtyByAttacker.get(1).get(2), 500);
+assert.equal(runtime.sideSoldiers[0], 9500); assert.equal(runtime.sideCasualties[0], 500);
+assert.equal(runtime.countryCasualties.get(1), 500); assert.equal(runtime.casualtyByAttacker.get(1).get(2), 500);
 assert.equal(context.applyLandUnitDamage(friendly, Infinity, enemy), 0);
 assert.equal(context.applyLandUnitDamage(friendly, 200, enemy), 4500);
 assert.equal(context.applyLandUnitDamage(friendly, 10, enemy), 0, "never count a dead formation twice");

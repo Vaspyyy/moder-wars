@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
+import { createEditorCommands } from "../src/editor-commands.js";
 import { paintClippedFlag, resolveRenderFlag } from "../src/render-flags.js";
 import { drawLabels } from "../src/render-labels.js";
 import { drawOverlays } from "../src/render-overlays.js";
@@ -9,6 +10,23 @@ import { drawTerrain } from "../src/render-terrain.js";
 import { drawUnits } from "../src/render-units.js";
 
 const layers = { STATIC: 1, LABELS: 2, OVERLAYS: 4 };
+
+const annexCalls = [];
+const annexWorld = new Uint16Array(8).fill(1);
+const annexRuntime = {
+	gridWidth: 4, gridHeight: 2, CONFIG: { GRID_RES: 1 },
+	worldControlMap: annexWorld, landMask: new Uint8Array(8).fill(1), provinceMap: new Int32Array(8),
+	countryMetadata: [{ id: 1 }, { id: 2 }],
+	loadingStatus: {}, loadingOverlay: { style: {} },
+	L: { geoJSON: () => ({ getBounds: () => ({ getSouth: () => -90, getNorth: () => -88, getWest: () => -180, getEast: () => -178 }) }) },
+	isPointInFeature: (_lat, lng) => lng < -178, getProvinceId: (_x, _y, id) => id,
+	RENDER_LAYERS: layers,
+	influenceLayer: { invalidate: (mask) => annexCalls.push(["invalidate", mask]), render: () => annexCalls.push(["render"]) },
+	recalculateAllBounds: () => annexCalls.push(["bounds"]),
+};
+await createEditorCommands(annexRuntime).annexFeatureToCountry({ properties: { NAME: "Fixture" } }, 2);
+assert.deepEqual(Array.from(annexWorld), [2, 2, 1, 1, 2, 2, 1, 1]);
+assert.deepEqual(annexCalls, [["invalidate", layers.STATIC], ["bounds"], ["render"]], "bulk annex refreshes world caches and label bounds before painting");
 function context(name, trace) {
 	return new Proxy({}, {
 		get(target, key) {
@@ -109,6 +127,22 @@ try {
 	assert.ok(result.trace.some(([name, command]) => name === "dynamic" && command === "rect"));
 	drawUnits.call(result.layer, result.frame);
 	assert.ok(result.trace.some(([name, command]) => name === "dynamic" && command === "arc"));
+	const mirroredCities = fixture();
+	const activeCity = { id: 17, name: "Small frontline city", lat: 0, lng: 0, isCapital: false, pop: 20 };
+	mirroredCities.frame.cities = [activeCity];
+	mirroredCities.frame.activeTheaterCities = [{ ...activeCity }];
+	mirroredCities.frame.map.getZoom = () => 4;
+	mirroredCities.frame.showBattleIndicators = false;
+	mirroredCities.frame.dominantSideMap[0] = 1;
+	mirroredCities.frame.occupationMap[0] = -0.9;
+	mirroredCities.frame.sideColors.push("rgba(20, 100, 200, 0.5)");
+	drawUnits.call(mirroredCities.layer, mirroredCities.frame);
+	assert.equal(mirroredCities.layer._citiesScratch.length, 1, "active city membership survives independent snapshot clones");
+	assert.ok(mirroredCities.trace.some(([name, command, color]) => name === "dynamic" && command === "fillStyle" && color === "rgba(20, 100, 200, 1)"), "signed occupation colors city markers without full influence maps");
+	mirroredCities.trace.length = 0;
+	mirroredCities.frame.occupationMap[0] = -0.2;
+	drawUnits.call(mirroredCities.layer, mirroredCities.frame);
+	assert.ok(mirroredCities.trace.some(([name, command, color]) => name === "dynamic" && command === "fillStyle" && color === "#fff"), "weakly occupied cities keep neutral marker color");
 	drawLabels.call(result.layer, result.frame);
 	assert.ok(result.trace.some(([name]) => name === "side-label"));
 	assert.ok(result.trace.some(([name]) => name === "casualties"));
@@ -124,6 +158,17 @@ try {
 	drawOverlays.call(result.layer, result.frame);
 	assert.deepEqual(result.trace.slice(overlayBefore), [["composite", "drawImage", "overlays", 0, 0]], "cached overlays only composite");
 	assert.equal(result.frame.ctx, originalContext, "pass-local contexts must not mutate the caller snapshot");
+	result.layer._compositeLayers = false;
+	const stackedBefore = result.trace.length;
+	drawLabels.call(result.layer, result.frame);
+	drawOverlays.call(result.layer, result.frame);
+	assert.deepEqual(result.trace.slice(stackedBefore), [], "normal viewing leaves cached surfaces for the DOM compositor");
+	result.layer._compositeLayers = true;
+	const captureBefore = result.trace.length;
+	drawLabels.call(result.layer, result.frame);
+	drawOverlays.call(result.layer, result.frame);
+	assert.deepEqual(result.trace.slice(captureBefore), [["composite", "drawImage", "labels", 0, 0], ["composite", "drawImage", "overlays", 0, 0]], "captures retain one complete composited canvas");
+
 
 	// Optional reference is an archived source file, never a browser/runtime import.
 	const baselinePath = process.env.MW_RENDER_BASELINE || "/tmp/mw-renderer-v02735.js";

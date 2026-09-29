@@ -1,6 +1,6 @@
 // Service Worker — versioned offline shell plus persistent runtime data cache
 
-const CACHE_VERSION = "mw-v0.27.37";
+const CACHE_VERSION = "mw-v0.27.38";
 const APP_SHELL_PREFIX = "mw-app-shell-";
 const RUNTIME_PREFIX = "mw-runtime-";
 const LEGACY_CACHE_PREFIX = "mw-cache-";
@@ -97,6 +97,24 @@ const APP_SHELL_PATHS = [
 	"workers/geo-raster-worker.js",
 	"workers/scenario-worker.js",
 	"workers/simulation-worker.js",
+
+	"src/conflict-presentation.js",
+	"src/frontline-core.js",
+	"src/influence-grid.js",
+	"src/render-culling.js",
+	"src/render-political-cache.js",
+	"src/render-regions.js",
+	"src/saved-cells.js",
+	"src/simulation-client.js",
+	"src/simulation-clock.js",
+	"src/simulation-core.js",
+	"src/simulation-engine.js",
+	"src/simulation-metrics.js",
+	"src/simulation-protocol.js",
+	"src/simulation-state.js",
+	"src/simulation-resize.js",
+	"src/simulation-world.js",
+	"workers/war-simulation-worker.js",
 ];
 
 // Resolve against the registration scope instead of the origin root. This keeps

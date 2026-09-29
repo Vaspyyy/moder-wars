@@ -61,13 +61,30 @@ The title screen uses a dedicated vector backdrop with bundled 50m geography and
 
 ## Tech
 
-Vanilla JavaScript, Leaflet map, Canvas overlay, IndexedDB GeoJSON cache, and Web Workers for frontline and GeoJSON processing.
+Vanilla JavaScript, Leaflet map, Canvas overlays, IndexedDB caching, and a resident simulation worker. The simulation advances on a fixed logical clock independent of rendering; the UI receives packed unit positions and changed 32-cell map tiles. Editing and diplomacy take an acknowledged state handoff. Canvas meshes and country geometry cache world chunks across camera movement.
+
+Compiled scenarios use MWSC v3 with compact saved-territory runs and deduplicated flag blobs; the v2 decoder and JSON import/export remain supported. Raw reference geography is loaded only when an editing tool needs it. Worker influence grids use lazy Float32 pages; legacy editing receives dense arrays on demand.
+
+## Offline Verification
+
+Run `biome check .` and `node scripts/<name>-smoke.mjs`. The module-graph check requires `node --experimental-vm-modules scripts/module-graph-smoke.mjs`. Worker/core/client checks use actual simulation code and Node worker threads without a browser.
+
+Measured CPU probes during the performance refactor (synthetic fixtures, not browser FPS):
+
+| Probe | Before | After |
+| --- | ---: | ---: |
+| Repeated 180,000-cell terrain paint | 75.2–95.3 ms | 6.1–6.5 ms |
+| Unchanged 1,200-member allocation among 2,400 units | 24.55 ms | 0.76 ms |
+| Eligible dense friendly group of 1,000 units | 12.36 ms | 0.053 ms |
+| Modern Day compressed package | 1,109,544 bytes | 282,918 bytes |
+
+Sparse influence pages reduce memory for regional wars, with extra scalar lookup cost; `node scripts/influence-storage-benchmark.mjs` measures that tradeoff. Full ownership transfers remain intentionally limited to starting wars and explicit UI edits.
 
 The live overview keeps only current values. Intelligence/contact memory, economy, rebellions, armor, air power, occupation garrisons, experiment recording, rematches, interventions, and native runtime checkpoint exports have been removed. Existing scenario files still load; obsolete options are ignored.
 
 ## Code organization
 
-`src/main.js` owns shared application state and startup. Live getter/setter bindings in `runtime-context.js` let feature controllers observe replaced arrays and current state without importing `main.js`. These controllers cover setup, conflict lifecycle, AI planning, simulation ticks, menus, community tools, and editor actions. This is an incremental split: shared state still belongs to the application, rather than a fully independent simulation store.
+`src/main.js` owns startup, browser state mirrors, menus, and editor integration. Live getter/setter bindings in `runtime-context.js` let browser controllers observe replaced arrays and current state without importing `main.js`. The independent simulation owner in `simulation-core.js` composes combat, AI, influence, territory, and calendar modules through explicit dependencies. `simulation-client.js` synchronizes controls and drawing snapshots, and returns full ownership before browser edits.
 
 `src/editor.js` wires editor tools; `geography-loader.js` and `scenario-loader.js` handle geography and scenario loading. `src/renderer.js` owns the Canvas layer and caches, with separate terrain, unit, label, overlay, and flag passes. Translation data, language application, audio, settings, and exports also have their own modules.
 

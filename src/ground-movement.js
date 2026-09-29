@@ -1,5 +1,7 @@
+import { getSimulationMetrics } from "./simulation-metrics.js";
 // Movement/combat consumes this formation's tactical decision snapshot.
 export function executeGroundTarget(input) {
+	const perf = getSimulationMetrics(input.frame);
 	const {
 		u,
 		simFrameCount,
@@ -89,7 +91,7 @@ export function executeGroundTarget(input) {
 
 	// ── unitLoop sub-timer checkpoint: end retreatMopUp, start combatMove ──
 	_u4 = _detailedPerfEnabled ? performance.now() : 0;
-	if (_detailedPerfEnabled) window.__perf.unitRetreatMopUp += _u4 - _u3;
+	if (_detailedPerfEnabled) perf.unitRetreatMopUp += _u4 - _u3;
 
 	if (dist > 0.05) {
 		// Movement logic
@@ -1416,7 +1418,7 @@ export function executeGroundTarget(input) {
 								);
 								if (deflDestIdx !== -1 && landMask[deflDestIdx] === 0) {
 									moveDist *= 0.5;
-									window.__perf.coastDeflectHalved++;
+									perf.coastDeflectHalved++;
 								}
 								deflected = true;
 								break;
@@ -1438,8 +1440,7 @@ export function executeGroundTarget(input) {
 					target = null;
 					u._cachedTarget = null;
 					u._coastStuckTicks = 0;
-					window.__perf.coastStuckAbandoned =
-						(window.__perf.coastStuckAbandoned || 0) + 1;
+					perf.coastStuckAbandoned = (perf.coastStuckAbandoned || 0) + 1;
 				}
 			} else {
 				u._coastStuckTicks = 0;
@@ -1551,7 +1552,7 @@ export function executeGroundTarget(input) {
 				// Water guard: don't push land units into water
 				const pushIdx = getGridIndex(newLat, newLng);
 				if (pushIdx !== -1 && landMask[pushIdx] === 0 && !unitObj.isAtSea) {
-					window.__perf.knockbackBlocked++;
+					perf.knockbackBlocked++;
 					return;
 				}
 				unitObj.lat = newLat;

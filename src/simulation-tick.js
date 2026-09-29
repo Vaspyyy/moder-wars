@@ -1,12 +1,14 @@
+import { multiplyInfluence } from "./influence-grid.js";
+import { getSimulationMetrics } from "./simulation-metrics.js";
+import { aggregateTaskForceCellPair } from "./tactical-grid.js";
 // Dependencies are supplied by the application; this module does not import it.
 export function createSimulationTick(runtime) {
 	function performSimulationTick() {
-		// PERF PROFILER - check window.__perf in console
-		if (!window.__perf) window.__perf = runtime.createPerfState();
-		window.__perf.ticks++;
+		const perf = getSimulationMetrics(runtime);
+		const clockNow = perf._mode === "off" ? () => 0 : () => performance.now();
+		perf.ticks++;
 		// ── Perf snapshot for per-tick delta computation ──
-		const _perfEnabled =
-			window.__perf._mode !== "off" && !window.__perf._trackingPaused;
+		const _perfEnabled = perf._mode !== "off" && !perf._trackingPaused;
 		const _perfSnap = _perfEnabled ? {} : null;
 		const _perfKeys = [
 			"plans",
@@ -53,7 +55,7 @@ export function createSimulationTick(runtime) {
 			"unitCombatMove",
 		];
 		if (_perfEnabled) {
-			for (const k of _perfKeys) _perfSnap[k] = window.__perf[k] || 0;
+			for (const k of _perfKeys) _perfSnap[k] = perf[k] || 0;
 			for (const k of [
 				"proposalRuns",
 				"proposalFailed",
@@ -64,14 +66,14 @@ export function createSimulationTick(runtime) {
 				"reassess_posture",
 				"reassess_ratio",
 			])
-				_perfSnap[k] = window.__perf[k] || 0;
+				_perfSnap[k] = perf[k] || 0;
 			for (const k of [
 				"coastDeflectHalved",
 				"knockbackBlocked",
 				"waterPathPenalized",
 				"coastStuckAbandoned",
 			])
-				_perfSnap[k] = window.__perf[k] || 0;
+				_perfSnap[k] = perf[k] || 0;
 			for (const k of [
 				"tacticalFriendlyCandidatePairs",
 				"tacticalEnemyCandidateVisits",
@@ -83,7 +85,7 @@ export function createSimulationTick(runtime) {
 				"tacticalGhostInvalidations",
 				"tacticalFastLaneUnits",
 			]) {
-				_perfSnap[k] = window.__perf[k] || 0;
+				_perfSnap[k] = perf[k] || 0;
 			}
 		}
 		if (
@@ -93,18 +95,17 @@ export function createSimulationTick(runtime) {
 			const asyncApplyMs =
 				runtime._frontlineLayoutApplyPendingMs +
 				runtime._frontlineSlotApplyPendingMs;
-			window.__perf.frontlineLayoutApply +=
-				runtime._frontlineLayoutApplyPendingMs;
-			window.__perf.frontlineSlotApply += runtime._frontlineSlotApplyPendingMs;
-			window.__perf.frontlinePolys += asyncApplyMs;
-			window.__perf.frontline += asyncApplyMs;
+			perf.frontlineLayoutApply += runtime._frontlineLayoutApplyPendingMs;
+			perf.frontlineSlotApply += runtime._frontlineSlotApplyPendingMs;
+			perf.frontlinePolys += asyncApplyMs;
+			perf.frontline += asyncApplyMs;
 			runtime._frontlineLayoutApplyPendingMs = 0;
 			runtime._frontlineSlotApplyPendingMs = 0;
 		}
 		runtime._simTickCount++;
 		// DEBUG: throttled out (was 0)
 		let moveDirLat, moveDirLng;
-		const _t0 = performance.now();
+		const _t0 = clockNow();
 
 		// If war is over, stop simulation mechanics (but update loop may continue for aftermath recording)
 		if (runtime.gameState === "WAR_OVER") return false;
@@ -161,7 +162,7 @@ export function createSimulationTick(runtime) {
 			isNeutral(idx) && runtime.worldControlMap[idx] > 0;
 
 		// Determine unit counts once
-		const _tInfluence = performance.now();
+		const _tInfluence = clockNow();
 		let p1UnitsCount = 0;
 		let p2UnitsCount = 0;
 		for (let i = 0; i < runtime.units.length; i++) {
@@ -184,11 +185,10 @@ export function createSimulationTick(runtime) {
 			p2UnitsCount,
 			countryToSideMap,
 		);
-		window.__perf.influence =
-			(window.__perf.influence || 0) + performance.now() - _tInfluence;
+		perf.influence = (perf.influence || 0) + clockNow() - _tInfluence;
 
 		// 1a. Occupancy Smoothing: Occasionally clean up primaryOccupierMap during war to prevent speckling
-		const _tSmooth = performance.now();
+		const _tSmooth = clockNow();
 		if (runtime.isSimulationPhaseDue(runtime._simTickCount, 120, 83)) {
 			const sampleCount = 5000;
 			const modified = [];
@@ -250,11 +250,10 @@ export function createSimulationTick(runtime) {
 				const change = modified[i];
 				runtime.primaryOccupierMap[change.idx] = change.dominantAlly;
 				runtime._territoryLedger?.markControllerChange(change.idx);
-				runtime.influenceLayer?.notifyControlCellsChanged(change.idx);
+				runtime.onControlCellsChanged?.(change.idx);
 			}
 		}
-		window.__perf.smoothing =
-			(window.__perf.smoothing || 0) + performance.now() - _tSmooth;
+		perf.smoothing = (perf.smoothing || 0) + clockNow() - _tSmooth;
 
 		// 1b. Territorial Integrity: Collapse deep pockets and isolated protrusions (Enclaves/Exclaves)
 		// We sample the grid to find territory that is surrounded by the enemy.
@@ -276,7 +275,7 @@ export function createSimulationTick(runtime) {
 		if (
 			runtime.isSimulationPhaseDue(runtime._simTickCount, countInterval, 67)
 		) {
-			const _tP0 = performance.now();
+			const _tP0 = clockNow();
 			const integBase = 5000;
 			const integSamples = Math.max(
 				1000,
@@ -322,28 +321,36 @@ export function createSimulationTick(runtime) {
 
 				if (isEnemyOccupation && sovereignNeighbors >= 6) {
 					for (let si = 0; si < runtime.sideInfluenceMaps.length; si++)
-						runtime.sideInfluenceMaps[si][idx] *= 0.8;
+						multiplyInfluence(runtime.sideInfluenceMaps[si], idx, 0.8);
 					runtime.syncOccupationFromSideInfluence(idx);
 				}
 
 				if (isSelfOccupation && enemyOccupiedNeighbors >= 7) {
-					runtime.sideInfluenceMaps[dsIdx][idx] *= 0.75;
+					multiplyInfluence(runtime.sideInfluenceMaps[dsIdx], idx, 0.75);
 					runtime.syncOccupationFromSideInfluence(idx);
 				}
 			}
-			window.__perf.phase67 += performance.now() - _tP0;
+			perf.phase67 += clockNow() - _tP0;
 		} // end territorial integrity
 
 		// 2. Statistics & Soldiers: shared territory ledger and direct manpower counts.
-		const _tP133 = performance.now();
+		const _tP133 = clockNow();
 		runtime._simulationJobs.step(160_000);
-		runtime.stepTerritoryLedger(countryToSideMap, 160_000);
-		if (shouldCommitTerritoryDecision) {
-			const decisionSnapshot = runtime.flushTerritoryLedger(countryToSideMap);
-			runtime.publishTerritoryLedgerSnapshot(decisionSnapshot, true);
+		if (shouldCommitTerritoryDecision) runtime._territoryDecisionPending = true;
+		const census = runtime.stepTerritoryLedger(countryToSideMap, 160_000);
+		if (
+			runtime._territoryDecisionPending &&
+			census &&
+			(census.committed ||
+				(census.remainingItems === 0 && census.dirtyTiles === 0))
+		) {
+			runtime.publishTerritoryLedgerSnapshot(
+				runtime._territoryLedgerSnapshot,
+				true,
+			);
+			runtime._territoryDecisionPending = false;
 		}
-		window.__perf.phase133 =
-			(window.__perf.phase133 || 0) + performance.now() - _tP133;
+		perf.phase133 = (perf.phase133 || 0) + clockNow() - _tP133;
 		const territoryCensusFresh =
 			runtime._territoryLedgerDecisionTick === runtime._simTickCount;
 
@@ -360,7 +367,7 @@ export function createSimulationTick(runtime) {
 
 		// Build Spatial Hash for ultra-fast O(1) local combat & target lookup
 		// Shared with renderer to allow high-performance unit culling
-		const _tsh = performance.now();
+		const _tsh = clockNow();
 		for (const arr of runtime.unitSpatialHash.values()) arr.length = 0;
 		for (let si = 0; si < runtime.sides.length; si++) {
 			for (const arr of runtime.unitHashBySide[si].values()) arr.length = 0;
@@ -400,7 +407,7 @@ export function createSimulationTick(runtime) {
 				sArr.push(u);
 			}
 		}
-		const _tTactical = performance.now();
+		const _tTactical = clockNow();
 		{
 			runtime.rebuildTacticalGrid(runtime._tacticalGrid, runtime.units, {
 				getSide: (unit) =>
@@ -510,31 +517,33 @@ export function createSimulationTick(runtime) {
 							right.repulsionVector.lng -= deltaLng / distance;
 						}
 					},
-					{ radiusCells: 1, radiusSq: tacticalRadiusSq },
+					{
+						radiusCells: 1,
+						radiusSq: tacticalRadiusSq,
+						aggregateCellPair: aggregateTaskForceCellPair,
+					},
 				);
 				tacticalCandidatePairs += pairResult.candidatePairs;
 				tacticalAcceptedPairs += pairResult.acceptedPairs;
+				tacticalFriendlyPairs += pairResult.aggregatedPairs;
 			}
-			window.__perf.tacticalFriendlyCandidatePairs += tacticalCandidatePairs;
-			window.__perf.tacticalAcceptedPairs += tacticalAcceptedPairs;
-			window.__perf.tacticalFriendlyPairs += tacticalFriendlyPairs;
-			window.__perf.tacticalHostileCellVisits += hostileCellVisits;
-			window.__perf.tacticalMaxBucketOccupancy =
+			perf.tacticalFriendlyCandidatePairs += tacticalCandidatePairs;
+			perf.tacticalAcceptedPairs += tacticalAcceptedPairs;
+			perf.tacticalFriendlyPairs += tacticalFriendlyPairs;
+			perf.tacticalHostileCellVisits += hostileCellVisits;
+			perf.tacticalMaxBucketOccupancy =
 				runtime._tacticalGrid.counters.maxBucketOccupancy;
-			window.__perf.tacticalPeakBucketOccupancy = Math.max(
-				window.__perf.tacticalPeakBucketOccupancy || 0,
+			perf.tacticalPeakBucketOccupancy = Math.max(
+				perf.tacticalPeakBucketOccupancy || 0,
 				runtime._tacticalGrid.counters.maxBucketOccupancy,
 			);
-			window.__perf.tacticalCellCount =
-				runtime._tacticalGrid.counters.cellCount;
-			window.__perf.tacticalInsertedUnits =
-				runtime._tacticalGrid.counters.insertedUnits;
+			perf.tacticalCellCount = runtime._tacticalGrid.counters.cellCount;
+			perf.tacticalInsertedUnits = runtime._tacticalGrid.counters.insertedUnits;
 		}
-		window.__perf.unitAllyScan += performance.now() - _tTactical;
-		window.__perf.spatialHash =
-			(window.__perf.spatialHash || 0) + performance.now() - _tsh;
+		perf.unitAllyScan += clockNow() - _tTactical;
+		perf.spatialHash = (perf.spatialHash || 0) + clockNow() - _tsh;
 
-		const _tFrontline = performance.now();
+		const _tFrontline = clockNow();
 		// Direction fields and polyline/slot layouts share one async worker. While it
 		// is busy, each work type coalesces to one newest snapshot for the next tick.
 		const fieldDue =
@@ -552,21 +561,19 @@ export function createSimulationTick(runtime) {
 				(runtime._frontlineWorkerPendingField ||
 					runtime._frontlineWorkerPendingLayout))
 		) {
-			const _tFrontlineDispatch = performance.now();
+			const _tFrontlineDispatch = clockNow();
 			runtime.dispatchFrontlineWork(fieldDue, layoutDue);
-			window.__perf.frontlineDispatch +=
-				performance.now() - _tFrontlineDispatch;
+			perf.frontlineDispatch += clockNow() - _tFrontlineDispatch;
 		}
-		window.__perf.frontline =
-			(window.__perf.frontline || 0) + performance.now() - _tFrontline;
+		perf.frontline = (perf.frontline || 0) + clockNow() - _tFrontline;
 
-		const _tPhaseWheel = performance.now();
+		const _tPhaseWheel = clockNow();
 		if (runtime.isSimulationPhaseDue(runtime._simTickCount, 30, 11)) {
-			const started = performance.now();
+			const started = clockNow();
 			runtime.consolidateOverlappingUnits();
-			window.__perf.consolidate += performance.now() - started;
+			perf.consolidate += clockNow() - started;
 		}
-		window.__perf.phaseWheel += performance.now() - _tPhaseWheel;
+		perf.phaseWheel += clockNow() - _tPhaseWheel;
 		// Consume only committed census data; partial tile refreshes never leak into AI or
 		// surrender decisions.
 		_allCombatants.forEach((c) => {
@@ -586,7 +593,7 @@ export function createSimulationTick(runtime) {
 			runtime._tickUnitsBySide.push([]);
 		for (let si = 0; si < runtime.sides.length; si++)
 			runtime._tickUnitsBySide[si].length = 0;
-		const _tbs = performance.now();
+		const _tbs = clockNow();
 		for (let ui = 0; ui < runtime.units.length; ui++) {
 			const sIdx = runtime.units[ui].sideIndex;
 			if (sIdx >= 0 && sIdx < runtime.sides.length)
@@ -633,10 +640,9 @@ export function createSimulationTick(runtime) {
 			_ug._isAtSea = idx === -1 || runtime.landMask[idx] === 0;
 		}
 
-		window.__perf.caches =
-			(window.__perf.caches || 0) + performance.now() - _tbs;
+		perf.caches = (perf.caches || 0) + clockNow() - _tbs;
 
-		const _tVictory = performance.now();
+		const _tVictory = clockNow();
 
 		// Calculate Victory Ratios for each side to coordinate surges
 		const sideVictoryRatios = unitsBySide.map((sideUnits, sIdx) => {
@@ -759,9 +765,8 @@ export function createSimulationTick(runtime) {
 
 		// --- COUNTRY AI POSTURE (Desperation + realism tuning) ---
 		// Recomputed on counting frames and reused between them.
-		const _tAiPosture = performance.now();
-		window.__perf.victory =
-			(window.__perf.victory || 0) + performance.now() - _tVictory;
+		const _tAiPosture = clockNow();
+		perf.victory = (perf.victory || 0) + clockNow() - _tVictory;
 		if (shouldCountLand) {
 			_allCombatants.forEach((country) => {
 				if (!country) return;
@@ -914,8 +919,7 @@ export function createSimulationTick(runtime) {
 				runtime.aiCountryState.set(country.id, profile);
 			});
 		}
-		window.__perf.aiPosture =
-			(window.__perf.aiPosture || 0) + performance.now() - _tAiPosture;
+		perf.aiPosture = (perf.aiPosture || 0) + clockNow() - _tAiPosture;
 
 		// ── Momentum Tracking & War Phase Computation ──
 		if (shouldCountLand) {
@@ -981,7 +985,7 @@ export function createSimulationTick(runtime) {
 			runtime.refreshLiveCombatPower(true);
 
 		// ── Auto Posture: per-side strength ratio → OFFENSIVE/BALANCED/DEFENSIVE ──
-		const _tpo = performance.now();
+		const _tpo = clockNow();
 
 		runtime._sidePosture = new Array(runtime.sides.length).fill("BALANCED");
 		for (let si = 0; si < runtime.sides.length; si++) {
@@ -1055,28 +1059,26 @@ export function createSimulationTick(runtime) {
 		}
 
 		// Evaluate war plans — check completion/failure, regenerate if needed
-		window.__perf.posture =
-			(window.__perf.posture || 0) + performance.now() - _tpo;
+		perf.posture = (perf.posture || 0) + clockNow() - _tpo;
 		// Cumulative pre-plans profiler: everything from tick start (_t0) to here
-		window.__perf.prePlans =
-			(window.__perf.prePlans || 0) + performance.now() - _t0;
-		const _t1 = performance.now();
-		const _tLegacyPlans = performance.now();
+		perf.prePlans = (perf.prePlans || 0) + clockNow() - _t0;
+		const _t1 = clockNow();
+		const _tLegacyPlans = clockNow();
 		runtime.evaluateAllPlans();
-		window.__perf.legacyPlans += performance.now() - _tLegacyPlans;
-		const _tOperationalTaskForces = performance.now();
+		perf.legacyPlans += clockNow() - _tLegacyPlans;
+		const _tOperationalTaskForces = clockNow();
 		runtime.updateOperationalAiTaskForces();
-		const operationalTaskForceMs = performance.now() - _tOperationalTaskForces;
-		window.__perf.operationalTaskForces += operationalTaskForceMs;
+		const operationalTaskForceMs = clockNow() - _tOperationalTaskForces;
+		perf.operationalTaskForces += operationalTaskForceMs;
 		runtime.recordPerfMeasure(
 			"Operational AI · Task Forces",
 			_tOperationalTaskForces,
 			operationalTaskForceMs,
 		);
-		window.__perf.plans += performance.now() - _t1;
+		perf.plans += clockNow() - _t1;
 
 		// ── Compute neutral border polylines only when political topology changes ──
-		const _tn = performance.now();
+		const _tn = clockNow();
 		const neutralBorderSignature = `${runtime._simulationWorldGeneration}:${runtime._politicalMapRevision}:${[...combatantIds].sort((left, right) => left - right).join(",")}`;
 		if (
 			runtime.adjacencyCache &&
@@ -1146,9 +1148,9 @@ export function createSimulationTick(runtime) {
 		if (Object.keys(runtime._neutralBorderPolys).length === 0) {
 			runtime._neutralBorderPolys.__empty = true;
 		}
-		window.__perf.neutralBorder += performance.now() - _tn;
+		perf.neutralBorder += clockNow() - _tn;
 
-		const _t2 = performance.now();
+		const _t2 = clockNow();
 		// Mid-War Recruitment (Steady, Land-Capped, and Underdog-Aware)
 		runtime.sides.forEach((side, sIdx) => {
 			side.forEach((country) => {
@@ -1347,8 +1349,8 @@ export function createSimulationTick(runtime) {
 			if (m && m.id !== undefined) _metadataById.set(m.id, m);
 		}
 
-		window.__perf.recruit += performance.now() - _t2;
-		const _t3 = performance.now();
+		perf.recruit += clockNow() - _t2;
+		const _t3 = clockNow();
 		// Pre-build city grid index Set once per tick (not per unit)
 		const _cityIdxSetTick = new Set();
 		for (let _cci = 0; _cci < runtime.activeTheaterCities.length; _cci++) {
@@ -1370,8 +1372,9 @@ export function createSimulationTick(runtime) {
 			}
 			arr.push(city);
 		}
-		const _detailedPerfEnabled = window.__perf._mode === "detailed";
+		const _detailedPerfEnabled = perf._mode === "detailed";
 		const groundFrame = {
+			perf,
 			units: runtime.units,
 			_detailedPerfEnabled,
 			getLiveFormationStrength: runtime.getLiveFormationStrength,
@@ -1448,8 +1451,8 @@ export function createSimulationTick(runtime) {
 			runtime.updateGroundFormation(groundFrame, i);
 
 		// A side can keep fighting at zero reserve, but it cannot recruit new formations.
-		window.__perf.unitLoop += performance.now() - _t3;
-		const _t4 = performance.now();
+		perf.unitLoop += clockNow() - _t3;
+		const _t4 = clockNow();
 		// 4. Individual Capitulation & Treaty Logic
 		const timeSinceTreaty = Date.now() - runtime.lastTreatyTime;
 
@@ -1559,10 +1562,7 @@ export function createSimulationTick(runtime) {
 				runtime.sides.length > 1 ? 1 : 0,
 			);
 			return true;
-		} else if (
-			timeSinceTreaty > 6000 &&
-			runtime.treatyAlert.style.display === "none"
-		) {
+		} else if (timeSinceTreaty > 6000 && !runtime.isTreatyNoticeVisible()) {
 			if (!runtime.peaceTreatiesDisabled) {
 				const getSidePressure = (sIdx) => {
 					let total = 0;
@@ -1760,19 +1760,19 @@ export function createSimulationTick(runtime) {
 		runtime._cachedSideUnitCounts = unitCounts;
 		runtime._cachedSideSoldierEsts = soldierEsts;
 
-		window.__perf.post += performance.now() - _t4;
-		const _tickMs = performance.now() - _t0;
-		window.__perf.tickTotal += _tickMs;
-		if (_tickMs > window.__perf.maxTick) window.__perf.maxTick = _tickMs;
+		perf.post += clockNow() - _t4;
+		const _tickMs = clockNow() - _t0;
+		perf.tickTotal += _tickMs;
+		if (_tickMs > perf.maxTick) perf.maxTick = _tickMs;
 		runtime.recordPerfMeasure("Simulation Tick", _t0, _tickMs, {
-			tick: window.__perf.ticks,
+			tick: perf.ticks,
 			units: runtime.units.length,
 		});
 
 		// ── Per-tick perf history ring buffer ──
 		if (!_perfEnabled) return false;
 		const _tickEntry = {
-			tick: window.__perf.ticks,
+			tick: perf.ticks,
 			ms: _tickMs,
 			units: runtime.units.length,
 			cats: {},
@@ -1781,7 +1781,7 @@ export function createSimulationTick(runtime) {
 			water: {},
 		};
 		for (const k of _perfKeys)
-			_tickEntry.cats[k] = (window.__perf[k] || 0) - _perfSnap[k];
+			_tickEntry.cats[k] = (perf[k] || 0) - _perfSnap[k];
 		for (const k of [
 			"proposalRuns",
 			"proposalFailed",
@@ -1792,14 +1792,14 @@ export function createSimulationTick(runtime) {
 			"reassess_posture",
 			"reassess_ratio",
 		])
-			_tickEntry.reassess[k] = (window.__perf[k] || 0) - (_perfSnap[k] || 0);
+			_tickEntry.reassess[k] = (perf[k] || 0) - (_perfSnap[k] || 0);
 		for (const k of [
 			"coastDeflectHalved",
 			"knockbackBlocked",
 			"waterPathPenalized",
 			"coastStuckAbandoned",
 		])
-			_tickEntry.water[k] = (window.__perf[k] || 0) - (_perfSnap[k] || 0);
+			_tickEntry.water[k] = (perf[k] || 0) - (_perfSnap[k] || 0);
 		for (const k of [
 			"tacticalFriendlyCandidatePairs",
 			"tacticalEnemyCandidateVisits",
@@ -1811,17 +1811,16 @@ export function createSimulationTick(runtime) {
 			"tacticalGhostInvalidations",
 			"tacticalFastLaneUnits",
 		]) {
-			_tickEntry.tactical[k] = (window.__perf[k] || 0) - (_perfSnap[k] || 0);
+			_tickEntry.tactical[k] = (perf[k] || 0) - (_perfSnap[k] || 0);
 		}
 		_tickEntry.tactical.maxBucketOccupancy =
-			window.__perf.tacticalMaxBucketOccupancy || 0;
-		_tickEntry.tactical.cellCount = window.__perf.tacticalCellCount || 0;
-		_tickEntry.tactical.insertedUnits =
-			window.__perf.tacticalInsertedUnits || 0;
-		if (!window.__perf._history) window.__perf._history = [];
-		window.__perf._history.push(_tickEntry);
-		if (window.__perf._history.length > runtime.PERF_TICK_HISTORY_LIMIT) {
-			window.__perf._history.shift();
+			perf.tacticalMaxBucketOccupancy || 0;
+		_tickEntry.tactical.cellCount = perf.tacticalCellCount || 0;
+		_tickEntry.tactical.insertedUnits = perf.tacticalInsertedUnits || 0;
+		if (!perf._history) perf._history = [];
+		perf._history.push(_tickEntry);
+		if (perf._history.length > runtime.PERF_TICK_HISTORY_LIMIT) {
+			perf._history.shift();
 		}
 
 		return false;

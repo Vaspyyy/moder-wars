@@ -242,6 +242,8 @@ export function createEditorCommands(runtime) {
 		}
 
 		runtime.loadingOverlay.style.display = "none";
+		runtime.influenceLayer?.invalidate(runtime.RENDER_LAYERS.STATIC);
+		runtime.recalculateAllBounds();
 		runtime.influenceLayer.render();
 	}
 

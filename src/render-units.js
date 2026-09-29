@@ -1,3 +1,8 @@
+import {
+	collectSelectionQuads,
+	containsRenderPoint,
+} from "./render-culling.js";
+
 // This pass receives a frame snapshot; surface caches stay on the map layer.
 export function drawUnits(frame) {
 	const {
@@ -28,6 +33,7 @@ export function drawUnits(frame) {
 		bases,
 		getGridIndex,
 		dominantSideMap,
+		occupationMap,
 		sideInfluenceMaps,
 		UNIT_HASH_CELL_SIZE,
 		unitSpatialHash,
@@ -114,98 +120,114 @@ export function drawUnits(frame) {
 
 		if (editingCountryId > 0) drawInspectorHighlight(editingCountryId);
 
-		const drawSelectionHighlight = (input, sideIdx) => {
-			let id = -1;
-			if (typeof input === "number") {
-				id = input;
-			} else if (input?.properties) {
-				id = countryMetadata.findIndex((m) => m.feature === input) + 1;
+		const selected = new Set();
+		const selectionOrder = [];
+		const featureIds = new Map(
+			countryMetadata
+				.filter(Boolean)
+				.map((metadata, index) => [metadata.feature, metadata.id || index + 1]),
+		);
+		for (let sideIndex = 0; sideIndex < sides.length; sideIndex++) {
+			for (const country of sides[sideIndex]) {
+				const id = country.feature
+					? featureIds.get(country.feature)
+					: country.id;
+				if (!(id > 0)) continue;
+				selected.add(id);
+				selectionOrder.push([id, sideIndex]);
 			}
-			if (id <= 0) return;
-
+		}
+		if (!this._selectionQuads) this._selectionQuads = new Map();
+		const selectionQuads = collectSelectionQuads(
+			worldControlMap,
+			gridWidth,
+			{ xMin, xMax, yMin, yMax },
+			selected,
+			this._selectionQuads,
+		);
+		const drawSelectionHighlight = (id, sideIdx) => {
 			ctx.beginPath();
 			ctx.strokeStyle = sideColors[sideIdx].replace(rgbaRe, "1)");
 			ctx.lineWidth = 3;
 
-			for (let y = yMin; y < yMax; y++) {
-				for (let x = xMin; x < xMax; x++) {
-					const i1 = y * gridWidth + x;
-					const i2 = y * gridWidth + (x + 1);
-					const i3 = (y + 1) * gridWidth + (x + 1);
-					const i4 = (y + 1) * gridWidth + x;
-					const b1 = worldControlMap[i1] === id ? 1 : 0;
-					const b2 = worldControlMap[i2] === id ? 1 : 0;
-					const b3 = worldControlMap[i3] === id ? 1 : 0;
-					const b4 = worldControlMap[i4] === id ? 1 : 0;
-					const mid = (b1 << 3) | (b2 << 2) | (b3 << 1) | b4;
-					if (mid === 0 || mid === 15) continue;
-					const pT = getGridPoint(x + 0.5, y);
-					const pR = getGridPoint(x + 1, y + 0.5);
-					const pB = getGridPoint(x + 0.5, y + 1);
-					const pL = getGridPoint(x, y + 0.5);
-					switch (mid) {
-						case 1:
-						case 14:
-							ctx.moveTo(pL.x, pL.y);
-							ctx.lineTo(pB.x, pB.y);
-							break;
-						case 2:
-						case 13:
-							ctx.moveTo(pR.x, pR.y);
-							ctx.lineTo(pB.x, pB.y);
-							break;
-						case 3:
-						case 12:
-							ctx.moveTo(pL.x, pL.y);
-							ctx.lineTo(pR.x, pR.y);
-							break;
-						case 4:
-						case 11:
-							ctx.moveTo(pT.x, pT.y);
-							ctx.lineTo(pR.x, pR.y);
-							break;
-						case 5:
-							ctx.moveTo(pL.x, pL.y);
-							ctx.lineTo(pT.x, pT.y);
-							ctx.moveTo(pR.x, pR.y);
-							ctx.lineTo(pB.x, pB.y);
-							break;
-						case 6:
-						case 9:
-							ctx.moveTo(pT.x, pT.y);
-							ctx.lineTo(pB.x, pB.y);
-							break;
-						case 7:
-						case 8:
-							ctx.moveTo(pL.x, pL.y);
-							ctx.lineTo(pT.x, pT.y);
-							break;
-						case 10:
-							ctx.moveTo(pT.x, pT.y);
-							ctx.lineTo(pR.x, pR.y);
-							ctx.moveTo(pL.x, pL.y);
-							ctx.lineTo(pB.x, pB.y);
-							break;
-					}
+			for (const i1 of selectionQuads.get(id) || []) {
+				const y = Math.floor(i1 / gridWidth);
+				const x = i1 % gridWidth;
+				const i2 = y * gridWidth + (x + 1);
+				const i3 = (y + 1) * gridWidth + (x + 1);
+				const i4 = (y + 1) * gridWidth + x;
+				const b1 = worldControlMap[i1] === id ? 1 : 0;
+				const b2 = worldControlMap[i2] === id ? 1 : 0;
+				const b3 = worldControlMap[i3] === id ? 1 : 0;
+				const b4 = worldControlMap[i4] === id ? 1 : 0;
+				const mid = (b1 << 3) | (b2 << 2) | (b3 << 1) | b4;
+				if (mid === 0 || mid === 15) continue;
+				const pT = getGridPoint(x + 0.5, y);
+				const pR = getGridPoint(x + 1, y + 0.5);
+				const pB = getGridPoint(x + 0.5, y + 1);
+				const pL = getGridPoint(x, y + 0.5);
+				switch (mid) {
+					case 1:
+					case 14:
+						ctx.moveTo(pL.x, pL.y);
+						ctx.lineTo(pB.x, pB.y);
+						break;
+					case 2:
+					case 13:
+						ctx.moveTo(pR.x, pR.y);
+						ctx.lineTo(pB.x, pB.y);
+						break;
+					case 3:
+					case 12:
+						ctx.moveTo(pL.x, pL.y);
+						ctx.lineTo(pR.x, pR.y);
+						break;
+					case 4:
+					case 11:
+						ctx.moveTo(pT.x, pT.y);
+						ctx.lineTo(pR.x, pR.y);
+						break;
+					case 5:
+						ctx.moveTo(pL.x, pL.y);
+						ctx.lineTo(pT.x, pT.y);
+						ctx.moveTo(pR.x, pR.y);
+						ctx.lineTo(pB.x, pB.y);
+						break;
+					case 6:
+					case 9:
+						ctx.moveTo(pT.x, pT.y);
+						ctx.lineTo(pB.x, pB.y);
+						break;
+					case 7:
+					case 8:
+						ctx.moveTo(pL.x, pL.y);
+						ctx.lineTo(pT.x, pT.y);
+						break;
+					case 10:
+						ctx.moveTo(pT.x, pT.y);
+						ctx.lineTo(pR.x, pR.y);
+						ctx.moveTo(pL.x, pL.y);
+						ctx.lineTo(pB.x, pB.y);
+						break;
 				}
 			}
 			ctx.stroke();
 		};
-		sides.forEach((side, idx) => {
-			side.forEach((c) => {
-				if (c.feature) drawSelectionHighlight(c.feature, idx);
-				else if (c.id) drawSelectionHighlight(c.id, idx);
-			});
-		});
+		for (const [id, sideIndex] of selectionOrder)
+			drawSelectionHighlight(id, sideIndex);
 	}
 
 	// Draw Explosions - Viewport Culled
 	const drawBounds = viewBounds.pad(0.1);
+	if (!this._activeCitySet) this._activeCitySet = new Set();
+	const activeCitySet = this._activeCitySet;
+	activeCitySet.clear();
+	for (const city of activeTheaterCities) activeCitySet.add(city.id ?? city);
 	explosions.forEach((exp) => {
 		if (
 			Number.isNaN(exp.lat) ||
 			Number.isNaN(exp.lng) ||
-			!drawBounds.contains([exp.lat, exp.lng])
+			!containsRenderPoint(drawBounds, exp.lat, exp.lng)
 		)
 			return;
 		let p;
@@ -233,7 +255,7 @@ export function drawUnits(frame) {
 		if (
 			Number.isNaN(b.currentLat) ||
 			Number.isNaN(b.currentLng) ||
-			!drawBounds.contains([b.currentLat, b.currentLng])
+			!containsRenderPoint(drawBounds, b.currentLat, b.currentLng)
 		)
 			return;
 		let p, pn;
@@ -315,7 +337,7 @@ export function drawUnits(frame) {
 		const baseSize = Math.max(4, zoom * 1.5);
 
 		bases.forEach((base) => {
-			if (!drawBounds.contains([base.lat, base.lng])) return;
+			if (!containsRenderPoint(drawBounds, base.lat, base.lng)) return;
 			const p = project(base.lat, base.lng);
 			ctx.beginPath();
 			ctx.arc(p.x, p.y, baseSize * 1.2, 0, Math.PI * 2);
@@ -358,11 +380,11 @@ export function drawUnits(frame) {
 		if (skipNonCapital && !c.isCapital) continue;
 		if (zoom >= 3) {
 			if (zoom >= 6) {
-				if (!viewBounds.contains([c.lat, c.lng])) continue;
+				if (!containsRenderPoint(viewBounds, c.lat, c.lng)) continue;
 			} else {
 				const qualifies =
-					(c.pop > minPop && viewBounds.contains([c.lat, c.lng])) ||
-					activeTheaterCities.includes(c);
+					(c.pop > minPop && containsRenderPoint(viewBounds, c.lat, c.lng)) ||
+					activeCitySet.has(c.id ?? c);
 				if (!qualifies) continue;
 			}
 		}
@@ -387,7 +409,8 @@ export function drawUnits(frame) {
 		if (
 			ds >= 0 &&
 			ds < sideColors.length &&
-			sideInfluenceMaps[ds][gIdx] > 0.3
+			(sideInfluenceMaps[ds]?.[gIdx] ?? Math.abs(occupationMap?.[gIdx] || 0)) >
+				0.3
 		) {
 			ctx.fillStyle = sideColors[ds].replace(rgbaRe, "1)");
 			ctx.strokeStyle = "rgba(0,0,0,0.4)";
@@ -428,16 +451,22 @@ export function drawUnits(frame) {
 		const minKy = Math.floor((b.getSouth() + 90) / UNIT_HASH_CELL_SIZE);
 		const maxKy = Math.floor((b.getNorth() + 90) / UNIT_HASH_CELL_SIZE);
 
-		const visibleUnits = [];
+		if (!this._visibleUnitsScratch) this._visibleUnitsScratch = [];
+		const visibleUnits = this._visibleUnitsScratch;
+		visibleUnits.length = 0;
+		const hashColumns = Math.ceil(360 / UNIT_HASH_CELL_SIZE);
+		const visitedColumns = new Set();
 		for (let kx = minKx; kx <= maxKx; kx++) {
 			// Handle longitude wrap
-			const wrappedKx = ((kx % 144) + 144) % 144; // 360/2.5 = 144 buckets
+			const wrappedKx = ((kx % hashColumns) + hashColumns) % hashColumns;
+			if (visitedColumns.has(wrappedKx)) continue;
+			visitedColumns.add(wrappedKx);
 			for (let ky = minKy; ky <= maxKy; ky++) {
 				const bucket = unitSpatialHash.get(wrappedKx * 100 + ky);
 				if (bucket) {
 					for (let bu = 0; bu < bucket.length; bu++) {
 						const u = bucket[bu];
-						if (uDrawBounds.contains([u.lat, u.lng])) {
+						if (containsRenderPoint(uDrawBounds, u.lat, u.lng)) {
 							visibleUnits.push(u);
 						}
 					}
@@ -445,6 +474,11 @@ export function drawUnits(frame) {
 			}
 		}
 
+		if (!this._renderCountryById) this._renderCountryById = new Map();
+		const countryById = this._renderCountryById;
+		countryById.clear();
+		for (const side of sides)
+			for (const country of side) countryById.set(country.id, country);
 		visibleUnits.forEach((u) => {
 			if (drawProb < 1.0 && u.id % 1 > drawProb) return;
 			let p;
@@ -486,24 +520,9 @@ export function drawUnits(frame) {
 				ctx.fillStyle = "white";
 				ctx.fill();
 			} else {
-				let country = null;
-
-				// Mountain Visuals: Units are "snow-capped" for visibility
+				const country = countryById.get(u.sovereignId);
 				const sw = w;
 				const sh = h;
-
-				// Robust lookup: first try assigned side, then search all sides as fallback
-				if (u.sideIndex !== undefined && sides[u.sideIndex]) {
-					country = sides[u.sideIndex].find((c) => c.id === u.sovereignId);
-				}
-
-				if (!country) {
-					// Deep search fallback
-					for (let s = 0; s < sides.length; s++) {
-						country = sides[s].find((c) => c.id === u.sovereignId);
-						if (country) break;
-					}
-				}
 
 				// If still not found, try searching the metadata (for dead countries)
 				let flagMeta = null;
@@ -629,7 +648,7 @@ export function drawUnits(frame) {
 	if (isWar && showBattleIndicators) {
 		const zoomScale = 1.3 ** (map.getZoom() - 3);
 		activeBattles.forEach((b) => {
-			if (!drawBounds.contains([b.lat, b.lng])) return;
+			if (!containsRenderPoint(drawBounds, b.lat, b.lng)) return;
 			let p;
 			try {
 				p = project(b.lat, b.lng);

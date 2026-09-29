@@ -187,18 +187,28 @@ function _parseInWorker(buf) {
 	});
 }
 
-export async function fetchJSONWithCache(url) {
+const _geoFetches = new Map();
+export function fetchJSONWithCache(url) {
 	const key = new URL(url, window.location.href).href;
-	const cached = await _geoCacheGet(key);
-	if (cached) return cached;
-	const response = await fetch(url);
-	if (!response.ok) throw new Error(`HTTP ${response.status}`);
-	const buf = await response.arrayBuffer();
-	const data = await _parseInWorker(buf);
-	_cachePut(key, data).catch((error) =>
-		console.warn("geoCache: deferred write failed", error),
-	);
-	return data;
+	if (_geoFetches.has(key)) return _geoFetches.get(key);
+	const request = (async () => {
+		const cached = await _geoCacheGet(key);
+		if (cached) return cached;
+		const response = await fetch(url);
+		if (!response.ok) throw new Error(`HTTP ${response.status}`);
+		const data = await _parseInWorker(await response.arrayBuffer());
+		_cachePut(key, data).catch((error) =>
+			console.warn("geoCache: deferred write failed", error),
+		);
+		return data;
+	})();
+	_geoFetches.set(key, request);
+	request
+		.finally(() => {
+			_geoFetches.delete(key);
+		})
+		.catch(() => {});
+	return request;
 }
 
 export { _cachePut as _geoCachePut };

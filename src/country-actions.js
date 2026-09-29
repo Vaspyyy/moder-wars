@@ -1,7 +1,9 @@
+import { hasSavedCells, visitSavedCells } from "./saved-cells.js";
+
 // Controls receive live state and commands; they do not import the application.
 export function createCountryActions(runtime) {
 	function bindReleaseNationHandler() {
-		window.releaseNation = async (nationId, releaserId, sideIdx) => {
+		const releaseNation = async (nationId, releaserId, sideIdx) => {
 			const meta = runtime.countryMetadata[nationId - 1];
 			if (!meta) return;
 
@@ -18,12 +20,10 @@ export function createCountryActions(runtime) {
 			// 1) explicit savedCells from when it was marked releasable
 			// 2) deJure cores
 			// 3) rasterized from GeoJSON feature (slowest; last resort)
-			let cellList =
-				Array.isArray(meta.savedCells) && meta.savedCells.length
-					? meta.savedCells
-					: null;
+			const hasExplicitSavedCells = hasSavedCells(meta);
+			let cellList = null;
 
-			if (!cellList && runtime.deJureMap) {
+			if (!hasExplicitSavedCells && !cellList && runtime.deJureMap) {
 				const cells = [];
 				for (let i = 0; i < runtime.deJureMap.length; i++) {
 					if (runtime.deJureMap[i] === nationId) {
@@ -35,7 +35,7 @@ export function createCountryActions(runtime) {
 				if (cells.length) cellList = cells;
 			}
 
-			if (!cellList && meta.feature) {
+			if (!hasExplicitSavedCells && !cellList && meta.feature) {
 				const bounds = runtime.L.geoJSON(meta.feature).getBounds();
 				const res = runtime.CONFIG.GRID_RES;
 				const sLat = Math.max(0, Math.floor((bounds.getSouth() + 90) / res));
@@ -62,15 +62,11 @@ export function createCountryActions(runtime) {
 			}
 
 			let restoredAny = false;
-			// If this nation came from a preset with savedCells, we can safely override any current owner on those cells.
-			const hasExplicitSavedCells =
-				Array.isArray(meta.savedCells) && meta.savedCells.length > 0;
-
-			if (cellList?.length) {
-				for (let i = 0; i < cellList.length; i++) {
-					const [x, y] = cellList[i];
+			if (isWar && sideIdx >= 0) runtime.ensureSideInfluenceMaps(sideIdx + 1);
+			if (hasExplicitSavedCells || cellList?.length) {
+				const restoreCell = (x, y) => {
 					const idx = y * runtime.gridWidth + x;
-					if (idx < 0 || idx >= runtime.worldControlMap.length) continue;
+					if (idx < 0 || idx >= runtime.worldControlMap.length) return;
 
 					const currentOwner = runtime.worldControlMap[idx];
 
@@ -81,7 +77,7 @@ export function createCountryActions(runtime) {
 							currentOwner !== 0 &&
 							currentOwner !== nationId
 						) {
-							continue;
+							return;
 						}
 					}
 
@@ -104,7 +100,9 @@ export function createCountryActions(runtime) {
 					}
 
 					restoredAny = true;
-				}
+				};
+				if (hasExplicitSavedCells) visitSavedCells(meta, restoreCell);
+				else for (const [x, y] of cellList) restoreCell(x, y);
 			}
 
 			if (!restoredAny) {
@@ -152,6 +150,10 @@ export function createCountryActions(runtime) {
 			runtime.influenceLayer.render();
 			runtime.statusText.innerText = `${meta.name} has been released!`;
 		};
+		window.releaseNation = (...args) =>
+			runtime.simulationClient
+				? runtime.simulationClient.edit(() => releaseNation(...args))
+				: releaseNation(...args);
 	}
 	return { bindReleaseNationHandler };
 }

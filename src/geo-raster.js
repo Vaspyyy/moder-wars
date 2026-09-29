@@ -14,7 +14,8 @@ function getWorker() {
 		{ type: "module" },
 	);
 	worker.onmessage = (event) => {
-		const { id, type, progress, arrays, error } = event.data || {};
+		const { id, type, progress, arrays, error, featureCount } =
+			event.data || {};
 		const request = pending.get(id);
 		if (!request) return;
 		if (type === "progress") {
@@ -22,7 +23,8 @@ function getWorker() {
 			return;
 		}
 		pending.delete(id);
-		if (type === "result") request.resolve(arrays);
+		if (type === "result")
+			request.resolve(request.source ? { arrays, featureCount } : arrays);
 		else request.reject(new Error(error || "Geography raster worker failed"));
 	};
 	worker.onerror = (event) => {
@@ -45,6 +47,25 @@ export function rasterizeGeoFeaturesInWorker(features, options, onProgress) {
 		pending.set(id, { onProgress, reject, resolve });
 		try {
 			getWorker().postMessage({ features, id, options });
+		} catch (error) {
+			pending.delete(id);
+			reject(error);
+		}
+	});
+}
+
+/** Fetch, parse, and rasterize in the same worker; full GeoJSON never crosses threads. */
+export function rasterizeGeoSourceInWorker(sourceUrl, options, onProgress) {
+	const baseUrl =
+		typeof window !== "undefined"
+			? window.location.href
+			: new URL("../", import.meta.url);
+	const url = new URL(sourceUrl, baseUrl).href;
+	return new Promise((resolve, reject) => {
+		const id = ++nextRequestId;
+		pending.set(id, { onProgress, reject, resolve, source: true });
+		try {
+			getWorker().postMessage({ sourceUrl: url, id, options });
 		} catch (error) {
 			pending.delete(id);
 			reject(error);

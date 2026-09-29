@@ -1,6 +1,13 @@
+import {
+	expandSavedCells,
+	hasSavedCells,
+	packSavedCells,
+} from "./saved-cells.js";
+
 const MAGIC = new Uint8Array([0x4d, 0x57, 0x53, 0x43]); // MWSC
-const VERSION = 2;
-const HEADER_BYTES = 20;
+const VERSION = 3;
+const HEADER_BYTES = 32;
+const LEGACY_HEADER_BYTES = 20;
 
 /** Return the lowercase SHA-256 digest of an ArrayBuffer or typed-array view. */
 export async function sha256Hex(input) {
@@ -24,9 +31,9 @@ export async function sha256Hex(input) {
 // Content-addressed query revisions keep the persistent runtime cache fast
 // without allowing rebuilt packages with stable filenames to remain stale.
 export const COMPILED_SCENARIO_URLS = Object.freeze({
-	modern: "assets/maps/compiled/world-map-2022-v2.mwsc.gz?rev=e360e86fbcc5decb",
-	ww1: "assets/maps/compiled/world-war-1-1914-v2.mwsc.gz?rev=dd4b9981901746de",
-	ww2: "assets/maps/compiled/world-war-2-v2.mwsc.gz?rev=1237a0dfbdded431",
+	modern: "assets/maps/compiled/world-map-2022-v3.mwsc.gz?rev=a40b8db35255df20",
+	ww1: "assets/maps/compiled/world-war-1-1914-v3.mwsc.gz?rev=b76fc79757b50a5a",
+	ww2: "assets/maps/compiled/world-war-2-v3.mwsc.gz?rev=85c0a2cc2b8823b8",
 });
 
 function writeVarUint(target, offset, value) {
@@ -71,18 +78,54 @@ function assertScenario(data) {
 	}
 }
 
-/** Encode a JSON scenario into the MWSC v2 binary format. */
+/** Encode MWSC v3: small JSON metadata, map runs, saved-territory runs, flag blobs. */
 export function encodeScenario(data) {
 	assertScenario(data);
 	const scenario = { ...data };
 	delete scenario.mapData;
-	const metadata = new TextEncoder().encode(JSON.stringify(scenario));
-	// Preserve source order because overlapping cells during resolution remapping
-	// intentionally use the scenario's last-write-wins ordering.
+	const sourceWidth = sourceGrid(data).width;
+	const savedTerritory = [];
+	const flagIds = new Map();
+	const flagBlobs = [];
+	const encoder = new TextEncoder();
+	scenario.metadata = (data.metadata || []).map((original, metadataIndex) => {
+		if (!original) return original;
+		const meta = { ...original };
+		const packed = packSavedCells(meta, sourceWidth);
+		if (packed.savedCellRuns?.length) {
+			savedTerritory.push({ metadataIndex, ...packed });
+			delete meta.savedCells;
+			delete meta.savedCellRuns;
+			delete meta.savedCellWidth;
+		}
+		const refs = {};
+		for (const [key, value] of Object.entries(meta)) {
+			if (!/flagUrl$/i.test(key) || typeof value !== "string") continue;
+			let id = flagIds.get(value);
+			if (id === undefined) {
+				id = flagBlobs.length;
+				flagIds.set(value, id);
+				flagBlobs.push(encoder.encode(value));
+			}
+			refs[key] = id;
+			delete meta[key];
+		}
+		if (Object.keys(refs).length) meta._mwFlagBlobs = refs;
+		return meta;
+	});
+	const metadata = encoder.encode(JSON.stringify(scenario));
 	const entries = data.mapData;
-	// Four uint32 varints require at most 20 bytes per run.
+	const savedBound = savedTerritory.reduce(
+		(sum, territory) => sum + 15 + territory.savedCellRuns.length * 5,
+		5,
+	);
+	const blobBound = flagBlobs.reduce((sum, bytes) => sum + 5 + bytes.length, 0);
 	const output = new Uint8Array(
-		HEADER_BYTES + metadata.length + entries.length * 20,
+		HEADER_BYTES +
+			metadata.length +
+			entries.length * 20 +
+			savedBound +
+			blobBound,
 	);
 	output.set(MAGIC, 0);
 	const view = new DataView(output.buffer);
@@ -91,7 +134,7 @@ export function encodeScenario(data) {
 	view.setUint16(6, HEADER_BYTES, true);
 	view.setUint32(8, metadata.length, true);
 	view.setUint32(12, entries.length, true);
-	view.setUint32(16, 0, true);
+	view.setUint32(28, flagBlobs.length, true);
 	output.set(metadata, HEADER_BYTES);
 
 	let offset = HEADER_BYTES + metadata.length;
@@ -112,9 +155,8 @@ export function encodeScenario(data) {
 			entries[i + runLength][0] === runStart + runLength &&
 			(entries[i + runLength][1] || 0) === owner &&
 			(entries[i + runLength][2] || 0) === biome
-		) {
+		)
 			runLength++;
-		}
 		offset = writeVarInt(output, offset, runStart - previousRunStart);
 		offset = writeVarUint(output, offset, runLength);
 		offset = writeVarUint(output, offset, owner);
@@ -123,20 +165,42 @@ export function encodeScenario(data) {
 		i += runLength;
 	}
 	view.setUint32(16, offset - HEADER_BYTES - metadata.length, true);
+	const savedStart = offset;
+	offset = writeVarUint(output, offset, savedTerritory.length);
+	for (const territory of savedTerritory) {
+		offset = writeVarUint(output, offset, territory.metadataIndex);
+		offset = writeVarUint(output, offset, territory.savedCellWidth);
+		offset = writeVarUint(output, offset, territory.savedCellRuns.length / 2);
+		let previousStart = 0;
+		for (let i = 0; i < territory.savedCellRuns.length; i += 2) {
+			const start = territory.savedCellRuns[i];
+			offset = writeVarInt(output, offset, start - previousStart);
+			offset = writeVarUint(output, offset, territory.savedCellRuns[i + 1]);
+			previousStart = start;
+		}
+	}
+	view.setUint32(20, offset - savedStart, true);
+	const blobStart = offset;
+	for (const blob of flagBlobs) {
+		offset = writeVarUint(output, offset, blob.length);
+		output.set(blob, offset);
+		offset += blob.length;
+	}
+	view.setUint32(24, offset - blobStart, true);
 	return output.slice(0, offset);
 }
 
 function parseEnvelope(input) {
 	const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
 	if (
-		bytes.length < HEADER_BYTES ||
+		bytes.length < LEGACY_HEADER_BYTES ||
 		!MAGIC.every((byte, index) => bytes[index] === byte)
 	) {
 		throw new Error("Not an MWSC scenario binary");
 	}
 	const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 	const version = view.getUint8(4);
-	if (version !== VERSION)
+	if (version !== 2 && version !== VERSION)
 		throw new Error(`Unsupported MWSC version ${version}`);
 	const headerBytes = view.getUint16(6, true);
 	const metadataBytes = view.getUint32(8, true);
@@ -144,7 +208,7 @@ function parseEnvelope(input) {
 	const payloadBytes = view.getUint32(16, true);
 	const payloadOffset = headerBytes + metadataBytes;
 	if (
-		headerBytes < HEADER_BYTES ||
+		headerBytes < (version === 2 ? LEGACY_HEADER_BYTES : HEADER_BYTES) ||
 		payloadOffset + payloadBytes > bytes.length
 	) {
 		throw new Error("Truncated MWSC scenario binary");
@@ -155,10 +219,79 @@ function parseEnvelope(input) {
 	return {
 		bytes,
 		scenario: JSON.parse(metadataText),
+		version,
+		savedBytes: version === 3 ? view.getUint32(20, true) : 0,
+		blobBytes: version === 3 ? view.getUint32(24, true) : 0,
+		blobCount: version === 3 ? view.getUint32(28, true) : 0,
 		entryCount,
 		payloadOffset,
 		payloadEnd: payloadOffset + payloadBytes,
 	};
+}
+
+function restoreBinaryMetadata(envelope, options) {
+	if (envelope.version === 2) {
+		if (!options.expandSavedCells) compactSavedMetadata(envelope.scenario);
+		return;
+	}
+	const savedEnd = envelope.payloadEnd + envelope.savedBytes;
+	const blobEnd = savedEnd + envelope.blobBytes;
+	if (blobEnd !== envelope.bytes.length)
+		throw new Error("Truncated MWSC metadata sections");
+	const state = { offset: envelope.payloadEnd };
+	const savedBytes = envelope.bytes.subarray(0, savedEnd);
+	const count = readVarUint(savedBytes, state);
+	for (let record = 0; record < count; record++) {
+		const metadataIndex = readVarUint(savedBytes, state);
+		const width = readVarUint(savedBytes, state);
+		const runCount = readVarUint(savedBytes, state);
+		const meta = envelope.scenario.metadata?.[metadataIndex];
+		if (!meta || !width) throw new Error("Invalid MWSC saved territory record");
+		const runs = [];
+		let previousStart = 0;
+		for (let run = 0; run < runCount; run++) {
+			const start = previousStart + readVarInt(savedBytes, state);
+			const length = readVarUint(savedBytes, state);
+			if (start < 0 || !length)
+				throw new Error("Invalid MWSC saved territory run");
+			runs.push(start, length);
+			previousStart = start;
+		}
+		meta.savedCells = null;
+		meta.savedCellRuns = runs;
+		meta.savedCellWidth = width;
+		if (options.expandSavedCells) {
+			meta.savedCells = expandSavedCells(meta);
+			delete meta.savedCellRuns;
+			delete meta.savedCellWidth;
+		}
+	}
+	if (state.offset !== savedEnd)
+		throw new Error("MWSC saved territory section length mismatch");
+	const blobs = [];
+	const decoder = new TextDecoder();
+	for (let id = 0; id < envelope.blobCount; id++) {
+		const length = readVarUint(envelope.bytes, state);
+		if (state.offset + length > blobEnd)
+			throw new Error("Truncated MWSC flag blob");
+		blobs.push(
+			decoder.decode(
+				envelope.bytes.subarray(state.offset, state.offset + length),
+			),
+		);
+		state.offset += length;
+	}
+	if (state.offset !== blobEnd)
+		throw new Error("MWSC flag section length mismatch");
+	for (const meta of envelope.scenario.metadata || []) {
+		if (!meta?._mwFlagBlobs) continue;
+		for (const [key, id] of Object.entries(meta._mwFlagBlobs)) {
+			if (!Number.isInteger(id) || id < 0 || id >= blobs.length)
+				throw new Error("Invalid MWSC flag reference");
+			meta[key] = blobs[id];
+		}
+		delete meta._mwFlagBlobs;
+	}
 }
 
 function sourceGrid(scenario) {
@@ -178,6 +311,7 @@ function sourceGrid(scenario) {
 /** Decode MWSC bytes into dense typed maps ready for the simulation state. */
 export function decodeScenarioBinary(input, options = {}) {
 	const envelope = parseEnvelope(input);
+	restoreBinaryMetadata(envelope, options);
 	return expandSparseEntries(
 		envelope.scenario,
 		envelope.entryCount,
@@ -212,9 +346,17 @@ export function decodeScenarioJson(data, options = {}) {
 	const scenario = { ...data };
 	const entries = scenario.mapData;
 	delete scenario.mapData;
+	if (!options.expandSavedCells) compactSavedMetadata(scenario);
 	return expandSparseEntries(scenario, entries.length, options, (visit) => {
 		for (const entry of entries) visit(entry[0], entry[1] || 0, entry[2] || 0);
 	});
+}
+
+function compactSavedMetadata(scenario) {
+	const width = sourceGrid(scenario).width;
+	scenario.metadata = (scenario.metadata || []).map((meta) =>
+		hasSavedCells(meta) ? { ...meta, ...packSavedCells(meta, width) } : meta,
+	);
 }
 
 function targetGrid(source, scenario, options) {

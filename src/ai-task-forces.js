@@ -226,10 +226,39 @@ function eligibleUnit(unit, sideUid) {
 export function assignTaskForceRoles(taskForce, units, options = {}) {
 	const tick = Math.max(0, Math.trunc(finite(options.tick)));
 	const thresholds = getAiPostureThresholds(taskForce.posture);
-	const byId = new Map((units || []).map((unit) => [unitKey(unit.id), unit]));
+	const byId =
+		options.unitsById ||
+		new Map((units || []).map((unit) => [unitKey(unit.id), unit]));
 	const members = taskForce.assignedUnitIds
 		.map((id) => byId.get(unitKey(id)))
 		.filter((unit) => eligibleUnit(unit, taskForce.sideUid));
+	const roleInputs = options.roleCache ? [taskForce.posture] : null;
+	if (roleInputs) {
+		for (const member of members) {
+			const key = unitKey(member.id);
+			const previous = taskForce.unitRoles[key];
+			roleInputs.push(
+				key,
+				estimateUnitCombatPower(member),
+				String(member.countryRole || "PRIMARY").toUpperCase(),
+				previous?.role,
+				previous?.assignedTick,
+			);
+		}
+		const cached = options.roleCache.get(taskForce.id);
+		if (
+			cached &&
+			Object.keys(cached.unitRoles).length === members.length &&
+			cached.inputs.length === roleInputs.length &&
+			cached.inputs.every((value, index) => value === roleInputs[index])
+		) {
+			return {
+				...taskForce,
+				unitRoles: cached.unitRoles,
+				reserveUnitIds: [...cached.reserveUnitIds],
+			};
+		}
+	}
 	members.sort(
 		(left, right) =>
 			estimateUnitCombatPower(right) - estimateUnitCombatPower(left) ||
@@ -321,29 +350,38 @@ export function assignTaskForceRoles(taskForce, units, options = {}) {
 			assignedTick: previous?.role === role ? previous.assignedTick : tick,
 		};
 	}
-	if (
+	const needsCombatFallback =
 		members.length > 0 &&
 		!Object.values(unitRoles).some((assignment) =>
 			["LINE", "SPEARHEAD"].includes(assignment.role),
-		)
-	) {
-		const combatMember = [...members].sort(
-			(left, right) =>
-				estimateUnitCombatPower(right) - estimateUnitCombatPower(left) ||
-				unitKey(left.id).localeCompare(unitKey(right.id)),
-		)[0];
+		);
+	if (needsCombatFallback) {
+		const combatMember = members[0];
 		const key = unitKey(combatMember.id);
 		unitRoles[key] = {
 			role: "LINE",
 			assignedTick: tick,
 		};
 	}
+	const reserveUnitIds = members
+		.filter((member) => unitRoles[unitKey(member.id)]?.role === "RESERVE")
+		.map((member) => member.id);
+	if (roleInputs && !needsCombatFallback) {
+		// Sticky role selection can take several passes to settle. Reuse only when
+		// this call's complete input matches the prior call's complete input.
+		options.roleCache.set(taskForce.id, {
+			inputs: roleInputs,
+			unitRoles,
+			reserveUnitIds: [...reserveUnitIds],
+		});
+	} else if (roleInputs) {
+		// The fallback deliberately refreshes its assignment tick on every call.
+		options.roleCache.delete(taskForce.id);
+	}
 	return {
 		...taskForce,
 		unitRoles,
-		reserveUnitIds: members
-			.filter((member) => unitRoles[unitKey(member.id)]?.role === "RESERVE")
-			.map((member) => member.id),
+		reserveUnitIds,
 	};
 }
 
@@ -362,6 +400,19 @@ export function reconcileAiTaskForces(
 	);
 	const usedUnits = new Set();
 	const taskForces = [];
+	const eligibleBySide = new Map();
+	const eligibleById = new Map();
+	for (const unit of units || []) {
+		const sideUid = String(unit.sideUid);
+		if (!eligibleUnit(unit, sideUid)) continue;
+		let sideUnits = eligibleBySide.get(sideUid);
+		if (!sideUnits) {
+			sideUnits = [];
+			eligibleBySide.set(sideUid, sideUnits);
+		}
+		sideUnits.push(unit);
+		eligibleById.set(unitKey(unit.id), unit);
+	}
 	const sortedPlans = [...(selectedPlans || [])].sort(
 		(left, right) =>
 			finite(right.priority) - finite(left.priority) ||
@@ -415,28 +466,17 @@ export function reconcileAiTaskForces(
 					tick,
 				})
 			: createAiTaskForce({ ...plan, tick });
-		const available = (units || []).filter(
-			(unit) =>
-				eligibleUnit(unit, taskForce.sideUid) &&
-				!usedUnits.has(unitKey(unit.id)) &&
-				(!stickyOwnerByUnit.has(unitKey(unit.id)) ||
-					stickyOwnerByUnit.get(unitKey(unit.id)) === signature),
-		);
-		const availableById = new Map(
-			available.map((unit) => [unitKey(unit.id), unit]),
-		);
 		const sticky = taskForce.assignedUnitIds
-			.map((id) => availableById.get(unitKey(id)))
-			.filter(Boolean);
-		sticky.sort(
-			(left, right) =>
-				taskForce.assignedUnitIds.findIndex(
-					(id) => unitKey(id) === unitKey(left.id),
-				) -
-				taskForce.assignedUnitIds.findIndex(
-					(id) => unitKey(id) === unitKey(right.id),
-				),
-		);
+			.map((id) => eligibleById.get(unitKey(id)))
+			.filter(
+				(unit) =>
+					unit &&
+					String(unit.sideUid) === taskForce.sideUid &&
+					!usedUnits.has(unitKey(unit.id)) &&
+					(!stickyOwnerByUnit.has(unitKey(unit.id)) ||
+						stickyOwnerByUnit.get(unitKey(unit.id)) === signature),
+			);
+		// Mapping assignedUnitIds already preserves the sticky membership order.
 		for (const unit of sticky) usedUnits.add(unitKey(unit.id));
 		const anchor =
 			taskForce.phase === "WITHDRAWING"
@@ -446,22 +486,32 @@ export function reconcileAiTaskForces(
 			taskForce.phase,
 		);
 		// Recovery retains its members without searching the rest of the army.
-		const candidates = recovering
-			? []
-			: available
-					.filter((unit) => !usedUnits.has(unitKey(unit.id)))
-					.sort(
-						(left, right) =>
-							wrappedDistanceSq(left, anchor) -
-								wrappedDistanceSq(right, anchor) ||
-							estimateUnitCombatPower(right) - estimateUnitCombatPower(left) ||
-							unitKey(left.id).localeCompare(unitKey(right.id)),
-					);
 		const selected = [...sticky];
 		let selectedPower = selected.reduce(
 			(sum, unit) => sum + estimateUnitCombatPower(unit),
 			0,
 		);
+		const needsMembers =
+			selected.length < taskForce.maxAssignedUnits &&
+			(selected.length === 0 || selectedPower < taskForce.desiredPower);
+		const candidates =
+			recovering || !needsMembers
+				? []
+				: (eligibleBySide.get(taskForce.sideUid) || [])
+						.filter(
+							(unit) =>
+								!usedUnits.has(unitKey(unit.id)) &&
+								(!stickyOwnerByUnit.has(unitKey(unit.id)) ||
+									stickyOwnerByUnit.get(unitKey(unit.id)) === signature),
+						)
+						.sort(
+							(left, right) =>
+								wrappedDistanceSq(left, anchor) -
+									wrappedDistanceSq(right, anchor) ||
+								estimateUnitCombatPower(right) -
+									estimateUnitCombatPower(left) ||
+								unitKey(left.id).localeCompare(unitKey(right.id)),
+						);
 		for (const candidate of candidates) {
 			if (selected.length >= taskForce.maxAssignedUnits) break;
 			if (selectedPower >= taskForce.desiredPower && selected.length > 0) break;
@@ -474,6 +524,8 @@ export function reconcileAiTaskForces(
 		taskForce.peakPower = Math.max(taskForce.peakPower, selectedPower);
 		taskForce = assignTaskForceRoles(taskForce, selected, {
 			tick,
+			unitsById: eligibleById,
+			roleCache: options.roleCache,
 		});
 		taskForces.push(taskForce);
 	}
@@ -481,30 +533,24 @@ export function reconcileAiTaskForces(
 }
 
 export function calculateTaskForceReadiness(taskForce, units, options = {}) {
-	const byId = new Map((units || []).map((unit) => [unitKey(unit.id), unit]));
-	const members = taskForce.assignedUnitIds
-		.map((id) => byId.get(unitKey(id)))
-		.filter((unit) => eligibleUnit(unit, taskForce.sideUid));
-	const currentPower = members.reduce(
-		(sum, unit) => sum + estimateUnitCombatPower(unit),
-		0,
-	);
+	const byId =
+		options.unitsById ||
+		new Map((units || []).map((unit) => [unitKey(unit.id), unit]));
 	const anchor = taskForce.stagingAnchor || taskForce.target;
 	const radiusSq = Math.max(0, finite(options.assemblyRadiusSq, 2));
-	const assembledPower = members.reduce(
-		(sum, unit) =>
-			sum +
-			(wrappedDistanceSq(unit, anchor) <= radiusSq
-				? estimateUnitCombatPower(unit)
-				: 0),
-		0,
-	);
-	const commandReadyPower = members.reduce(
-		(sum, unit) =>
-			sum +
-			(unit.commandEligible === false ? 0 : estimateUnitCombatPower(unit)),
-		0,
-	);
+	let currentPower = 0;
+	let assembledPower = 0;
+	let assignedCount = 0;
+	for (const id of taskForce.assignedUnitIds) {
+		const unit = byId.get(unitKey(id));
+		if (!eligibleUnit(unit, taskForce.sideUid)) continue;
+		const power = estimateUnitCombatPower(unit);
+		currentPower += power;
+		assignedCount++;
+		if (wrappedDistanceSq(unit, anchor) <= radiusSq) assembledPower += power;
+	}
+	// Eligibility already excludes formations which cannot accept commands.
+	const commandReadyPower = currentPower;
 	const desiredPower = Math.max(1, taskForce.desiredPower);
 	const readiness = clamp(
 		Math.min(1, currentPower / desiredPower) * 0.35 +
@@ -518,7 +564,7 @@ export function calculateTaskForceReadiness(taskForce, units, options = {}) {
 		currentPower,
 		assembledPower,
 		commandReadyPower,
-		assignedCount: members.length,
+		assignedCount,
 	};
 }
 

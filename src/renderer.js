@@ -28,7 +28,6 @@ import {
 	dominantSideMap,
 	editingCountryId,
 	explosions,
-	flagProcessedBuffer,
 	gameMode,
 	gameState,
 	getAiOperationsSnapshot,
@@ -78,6 +77,7 @@ import {
 import { paintClippedFlag, resolveRenderFlag } from "./render-flags.js";
 import { drawLabels } from "./render-labels.js";
 import { drawOverlays } from "./render-overlays.js";
+import { createPoliticalStyleTracker } from "./render-political-cache.js";
 import { drawTerrain } from "./render-terrain.js";
 import { drawUnits } from "./render-units.js";
 
@@ -362,6 +362,20 @@ const ControlMapLayer = L.Layer.extend({
 		this._staticSurface = createRenderSurface();
 		this._labelsSurface = createRenderSurface();
 		this._overlaysSurface = createRenderSurface();
+		this._surfaces = [
+			this._staticSurface,
+			this._container,
+			this._labelsSurface,
+			this._overlaysSurface,
+		];
+		for (const surface of this._surfaces) {
+			surface.style.position = "absolute";
+			surface.style.top = "0";
+			surface.style.left = "0";
+			surface.style.pointerEvents = "none";
+			surface.style.zIndex = "400";
+		}
+		this._compositeLayers = false;
 
 		this._lastZoom = map.getZoom();
 		this._renderRequested = false;
@@ -371,6 +385,7 @@ const ControlMapLayer = L.Layer.extend({
 		this._cachedRegions = [];
 		this._gridProjectionCache = null;
 		this._materialCache = null;
+		this._politicalChunkCache = null;
 		this._dirtyControlTiles = new Set();
 		this._allControlTilesDirty = true;
 		this._controlChangeTrackingEnabled = false;
@@ -380,14 +395,14 @@ const ControlMapLayer = L.Layer.extend({
 		this._labelsCacheKey = "";
 		this._overlaysCacheKey = "";
 		this._regionsRevision = 0;
-		this._visitId = 0;
 		this._zooming = false;
 		this._zoomSettlePending = false;
 		this._renderedZoom = map.getZoom();
 		this._renderedCenter = map.getCenter();
 
 		// Append to map container directly to avoid double-transforms from mapPane/overlayPane
-		map.getContainer().appendChild(this._container);
+		for (const surface of this._surfaces)
+			map.getContainer().appendChild(surface);
 
 		this._update();
 
@@ -395,7 +410,7 @@ const ControlMapLayer = L.Layer.extend({
 			const nextBounds = map.getBounds();
 			if (this._lastBounds?.equals(nextBounds)) return;
 			this._lastBounds = nextBounds;
-			this.requestRender(RENDER_LAYERS.ALL);
+			this.requestRender(RENDER_LAYERS.ALL, true);
 		};
 		this._onTileLoad = () => {
 			if (!cinematicMode && !this._isCapturing) return;
@@ -404,7 +419,8 @@ const ControlMapLayer = L.Layer.extend({
 
 		this._onZoomStart = () => {
 			this._zooming = true;
-			this._container.style.willChange = "transform";
+			for (const surface of this._surfaces)
+				surface.style.willChange = "transform";
 		};
 
 		this._onZoomAnim = (e) => {
@@ -421,8 +437,10 @@ const ControlMapLayer = L.Layer.extend({
 				.add(viewportCenter);
 			const scale = map.getZoomScale(e.zoom, baseZoom);
 			const offset = viewportCenter.subtract(oldTargetCenter.multiplyBy(scale));
-			this._container.style.transformOrigin = "0 0";
-			L.DomUtil.setTransform(this._container, offset, scale);
+			for (const surface of this._surfaces) {
+				surface.style.transformOrigin = "0 0";
+				L.DomUtil.setTransform(surface, offset, scale);
+			}
 		};
 
 		this._onZoomEnd = () => {
@@ -432,7 +450,7 @@ const ControlMapLayer = L.Layer.extend({
 			// Keep the transformed old frame visible until one complete final-zoom
 			// render can replace it atomically. requestRender schedules that frame in
 			// paused/menu views; the simulation loop force-admits it during a live war.
-			this.requestRender(RENDER_LAYERS.ALL);
+			this.requestRender(RENDER_LAYERS.ALL, true);
 		};
 
 		map.on("move", this._onMove, this);
@@ -449,9 +467,11 @@ const ControlMapLayer = L.Layer.extend({
 		this._renderRaf = 0;
 		this._renderRequested = false;
 		this._zoomSettlePending = false;
-		if (this._container?.parentNode) {
-			this._container.parentNode.removeChild(this._container);
+		for (const surface of this._surfaces || []) {
+			surface.parentNode?.removeChild(surface);
 		}
+		this._politicalChunkCache?.clear();
+		this._regionChunkCache?.clear();
 		map.off("move", this._onMove, this);
 		map.off("moveend", this._onMove, this);
 		map.off("zoomstart", this._onZoomStart, this);
@@ -466,9 +486,18 @@ const ControlMapLayer = L.Layer.extend({
 	 * Marks renderer-owned caches stale without forcing an immediate paint.
 	 * Callers can combine RENDER_LAYERS masks.
 	 */
-	invalidate: function (layerMask = RENDER_LAYERS.ALL) {
+	invalidate: function (
+		layerMask = RENDER_LAYERS.ALL,
+		preserveWorldCache = false,
+	) {
 		this._invalidLayers = (this._invalidLayers || 0) | layerMask;
-		if (layerMask & RENDER_LAYERS.STATIC) this._staticCacheKey = "";
+		if (layerMask & RENDER_LAYERS.STATIC) {
+			this._staticCacheKey = "";
+			if (!preserveWorldCache) {
+				this._politicalChunkCache?.clear();
+				this._regionChunkCache?.clear();
+			}
+		}
 		if (layerMask & RENDER_LAYERS.LABELS) this._labelsCacheKey = "";
 		if (layerMask & RENDER_LAYERS.OVERLAYS) this._overlaysCacheKey = "";
 	},
@@ -485,17 +514,22 @@ const ControlMapLayer = L.Layer.extend({
 	_commitZoomSettle: function () {
 		if (!this._zoomSettlePending) return;
 		this._zoomSettlePending = false;
-		this._container.style.transform = "";
-		this._container.style.transformOrigin = "";
-		this._container.style.willChange = "";
+		for (const surface of this._surfaces) {
+			surface.style.transform = "";
+			surface.style.transformOrigin = "";
+			surface.style.willChange = "";
+		}
 	},
 
 	/**
 	 * Coalesces multiple paint requests into one animation-frame callback.
 	 * `render()` remains synchronous for capture/export compatibility.
 	 */
-	requestRender: function (layerMask = RENDER_LAYERS.DYNAMIC) {
-		this.invalidate(layerMask);
+	requestRender: function (
+		layerMask = RENDER_LAYERS.DYNAMIC,
+		preserveWorldCache = false,
+	) {
+		this.invalidate(layerMask, preserveWorldCache);
 		// The simulation loop performs spike-aware render admission. Renderer-owned
 		// callbacks during an active war can otherwise bypass that admission or paint
 		// the same frame twice. Paused/non-war views still receive immediate updates.
@@ -550,9 +584,16 @@ const ControlMapLayer = L.Layer.extend({
 			const tileY = Math.floor(y / CONTROL_DIRTY_TILE_SIZE);
 			const tileColumns = Math.ceil(gridWidth / CONTROL_DIRTY_TILE_SIZE);
 			this._dirtyControlTiles.add(tileY * tileColumns + tileX);
+			this._regionChunkCache?.invalidateTiles([tileY * tileColumns + tileX]);
+			this._politicalChunkCache?.invalidateCells(
+				[cellIndex],
+				gridWidth,
+				gridHeight,
+			);
 			if (this._dirtyControlTiles.size > CONTROL_DIRTY_TILE_LIMIT) {
 				this._dirtyControlTiles.clear();
 				this._allControlTilesDirty = true;
+				this._politicalChunkCache?.clear();
 				break;
 			}
 		}
@@ -560,6 +601,38 @@ const ControlMapLayer = L.Layer.extend({
 		// rAF here would bypass spike-aware render deferral and can paint twice in one
 		// visual frame. The dirty tile remains queued until the admitted render.
 		this.invalidate(RENDER_LAYERS.DYNAMIC);
+		this.requestRender(RENDER_LAYERS.DYNAMIC);
+	},
+
+	// Worker snapshots report dirty world tiles directly, avoiding a temporary
+	// array and invalidation call for every one of their 1,024 cells.
+	notifyControlTilesChanged: function (
+		tileKeys,
+		tileSize = CONTROL_DIRTY_TILE_SIZE,
+	) {
+		if (tileSize !== CONTROL_DIRTY_TILE_SIZE) {
+			this._allControlTilesDirty = true;
+			this.requestRender(RENDER_LAYERS.STATIC | RENDER_LAYERS.DYNAMIC);
+			return;
+		}
+		this._controlChangeTrackingEnabled = true;
+		const columns = Math.ceil(gridWidth / CONTROL_DIRTY_TILE_SIZE);
+		const count = columns * Math.ceil(gridHeight / CONTROL_DIRTY_TILE_SIZE);
+		const valid = [];
+		for (const value of tileKeys || []) {
+			const key = Number(value);
+			if (!Number.isInteger(key) || key < 0 || key >= count) continue;
+			valid.push(key);
+			this._dirtyControlTiles.add(key);
+		}
+		this._politicalChunkCache?.invalidateTiles(valid, gridWidth, gridHeight);
+		this._regionChunkCache?.invalidateTiles(valid);
+		if (this._dirtyControlTiles.size > CONTROL_DIRTY_TILE_LIMIT) {
+			this._dirtyControlTiles.clear();
+			this._allControlTilesDirty = true;
+			this._politicalChunkCache?.clear();
+			this._regionChunkCache?.clear();
+		}
 		this.requestRender(RENDER_LAYERS.DYNAMIC);
 	},
 
@@ -639,7 +712,11 @@ const ControlMapLayer = L.Layer.extend({
 			this._overlaysSurface.width = newW;
 			this._overlaysSurface.height = newH;
 			this._gridProjectionCache = null;
-			this.invalidate(RENDER_LAYERS.ALL);
+			for (const surface of this._surfaces) {
+				surface.style.width = this._container.style.width;
+				surface.style.height = this._container.style.height;
+			}
+			this.invalidate(RENDER_LAYERS.ALL, true);
 		}
 
 		const isSimulating =
@@ -649,7 +726,7 @@ const ControlMapLayer = L.Layer.extend({
 		const currentBounds = map.getBounds();
 		const mapMoved = !this._lastBounds?.equals(currentBounds);
 		if (mapMoved) this._lastBounds = currentBounds;
-		if (mapMoved) this.invalidate(RENDER_LAYERS.ALL);
+		if (mapMoved) this.invalidate(RENDER_LAYERS.ALL, true);
 		if (this._forceRender) this.invalidate(RENDER_LAYERS.ALL);
 
 		if (isSimulating || mapMoved || this._forceRender) {
@@ -658,7 +735,7 @@ const ControlMapLayer = L.Layer.extend({
 		}
 	},
 	render: function () {
-		const _r0 = performance.now();
+		const _r0 = window.__perf?._enabled ? performance.now() : 0;
 		if (!worldControlMap || !landMask) return;
 		// The animated CSS transform owns presentation until zoomend. The main
 		// simulation loop calls render() directly, so it needs the same guard as
@@ -729,7 +806,11 @@ const ControlMapLayer = L.Layer.extend({
 			this._overlaysSurface.width = surfaceWidth;
 			this._overlaysSurface.height = surfaceHeight;
 			this._gridProjectionCache = null;
-			this.invalidate(RENDER_LAYERS.ALL);
+			for (const surface of this._surfaces) {
+				surface.style.width = this._container.style.width;
+				surface.style.height = this._container.style.height;
+			}
+			this.invalidate(RENDER_LAYERS.ALL, true);
 		}
 		const isWar =
 			gameState === "SIMULATING" ||
@@ -743,6 +824,10 @@ const ControlMapLayer = L.Layer.extend({
 		const useSimplifiedBase = isSimplifiedMode || isCustomTerrain;
 		const isEditing =
 			gameMode === "EDITOR" || gameMode === "EDITOR_TEST" || godModeActive;
+		if (!this._countryStyleChanged)
+			this._countryStyleChanged = createPoliticalStyleTracker();
+		if (this._countryStyleChanged({ countryMetadata, sideColors }))
+			this.invalidate(RENDER_LAYERS.STATIC);
 		const viewportKey = `${map.getZoom()}:${getBoundsCacheKey(bounds)}:${this._container.width}x${this._container.height}`;
 		const sideKey = sides
 			.map((side) => side.map((country) => country?.id || 0).join(","))
@@ -768,6 +853,17 @@ const ControlMapLayer = L.Layer.extend({
 			sideKey,
 			sideColors.join("|"),
 		].join(";");
+		const politicalStyleKey = [
+			viewMode,
+			currentImagery,
+			useSimplifiedBase ? 1 : 0,
+			mountainsEnabled ? 1 : 0,
+			disableCountryGradient ? 1 : 0,
+			allianceViewEnabled ? 1 : 0,
+			isWar ? 1 : 0,
+			sideKey,
+			sideColors.join("|"),
+		].join(";");
 		const canReuseStaticSurface =
 			this._controlChangeTrackingEnabled && isWar && !isEditing;
 		const dirtyControlPaintTiles = this._allControlTilesDirty
@@ -788,7 +884,7 @@ const ControlMapLayer = L.Layer.extend({
 			isPaused ||
 			simFrameCount - this._lastStaticRenderFrame >= politicalBatchFrames;
 		const fullStaticRefresh =
-			!canReuseStaticSurface ||
+			(isWar && !canReuseStaticSurface) ||
 			(this._invalidLayers & RENDER_LAYERS.STATIC) !== 0 ||
 			this._staticCacheKey !== staticCacheKey ||
 			_allianceCacheDirty ||
@@ -798,6 +894,10 @@ const ControlMapLayer = L.Layer.extend({
 			!fullStaticRefresh && hasVisibleControlChanges && politicalRefreshDue;
 		const renderStatic = fullStaticRefresh || partialControlRedraw;
 		const controlTileColumns = Math.ceil(gridWidth / CONTROL_DIRTY_TILE_SIZE);
+		if (this._allControlTilesDirty) {
+			this._politicalChunkCache?.clear();
+			this._regionChunkCache?.clear();
+		}
 		const isStaticCellInPaintTiles = (x, y) => {
 			if (!partialControlRedraw) return true;
 			return intersectsControlPaintTiles(
@@ -1169,13 +1269,16 @@ const ControlMapLayer = L.Layer.extend({
 			fullStaticRefresh,
 			viewMode,
 			showCountryLabels,
-			flagProcessedBuffer,
 			gridProjection,
 			isWar,
 			ctx,
 			currentZoom,
 			gridWidth,
 			staticCacheKey,
+			politicalStyleKey,
+			sideKey,
+			staticPaintXMax: staticPaintGridBounds.xMax,
+			staticPaintYMax: staticPaintGridBounds.yMax,
 			simFrameCount,
 			RENDER_LAYERS,
 			xMin,
@@ -1228,19 +1331,28 @@ const ControlMapLayer = L.Layer.extend({
 			staticLoopXMax,
 		});
 
-		// Dynamic entities, labels, editor highlights and operation overlays stay on
-		// the public canvas. Captures therefore continue to receive one composited
-		// surface even though the political/control work is cached separately.
+		// Let the browser composite unchanged map layers during normal viewing.
+		// Exports and recordings still receive the complete public canvas.
+		this._compositeLayers = cinematicMode || this._isCapturing === true;
+		for (const surface of [
+			this._staticSurface,
+			this._labelsSurface,
+			this._overlaysSurface,
+		]) {
+			surface.style.display = this._compositeLayers ? "none" : "";
+		}
 		mainCtx.clearRect(0, 0, this._container.width, this._container.height);
 		mainCtx.save();
 		mainCtx.scale(dpr, dpr);
-		mainCtx.drawImage(
-			this._staticSurface,
-			0,
-			0,
-			this._container.width / dpr,
-			this._container.height / dpr,
-		);
+		if (this._compositeLayers) {
+			mainCtx.drawImage(
+				this._staticSurface,
+				0,
+				0,
+				this._container.width / dpr,
+				this._container.height / dpr,
+			);
+		}
 		ctx = mainCtx;
 
 		// Pass 4: Selection Highlight
@@ -1350,7 +1462,7 @@ const ControlMapLayer = L.Layer.extend({
 		this._renderedCenter = map.getCenter();
 		this._commitZoomSettle();
 
-		if (window.__perf)
+		if (_r0)
 			window.__perf.render =
 				(window.__perf.render || 0) + performance.now() - _r0;
 	},

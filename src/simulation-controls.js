@@ -37,6 +37,7 @@ export function createSimulationControls(runtime) {
 				) {
 					e.preventDefault();
 					runtime.gameState = "SIMULATING";
+					runtime.simulationClient.syncControls();
 					runtime.statusText.innerText = "Conflict Continued";
 					requestAnimationFrame(runtime.updateLoop);
 				} else if (runtime.countryInspector.style.display === "block") {
@@ -48,44 +49,14 @@ export function createSimulationControls(runtime) {
 
 	function bindDocumentVisibilityChange() {
 		document.addEventListener("visibilitychange", () => {
-			if (document.hidden) {
-				// Stop visual loop and start a lightweight background tick loop
-				if (runtime.animationFrameId !== null) {
-					cancelAnimationFrame(runtime.animationFrameId);
-					runtime.animationFrameId = null;
-				}
-				if (!runtime.backgroundTickId && runtime.gameState === "SIMULATING") {
-					runtime.backgroundTickId = setInterval(() => {
-						if (runtime.gameState !== "SIMULATING" || runtime.isPaused) return;
-						// Advance simulation based on simSpeed, but skip rendering/UI-heavy work
-						runtime.frameAccumulator += runtime.simSpeed;
-						while (runtime.frameAccumulator >= 1) {
-							const warEnded = runtime.performSimulationTick();
-							if (warEnded) {
-								runtime.frameAccumulator = 0;
-								break;
-							}
-							runtime.frameAccumulator -= 1;
-						}
-						// Advance in-game date based on background tick interval
-						runtime.tickGameTime(100);
-						runtime.simFrameCount++;
-					}, 100); // ~10 ticks per second while unfocused
-				}
-			} else {
-				// Back to foreground: stop background loop and resume visual loop
-				if (runtime.backgroundTickId) {
-					clearInterval(runtime.backgroundTickId);
-					runtime.backgroundTickId = null;
-				}
-				if (runtime.gameState === "SIMULATING") {
-					if (runtime.animationFrameId !== null) {
-						cancelAnimationFrame(runtime.animationFrameId);
-					}
-					runtime.animationFrameId = requestAnimationFrame(runtime.updateLoop);
-				}
-			}
+			runtime.simulationClient.syncControls();
+			if (runtime.animationFrameId !== null)
+				cancelAnimationFrame(runtime.animationFrameId);
+			runtime.animationFrameId = null;
+			if (!document.hidden && runtime.gameState === "SIMULATING")
+				runtime.animationFrameId = requestAnimationFrame(runtime.updateLoop);
 		});
 	}
+
 	return { bindDocumentKeydown, bindDocumentVisibilityChange };
 }

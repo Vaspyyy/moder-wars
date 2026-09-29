@@ -1,3 +1,5 @@
+import { expandSavedCells } from "./saved-cells.js";
+
 /** Serialize scenario state without depending on the simulation bootstrap. */
 export function generateScenarioSnapshot(
 	name,
@@ -63,7 +65,7 @@ export function generateScenarioSnapshot(
 			role: m.role || "OFFENSE",
 			overlordId: m.overlordId || null,
 			releasableBy: m.releasableBy || null,
-			savedCells: m.savedCells || null,
+			savedCells: expandSavedCells(m),
 			buffState: m.buffState || "none",
 			hiddenBuffState: m.hiddenBuffState || "none",
 			allies: Array.isArray(m.allies) ? m.allies : [],

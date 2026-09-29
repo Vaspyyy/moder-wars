@@ -1,7 +1,7 @@
 import L from "leaflet";
 import { CONFIG } from "./config.js";
-import { fetchJSONWithCache } from "./geo.js";
 import { beginLoadTrace } from "./load-profiler.js";
+import { normalizeSavedCells } from "./saved-cells.js";
 import { loadScenario } from "./scenario-codec.js";
 import { generateScenarioSnapshot } from "./scenario-export.js";
 
@@ -370,44 +370,17 @@ export function createScenarioLoader(context, loadSession) {
 					m.displayName = translatedName;
 				}
 
-				// Resolution Normalization for Releasable Saved Cells
-				const sourceRes = data.gridRes || CONFIG.GRID_RES;
-				const targetRes = CONFIG.GRID_RES;
-				let normalizedCells = null;
-
-				if (Array.isArray(m.savedCells) && m.savedCells.length > 0) {
-					if (sourceRes === targetRes) {
-						// Same resolution: just clone the list so we don't mutate the original
-						normalizedCells = m.savedCells.map((pair) => [pair[0], pair[1]]);
-					} else {
-						// Remap saved cells from source grid to current grid using lat/lng centers
-						const seen = new Set();
-						normalizedCells = [];
-						m.savedCells.forEach(([sx, sy]) => {
-							const latCenter = sy * sourceRes - 90 + sourceRes / 2;
-							const lngCenter = sx * sourceRes - 180 + sourceRes / 2;
-							const idx = context.getGridIndex(latCenter, lngCenter);
-							if (idx === -1) return;
-							const ty = Math.floor(idx / context.gridWidth);
-							const tx = idx % context.gridWidth;
-							const key = `${tx},${ty}`;
-							if (!seen.has(key)) {
-								seen.add(key);
-								normalizedCells.push([tx, ty]);
-							}
-						});
-						if (!normalizedCells.length) {
-							console.log(
-								`Satellite Notice: ${m.name} releasable cells could not be remapped; falling back to deJure/feature.`,
-							);
-							normalizedCells = null;
-						}
-					}
-				}
+				const normalizedTerritory = normalizeSavedCells(
+					m,
+					data.gridRes || CONFIG.GRID_RES,
+					CONFIG.GRID_RES,
+					context.gridWidth,
+					context.getGridIndex,
+				);
 
 				const meta = {
 					...m,
-					savedCells: normalizedCells,
+					...normalizedTerritory,
 					rgba: context.parseColorToRGBA(m.color || "rgba(150, 150, 150, 0.5)"),
 					bounds: m.bounds || {
 						minX: Infinity,
@@ -664,23 +637,7 @@ export function createScenarioLoader(context, loadSession) {
 			context.activateImageryProvider();
 			context.influenceLayer.render();
 			context.updateRestartVisibility();
-			if (compiledMaps && !data.isCustomTerrain && !prederivedEarth?.rawData) {
-				const geoUrl = `${CONFIG.GEOJSON_BASE}${selectedMapResolution}/cultural/ne_${selectedMapResolution}_admin_0_countries.json`;
-				context.scheduleIdleLoad(async () => {
-					if (loadGeneration !== loadSession.generation) return;
-					try {
-						const rawData = await fetchJSONWithCache(geoUrl);
-						if (loadGeneration === loadSession.generation) {
-							context.setRawGeoJsonData(rawData);
-						}
-					} catch (error) {
-						console.warn(
-							"Deferred scenario geography hydration failed:",
-							error,
-						);
-					}
-				});
-			}
+
 			context.scheduleIdleLoad(() => {
 				if (loadGeneration !== loadSession.generation) return;
 				for (const startFlagLoad of deferredFlagLoads) startFlagLoad();

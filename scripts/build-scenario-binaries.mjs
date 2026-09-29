@@ -8,9 +8,9 @@ import { encodeScenario } from "../src/scenario-codec.js";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const outputDir = path.join(root, "assets/maps/compiled");
 const scenarios = [
-	["world map 2022.json", "world-map-2022-v2.mwsc.gz"],
-	["world_war_1__1914_.json", "world-war-1-1914-v2.mwsc.gz"],
-	["WW2 Peru Update.json", "world-war-2-v2.mwsc.gz"],
+	["world map 2022.json", "world-map-2022-v3.mwsc.gz"],
+	["world_war_1__1914_.json", "world-war-1-1914-v3.mwsc.gz"],
+	["WW2 Peru Update.json", "world-war-2-v3.mwsc.gz"],
 ];
 
 fs.mkdirSync(outputDir, { recursive: true });

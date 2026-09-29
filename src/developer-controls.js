@@ -34,6 +34,7 @@ export function createDeveloperControls(runtime) {
 			runtime._perfFrameCount = 0;
 			runtime._perfLastTime = 0;
 			runtime._perfPendingFrameEntry = null;
+			runtime.simulationClient?.syncControls();
 			return `perf counters reset (${normalizedMode})`;
 		};
 	}

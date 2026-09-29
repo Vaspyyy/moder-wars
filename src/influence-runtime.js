@@ -1,3 +1,10 @@
+import {
+	multiplyInfluence,
+	readInfluence,
+	sumInfluenceNeighborhood,
+	writeInfluence,
+} from "./influence-grid.js";
+
 // Dependencies are supplied by the application; this module does not import it.
 export function createInfluenceRuntime(runtime) {
 	function refreshInfluenceLookupCaches() {
@@ -208,15 +215,16 @@ export function createInfluenceRuntime(runtime) {
 			) {
 				const sideIndex = runtime._influenceActiveSideIndices[activeIndex];
 				const influenceMap = runtime.sideInfluenceMaps[sideIndex];
-				let sum = 0;
-				for (let deltaY = -1; deltaY <= 1; deltaY++) {
-					const rowOffset = index + deltaY * runtime.gridWidth;
-					for (let deltaX = -1; deltaX <= 1; deltaX++) {
-						sum += influenceMap[rowOffset + deltaX];
-					}
-				}
-				influenceMap[index] =
-					influenceMap[index] * (1 - blur) + (sum / 9) * blur;
+				const sum = sumInfluenceNeighborhood(
+					influenceMap,
+					index,
+					runtime.gridWidth,
+				);
+				writeInfluence(
+					influenceMap,
+					index,
+					readInfluence(influenceMap, index) * (1 - blur) + (sum / 9) * blur,
+				);
 			}
 			runtime.syncOccupationFromSideInfluence(index);
 			if (isInfluenceFrontierIndex(index)) {
@@ -474,7 +482,7 @@ export function createInfluenceRuntime(runtime) {
 						// Strategic Concentration: Units push harder when clustered or in spearheads
 						const weight = (1 - dist / rVar) ** 2.0 * concentrationBonus;
 
-						const curInfluence = myInfluenceMap[idx];
+						const curInfluence = readInfluence(myInfluenceMap, idx);
 						let newInfluence = curInfluence + Math.abs(cellDelta) * weight;
 						if (newInfluence > 1) newInfluence = 1;
 
@@ -527,7 +535,7 @@ export function createInfluenceRuntime(runtime) {
 							}
 						}
 
-						myInfluenceMap[idx] = newInfluence;
+						writeInfluence(myInfluenceMap, idx, newInfluence);
 						// Decay opposing sides' influence when we enter a cell
 						let touchedHostileInfluence = false;
 						for (
@@ -537,17 +545,19 @@ export function createInfluenceRuntime(runtime) {
 						) {
 							const sideIndex = hostileSideIndices[hostileIndex];
 							const hostileInfluenceMap = runtime.sideInfluenceMaps[sideIndex];
-							if (hostileInfluenceMap[idx] > 0) {
+							const hostileInfluence = readInfluence(hostileInfluenceMap, idx);
+							if (hostileInfluence > 0) {
 								touchedHostileInfluence = true;
-								hostileInfluenceMap[idx] = Math.max(
-									0,
-									hostileInfluenceMap[idx] - cellDelta * 0.5,
+								writeInfluence(
+									hostileInfluenceMap,
+									idx,
+									Math.max(0, hostileInfluence - cellDelta * 0.5),
 								);
 							}
 						}
 						// De-jure owner reclaim bonus: 1.5x influence when retaking own territory
 						if (runtime.worldControlMap[idx] === u.sovereignId) {
-							myInfluenceMap[idx] *= 1.5;
+							multiplyInfluence(myInfluenceMap, idx, 1.5);
 						}
 						runtime.syncOccupationFromSideInfluence(idx);
 						if (runtime.primaryOccupierMap[idx] !== currentOccupierId) {

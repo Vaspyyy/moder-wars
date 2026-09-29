@@ -212,5 +212,6 @@ export function drawLabels(frame) {
 		this._lastLabelsRenderFrame = simFrameCount;
 		this._invalidLayers &= ~RENDER_LAYERS.LABELS;
 	}
-	mainCtx.drawImage(this._labelsSurface, 0, 0);
+	if (this._compositeLayers !== false)
+		mainCtx.drawImage(this._labelsSurface, 0, 0);
 }

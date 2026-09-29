@@ -14,6 +14,8 @@ export function createBenchmarkRuntime(runtime) {
 	}
 
 	function prepareIsolatedBenchmarkRun() {
+		runtime.simulationClient?.stop();
+		runtime.resetLocalSimulationClock?.();
 		runtime.invalidateWarLifecycleTimers();
 		if (runtime.animationFrameId !== null) {
 			cancelAnimationFrame(runtime.animationFrameId);

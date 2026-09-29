@@ -1,5 +1,21 @@
 // Controls receive live state and commands; they do not import the application.
 export function createInspectorControls(runtime) {
+	async function loadReferenceGeometry() {
+		try {
+			runtime.loadingStatus.innerText = "Loading Modern Reference Geography...";
+			runtime.loadingOverlay.style.display = "flex";
+			return await runtime.ensureRawGeography();
+		} catch (error) {
+			console.warn("Modern reference geography unavailable:", error);
+			alert(
+				"Modern reference geography could not be loaded. Please try again.",
+			);
+			return null;
+		} finally {
+			runtime.loadingOverlay.style.display = "none";
+		}
+	}
+
 	function bindConfirmCreateBtnClick() {
 		runtime.confirmCreateBtn.addEventListener("click", async () => {
 			const name = runtime.newCountryNameInput.value || "New Nation";
@@ -70,8 +86,11 @@ export function createInspectorControls(runtime) {
 			let code = runtime.findCodeByName(name);
 
 			// Fallback to GeoJSON search if code mapping doesn't have it
-			if (!code && runtime.rawGeoJsonData) {
-				const feature = runtime.rawGeoJsonData.features.find((f) => {
+			if (!code) {
+				const reference =
+					runtime.rawGeoJsonData || (await loadReferenceGeometry());
+				if (!reference) return;
+				const feature = reference.features.find((f) => {
 					const p = f.properties;
 					const possibleNames = [
 						p.NAME,
@@ -177,11 +196,14 @@ export function createInspectorControls(runtime) {
 
 	function bindAnnexCountryBtnClick() {
 		runtime.annexCountryBtn.addEventListener("click", async () => {
-			if (!runtime.rawGeoJsonData || runtime.editingCountryId <= 0) return;
+			if (runtime.editingCountryId <= 0) return;
 			const name = runtime.annexCountryInput.value.trim().toLowerCase();
 			if (!name) return;
 
-			const feature = runtime.rawGeoJsonData.features.find((f) => {
+			const reference =
+				runtime.rawGeoJsonData || (await loadReferenceGeometry());
+			if (!reference) return;
+			const feature = reference.features.find((f) => {
 				const fName = (
 					f.properties.NAME ||
 					f.properties.name ||

@@ -126,33 +126,35 @@ export function createInspectors(runtime) {
 					// If more than 50% territory taken, show vassalize button for the leading side
 					if (controlPct < 0.5) {
 						vassalizeBtn.style.display = "block";
-						vassalizeBtn.onclick = () => {
-							// Find the side that occupies the most of this country
-							let bestSideIdx = 0;
+						vassalizeBtn.onclick = () =>
+							runtime.editSimulation(() => {
+								// Find the side that occupies the most of this country
+								let bestSideIdx = 0;
 
-							const sideOccs = new Array(runtime.sides.length).fill(0);
+								const sideOccs = new Array(runtime.sides.length).fill(0);
 
-							// Sample grid to find dominant occupier
-							for (let i = 0; i < runtime.worldControlMap.length; i += 50) {
-								if (
-									runtime.worldControlMap[i] === id &&
-									runtime.landMask[i] === 2
-								) {
-									const occId = runtime.primaryOccupierMap[i];
-									const sIdx = runtime.sides.findIndex((s) =>
-										s.some((c) => c.id === occId),
-									);
-									if (sIdx !== -1) sideOccs[sIdx]++;
+								// Sample grid to find dominant occupier
+								for (let i = 0; i < runtime.worldControlMap.length; i += 50) {
+									if (
+										runtime.worldControlMap[i] === id &&
+										runtime.landMask[i] === 2
+									) {
+										const occId = runtime.primaryOccupierMap[i];
+										const sIdx = runtime.sides.findIndex((s) =>
+											s.some((c) => c.id === occId),
+										);
+										if (sIdx !== -1) sideOccs[sIdx]++;
+									}
 								}
-							}
-							bestSideIdx = sideOccs.indexOf(Math.max(...sideOccs));
-							const overlord = runtime.sides[bestSideIdx][0];
-							if (overlord) {
-								meta.overlordId = overlord.id;
-								runtime.recruitNeutralMidWar(id, bestSideIdx);
-								runtime.countryInspector.style.display = "none";
-							}
-						};
+								bestSideIdx = sideOccs.indexOf(Math.max(...sideOccs));
+								const overlord = runtime.sides[bestSideIdx]?.[0];
+								const liveMeta = runtime.countryMetadata[id - 1];
+								if (overlord && liveMeta) {
+									liveMeta.overlordId = overlord.id;
+									runtime.recruitNeutralMidWar(id, bestSideIdx);
+									runtime.countryInspector.style.display = "none";
+								}
+							});
 					}
 				}
 			} else {

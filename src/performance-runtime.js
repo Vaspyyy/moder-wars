@@ -1,32 +1,8 @@
+import { createSimulationMetrics } from "./simulation-metrics.js";
 // Dependencies are supplied by the application; this module does not import it.
 export function createPerformanceRuntime(runtime) {
 	function createPerfState(mode = "off") {
-		return {
-			...runtime.PERF_COUNTER_DEFAULTS,
-			_mode: mode,
-			_enabled: mode !== "off",
-			_trackingPaused: false,
-			_measurementStart: mode === "off" ? null : performance.now(),
-			_traceMarksEnabled: false,
-			_history: [],
-			_frameHistory: [],
-			_frameSpikes: [],
-			_longTasks: [],
-			_memorySamples: [],
-			_frozenReport: null,
-			_scheduler: {
-				frames: 0,
-				renderedFrames: 0,
-				skippedRenderFrames: 0,
-				requestedSubTicks: 0,
-				executedSubTicks: 0,
-				cappedSubTickFrames: 0,
-				cappedSubTicks: 0,
-				accumulatorSum: 0,
-				maxAccumulator: 0,
-			},
-			_lastBenchmark: null,
-		};
+		return createSimulationMetrics(mode, runtime.PERF_COUNTER_DEFAULTS);
 	}
 
 	function ensurePerfLongTaskObserver() {

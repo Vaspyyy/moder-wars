@@ -55,7 +55,8 @@ Object.defineProperties(
 		Object.entries(scenarioLoader).map(([name, value]) => [name, { value }]),
 	),
 );
-const { updateLandMask, loadTerrain, loadCountries } = geographyLoader;
+const { updateLandMask, loadTerrain, loadCountries, ensureRawGeography } =
+	geographyLoader;
 const {
 	generatePresetData,
 	performPresetLoad,
@@ -406,6 +407,7 @@ function updateEditorToolPage(page) {
 
 export {
 	applyPaintAt,
+	ensureRawGeography,
 	fillTerrainAt,
 	generatePresetData,
 	importSingleCountryFromScenario,

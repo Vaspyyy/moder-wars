@@ -25,7 +25,11 @@ export function createSandboxControls(runtime) {
 	}
 
 	function bindGodModeBtnClick() {
-		runtime.godModeBtn.addEventListener("click", () => {
+		runtime.godModeBtn.addEventListener("click", async () => {
+			if (!runtime.godModeActive) {
+				await runtime.simulationClient.suspend();
+				runtime.resetLocalSimulationClock();
+			}
 			if (!runtime.godModeActive) {
 				// Activate God Mode
 				runtime.godModeActive = true;
@@ -157,6 +161,8 @@ export function createSandboxControls(runtime) {
 					runtime.updateSidesUI();
 				}
 				runtime.updateRestartVisibility();
+				if (runtime.gameState === "SIMULATING")
+					await runtime.simulationClient.start();
 			}
 		});
 	}

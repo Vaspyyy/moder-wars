@@ -8,7 +8,10 @@ import {
 	PARSED_GEO_CACHE_REVISION,
 	putDerivedRaster,
 } from "./geo.js";
-import { rasterizeGeoFeaturesInWorker } from "./geo-raster.js";
+import {
+	rasterizeGeoFeaturesInWorker,
+	rasterizeGeoSourceInWorker,
+} from "./geo-raster.js";
 import {
 	combineScenarioEarthRasters,
 	loadPrederivedEarthRaster,
@@ -17,6 +20,31 @@ import { beginLoadTrace } from "./load-profiler.js";
 
 /** Read live state only when a loader runs; module construction is cycle-safe. */
 export function createGeographyLoader(context, loadSession) {
+	let rawGeometryRequest = null;
+	async function ensureRawGeography(
+		url = `${CONFIG.GEOJSON_BASE}${document.getElementById("map-res-select")?.value || "110m"}/cultural/ne_${document.getElementById("map-res-select")?.value || "110m"}_admin_0_countries.json`,
+	) {
+		if (context.rawGeoJsonData) return context.rawGeoJsonData;
+		const generation = loadSession.generation;
+		if (
+			rawGeometryRequest?.url === url &&
+			rawGeometryRequest.generation === generation
+		)
+			return rawGeometryRequest.promise;
+		const request = { url, generation, promise: null };
+		request.promise = fetchJSONWithCache(url)
+			.then((data) => {
+				if (generation !== loadSession.generation) return null;
+				context.setRawGeoJsonData(data);
+				return data;
+			})
+			.finally(() => {
+				if (rawGeometryRequest === request) rawGeometryRequest = null;
+			});
+		rawGeometryRequest = request;
+		return request.promise;
+	}
+
 	function getFeatureBounds(feature) {
 		const geom = feature?.geometry?.coordinates;
 		let minX = Infinity,
@@ -455,9 +483,8 @@ export function createGeographyLoader(context, loadSession) {
 			}
 		}
 
-		const rawData = await fetchJSONWithCache(sourceUrl);
-		const arrays = await rasterizeGeoFeaturesInWorker(
-			rawData.features,
+		const { arrays, featureCount } = await rasterizeGeoSourceInWorker(
+			sourceUrl,
 			{
 				gridResolution,
 				gridWidth: targetWidth,
@@ -481,8 +508,8 @@ export function createGeographyLoader(context, loadSession) {
 		return {
 			...arrays,
 			deJureMap,
-			featureCount: rawData.features.length,
-			rawData,
+			featureCount,
+			rawData: null,
 			sourceUrl,
 		};
 	}
@@ -549,7 +576,7 @@ export function createGeographyLoader(context, loadSession) {
 			context.loadingStatus.innerText = "Downloading GeoData...";
 			context.loadingBar.style.width = "10%";
 			let loadedBlankRaster = null;
-			const usePreparedBlankEarth = isBlank && !suppressUi;
+			const usePreparedBlankEarth = isBlank;
 
 			if (usePreparedBlankEarth) {
 				context.loadingStatus.innerText = "Loading Prepared Landmasses...";
@@ -590,30 +617,31 @@ export function createGeographyLoader(context, loadSession) {
 					features: raster.featureCount,
 				});
 
-				// Raw feature geometry, flags, and cities are editor conveniences rather
-				// than prerequisites for displaying the blank Earth canvas. Hydrate them
-				// after the editor becomes usable so they do not hold the loading screen.
-				scheduleIdleLoad(async () => {
-					if (loadGeneration !== loadSession.generation) return;
-					try {
-						const [, , data] = await Promise.all([
-							context.loadCities(
-								() => loadGeneration === loadSession.generation,
-								true,
-							),
-							context.loadFlagCodes(),
-							raster.rawData
-								? Promise.resolve(raster.rawData)
-								: fetchJSONWithCache(url),
-						]);
+				// Cities and flag codes are useful to editor tools. Polygon geometry is
+				// demand-loaded by ensureRawGeography only for geometry operations.
+				if (!suppressUi)
+					scheduleIdleLoad(async () => {
 						if (loadGeneration !== loadSession.generation) return;
-						context.setRawGeoJsonData(data);
-						context.setInitialCitiesSnapshot(context.deepClone(context.cities));
-						context.influenceLayer?.render();
-					} catch (error) {
-						console.warn("Deferred editor geography hydration failed:", error);
-					}
-				});
+						try {
+							await Promise.all([
+								context.loadCities(
+									() => loadGeneration === loadSession.generation,
+									true,
+								),
+								context.loadFlagCodes(),
+							]);
+							if (loadGeneration !== loadSession.generation) return;
+							context.setInitialCitiesSnapshot(
+								context.deepClone(context.cities),
+							);
+							context.influenceLayer?.render();
+						} catch (error) {
+							console.warn(
+								"Deferred editor support-data hydration failed:",
+								error,
+							);
+						}
+					});
 			} else {
 				await Promise.all([context.loadCities(), context.loadFlagCodes()]);
 				loadTrace?.mark("support-data-ready");
@@ -766,6 +794,7 @@ export function createGeographyLoader(context, loadSession) {
 		}
 	}
 	return {
+		ensureRawGeography,
 		updateLandMask,
 		loadTerrain,
 		scheduleIdleLoad,

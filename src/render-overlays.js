@@ -574,5 +574,6 @@ export function drawOverlays(frame) {
 		this._lastOverlaysRenderFrame = simFrameCount;
 		this._invalidLayers &= ~RENDER_LAYERS.OVERLAYS;
 	}
-	mainCtx.drawImage(this._overlaysSurface, 0, 0);
+	if (this._compositeLayers !== false)
+		mainCtx.drawImage(this._overlaysSurface, 0, 0);
 }

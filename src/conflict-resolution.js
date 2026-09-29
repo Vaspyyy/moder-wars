@@ -1,3 +1,4 @@
+import { writeInfluence } from "./influence-grid.js";
 // Explicit live context keeps replacements of arrays/state visible across awaits and callbacks.
 export function createConflictResolution(runtime) {
 	function capitulateCountry(country, sideIndex) {
@@ -268,15 +269,7 @@ export function createConflictResolution(runtime) {
 		}
 
 		runtime._lastCapitulationTick = runtime._simTickCount;
-		runtime.statusText.innerText = `${country.name} HAS CAPITULATED`;
-		runtime.treatyMsg.innerText = "NATION ANNEXED";
-		document.getElementById("treaty-status").innerText =
-			`${country.name} territory has been seized.`;
-		runtime.treatyAlert.style.display = "block";
-		runtime.scheduleWarLifecycleCallback(() => {
-			if (runtime.gameState === "SIMULATING")
-				runtime.treatyAlert.style.display = "none";
-		}, 4000);
+		runtime.presentCapitulation?.(country);
 
 		// Re-evaluate warzone status for newly annexed tiles so winners can keep pushing
 		affectedIndices.forEach((idx) => {
@@ -284,7 +277,7 @@ export function createConflictResolution(runtime) {
 			if (ownerId <= 0) {
 				runtime.landMask[idx] = 1;
 				for (let s = 0; s < runtime.sideInfluenceMaps.length; s++)
-					runtime.sideInfluenceMaps[s][idx] = 0;
+					writeInfluence(runtime.sideInfluenceMaps[s], idx, 0);
 				runtime.syncOccupationFromSideInfluence(idx);
 				runtime.primaryOccupierMap[idx] = 0;
 				return;
@@ -298,8 +291,8 @@ export function createConflictResolution(runtime) {
 			) {
 				runtime.landMask[idx] = 2;
 				for (let s = 0; s < runtime.sideInfluenceMaps.length; s++)
-					runtime.sideInfluenceMaps[s][idx] = 0;
-				runtime.sideInfluenceMaps[ownerSideIdx][idx] = 1.0;
+					writeInfluence(runtime.sideInfluenceMaps[s], idx, 0);
+				writeInfluence(runtime.sideInfluenceMaps[ownerSideIdx], idx, 1.0);
 				runtime.syncOccupationFromSideInfluence(idx);
 				runtime.primaryOccupierMap[idx] = ownerId;
 			} else {
@@ -308,7 +301,7 @@ export function createConflictResolution(runtime) {
 				runtime.landMask[idx] = hasOccupation ? 2 : 1;
 				if (!hasOccupation) {
 					for (let s = 0; s < runtime.sideInfluenceMaps.length; s++)
-						runtime.sideInfluenceMaps[s][idx] = 0;
+						writeInfluence(runtime.sideInfluenceMaps[s], idx, 0);
 					runtime.syncOccupationFromSideInfluence(idx);
 				}
 				runtime.primaryOccupierMap[idx] = 0;
@@ -374,10 +367,8 @@ export function createConflictResolution(runtime) {
 		runtime._frontlinePolyTick = -999;
 
 		// Refresh UI
-		runtime.recalculateAllBounds();
-		runtime.updateSidesUI();
 		runtime.reconcileOperationalAiLifecycle("capitulation");
-		runtime.influenceLayer.render();
+		runtime.onConflictMapChanged?.();
 		return true;
 	}
 
@@ -389,42 +380,9 @@ export function createConflictResolution(runtime) {
 		if (runtime.gameState === "WAR_OVER") return;
 		runtime.invalidateWarLifecycleTimers();
 		runtime.gameState = "WAR_OVER";
-		runtime.playPeaceSound();
-
-		// Stop recording if active
-		if (runtime.mediaRecorder && runtime.mediaRecorder.state !== "inactive") {
-			runtime.mediaRecorder.onstop = () => {
-				const blob = new Blob(runtime.recordedChunks, { type: "video/webm" });
-				const url = URL.createObjectURL(blob);
-				const a = document.createElement("a");
-				a.href = url;
-				a.download = `ModernWars_${Date.now()}.webm`;
-				document.body.appendChild(a);
-				a.click();
-				document.body.removeChild(a);
-				window.URL.revokeObjectURL(url);
-				runtime.recordedChunks = [];
-			};
-			runtime.mediaRecorder.stop();
-		}
-
-		// Freeze time system at war end and reflect final date in the setup inputs
-		if (
-			runtime.gameTimeDate &&
-			runtime.timeYearInput &&
-			runtime.timeMonthInput &&
-			runtime.timeDayInput
-		) {
-			runtime.gameTimeEnabled = false;
-			runtime.gameTimeAccumulatorMs = 0;
-			runtime.timeYearInput.value = runtime.gameTimeDate.year;
-			runtime.timeMonthInput.value = runtime.gameTimeDate.month;
-			runtime.timeDayInput.value = runtime.gameTimeDate.day;
-			if (runtime.gameDateDisplay) {
-				runtime.gameDateDisplay.textContent = runtime.formatGameDate();
-				runtime.gameDateDisplay.style.display = "block";
-			}
-		}
+		runtime.gameTimeEnabled = false;
+		runtime.gameTimeAccumulatorMs = 0;
+		runtime.presentTreatyStart?.();
 
 		const sideTerritory = new Array(runtime.sides.length).fill(0);
 		for (let i = 0; i < runtime.dominantSideMap.length; i++) {
@@ -445,8 +403,6 @@ export function createConflictResolution(runtime) {
 			side: s,
 		}));
 
-		runtime.casualtyPanel.style.display = "none";
-
 		const strongestWinner = sideUnitCounts
 			.filter((s) => s.idx === winnerSideIdx)
 			.sort((a, b) => b.units - a.units)[0];
@@ -454,34 +410,27 @@ export function createConflictResolution(runtime) {
 			? strongestWinner.side.length > 1
 				? `${strongestWinner.side[0].name} Allies`
 				: strongestWinner.side[0].name
-			: document.querySelector(`[data-sidename="${winnerSideIdx}"]`)
-					?.innerText || `Side ${String.fromCharCode(65 + winnerSideIdx)}`;
+			: runtime.getSideDisplayName?.(winnerSideIdx) ||
+				`Side ${String.fromCharCode(65 + winnerSideIdx)}`;
 
 		const isTotalCapitulation =
 			type.includes("FULL_CAPITULATION") || type === "ANNEXATION";
 		const isNegotiatedPeace = type === "PEACE_TREATY";
 
-		if (isTotalCapitulation) {
-			const loserNames = runtime.sides
-				.filter(
-					(s, i) => runtime.areSidesHostile(winnerSideIdx, i) && s.length > 0,
-				)
-				.map((s) => s[0]?.name || "Unknown")
-				.join(", ");
-			runtime.statusText.innerText = `Victory! ${winnerName} prevails${loserNames ? ` — ${loserNames} defeated` : ""}`;
-			runtime.treatyMsg.innerText = "TOTAL ANNEXATION";
-			document.getElementById("treaty-status").innerText =
-				"The conflict has concluded";
-			runtime.treatyAlert.style.display = "block";
-		} else if (isNegotiatedPeace) {
-			runtime.statusText.innerText = "Peace Treaty Signed";
-			runtime.treatyMsg.innerText = "BORDERS REDRAWN";
-			document.getElementById("treaty-status").innerText =
-				"Territorial adjustments finalized";
-			runtime.treatyAlert.style.display = "block";
-		} else {
-			runtime.statusText.innerText = "White Peace Signed";
-		}
+		const loserNames = runtime.sides
+			.filter(
+				(side, index) =>
+					runtime.areSidesHostile(winnerSideIdx, index) && side.length > 0,
+			)
+			.map((side) => side[0]?.name || "Unknown")
+			.join(", ");
+		runtime.presentTreatyNotice?.({
+			type,
+			winnerName,
+			loserNames,
+			isTotalCapitulation,
+			isNegotiatedPeace,
+		});
 
 		const countryToSideMap = new Map();
 		runtime.sides.forEach((side, idx) => {
@@ -609,17 +558,8 @@ export function createConflictResolution(runtime) {
 		}
 		runtime.adjacencyCache = null;
 
-		runtime.recalculateAllBounds();
-		runtime.influenceLayer.render();
-		runtime.animationFrameId = null;
-		runtime.stopWarAmbiance();
-		runtime.treatyAlert.style.display = "none";
-
-		runtime.updateWarOverview(true);
-		runtime.scheduleWarLifecycleCallback(
-			runtime.reopenConflictSetupAfterWar,
-			1500,
-		);
+		runtime.onConflictMapChanged?.();
+		runtime.presentTreatyFinished?.();
 	}
 	return { capitulateCountry, applyTreaty };
 }

@@ -1,7 +1,8 @@
-import { CONFIG } from "./config.js";
+import { CONFIG as DEFAULT_CONFIG } from "./config.js";
 
 /** createAiPlanner owns AI behavior and receives current world state through explicit accessors. */
 export function createAiPlanner(context) {
+	const CONFIG = context.CONFIG || DEFAULT_CONFIG;
 	function getSideStrategyProfile(sideIdx) {
 		const sideCountries = context.sides[sideIdx] || [];
 		const weights = {
@@ -344,24 +345,11 @@ export function createAiPlanner(context) {
 			lastOutcome: outcome,
 		};
 		context._aiPlanMemory.set(key, next);
-		const eventType = {
-			started: "AI_PLAN_STARTED",
-			success: "AI_PLAN_SUCCEEDED",
-			failed: "AI_PLAN_FAILED",
-			replaced: "AI_PLAN_REPLACED",
-		}[outcome];
-		const retainLegacyEvent = ["NAVAL_INVASION", "NAVAL_SUPPLY"].includes(
-			plan.type,
-		);
-		if (eventType && retainLegacyEvent) {
-		}
 	}
 
-	function scoreProposal(proposal, sideIdx) {
-		const strategyProfile = getSideStrategyProfile(sideIdx);
-		const strategy = strategyProfile.dominant;
+	function createScoringSummary(sideIdx) {
+		const strategy = getSideStrategyProfile(sideIdx).dominant;
 		const sideUnits = context._tickUnitsBySide[sideIdx] || [];
-
 		const friendlyCombatPower = sideUnits.reduce(
 			(sum, unit) =>
 				unit.deployTicks === 0 && unit.health > 0
@@ -372,6 +360,42 @@ export function createAiPlanner(context) {
 		const enemyUnitCount = context.getKnownEnemyPowerForSide(sideIdx);
 		const globalForceRatio =
 			friendlyCombatPower / Math.max(0.25, enemyUnitCount);
+		let enemyLandedOnUs = false;
+		for (let ei = 0; ei < context.sides.length; ei++) {
+			if (!context.areSidesHostile(sideIdx, ei)) continue;
+			const plan = context._navalPlan[ei];
+			const idx = plan?.target
+				? context.getGridIndex(plan.target.lat, plan.target.lng)
+				: -1;
+			if (
+				plan?.phase === "LANDING" &&
+				idx >= 0 &&
+				context.dominantSideMap[idx] === sideIdx
+			) {
+				enemyLandedOnUs = true;
+				break;
+			}
+		}
+		return {
+			sideIdx,
+			strategy,
+			globalForceRatio,
+			enemyLandedOnUs,
+			noLandFront:
+				!context._frontlinePolys ||
+				Object.keys(context._frontlinePolys).length === 0,
+		};
+	}
+
+	// A batch belongs to one synchronous reassessment. It never caches across ticks.
+	function scoreProposal(proposal, sideIdx, batch = null) {
+		let summary = batch?.summary;
+		if (!summary || summary.sideIdx !== sideIdx) {
+			summary = createScoringSummary(sideIdx);
+			if (batch) batch.summary = summary;
+		}
+		const { strategy, globalForceRatio, enemyLandedOnUs, noLandFront } =
+			summary;
 		const geo = proposal.geographicData || {};
 		const risk = proposal.riskAssessment || {};
 		const localForceRatio =
@@ -458,22 +482,7 @@ export function createAiPlanner(context) {
 		score -= Math.min(15, (risk.enemyCounterWeight || 0) * 15);
 
 		// ── Urgency (0–10) ──
-		// Enemy naval landing on our territory boosts COASTAL_DEFENSE
-		let enemyLandedOnUs = false;
-		for (let ei = 0; ei < context.sides.length; ei++) {
-			if (!context.areSidesHostile(sideIdx, ei)) continue;
-			const plan = context._navalPlan[ei];
-			const idx = plan?.target
-				? context.getGridIndex(plan.target.lat, plan.target.lng)
-				: -1;
-			if (
-				plan?.phase === "LANDING" &&
-				idx >= 0 &&
-				context.dominantSideMap[idx] === sideIdx
-			)
-				enemyLandedOnUs = true;
-		}
-
+		// Enemy naval landing on our territory boosts COASTAL_DEFENSE.
 		if (enemyLandedOnUs && proposal.type === "COASTAL_DEFENSE") {
 			score += 20;
 		}
@@ -534,10 +543,7 @@ export function createAiPlanner(context) {
 			score *= 0.1;
 		}
 		// Boost naval proposals when no land connection exists
-		if (
-			!context._frontlinePolys ||
-			Object.keys(context._frontlinePolys).length === 0
-		) {
+		if (noLandFront) {
 			if (
 				isOffensive &&
 				proposal.type !== "CAPTURE_CITY" &&

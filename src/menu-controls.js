@@ -372,6 +372,7 @@ export function createMenuControls(runtime) {
 		runtime.forcePeaceBtn.addEventListener("click", () => {
 			if (runtime.gameState === "SIMULATING") {
 				runtime.gameState = "PEACE_SELECT_1";
+				runtime.simulationClient.syncControls();
 				runtime.statusText.innerText =
 					"DIPLOMACY: Click nation to withdraw from war";
 				runtime.peaceSelection1 = null;
@@ -501,15 +502,16 @@ export function createMenuControls(runtime) {
 	}
 
 	function bindLaunchBtnClick() {
-		runtime.launchBtn.addEventListener("click", () => {
+		runtime.launchBtn.addEventListener("click", async () => {
 			runtime.primeAudio();
-			runtime.initializeEngine();
+			await runtime.initializeEngine();
 
 			if (runtime.saveSkipCheckbox.checked) runtime.settingsController.save();
 			else runtime.setCookie("mw_skip_settings", "false");
 
 			runtime.settingsOverlay.style.display = "none";
 			if (runtime.gameState === "MAIN_MENU") {
+				runtime.simulationClient?.stop();
 				runtime.mainMenu.style.display = "flex";
 			} else {
 				runtime.mapUi.style.display = "flex";
@@ -623,6 +625,7 @@ export function createMenuControls(runtime) {
 			runtime.closeSettingsBtn.addEventListener("click", () => {
 				runtime.settingsOverlay.style.display = "none";
 				if (runtime.gameState === "MAIN_MENU") {
+					runtime.simulationClient?.stop();
 					runtime.mainMenu.style.display = "flex";
 				} else {
 					runtime.mapUi.style.display = "flex";

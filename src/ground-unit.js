@@ -1,6 +1,32 @@
 import { executeGroundTarget } from "./ground-movement.js";
+import { getSimulationMetrics } from "./simulation-metrics.js";
+
+/** Supply decisions only distinguish 0, 1–2, 3–7, and at least 8 friendly cells. */
+export function countNearbyFriendlySupplyCells(frame, gridIndex, sideIndex) {
+	const { CONFIG, gridWidth, gridHeight, landMask, dominantSideMap } = frame;
+	const radius = Math.round(0.8 / CONFIG.GRID_RES);
+	const row = Math.floor(gridIndex / gridWidth);
+	const col = gridIndex % gridWidth;
+	let count = 0;
+	for (let dr = -radius; dr <= radius; dr++) {
+		const nr = row + dr;
+		if (nr < 0 || nr >= gridHeight) continue;
+		for (let dc = -radius; dc <= radius; dc++) {
+			if (dr === 0 && dc === 0) continue;
+			const nc = col + dc;
+			if (nc < 0 || nc >= gridWidth) continue;
+			const index = nr * gridWidth + nc;
+			if (landMask[index] > 0 && dominantSideMap[index] === sideIndex) {
+				if (++count === 8) return count;
+			}
+		}
+	}
+	return count;
+}
+
 // One formation uses a stable per-tick snapshot; no global getters in the unit loop.
 export function updateGroundFormation(frame, i) {
+	const perf = getSimulationMetrics(frame);
 	const {
 		units,
 		_detailedPerfEnabled,
@@ -150,7 +176,6 @@ export function updateGroundFormation(frame, i) {
 	const warPhase = _sideWarPhase[u.sideIndex];
 	if (warPhase === "COLLAPSING") {
 		damageDealtMult *= 0.7;
-	} else {
 	}
 
 	const gridIdxNow = _unitGridIdx.get(u) ?? -1;
@@ -334,23 +359,11 @@ export function updateGroundFormation(frame, i) {
 		// SUPPLY CUT-OFF: units deep in enemy territory with no friendly tiles nearby
 		// take extreme damage — they're completely isolated from logistics.
 		if (inEnemyTerritory && !isEncircled && !isAtSea) {
-			let friendlyTilesNearby = 0;
-			const cutoffRadius = Math.round(0.8 / CONFIG.GRID_RES);
-			const gr = gridWidth;
-			const cRow = Math.floor(gridIdxNow / gr);
-			const cCol = gridIdxNow % gr;
-			for (let dr = -cutoffRadius; dr <= cutoffRadius; dr++) {
-				for (let dc = -cutoffRadius; dc <= cutoffRadius; dc++) {
-					if (dr === 0 && dc === 0) continue;
-					const nr = cRow + dr,
-						nc = cCol + dc;
-					if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
-					const ni = nr * gr + nc;
-					if (landMask[ni] > 0 && dominantSideMap[ni] === u.sideIndex) {
-						friendlyTilesNearby++;
-					}
-				}
-			}
+			const friendlyTilesNearby = countNearbyFriendlySupplyCells(
+				frame,
+				gridIdxNow,
+				u.sideIndex,
+			);
 			// No friendly tiles within ~0.8° → total supply collapse
 			if (friendlyTilesNearby === 0) {
 				u._supplyCollapsedTick = _simTickCount;
@@ -414,7 +427,7 @@ export function updateGroundFormation(frame, i) {
 
 	// ── unitLoop sub-timer checkpoint: end setupTerrain, start unitSpatialHash ──
 	const _u2 = _detailedPerfEnabled ? performance.now() : 0;
-	if (_detailedPerfEnabled) window.__perf.unitSetupTerrain += _u2 - _u1;
+	if (_detailedPerfEnabled) perf.unitSetupTerrain += _u2 - _u1;
 
 	// Tactical Awareness: Identify enemies and local balance of power using O(1) Spatial Hash
 	let target = null;
@@ -445,7 +458,7 @@ export function updateGroundFormation(frame, i) {
 	);
 	if (operationalFastLane) {
 		target = u._taskForceOrder.target;
-		window.__perf.tacticalFastLaneUnits++;
+		perf.tacticalFastLaneUnits++;
 	}
 
 	const kx = Math.floor((u.lng + 180) / HASH_SIZE);
@@ -463,8 +476,8 @@ export function updateGroundFormation(frame, i) {
 
 	{
 		// ═══ Phase 1: side-separated spatial hash scan ═══
-		if (!window.__perf._sideHashLogged) {
-			window.__perf._sideHashLogged = true;
+		if (!perf._sideHashLogged) {
+			perf._sideHashLogged = true;
 			console.info(
 				"%c⚡ Phase 1 active: side-separated spatial hash scan",
 				"color:#0f0;font-size:14px",
@@ -479,7 +492,7 @@ export function updateGroundFormation(frame, i) {
 				u._cachedTarget.health <= 0)
 		) {
 			if (u._cachedTarget._liveGeneration !== _unitLiveGeneration) {
-				window.__perf.tacticalGhostInvalidations++;
+				perf.tacticalGhostInvalidations++;
 			}
 			u._cachedTarget = null;
 			u._cachedLocalEnemyCount = 0;
@@ -517,7 +530,7 @@ export function updateGroundFormation(frame, i) {
 					enemyCentroidLng =
 						u._cachedEnemyCentroidLng || cached.lng * localEnemyCount;
 					didStaleSkip = true;
-					window.__perf.tacticalCacheHits++;
+					perf.tacticalCacheHits++;
 					// Proximity damage vs cached target (same logic as full scan)
 					if (cdSq < 0.09) {
 						const inWarGrace = simFrameCount < warGraceEndTick;
@@ -608,7 +621,7 @@ export function updateGroundFormation(frame, i) {
 			CONFIG.ENABLE_STALE_TARGET_SKIP &&
 			!didStaleSkip
 		) {
-			window.__perf.tacticalCacheMisses++;
+			perf.tacticalCacheMisses++;
 		}
 
 		// ── Enemy pass: iterate each enemy side's hash cells ──
@@ -627,7 +640,7 @@ export function updateGroundFormation(frame, i) {
 						if (!arr) continue;
 						for (let j = 0; j < arr.length; j++) {
 							const e = arr[j];
-							window.__perf.tacticalEnemyCandidateVisits++;
+							perf.tacticalEnemyCandidateVisits++;
 							const deLng = normalizeLongitudeDelta(e.lng - u.lng);
 							const dSq = (u.lat - e.lat) ** 2 + deLng ** 2;
 							// (enemy — no isEnemy check; bucket is enemy-only)
@@ -674,8 +687,8 @@ export function updateGroundFormation(frame, i) {
 									}
 									if (waterSamples > steps * 0.3) {
 										targetScore += 10000;
-										window.__perf.waterPathPenalized =
-											(window.__perf.waterPathPenalized || 0) + 1;
+										perf.waterPathPenalized =
+											(perf.waterPathPenalized || 0) + 1;
 									}
 									if (neutralSamples > steps * 0.3) {
 										targetScore += 10000;
@@ -795,8 +808,7 @@ export function updateGroundFormation(frame, i) {
 
 		const _tEnemyDone = _detailedPerfEnabled ? performance.now() : 0;
 		if (_detailedPerfEnabled) {
-			window.__perf.unitEnemyScan =
-				(window.__perf.unitEnemyScan || 0) + _tEnemyDone - _u2;
+			perf.unitEnemyScan = (perf.unitEnemyScan || 0) + _tEnemyDone - _u2;
 		}
 
 		// ── Garrison (moved out of neighbor loop — runs once per unit) ──
@@ -943,10 +955,8 @@ export function updateGroundFormation(frame, i) {
 
 		const _tGarrisonCoastal = _detailedPerfEnabled ? performance.now() : 0;
 		if (_detailedPerfEnabled) {
-			window.__perf.unitGarrisonCoastal =
-				(window.__perf.unitGarrisonCoastal || 0) +
-				_tGarrisonCoastal -
-				_tEnemyDone;
+			perf.unitGarrisonCoastal =
+				(perf.unitGarrisonCoastal || 0) + _tGarrisonCoastal - _tEnemyDone;
 		}
 
 		// precomputed once above instead of rescanning 9–25 coarse buckets per unit.
@@ -957,8 +967,7 @@ export function updateGroundFormation(frame, i) {
 	// ── unitLoop sub-timer checkpoint: end unitSpatialHash, start retreatMopUp ──
 	const _u3 = _detailedPerfEnabled ? performance.now() : 0;
 	if (_detailedPerfEnabled) {
-		window.__perf.unitScanPhase =
-			(window.__perf.unitScanPhase || 0) + _u3 - _u2;
+		perf.unitScanPhase = (perf.unitScanPhase || 0) + _u3 - _u2;
 	}
 
 	// Retreat logic: If enemy force is > 5x ally force (increased threshold to prevent premature dodging)
@@ -977,7 +986,7 @@ export function updateGroundFormation(frame, i) {
 	}
 
 	const _u3a = _detailedPerfEnabled ? performance.now() : 0;
-	if (_detailedPerfEnabled) window.__perf.unitRetreatDecision += _u3a - _u3;
+	if (_detailedPerfEnabled) perf.unitRetreatDecision += _u3a - _u3;
 
 	const totalEnemiesCount = hostileUnitCountsBySide[sideIndex] || 0;
 
@@ -1011,7 +1020,7 @@ export function updateGroundFormation(frame, i) {
 	}
 
 	const _u3b = _detailedPerfEnabled ? performance.now() : 0;
-	if (_detailedPerfEnabled) window.__perf.unitGlobalFallback += _u3b - _u3a;
+	if (_detailedPerfEnabled) perf.unitGlobalFallback += _u3b - _u3a;
 
 	// Unified behavior: Units hunt enemies when nearby, but switch to focused territory capture (mop-up)
 	// when there are literally zero enemy units remaining.
@@ -1134,7 +1143,7 @@ export function updateGroundFormation(frame, i) {
 	}
 
 	const _u3c = _detailedPerfEnabled ? performance.now() : 0;
-	if (_detailedPerfEnabled) window.__perf.unitFrontlinePress += _u3c - _u3b;
+	if (_detailedPerfEnabled) perf.unitFrontlinePress += _u3c - _u3b;
 	if (
 		u._strategicTargetGeneration !== _strategicTargetGeneration ||
 		u._strategicBeneficiaryId !== u.beneficiaryId
@@ -1234,7 +1243,7 @@ export function updateGroundFormation(frame, i) {
 	}
 	const _u3MopUpDone = _detailedPerfEnabled ? performance.now() : 0;
 	if (_detailedPerfEnabled) {
-		window.__perf.unitMopUpTargetSearch += _u3MopUpDone - _u3c;
+		perf.unitMopUpTargetSearch += _u3MopUpDone - _u3c;
 	}
 
 	// Nearby enemy-unit targets always win. City objectives are cached strategic
@@ -1331,15 +1340,11 @@ export function updateGroundFormation(frame, i) {
 	}
 	const _u3CityDone = _detailedPerfEnabled ? performance.now() : 0;
 	if (_detailedPerfEnabled) {
-		window.__perf.unitCityObjective += _u3CityDone - _u3MopUpDone;
+		perf.unitCityObjective += _u3CityDone - _u3MopUpDone;
 	}
 
-	const _u3GarrisonStart = _detailedPerfEnabled ? performance.now() : 0;
-
-	const _u3d = _detailedPerfEnabled ? performance.now() : 0;
 	if (_detailedPerfEnabled) {
-		window.__perf.unitGarrisonTarget += _u3d - _u3GarrisonStart;
-		window.__perf.unitMopUpSearch += _u3d - _u3c;
+		perf.unitMopUpSearch += _u3CityDone - _u3c;
 	}
 	if (u._taskForceOrder?.target) {
 		target = u._taskForceOrder.target;
@@ -1430,5 +1435,5 @@ export function updateGroundFormation(frame, i) {
 
 	// ── unitLoop sub-timer: end combatMove ──
 	if (_detailedPerfEnabled && _u4 !== undefined)
-		window.__perf.unitCombatMove += performance.now() - _u4;
+		perf.unitCombatMove += performance.now() - _u4;
 }

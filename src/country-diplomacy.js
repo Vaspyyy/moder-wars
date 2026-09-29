@@ -153,6 +153,9 @@ export function createCountryDiplomacy(runtime) {
 	}
 
 	function recruitNeutralMidWar(id, sideIdx) {
+		runtime.ensureSideInfluenceMaps(
+			Math.max(runtime.sides.length, sideIdx + 1),
+		);
 		const meta = runtime.countryMetadata[id - 1];
 		if (!meta) return;
 		const oldSideIdx = runtime.findCountrySideIndex(id);

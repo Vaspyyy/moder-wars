@@ -1,8 +1,44 @@
+import { createConflictPresentation } from "./conflict-presentation.js";
 import { createLiveContext } from "./runtime-context.js";
+import { createSimulationClient } from "./simulation-client.js";
+import { createSimulationClock } from "./simulation-clock.js";
+import { PERF_COUNTER_DEFAULTS } from "./simulation-metrics.js";
+import { resizeSimulationGrid } from "./simulation-resize.js";
 
 // Shared live binding bridge. Systems receive commands/state without importing main.js.
 const applicationRuntime = createLiveContext(
 	{
+		perf: () => window.__perf,
+		simulationClient: () => simulationClient,
+		editSimulation: () => editSimulation,
+		resetLocalSimulationClock: () => resetLocalSimulationClock,
+		_territoryDecisionPending: () => _territoryDecisionPending,
+		onControlCellsChanged: () => onControlCellsChanged,
+		onPoliticalMapChanged: () => onPoliticalMapChanged,
+		onOperationalAiReset: () => onOperationalAiReset,
+		isTreatyNoticeVisible: () => isTreatyNoticeVisible,
+		ensureRawGeography: () => ensureRawGeography,
+		ensureSideInfluenceMaps: () => ensureSideInfluenceMaps,
+		presentCapitulation: () => conflictPresentation.presentCapitulation,
+		presentTreatyStart: () => conflictPresentation.presentTreatyStart,
+		presentTreatyNotice: () => conflictPresentation.presentTreatyNotice,
+		onConflictMapChanged: () => conflictPresentation.onConflictMapChanged,
+		presentTreatyFinished: () => conflictPresentation.presentTreatyFinished,
+		invisibleBuffsEnabled: () => invisibleBuffsEnabled,
+		_nextSideUid: () => _nextSideUid,
+		getFormationPersonnel: () => getFormationPersonnel,
+		getFormationStrengthMultiplier: () => getFormationStrengthMultiplier,
+		createDeterministicJob: () => createDeterministicJob,
+		_liveSideCombatPower: () => _liveSideCombatPower,
+		_enemyCityCacheGeneration: () => _enemyCityCacheGeneration,
+		_enemyCityCacheSource: () => _enemyCityCacheSource,
+		_enemyCityCandidatesBySide: () => _enemyCityCandidatesBySide,
+		CITY_CANDIDATE_CACHE_LIMIT: () => CITY_CANDIDATE_CACHE_LIMIT,
+		_frontlineWorkerGeneration: () => _frontlineWorkerGeneration,
+		_frontlineTerritoryGeneration: () => _frontlineTerritoryGeneration,
+		syncFrontlineWorkerPendingState: () => syncFrontlineWorkerPendingState,
+		frontlineDirLat: () => frontlineDirLat,
+		frontlineDirLng: () => frontlineDirLng,
 		activeTheaterCities: () => activeTheaterCities,
 		_influenceCityGridSource: () => _influenceCityGridSource,
 		_influenceCityGridSourceLength: () => _influenceCityGridSourceLength,
@@ -720,6 +756,129 @@ const applicationRuntime = createLiveContext(
 		selectPlans: () => selectPlans,
 	},
 	{
+		primaryOccupierMap: (value) => {
+			primaryOccupierMap = value;
+		},
+		deJureMap: (value) => {
+			deJureMap = value;
+		},
+		_workerBusy: (value) => {
+			_workerBusy = value;
+		},
+		simSpeed: (value) => {
+			simSpeed = value;
+		},
+		currentSpeedIndex: (value) => {
+			currentSpeedIndex = value;
+		},
+		queuedScenarioAction: (value) => {
+			queuedScenarioAction = value;
+		},
+		worldWidthDeg: (value) => {
+			worldWidthDeg = value;
+		},
+		worldHeightDeg: (value) => {
+			worldHeightDeg = value;
+		},
+		rawGeoJsonData: (value) => {
+			rawGeoJsonData = value;
+		},
+		activeTutorialSet: (value) => {
+			activeTutorialSet = value;
+		},
+		biomeMask: (value) => {
+			biomeMask = value;
+		},
+		tutorialActive: (value) => {
+			tutorialActive = value;
+		},
+		_frontlineWorkerPending: (value) => {
+			_frontlineWorkerPending = value;
+		},
+		invisibleBuffsEnabled: (value) => {
+			invisibleBuffsEnabled = value;
+		},
+		sideUids: (value) => {
+			sideUids = value;
+		},
+		_nextSideUid: (value) => {
+			_nextSideUid = value;
+		},
+		hostilityMatrix: (value) => {
+			hostilityMatrix = value;
+		},
+		landMask: (value) => {
+			landMask = value;
+		},
+		_simulationWorldGeneration: (value) => {
+			_simulationWorldGeneration = value;
+		},
+		gridWidth: (value) => {
+			gridWidth = value;
+		},
+		gridHeight: (value) => {
+			gridHeight = value;
+		},
+		_coastalLandIndices: (value) => {
+			_coastalLandIndices = value;
+		},
+		_coastalTopologyReady: (value) => {
+			_coastalTopologyReady = value;
+		},
+		_strategicTargetGeneration: (value) => {
+			_strategicTargetGeneration = value;
+		},
+		_enemyCityCacheGeneration: (value) => {
+			_enemyCityCacheGeneration = value;
+		},
+		_enemyCityCacheSource: (value) => {
+			_enemyCityCacheSource = value;
+		},
+		_enemyCityCandidatesBySide: (value) => {
+			_enemyCityCandidatesBySide = value;
+		},
+		_frontlineWorkerGeneration: (value) => {
+			_frontlineWorkerGeneration = value;
+		},
+		_frontlineTerritoryGeneration: (value) => {
+			_frontlineTerritoryGeneration = value;
+		},
+		_frontlineWorkerPendingField: (value) => {
+			_frontlineWorkerPendingField = value;
+		},
+		_frontlineWorkerPendingLayout: (value) => {
+			_frontlineWorkerPendingLayout = value;
+		},
+		frontlineFieldTick: (value) => {
+			frontlineFieldTick = value;
+		},
+		frontlineDirLat: (value) => {
+			frontlineDirLat = value;
+		},
+		frontlineDirLng: (value) => {
+			frontlineDirLng = value;
+		},
+		provinceMap: (value) => {
+			provinceMap = value;
+		},
+		worldControlMap: (value) => {
+			worldControlMap = value;
+		},
+		_politicalMapRevision: (value) => {
+			_politicalMapRevision = value;
+		},
+		influenceLayer: (value) => {
+			influenceLayer = value;
+		},
+		occupationMap: (value) => {
+			occupationMap = value;
+		},
+		dominantSideMap: (value) => {
+			dominantSideMap = value;
+		},
+		terrainMask: (value) => {
+			terrainMask = value;
+		},
 		_influenceCityGridSource: (value) => {
 			_influenceCityGridSource = value;
 		},
@@ -783,6 +942,12 @@ const applicationRuntime = createLiveContext(
 		_territoryLedger: (value) => {
 			_territoryLedger = value;
 		},
+		_territoryDecisionPending: (value) => {
+			_territoryDecisionPending = value;
+		},
+		sideInfluenceMaps: (value) => {
+			sideInfluenceMaps = value;
+		},
 		_frontlineLayoutApplyPendingMs: (value) => {
 			_frontlineLayoutApplyPendingMs = value;
 		},
@@ -836,6 +1001,7 @@ const applicationRuntime = createLiveContext(
 		},
 		gameState: (value) => {
 			gameState = value;
+			simulationClient.syncControls();
 		},
 		viewMode: (value) => {
 			viewMode = value;
@@ -1217,6 +1383,129 @@ const applicationRuntime = createLiveContext(
 	},
 );
 
+let _territoryDecisionPending = false;
+function resetLocalSimulationClock() {
+	localSimulationClock.reset();
+}
+function editSimulation(mutation) {
+	return simulationClient.ownsState
+		? simulationClient.edit(mutation)
+		: mutation();
+}
+function onControlCellsChanged(indices) {
+	influenceLayer?.notifyControlCellsChanged(indices);
+}
+function onPoliticalMapChanged() {
+	influenceLayer?.invalidate(RENDER_LAYERS.STATIC);
+}
+function isTreatyNoticeVisible() {
+	return treatyAlert.style.display !== "none";
+}
+function onOperationalAiReset() {
+	_warOverviewSides = [];
+	_warOverviewLastUpdate = -Infinity;
+	const panel = document.getElementById("war-desk");
+	if (panel) panel.style.display = "none";
+}
+const conflictPresentation = createConflictPresentation(applicationRuntime);
+let visualFrameCount = 0;
+const localSimulationClock = createSimulationClock(
+	() => {
+		const ended = performSimulationTick();
+		simFrameCount++;
+		tickGameTime(1000 / 60 / Math.max(simSpeed, 0.01));
+		return !ended;
+	},
+	{ speed: 1, paused: true },
+);
+const simulationClient = createSimulationClient(applicationRuntime, {
+	onEvent: (type, ...args) => {
+		if (type === "showTreatyOffer") showTreatyOffer(...args);
+		else if (type === "playExplosionSound") playExplosionSound();
+		else if (type === "onPoliticalMapChanged") onPoliticalMapChanged();
+		else conflictPresentation[type]?.(...args);
+	},
+	onSnapshot: () => {
+		unitSpatialHash.clear();
+		for (const hash of unitHashBySide) hash.clear();
+		for (const u of units) {
+			if (!Number.isFinite(u.lat) || !Number.isFinite(u.lng)) continue;
+			const key =
+				Math.floor((u.lng + 180) / UNIT_HASH_CELL_SIZE) * 100 +
+				Math.floor((u.lat + 90) / UNIT_HASH_CELL_SIZE);
+			let list = unitSpatialHash.get(key);
+			if (!list) {
+				list = [];
+				unitSpatialHash.set(key, list);
+			}
+			list.push(u);
+			const hash = unitHashBySide[u.sideIndex];
+			if (hash) {
+				let sideList = hash.get(key);
+				if (!sideList) {
+					sideList = [];
+					hash.set(key, sideList);
+				}
+				sideList.push(u);
+			}
+		}
+		if (gameDateDisplay && gameTimeDate)
+			gameDateDisplay.textContent = formatGameDate();
+	},
+});
+
+import { createSimulationWorld } from "./simulation-world.js";
+
+const {
+	applyLandUnitDamage,
+	getLiveFormationPersonnel,
+	getLiveFormationStrength,
+	getOptimizationFactor,
+	areSidesHostile,
+	consolidateOverlappingUnits,
+	refreshLiveCombatPower,
+	getKnownEnemyPowerForSide,
+	spawnSingleUnit,
+	setUnitFormationPersonnel,
+	getEnemyCityCandidatesBySide,
+	getEffectiveBuffState,
+	getControlValue,
+	returnUnitPersonnelToReserve,
+	stableUnitCohort,
+	formationDamage,
+	_battleKey,
+	clearUnitStrategicTargets,
+	geoDistSq,
+	lngDelta,
+	getActiveHostilePairs,
+	launchBomb,
+	ensureSideIdentities,
+	allocateSideUid,
+	requestOperationalAiReassessment,
+	findCountrySideIndex,
+	generateProvinces,
+	getProvinceId,
+	notifyPoliticalMapLoaded,
+	invalidateFrontlineField,
+	sidePairKey,
+	createHostilityMatrix,
+	clearSideLandPlanSlots,
+	clearUnitCommandAssignments,
+	scheduleCoastalTopologyJob,
+} = createSimulationWorld(applicationRuntime);
+
+export {
+	areSidesHostile,
+	generateProvinces,
+	getControlValue,
+	getEffectiveBuffState,
+	getOptimizationFactor,
+	getProvinceId,
+	launchBomb,
+	notifyPoliticalMapLoaded,
+	spawnSingleUnit,
+};
+
 import { createInfluenceRuntime } from "./influence-runtime.js";
 
 const { queueInfluenceFrontierCell, updatePersistentInfluence } =
@@ -1409,11 +1698,19 @@ import { createCountryDiplomacy } from "./country-diplomacy.js";
 
 const {
 	openReleaseModal,
-	_setAsReleasable,
-	_setVassalage,
-	recruitNewSideMidWar,
-	recruitNeutralMidWar,
+	_setAsReleasable: local_setAsReleasable,
+	_setVassalage: local_setVassalage,
+	recruitNewSideMidWar: localrecruitNewSideMidWar,
+	recruitNeutralMidWar: localrecruitNeutralMidWar,
 } = createCountryDiplomacy(applicationRuntime);
+const recruitNeutralMidWar = (...args) =>
+	editSimulation(() => localrecruitNeutralMidWar(...args));
+const recruitNewSideMidWar = (...args) =>
+	editSimulation(() => localrecruitNewSideMidWar(...args));
+const _setVassalage = (...args) =>
+	editSimulation(() => local_setVassalage(...args));
+const _setAsReleasable = (...args) =>
+	editSimulation(() => local_setAsReleasable(...args));
 
 export {
 	_setAsReleasable,
@@ -1794,20 +2091,6 @@ export const BUFF_METADATA = {
  * - If invisible buffs are enabled and a hidden buff exists (not 'none'), it overrides the visible buff.
  * - Otherwise, falls back to the visible buff or 'none'.
  */
-export function getEffectiveBuffState(countryObj, meta) {
-	const visible = countryObj?.buffState || meta?.buffState || "none";
-
-	// If global invisible buffs are disabled, always use the visible buff only.
-	if (!invisibleBuffsEnabled) return visible;
-
-	const hidden =
-		(countryObj && countryObj.hiddenBuffState !== undefined
-			? countryObj.hiddenBuffState
-			: null) ??
-		(meta && meta.hiddenBuffState !== undefined ? meta.hiddenBuffState : null);
-	if (hidden && hidden !== "none") return hidden;
-	return visible;
-}
 
 /**
  * Cycle a buff state forwards (direction = 1) or backwards (direction = -1).
@@ -1819,12 +2102,6 @@ export function cycleBuffState(current, direction) {
 	const baseIndex = idx === -1 ? 0 : idx;
 	const nextIndex = (baseIndex + dir + BUFF_STATES.length) % BUFF_STATES.length;
 	return BUFF_STATES[nextIndex];
-}
-
-export function getOptimizationFactor() {
-	// More active sides => higher factor => more aggressive optimization
-	const activeSides = sides.filter((s) => s && s.length > 0).length || 1;
-	return Math.max(1, activeSides / 2);
 }
 
 export let gameState = "MAIN_MENU";
@@ -1867,7 +2144,7 @@ export let activeScenarioId = null;
 export let ffaMode = false;
 export let randomWarMode = false;
 export let adjacencyCache = null;
-export let flagProcessedBuffer;
+
 export let sideColors = [...DEFAULT_SIDE_COLORS];
 export let lastSelectionTime = 0;
 export let lastSelectedId = -1;
@@ -1884,9 +2161,6 @@ export let units = [];
 export let activeBattles = [];
 export const _battleHash = new Map(); // spatial hash: gridKey -> battle object reference
 
-function _battleKey(lat, lng) {
-	return (Math.round(lat * 10) + 900) * 10000 + (Math.round(lng * 10) + 1800);
-}
 export let capitalLostCountries = new Set();
 export let bombs = [];
 export let explosions = [];
@@ -2008,37 +2282,6 @@ const PHASE_CONFIG = {
 	COLLAPSING: { color: "#c0392b", symbol: "✗" },
 };
 
-function sidePairKey(uidA, uidB) {
-	return uidA < uidB ? `${uidA}|${uidB}` : `${uidB}|${uidA}`;
-}
-
-function synchronizeSideUidCounter() {
-	for (const uid of sideUids) {
-		const match = /^side-(\d+)$/.exec(String(uid || ""));
-		if (match) _nextSideUid = Math.max(_nextSideUid, Number(match[1]) + 1);
-	}
-}
-
-function allocateSideUid() {
-	let uid;
-	do {
-		uid = `side-${_nextSideUid++}`;
-	} while (sideUids.includes(uid));
-	return uid;
-}
-
-function ensureSideIdentities(reset = false) {
-	if (reset) {
-		sideUids = [];
-		hostileSidePairs.clear();
-	}
-	synchronizeSideUidCounter();
-	for (let i = 0; i < sides.length; i++) {
-		if (!sideUids[i]) sideUids[i] = allocateSideUid();
-	}
-	if (sideUids.length > sides.length) sideUids.length = sides.length;
-}
-
 export function rebuildHostilityMatrix() {
 	ensureSideIdentities();
 	hostilityMatrix = createHostilityMatrix(
@@ -2073,20 +2316,6 @@ export function resetSideHostilities() {
 	rebuildHostilityMatrix();
 }
 
-export function areSidesHostile(sideA, sideB) {
-	if (
-		!Number.isInteger(sideA) ||
-		!Number.isInteger(sideB) ||
-		sideA < 0 ||
-		sideB < 0 ||
-		sideA >= MAX_SIDES ||
-		sideB >= MAX_SIDES ||
-		sideA === sideB
-	)
-		return false;
-	return hostilityMatrix[sideA * MAX_SIDES + sideB] === 1;
-}
-
 export function setSidesHostile(sideA, sideB, hostile = true) {
 	ensureSideIdentities();
 	const uidA = sideUids[sideA];
@@ -2097,93 +2326,6 @@ export function setSidesHostile(sideA, sideB, hostile = true) {
 	else hostileSidePairs.delete(key);
 	rebuildHostilityMatrix();
 	return true;
-}
-
-function getActiveHostilePairs() {
-	const pairs = [];
-	for (let a = 0; a < sides.length; a++) {
-		if (!sides[a]?.length) continue;
-		for (let b = a + 1; b < sides.length; b++) {
-			if (sides[b]?.length && areSidesHostile(a, b)) pairs.push([a, b]);
-		}
-	}
-	return pairs;
-}
-
-function clearUnitCommandAssignments(unit) {
-	unit._assignedPlanSignature = null;
-	unit._taskForceUid = null;
-	unit._taskForceRole = null;
-	unit._taskForceOrder = null;
-	unit._transportPlanSignature = null;
-	unit._planWaypointSignature = null;
-	unit._planWaypointIndex = 0;
-	unit.navalAssigned = false;
-	unit.supplyAssigned = false;
-	unit.coastalAssigned = false;
-	unit.garrisonAssigned = false;
-
-	unit.frontSlot = null;
-	unit._defenderReactTarget = null;
-	unit._cachedTarget = null;
-	unit._cachedLocalEnemyCount = 0;
-	unit._cachedEnemyCentroidLat = 0;
-	unit._cachedEnemyCentroidLng = 0;
-}
-
-function getUnitPersonnelFallback(unit) {
-	const sideIdx = Number.isInteger(unit?.sideIndex) ? unit.sideIndex : -1;
-	return sideIdx >= 0 && sideIdx < MAX_SIDES
-		? soldiersPerUnit[sideIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO
-		: CONFIG.UNIT_TO_SOLDIER_RATIO;
-}
-
-function getLiveFormationPersonnel(unit) {
-	return getFormationPersonnel(unit, {
-		nominalPersonnel: getUnitPersonnelFallback(unit),
-		baseHealth:
-			unit?.maxHealth ||
-			CONFIG.UNIT_HEALTH * (unit?.isAlpenjager ? CONFIG.ALPEN_HEALTH_MULT : 1),
-	});
-}
-
-function getLiveFormationStrength(unit) {
-	if (!unit) return 1;
-	return getFormationStrengthMultiplier(unit, {
-		referencePersonnel: CONFIG.UNIT_TO_SOLDIER_RATIO,
-		nominalPersonnel: getUnitPersonnelFallback(unit),
-		baseHealth:
-			unit.maxHealth ||
-			CONFIG.UNIT_HEALTH * (unit.isAlpenjager ? CONFIG.ALPEN_HEALTH_MULT : 1),
-	});
-}
-
-function returnUnitPersonnelToReserve(unit) {
-	const sideIdx = Number.isInteger(unit?.sideIndex) ? unit.sideIndex : -1;
-	if (sideIdx < 0 || sideIdx >= MAX_SIDES) return 0;
-	const personnel = getLiveFormationPersonnel(unit);
-	if (personnel > 0) {
-		sideRecruitableManpower[sideIdx] += personnel;
-	}
-	return personnel;
-}
-
-function setUnitFormationPersonnel(unit, personnel) {
-	if (!unit) return unit;
-	const wholePersonnel = Math.max(1, Math.round(Number(personnel) || 0));
-	const strengthMultiplier =
-		wholePersonnel / Math.max(1, CONFIG.UNIT_TO_SOLDIER_RATIO);
-	const terrainHealthMultiplier = unit.isAlpenjager
-		? CONFIG.ALPEN_HEALTH_MULT
-		: 1;
-	unit.personnel = wholePersonnel;
-	unit.personnelCapacity = wholePersonnel;
-	unit.nominalPersonnel = CONFIG.UNIT_TO_SOLDIER_RATIO;
-	unit.strengthMultiplier = strengthMultiplier;
-	unit.maxHealth =
-		CONFIG.UNIT_HEALTH * strengthMultiplier * terrainHealthMultiplier;
-	unit.health = unit.maxHealth;
-	return unit;
 }
 
 function compactVariableStrengthFormationsForSide(
@@ -2305,12 +2447,6 @@ function applyPendingBenchmarkForceOverride() {
 	_benchmarkForcePersonnelPerSide = null;
 }
 
-function stableUnitCohort(unit, interval) {
-	const numericId = Math.abs(Number(unit?.id) || 0);
-	const stableId = Math.floor(numericId * 2_147_483_647) >>> 0;
-	return interval > 0 ? stableId % interval : 0;
-}
-
 function resetSimulationOptimizationRuntime() {
 	_simulationWorldGeneration++;
 	_simulationJobs.clear("world-reset");
@@ -2331,120 +2467,6 @@ function resetSimulationOptimizationRuntime() {
 	_renderAdmissionDeferredFrames = 0;
 }
 
-function scheduleCoastalTopologyJob() {
-	if (!landMask?.length || _simulationJobs.has("coastal-topology")) return;
-	const generation = _simulationWorldGeneration;
-	const coastal = [];
-	_simulationJobs.enqueue(
-		createDeterministicJob({
-			id: "coastal-topology",
-			generation,
-			totalItems: landMask.length,
-			maxItemsPerTurn: 80_000,
-			processRange(start, end) {
-				for (let index = start; index < end; index++) {
-					if (landMask[index] === 0) continue;
-					const column = index % gridWidth;
-					const row = Math.floor(index / gridWidth);
-					let coastalCell = false;
-					for (
-						let rowOffset = -1;
-						rowOffset <= 1 && !coastalCell;
-						rowOffset++
-					) {
-						for (let columnOffset = -1; columnOffset <= 1; columnOffset++) {
-							if (rowOffset === 0 && columnOffset === 0) continue;
-							const neighborRow = row + rowOffset;
-							const neighborColumn = column + columnOffset;
-							if (
-								neighborRow < 0 ||
-								neighborRow >= gridHeight ||
-								neighborColumn < 0 ||
-								neighborColumn >= gridWidth
-							) {
-								continue;
-							}
-							if (landMask[neighborRow * gridWidth + neighborColumn] === 0) {
-								coastalCell = true;
-								break;
-							}
-						}
-					}
-					if (coastalCell) coastal.push(index);
-				}
-			},
-			onComplete() {
-				if (generation !== _simulationWorldGeneration) return;
-				_coastalLandIndices = coastal;
-				_coastalTopologyReady = true;
-				for (let sideIdx = 0; sideIdx < sides.length; sideIdx++) {
-					if (sides[sideIdx]?.length) _planReassessNeeded[sideIdx] = true;
-				}
-			},
-		}),
-	);
-}
-
-function consolidateOverlappingUnits() {
-	if (units.length <= 40) return 0;
-	const mergeDistSq = 0.14 * 0.14;
-	const maxMergedHealth = CONFIG.UNIT_HEALTH * 5;
-	const unitsToRemove = new Set();
-
-	for (let index = 0; index < units.length; index++) {
-		const unit = units[index];
-		if (
-			unitsToRemove.has(unit) ||
-			unit.personnel !== undefined ||
-			(unit.personnelCapacity || 0) > CONFIG.UNIT_TO_SOLDIER_RATIO ||
-			unit.health >= maxMergedHealth ||
-			unit.deployTicks > 0
-		) {
-			continue;
-		}
-
-		const hashX = Math.floor((unit.lng + 180) / UNIT_HASH_CELL_SIZE);
-		const hashY = Math.floor((unit.lat + 90) / UNIT_HASH_CELL_SIZE);
-		const hashKey = hashX * 100 + hashY;
-		const sideIndex = unit.sideIndex;
-		const cellUnits =
-			sideIndex >= 0 && sideIndex < sides.length
-				? unitHashBySide[sideIndex].get(hashKey)
-				: unitSpatialHash.get(hashKey);
-		if (!cellUnits) continue;
-
-		for (let otherIndex = 0; otherIndex < cellUnits.length; otherIndex++) {
-			const other = cellUnits[otherIndex];
-			if (
-				other === unit ||
-				unitsToRemove.has(other) ||
-				other.personnel !== undefined ||
-				(other.personnelCapacity || 0) > CONFIG.UNIT_TO_SOLDIER_RATIO ||
-				other.sovereignId !== unit.sovereignId ||
-				other.deployTicks > 0
-			) {
-				continue;
-			}
-
-			const deltaLng = normalizeLongitudeDelta(other.lng - unit.lng);
-			const distanceSq = (unit.lat - other.lat) ** 2 + deltaLng ** 2;
-			if (distanceSq >= mergeDistSq) continue;
-
-			const transfer = Math.min(maxMergedHealth - unit.health, other.health);
-			unit.health += transfer;
-			other.health -= transfer;
-			if (other.health <= 0) unitsToRemove.add(other);
-			if (unit.health >= maxMergedHealth) break;
-		}
-	}
-
-	if (unitsToRemove.size > 0) {
-		units = units.filter((unit) => !unitsToRemove.has(unit));
-		_frameSimulationCommitFlags.add("unit-consolidation");
-	}
-	return unitsToRemove.size;
-}
-
 function resetOperationalAiRuntime() {
 	window.__mwAiOperationReveal = null;
 	_aiTaskForcesBySide = new Map();
@@ -2456,17 +2478,6 @@ function resetOperationalAiRuntime() {
 		unit._taskForceUid = null;
 		unit._taskForceRole = null;
 		unit._taskForceOrder = null;
-	}
-}
-
-function requestOperationalAiReassessment(sideIndex = null) {
-	_aiOperationsDirty = true;
-	if (Number.isInteger(sideIndex) && sideIndex >= 0) {
-		_planReassessNeeded[sideIndex] = true;
-		return;
-	}
-	for (let index = 0; index < sides.length; index++) {
-		if (sides[index]?.length) _planReassessNeeded[index] = true;
 	}
 }
 
@@ -2499,58 +2510,6 @@ export let disableFullscreen = true;
 let _warOverviewSides = [];
 let _warOverviewLastUpdate = -Infinity;
 const _liveSideCombatPower = new Float64Array(MAX_SIDES);
-function refreshLiveCombatPower(collectPosture = false) {
-	_liveSideCombatPower.fill(0);
-	const sideStrength = collectPosture ? new Array(sides.length).fill(0) : null;
-	const sideUnitCounts = collectPosture
-		? new Array(sides.length).fill(0)
-		: null;
-	for (const unit of units) {
-		const sideIndex = unit.sideIndex;
-		const countsForLivePower =
-			unit.health > 0 &&
-			unit.deployTicks <= 0 &&
-			sideIndex >= 0 &&
-			sideIndex < MAX_SIDES;
-		// Preserve the original posture scan: missing deployTicks is accepted and dead units still count.
-		const countsForPosture =
-			collectPosture &&
-			!(unit.deployTicks > 0) &&
-			!(sideIndex < 0 || sideIndex >= sides.length);
-		if (!countsForLivePower && !countsForPosture) continue;
-		const power = operationalUnitPower(unit);
-		if (countsForLivePower) _liveSideCombatPower[sideIndex] += power;
-		if (countsForPosture) {
-			sideStrength[sideIndex] += power;
-			sideUnitCounts[sideIndex]++;
-		}
-	}
-	return collectPosture ? { sideStrength, sideUnitCounts } : undefined;
-}
-function getKnownEnemyPowerForSide(sideIndex) {
-	let power = 0;
-	for (let index = 0; index < sides.length; index++)
-		if (areSidesHostile(sideIndex, index)) power += _liveSideCombatPower[index];
-	return power;
-}
-function formationDamage(damage, attacker) {
-	return (
-		damage *
-		(attacker.kind === "army"
-			? Math.max(0, getLiveFormationStrength(attacker))
-			: 1)
-	);
-}
-function createHostilityMatrix(sideCount, pairs, uids, maxSides = 8) {
-	const matrix = new Uint8Array(maxSides * maxSides);
-	for (let a = 0; a < sideCount; a++)
-		for (let b = a + 1; b < sideCount; b++)
-			if (uids[a] && uids[b] && pairs.has(sidePairKey(uids[a], uids[b]))) {
-				matrix[a * maxSides + b] = 1;
-				matrix[b * maxSides + a] = 1;
-			}
-	return matrix;
-}
 
 let _warLifecycleToken = 0;
 const _warLifecycleTimers = new Set();
@@ -2575,101 +2534,6 @@ function scheduleWarLifecycleCallback(
 	_warLifecycleTimers.add(timer);
 	return timer;
 }
-
-const PERF_COUNTER_DEFAULTS = {
-	_version: "V0.27.14",
-	_mode: "off",
-	_enabled: false,
-	plans: 0,
-	legacyPlans: 0,
-	operationalTaskForces: 0,
-	proposals: 0,
-	eval: 0,
-	neutralBorder: 0,
-	recruit: 0,
-	unitLoop: 0,
-	post: 0,
-	prePlans: 0,
-	influence: 0,
-	smoothing: 0,
-	phase0: 0,
-	phase67: 0,
-	phase133: 0,
-	spatialHash: 0,
-	frontline: 0,
-	frontlineDispatch: 0,
-	frontlinePolys: 0,
-	frontlineLayoutApply: 0,
-	frontlineSlotApply: 0,
-	phaseWheel: 0,
-	consolidate: 0,
-	caches: 0,
-	victory: 0,
-	aiPosture: 0,
-	posture: 0,
-	render: 0,
-	tickTotal: 0,
-	maxTick: 0,
-	ticks: 0,
-	proposalRuns: 0,
-	proposalFailed: 0,
-	reassess_noPlan: 0,
-	reassess_interval: 0,
-	reassess_forced: 0,
-	reassess_territory: 0,
-	reassess_posture: 0,
-	reassess_ratio: 0,
-	// unitLoop sub-timers
-	unitSetupTerrain: 0,
-	unitScanPhase: 0,
-	unitEnemyScan: 0,
-	unitAllyScan: 0,
-	unitGarrisonCoastal: 0,
-	unitRetreatMopUp: 0,
-	unitRetreatDecision: 0,
-	unitGlobalFallback: 0,
-	unitFrontlinePress: 0,
-	unitMopUpSearch: 0,
-	unitMopUpTargetSearch: 0,
-	unitCityObjective: 0,
-	unitGarrisonTarget: 0,
-	unitCombatMove: 0,
-	// Tactical-grid workload and stale-target effectiveness counters.
-	tacticalFriendlyCandidatePairs: 0,
-	tacticalEnemyCandidateVisits: 0,
-	tacticalAcceptedPairs: 0,
-	tacticalFriendlyPairs: 0,
-	tacticalHostileCellVisits: 0,
-	tacticalCacheHits: 0,
-	tacticalCacheMisses: 0,
-	tacticalGhostInvalidations: 0,
-	tacticalFastLaneUnits: 0,
-	tacticalMaxBucketOccupancy: 0,
-	tacticalPeakBucketOccupancy: 0,
-	tacticalCellCount: 0,
-	tacticalInsertedUnits: 0,
-	// Water avoidance debug counters
-	coastDeflectHalved: 0,
-	knockbackBlocked: 0,
-	waterPathPenalized: 0,
-	coastStuckAbandoned: 0,
-	// Frontline worker lifecycle counters
-	frontlineWorkerDispatches: 0,
-	frontlineWorkerCompleted: 0,
-	frontlineWorkerCoalesced: 0,
-	frontlineWorkerErrors: 0,
-	frontlineWorkerStaleResults: 0,
-	frontlineWorkerLastDurationMs: 0,
-	frontlineWorkerMaxDurationMs: 0,
-	frontlineWorkerFieldLastDurationMs: 0,
-	frontlineWorkerFieldMaxDurationMs: 0,
-	frontlineWorkerLayoutDispatches: 0,
-	frontlineWorkerLayoutCompleted: 0,
-	frontlineWorkerLayoutCoalesced: 0,
-	frontlineWorkerLayoutErrors: 0,
-	frontlineWorkerLayoutLastDurationMs: 0,
-	frontlineWorkerLayoutMaxDurationMs: 0,
-};
 
 const PERF_TICK_HISTORY_LIMIT = 4096;
 const PERF_FRAME_HISTORY_LIMIT = 4096;
@@ -2748,58 +2612,6 @@ let _enemyCityCacheSource = null;
 let _enemyCityCandidatesBySide = [];
 const _mopUpOwnedCellCache = new Map();
 const _mopUpDeJureCellCache = new Map();
-
-function invalidateStrategicTargetCaches() {
-	_strategicTargetGeneration++;
-	_enemyCityCacheGeneration = -1;
-	_enemyCityCacheSource = null;
-	_enemyCityCandidatesBySide = [];
-}
-
-function clearUnitStrategicTargets(unit) {
-	unit.mopUpTarget = null;
-	unit.mopUpTargetId = 0;
-	unit.lastMopUpId = null;
-	unit.targetSearchCooldown = 0;
-	unit._cityObjective = null;
-	unit._cityObjectiveTick = -999;
-	unit._strategicTargetGeneration = _strategicTargetGeneration;
-	unit._strategicBeneficiaryId = unit.beneficiaryId;
-}
-
-function getEnemyCityCandidatesBySide(citySource, countryToSideMap) {
-	if (
-		_enemyCityCacheGeneration === _strategicTargetGeneration &&
-		_enemyCityCacheSource === citySource &&
-		_enemyCityCandidatesBySide.length === sides.length
-	) {
-		return _enemyCityCandidatesBySide;
-	}
-	const candidates = Array.from({ length: sides.length }, () => []);
-	for (const city of citySource || []) {
-		const ownerId = city.sovereignId || city.ownerId || 0;
-		const ownerSide = countryToSideMap.get(ownerId);
-		if (ownerSide === undefined) continue;
-		for (let sideIndex = 0; sideIndex < sides.length; sideIndex++) {
-			if (areSidesHostile(sideIndex, ownerSide))
-				candidates[sideIndex].push(city);
-		}
-	}
-	for (const sideCandidates of candidates) {
-		sideCandidates.sort((a, b) => {
-			const capitalDelta = Number(b.isCapital) - Number(a.isCapital);
-			if (capitalDelta !== 0) return capitalDelta;
-			return (b.population || b.pop || 0) - (a.population || a.pop || 0);
-		});
-		if (sideCandidates.length > CITY_CANDIDATE_CACHE_LIMIT) {
-			sideCandidates.length = CITY_CANDIDATE_CACHE_LIMIT;
-		}
-	}
-	_enemyCityCacheGeneration = _strategicTargetGeneration;
-	_enemyCityCacheSource = citySource;
-	_enemyCityCandidatesBySide = candidates;
-	return candidates;
-}
 
 // Temporary diagnostics for cross-war state/capitulation bugs.
 export const aiCountryState = new Map();
@@ -2962,6 +2774,7 @@ export function setCustomSatelliteUrl(val) {
 }
 export function setGameState(val) {
 	gameState = val;
+	simulationClient.syncControls();
 }
 export function setHubReturnState(val) {
 	hubReturnState = val;
@@ -3997,7 +3810,10 @@ export const map = L.map("map", {
 });
 
 // Create Web Worker for async frontline field and layout rebuilds.
-_simWorker = new Worker("../workers/simulation-worker.js");
+_simWorker = new Worker(
+	new URL("../workers/simulation-worker.js", import.meta.url),
+	{ type: "module" },
+);
 
 function syncFrontlineWorkerPendingState() {
 	_frontlineWorkerPending =
@@ -4138,21 +3954,6 @@ _simWorker.onmessageerror = () => {
 	_frontlineWorkerActiveField = false;
 	_frontlineWorkerActiveLayout = false;
 };
-
-function invalidateFrontlineField() {
-	_frontlineWorkerGeneration++;
-	_frontlineTerritoryGeneration++;
-	invalidateStrategicTargetCaches();
-	_frontlineWorkerPendingField = true;
-	_frontlineWorkerPendingLayout = true;
-	syncFrontlineWorkerPendingState();
-	frontlineFieldTick = -999;
-	_frontlinePolyTick = -999;
-	frontlineDirLat = null;
-	frontlineDirLng = null;
-	_frontlinePolys = {};
-	for (const unit of units) unit.frontSlot = null;
-}
 
 function dispatchFrontlineWork(includeField = false, includeLayout = false) {
 	if (!_simWorker) {
@@ -4325,6 +4126,7 @@ menu_controls.bindImagerySelectChange();
 
 import {
 	applyPaintAt,
+	ensureRawGeography,
 	fillTerrainAt,
 	generatePresetData,
 	importSingleCountryFromScenario,
@@ -4340,6 +4142,7 @@ import {
 } from "./editor.js";
 import {
 	clearCellInfluence,
+	ensureSideInfluenceMaps,
 	getBorderDirection,
 	getGridIndex,
 	initSideInfluenceMaps,
@@ -4359,7 +4162,7 @@ import {
 } from "./firebase.js";
 import { ControlMapLayer, RENDER_LAYERS } from "./renderer.js";
 
-export { getGridIndex, resetSideInfluenceMaps };
+export { ensureSideInfluenceMaps, getGridIndex, resetSideInfluenceMaps };
 
 setOccupationChangeListener((cellIndex, change) => {
 	// Float influence changes are continuous; census totals only depend on which
@@ -4385,60 +4188,8 @@ map.getPane("refImagePane").style.zIndex = 350;
  * Completely remade province generation using multi-octave cellular noising.
  * Generates an organic, non-repeating province ID that is strictly unique to a specific sovereign country.
  */
-export function getProvinceId(x, y, countryId) {
-	if (countryId <= 0) return 0;
-	const res = CONFIG.GRID_RES;
-	const lat = y * res - 90;
-	const lng = x * res - 180;
-
-	// Base coordinates scaled for province density
-	const scale = 0.65;
-	const nx = lng * scale;
-	const ny = lat * scale;
-
-	// Octave 1: Domain warping
-	const w1 = Math.sin(nx * 0.8 + ny * 0.6 + countryId * 0.1) * 1.2;
-	const w2 = Math.cos(nx * 0.5 - ny * 0.9 + countryId * 0.2) * 1.1;
-
-	// Octave 2: High-frequency fractal noise composition
-	const noise =
-		Math.sin((nx + w1) * 2.3) * 0.5 +
-		Math.sin((ny + w2) * 1.9) * 0.5 +
-		Math.sin((nx + ny) * 1.4 + countryId) * 0.3 +
-		Math.cos(nx * 3.1 - ny * 2.7) * 0.2;
-
-	// Grid snap into "cells"
-	const cellX = Math.floor(nx + w1 + noise);
-	const cellY = Math.floor(ny + w2 + noise);
-
-	// Unique hashing using prime pairing to ensure no two provinces share an ID, even across countries.
-	// The countryId is a primary component of the hash, forcing province lines to reset at borders.
-	const h1 = Math.abs(cellX * 73856093);
-	const h2 = Math.abs(cellY * 19349663);
-	const h3 = Math.abs(countryId * 83492791);
-
-	return (h1 ^ h2 ^ h3) >>> 0;
-}
-
-export function generateProvinces() {
-	if (!provinceMap || !worldControlMap) return;
-	for (let y = 0; y < gridHeight; y++) {
-		const rowOffset = y * gridWidth;
-		for (let x = 0; x < gridWidth; x++) {
-			const idx = rowOffset + x;
-			provinceMap[idx] = getProvinceId(x, y, worldControlMap[idx]);
-		}
-	}
-	notifyPoliticalMapLoaded();
-}
 
 /** Invalidate political-map consumers after a precomputed grid is installed. */
-export function notifyPoliticalMapLoaded() {
-	_politicalMapRevision++;
-	_neutralBorderCacheSignature = "";
-	_territoryLedger?.markAllDirty();
-	influenceLayer?.invalidate(RENDER_LAYERS.STATIC);
-}
 
 export function applyWorldBounds(
 	widthDeg,
@@ -4536,6 +4287,7 @@ export function getAllianceMembers(startId) {
 }
 
 export function recalculateAllBounds(forceFullScan = false) {
+	influenceLayer?.invalidate(RENDER_LAYERS.STATIC);
 	if (!countryMetadata || !worldControlMap) return;
 	const isWar =
 		gameState === "SIMULATING" ||
@@ -4676,15 +4428,6 @@ export function getCountryColor(feature, alpha = 1) {
 	const s = 60 + Math.abs((hash >> 8) % 30); // 60-90%
 	const l = 45 + Math.abs((hash >> 16) % 20); // 45-65%
 	return `hsla(${h}, ${s}%, ${l}%, ${alpha})`;
-}
-
-export function getControlValue(lat, lng) {
-	const idx = getGridIndex(lat, lng);
-	if (idx === -1 || landMask[idx] === 0) return 0;
-	// For combat logic, return occupation if in active warzone
-	if (gameState === "SIMULATING" && landMask[idx] === 2)
-		return occupationMap[idx];
-	return 0;
 }
 
 export function estimateUnitsForCountry(countryId) {
@@ -5235,7 +4978,12 @@ export async function loadCities(
 	}
 }
 
-export function handleCountryClick(
+export function handleCountryClick(...args) {
+	if (simulationClient.active && gameState.startsWith("EDITOR_"))
+		return editSimulation(() => handleCountryClickOwned(...args));
+	return handleCountryClickOwned(...args);
+}
+function handleCountryClickOwned(
 	_feature,
 	_layer,
 	latlng,
@@ -5650,155 +5398,6 @@ export function handleCountryClick(
 	}
 }
 
-export function spawnSingleUnit(
-	sideIdx,
-	sovereignId,
-	_preferEnemyFront = false,
-) {
-	const supplyFailed = capitalLostCountries?.has(sovereignId);
-	const nominalPersonnel = Math.max(
-		1,
-		Math.round(soldiersPerUnit[sideIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO),
-	);
-	const recruitedPersonnel = Math.max(
-		1,
-		Math.round(nominalPersonnel * (supplyFailed ? 0.4 : 1)),
-	);
-	if ((sideRecruitableManpower[sideIdx] || 0) < recruitedPersonnel) {
-		return false;
-	}
-	// Enforce per‑side unit cap: if this side is already at or above the limit, do not spawn.
-	const sideUnits = units.filter((u) => u.sideIndex === sideIdx).length;
-	const manualMP = manualSideManpower[sideIdx];
-	const effectiveMax =
-		manualMP !== null
-			? Math.max(
-					CONFIG.MAX_UNITS_PER_SIDE,
-					Math.min(10000, Math.floor(manualMP / CONFIG.UNIT_TO_SOLDIER_RATIO)),
-				)
-			: CONFIG.MAX_UNITS_PER_SIDE;
-	if (sideUnits >= effectiveMax) return false;
-
-	// ── Spawn from friendly cities ──────────────────────────────────────
-	const friendlyCities = cities.filter((c) => {
-		if (!c.ownerId || c.ownerId !== sovereignId) return false;
-		const cIdx = getGridIndex(c.lat, c.lng);
-		if (cIdx === -1 || landMask[cIdx] === 0) return false;
-		if (dominantSideMap[cIdx] !== sideIdx) return false;
-		return true;
-	});
-
-	let lat, lng;
-
-	if (friendlyCities.length > 0) {
-		// Pick a random friendly city, bias toward frontline-adjacent ones
-		const frontlineCities = friendlyCities.filter((c) => {
-			const cIdx = getGridIndex(c.lat, c.lng);
-			const neighbors = [
-				cIdx + 1,
-				cIdx - 1,
-				cIdx + gridWidth,
-				cIdx - gridWidth,
-			];
-			for (const n of neighbors) {
-				if (n >= 0 && n < landMask.length) {
-					const nds = dominantSideMap[n];
-					if (nds >= 0 && areSidesHostile(sideIdx, nds)) return true;
-				}
-			}
-			return false;
-		});
-
-		const pick =
-			frontlineCities.length > 0 && !supplyFailed
-				? frontlineCities[Math.floor(Math.random() * frontlineCities.length)]
-				: friendlyCities[Math.floor(Math.random() * friendlyCities.length)];
-
-		lat = pick.lat + (Math.random() - 0.5) * CONFIG.GRID_RES * 0.8;
-		lng = pick.lng + (Math.random() - 0.5) * CONFIG.GRID_RES * 0.8;
-
-		// Validate: ensure still within friendly territory
-		const vIdx = getGridIndex(lat, lng);
-		if (
-			vIdx === -1 ||
-			worldControlMap[vIdx] !== sovereignId ||
-			dominantSideMap[vIdx] !== sideIdx
-		) {
-			lat = pick.lat;
-			lng = pick.lng;
-		}
-	} else {
-		// Fallback: spawn in friendly warzone territory
-		const theaterIndices = [];
-		const step = Math.max(1, Math.floor(landMask.length / 500000));
-		for (let i = 0; i < landMask.length; i += step) {
-			if (
-				landMask[i] === 2 &&
-				worldControlMap[i] === sovereignId &&
-				dominantSideMap[i] === sideIdx
-			) {
-				theaterIndices.push(i);
-			}
-		}
-		if (theaterIndices.length === 0) {
-			console.warn(
-				"[MW] spawnSingleUnit FAILED for country",
-				sovereignId,
-				": no friendly territory to spawn on (dominantSideMap check)",
-			);
-			return false;
-		}
-
-		const idx =
-			theaterIndices[Math.floor(Math.random() * theaterIndices.length)];
-		const y = Math.floor(idx / gridWidth);
-		const x = idx % gridWidth;
-		lat = y * CONFIG.GRID_RES - 90 + CONFIG.GRID_RES / 2;
-		lng = x * CONFIG.GRID_RES - 180 + CONFIG.GRID_RES / 2;
-	}
-
-	const finalIdx = getGridIndex(lat, lng);
-	const isMountainCell =
-		terrainMask && finalIdx >= 0 ? terrainMask[finalIdx] > 0.35 : false;
-	// Alpenjägers: mostly drawn from mountainous recruitment cells
-	const isAlpen = isMountainCell && Math.random() < 0.4;
-
-	const unitId = Math.random();
-
-	const unit = createArmyFormation({
-		id: unitId,
-		lat,
-		lng,
-		sideIndex: sideIdx,
-		sovereignId: sovereignId,
-		isAlpenjager: !!isAlpen,
-		_cachedTarget: null,
-		_cachedScanKx: -999,
-		_cachedScanKy: -999,
-		_lastFullScanTick: 0,
-	});
-	setUnitFormationPersonnel(unit, nominalPersonnel);
-	if (supplyFailed) {
-		unit.health *= 0.4;
-		unit.personnel = Math.round(unit.personnelCapacity * 0.4);
-		unit.strengthMultiplier = unit.personnel / CONFIG.UNIT_TO_SOLDIER_RATIO;
-	}
-	units.push(unit);
-
-	if (sideIdx >= 0 && sideIdx < MAX_SIDES) {
-		sideRecruitableManpower[sideIdx] = Math.max(
-			0,
-			sideRecruitableManpower[sideIdx] - unit.personnel,
-		);
-	}
-
-	return true;
-}
-
-function findCountrySideIndex(countryId) {
-	return sides.findIndex((side) => side?.some((c) => c.id === countryId));
-}
-
 function getCountryLivePersonnel(...args) {
 	return lifecycle.getCountryLivePersonnel(...args);
 }
@@ -5809,13 +5408,6 @@ function clearSidePersonnelAccounting(...args) {
 
 function releaseCountryPersonnelFromSide(...args) {
 	return lifecycle.releaseCountryPersonnelFromSide(...args);
-}
-
-function clearSideLandPlanSlots(sideIdx) {
-	if (sideIdx < 0) return;
-	if (sideIdx < _warPlan.length) _warPlan[sideIdx] = null;
-	const secondSlot = sideIdx + sides.length;
-	if (secondSlot < _warPlan.length) _warPlan[secondSlot] = null;
 }
 
 function clearSideHostilities(sideIdx) {
@@ -5998,15 +5590,25 @@ function updateWarOverview(force = false) {
 }
 
 function reopenConflictSetupAfterWar(...args) {
+	simulationClient.stop();
+	resetLocalSimulationClock();
 	return lifecycle.reopenConflictSetupAfterWar(...args);
 }
 
 export async function startWar(...args) {
-	return lifecycle.startWar(...args);
+	simulationClient.stop();
+	ensureSideInfluenceMaps();
+	const result = await lifecycle.startWar(...args);
+	if (gameState === "SIMULATING") await simulationClient.start();
+	return result;
 }
 
 export async function _startWarInner(...args) {
-	return lifecycle._startWarInner(...args);
+	simulationClient.stop();
+	ensureSideInfluenceMaps();
+	const result = await lifecycle._startWarInner(...args);
+	if (gameState === "SIMULATING") await simulationClient.start();
+	return result;
 }
 
 export function computeAdjacency() {
@@ -6159,26 +5761,8 @@ export function triggerRandomWar() {
  */
 
 export function activateCountryMidWar(...args) {
+	ensureSideInfluenceMaps(Math.max(sides.length, (args[1] || 0) + 1));
 	return lifecycle.activateCountryMidWar(...args);
-}
-
-export function launchBomb(fromLat, fromLng, toLat, toLng, sideIdx) {
-	bombs.push({
-		id: Math.random(),
-		startLat: fromLat,
-		startLng: fromLng,
-		targetLat: toLat,
-		targetLng: toLng,
-		currentLat: fromLat,
-		currentLng: fromLng,
-		nextLat: fromLat,
-		nextLng: fromLng,
-		progress: 0,
-		sideIndex: sideIdx,
-		state: "rising",
-		trail: [],
-		peakAlt: 1.5 + Math.random() * 2.5,
-	});
 }
 
 /**
@@ -6199,17 +5783,6 @@ export function launchBomb(fromLat, fromLng, toLat, toLng, sideIdx) {
  * Assign proportional slots to garrison units along neutral border polylines
  * so they spread evenly instead of clustering at cities.
  */
-
-function lngDelta(a, b) {
-	const d = normalizeLongitudeDelta(a - b);
-	return d;
-}
-
-function geoDistSq(aLat, aLng, bLat, bLng) {
-	const dLat = aLat - bLat;
-	const dLng = lngDelta(aLng, bLng);
-	return dLat * dLat + dLng * dLng;
-}
 
 const aiPlanner = createAiPlanner(applicationRuntime);
 export const { scoreProposal, selectPlans } = aiPlanner;
@@ -6263,65 +5836,6 @@ export const { evaluateAllPlans } = aiPlanExecutor;
 const NAVAL_STALL_TICKS = 600; // ticks of no progress before abandoning naval/coastal plan
 // longer stall before aborting second-wave naval plan
 
-function recordCountryCombatLoss(victimId, loss, attackerId = null) {
-	if (!Number.isFinite(loss) || loss <= 0 || victimId <= 0) return;
-	countryCasualties.set(
-		victimId,
-		(countryCasualties.get(victimId) || 0) + loss,
-	);
-	if (attackerId && attackerId !== victimId) {
-		let victimMap = casualtyByAttacker.get(victimId);
-		if (!victimMap) {
-			victimMap = new Map();
-			casualtyByAttacker.set(victimId, victimMap);
-		}
-		victimMap.set(attackerId, (victimMap.get(attackerId) || 0) + loss);
-	}
-}
-
-function applyLandUnitDamage(targetUnit, damage, attacker = null) {
-	if (
-		!targetUnit ||
-		!Number.isFinite(damage) ||
-		damage <= 0 ||
-		!Number.isFinite(targetUnit.health) ||
-		targetUnit.health <= 0
-	)
-		return 0;
-	const effectiveDamage = Math.min(targetUnit.health, damage);
-	const attackerId = attacker?.sovereignId || Number(attacker);
-	let personnelLoss = 0;
-	{
-		const beforePersonnel = getLiveFormationPersonnel(targetUnit);
-		const maxHealth = Math.max(1, targetUnit.maxHealth || CONFIG.UNIT_HEALTH);
-		const personnelCapacity = Math.max(
-			beforePersonnel,
-			targetUnit.personnelCapacity || beforePersonnel,
-		);
-		const nextHealth = Math.max(0, targetUnit.health - effectiveDamage);
-		const nextPersonnel = Math.min(
-			beforePersonnel,
-			Math.max(0, Math.round(personnelCapacity * (nextHealth / maxHealth))),
-		);
-		personnelLoss = beforePersonnel - nextPersonnel;
-		targetUnit.personnel = nextPersonnel;
-		targetUnit.strengthMultiplier =
-			targetUnit.personnel / CONFIG.UNIT_TO_SOLDIER_RATIO;
-		if (targetUnit.personnel <= 0) targetUnit.health = 0;
-	}
-	targetUnit.health = Math.max(0, targetUnit.health - effectiveDamage);
-	const targetSideIndex = targetUnit.sideIndex;
-	if (targetSideIndex >= 0 && targetSideIndex < MAX_SIDES) {
-		sideCasualties[targetSideIndex] += personnelLoss;
-		sideSoldiers[targetSideIndex] = Math.max(
-			0,
-			sideSoldiers[targetSideIndex] - personnelLoss,
-		);
-	}
-	recordCountryCombatLoss(targetUnit.sovereignId, personnelLoss, attackerId);
-	return personnelLoss;
-}
-
 // ── Perf Report: type window.perfReport() in console ──
 window.startBenchmark = startBenchmark;
 developer_controls.bindPerfEnableHandler();
@@ -6345,7 +5859,7 @@ window.aiDebugReport = (sideIdx = null) => {
 	return _aiDebugPlans[sideIdx];
 };
 
-export function updateLoop(now) {
+export function updateLoop() {
 	const shouldSimulate =
 		gameState === "SIMULATING" ||
 		(godModeActive &&
@@ -6429,68 +5943,25 @@ export function updateLoop(now) {
 
 	_frameSimulationCommitFlags.clear();
 	let simulationWorkMs = 0;
-	if (!isPaused) {
-		const simulationStarted = performance.now();
-		if (framePerfEntry) framePerfEntry.simulationStart = simulationStarted;
-		// Run sub-ticks based on simSpeed (handles both fast-forward and slow-motion)
-		frameAccumulator += simSpeed;
-		const maxSubTicksThisFrame = simSpeed >= 3 ? 2 : Infinity;
-		let subTicksThisFrame = 0;
-		const requestedSubTicks = Math.floor(frameAccumulator);
-		while (frameAccumulator >= 1 && subTicksThisFrame < maxSubTicksThisFrame) {
-			const warEnded = performSimulationTick();
-			if (warEnded) {
-				frameAccumulator = 0;
-				return;
-			}
-			frameAccumulator -= 1;
-			subTicksThisFrame++;
-		}
-		const cappedSubTicks = Math.max(0, requestedSubTicks - subTicksThisFrame);
-		if (simSpeed >= 3 && frameAccumulator > 1) {
-			frameAccumulator = 1;
-		}
-		if (framePerfEntry) {
-			framePerfEntry.requestedSubTicks = requestedSubTicks;
-			framePerfEntry.executedSubTicks = subTicksThisFrame;
-			framePerfEntry.cappedSubTicks = cappedSubTicks;
-			framePerfEntry.accumulatorAfter = frameAccumulator;
-		}
-		if (shouldTrackFrame) {
-			if (!window.__perf._scheduler) {
-				window.__perf._scheduler = createPerfState(
-					window.__perf._mode,
-				)._scheduler;
-			}
-			const scheduler = window.__perf._scheduler;
-			scheduler.frames++;
-			scheduler.requestedSubTicks += requestedSubTicks;
-			scheduler.executedSubTicks += subTicksThisFrame;
-			scheduler.cappedSubTicks += cappedSubTicks;
-			if (cappedSubTicks > 0) scheduler.cappedSubTickFrames++;
-			scheduler.accumulatorSum += frameAccumulator;
-			if (frameAccumulator > scheduler.maxAccumulator) {
-				scheduler.maxAccumulator = frameAccumulator;
-			}
-		}
-
-		// Advance in-game date by real time (clamped to avoid huge jumps on tab switch)
-		if (typeof now === "number") {
-			tickGameTime(Math.min(_frameDt, 50));
-		}
-		simulationWorkMs = performance.now() - simulationStarted;
+	simulationClient.syncControls();
+	if (!simulationClient.ownsState && !isPaused) {
+		const started = performance.now();
+		localSimulationClock.configure(
+			{ speed: simSpeed, paused: isPaused },
+			realNow,
+		);
+		localSimulationClock.pump(realNow);
+		simulationWorkMs = performance.now() - started;
 		if (framePerfEntry) framePerfEntry.simulationMs = simulationWorkMs;
 	}
-
-	// Advance simulation frame counter once per visual loop
-	simFrameCount++;
+	visualFrameCount++;
 
 	// Preserve high-speed paint cadence, then avoid placing an admitted paint on
 	// the same frame as a large simulation/atomic-commit spike. Presentation may
 	// move; simulation ordering and budgets never depend on wall-clock time.
 	const renderCadence =
 		simSpeed >= 5 ? 5 : simSpeed >= 3 ? 4 : simSpeed >= 2 ? 2 : 1;
-	const cadenceDue = simFrameCount % renderCadence === 0;
+	const cadenceDue = visualFrameCount % renderCadence === 0;
 	const maxDeferredFrames = Math.max(2, renderCadence + 1);
 	const starvationDue = _renderAdmissionDeferredFrames >= maxDeferredFrames;
 	const zoomSettleDue =
@@ -6823,14 +6294,23 @@ export function capitulateCountry(...args) {
 }
 
 export function applyTreaty(...args) {
+	if (simulationClient.active)
+		return simulationClient.command({
+			type: "APPLY_TREATY",
+			treatyType: args[0],
+			winnerSideIdx: args[1],
+			endingReason: args[2],
+		});
 	return lifecycle.applyTreaty(...args);
 }
 
 export function resetToSelection(...args) {
+	simulationClient.stop();
 	return lifecycle.resetToSelection(...args);
 }
 
 export async function resetGame(...args) {
+	simulationClient.stop();
 	return lifecycle.resetGame(...args);
 }
 
@@ -6942,15 +6422,15 @@ sandbox_controls.bindGodBombBtnClick();
 menu_controls.bindForcePeaceBtnClick();
 
 export function unilateralExitConflict(...args) {
-	return lifecycle.unilateralExitConflict(...args);
+	return editSimulation(() => lifecycle.unilateralExitConflict(...args));
 }
 
 export function _signSelectiveSideExit(...args) {
-	return lifecycle._signSelectiveSideExit(...args);
+	return editSimulation(() => lifecycle._signSelectiveSideExit(...args));
 }
 
 export function _signSelectivePeace(...args) {
-	return lifecycle._signSelectivePeace(...args);
+	return editSimulation(() => lifecycle._signSelectivePeace(...args));
 }
 
 export const SPEED_STEPS = [1, 2, 3];
@@ -6958,6 +6438,8 @@ export let currentSpeedIndex = 0; // Index for "0.1x"
 
 export function togglePause() {
 	isPaused = !isPaused;
+	simulationClient.syncControls();
+	localSimulationClock.configure({ paused: isPaused, speed: simSpeed });
 	pauseBtn.innerText = isPaused ? "Resume" : "Pause";
 	pauseBtn.setAttribute("aria-pressed", String(isPaused));
 	pauseBtn.style.background = "";
@@ -7010,6 +6492,8 @@ export function unclaimSelectedCountry() {
 export function setSpeed(index) {
 	currentSpeedIndex = Math.max(0, Math.min(index, SPEED_STEPS.length - 1));
 	simSpeed = SPEED_STEPS[currentSpeedIndex];
+	simulationClient.syncControls();
+	localSimulationClock.configure({ speed: simSpeed, paused: isPaused });
 	ffBtn.innerText = `${simSpeed}x`;
 	if (simSpeed === 1) {
 		ffBtn.classList.remove("active");
@@ -7087,6 +6571,11 @@ export function preloadAssets() {
 
 // Initialization logic
 export function initializeEngine(refreshLoadedGeography = true) {
+	if (simulationClient.active)
+		return editSimulation(() => initializeEngineOwned(refreshLoadedGeography));
+	return initializeEngineOwned(refreshLoadedGeography);
+}
+function initializeEngineOwned(refreshLoadedGeography) {
 	const gridRes = parseFloat(document.getElementById("grid-res-select").value);
 	const unitLimit = parseInt(
 		document.getElementById("unit-limit-select").value,
@@ -7111,6 +6600,13 @@ export function initializeEngine(refreshLoadedGeography = true) {
 		"disable-country-gradient-checkbox",
 	)?.checked;
 
+	if (
+		worldControlMap &&
+		CONFIG.GRID_RES !== gridRes &&
+		(gameState === "SIMULATING" || godModeActive)
+	)
+		resizeSimulationGrid(applicationRuntime, gridRes);
+	const hadGeography = rawGeoJsonData || landMask?.some((value) => value > 0);
 	// Check if configuration changed enough to require re-allocation
 	if (CONFIG.GRID_RES !== gridRes || !worldControlMap) {
 		CONFIG.GRID_RES = gridRes;
@@ -7122,7 +6618,6 @@ export function initializeEngine(refreshLoadedGeography = true) {
 		worldControlMap = new Uint16Array(gridWidth * gridHeight);
 		deJureMap = new Uint16Array(gridWidth * gridHeight);
 		provinceMap = new Int32Array(gridWidth * gridHeight);
-		flagProcessedBuffer = new Int32Array(gridWidth * gridHeight);
 		occupationMap = new Float32Array(gridWidth * gridHeight);
 		initSideInfluenceMaps();
 		primaryOccupierMap = new Uint16Array(gridWidth * gridHeight);
@@ -7131,11 +6626,13 @@ export function initializeEngine(refreshLoadedGeography = true) {
 		terrainMask = new Float32Array(gridWidth * gridHeight);
 
 		// If we are already in a mode that has geography loaded, we should refresh it
-		if (rawGeoJsonData && refreshLoadedGeography) {
+		if (hadGeography && refreshLoadedGeography) {
 			const isBlank = gameMode === "EDITOR";
-			updateLandMask(rawGeoJsonData.features, 1, isBlank).catch((error) => {
-				console.warn("Geography refresh failed:", error);
-			});
+			ensureRawGeography()
+				.then((data) => data && updateLandMask(data.features, 1, isBlank))
+				.catch((error) => {
+					console.warn("Geography refresh failed:", error);
+				});
 		}
 	} else {
 		CONFIG.MAX_UNITS_PER_SIDE = unitLimit;

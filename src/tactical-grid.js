@@ -39,6 +39,7 @@ export const DEFAULT_TACTICAL_CELL_SIZE = 0.6;
  * @property {number} maxBucketOccupancy Largest occupied per-side cell.
  * @property {number} candidatePairs Pairs found in neighboring buckets.
  * @property {number} acceptedPairs Candidate pairs passing distance and caller filters.
+ * @property {number} aggregatedPairs Pairs handled by an exact cell-pair aggregate.
  */
 
 /**
@@ -171,6 +172,7 @@ export function createTacticalGridCounters() {
 		maxBucketOccupancy: 0,
 		candidatePairs: 0,
 		acceptedPairs: 0,
+		aggregatedPairs: 0,
 	};
 }
 
@@ -298,6 +300,7 @@ export function resetTacticalPairCounters(grid) {
 	if (!grid?.counters) return;
 	grid.counters.candidatePairs = 0;
 	grid.counters.acceptedPairs = 0;
+	grid.counters.aggregatedPairs = 0;
 }
 
 /**
@@ -346,6 +349,87 @@ function wrappedDistanceSq(left, right, getLat, getLng) {
 }
 
 /**
+ * Aggregate ally density when formation slots already replace repulsion for
+ * every pair in a crowded block. Integer weights keep the result exact;
+ * fractional weights and any hostile, mixed force, or boundary pair fall back.
+ */
+export function aggregateTaskForceCellPair(leftCell, rightCell, radiusSq) {
+	const sameCell = leftCell === rightCell;
+	const pairCount = sameCell
+		? (leftCell.units.length * (leftCell.units.length - 1)) / 2
+		: leftCell.units.length * rightCell.units.length;
+	if (pairCount < 64) return false;
+	const forceUid = leftCell.units[0]?._taskForceUid;
+	if (!forceUid) return false;
+	const originLng = leftCell.units[0].lng;
+	let minLat = Infinity;
+	let maxLat = -Infinity;
+	let minLng = Infinity;
+	let maxLng = -Infinity;
+	const leftWeight = inspect(leftCell);
+	if (leftWeight === null) return false;
+	const rightWeight = sameCell ? leftWeight : inspect(rightCell);
+	if (rightWeight === null) return false;
+	const deltaLat = maxLat - minLat;
+	const deltaLng = maxLng - minLng;
+	if (deltaLat * deltaLat + deltaLng * deltaLng > radiusSq) return false;
+	const totalWeight = leftWeight + (sameCell ? 0 : rightWeight);
+	for (const cell of sameCell ? [leftCell] : [leftCell, rightCell]) {
+		for (const unit of cell.units) {
+			if (
+				!skipsLocal(unit) &&
+				!Number.isSafeInteger(unit._tickLocalAllyCount + totalWeight)
+			)
+				return false;
+		}
+	}
+	for (const unit of leftCell.units) {
+		if (!skipsLocal(unit)) {
+			unit._tickLocalAllyCount += sameCell
+				? leftWeight - (unit._tickAllyWeight || 1)
+				: rightWeight;
+		}
+	}
+	if (!sameCell) {
+		for (const unit of rightCell.units) {
+			if (!skipsLocal(unit)) unit._tickLocalAllyCount += leftWeight;
+		}
+	}
+	return true;
+
+	function skipsLocal(unit) {
+		return unit.navalAssigned || unit.supplyAssigned || unit.coastalAssigned;
+	}
+
+	function inspect(cell) {
+		let total = 0;
+		for (const unit of cell.units) {
+			if (
+				unit._taskForceUid !== forceUid ||
+				unit._tickHasNearbyHostile ||
+				!Number.isFinite(unit.lat) ||
+				!Number.isFinite(unit.lng) ||
+				unit.lng < -180 ||
+				unit.lng > 180
+			)
+				return null;
+			const weight = unit._tickAllyWeight || 1;
+			if (!Number.isSafeInteger(weight) || weight < 0) return null;
+			total += weight;
+			if (!Number.isSafeInteger(total)) return null;
+			let lng = unit.lng - originLng;
+			if (lng > 180) lng -= 360;
+			else if (lng < -180) lng += 360;
+			minLat = Math.min(minLat, unit.lat);
+			maxLat = Math.max(maxLat, unit.lat);
+			minLng = Math.min(minLng, lng);
+			maxLng = Math.max(maxLng, lng);
+		}
+		return total;
+	}
+}
+
+/**
  * Visits each unordered unit pair in the selected side's neighboring cells at
  * most once. Cells and neighbor keys use canonical numeric ordering, including
  * across the antimeridian. The visitor receives
@@ -363,6 +447,7 @@ export function forEachUnorderedNeighborPair(
 	const result = {
 		candidatePairs: 0,
 		acceptedPairs: 0,
+		aggregatedPairs: 0,
 		maxBucketOccupancy: grid?.counters?.maxBucketOccupancy || 0,
 	};
 	if (!sideCells || typeof visitor !== "function") return result;
@@ -374,6 +459,10 @@ export function forEachUnorderedNeighborPair(
 			: Math.max(0, finite(options.radiusSq));
 	const acceptPair =
 		typeof options.acceptPair === "function" ? options.acceptPair : null;
+	const aggregateCellPair =
+		!acceptPair && typeof options.aggregateCellPair === "function"
+			? options.aggregateCellPair
+			: null;
 	const sortedKeys = [...sideCells.keys()].sort((left, right) => left - right);
 	const getLat = grid.accessors.getLat;
 	const getLng = grid.accessors.getLng;
@@ -398,6 +487,16 @@ export function forEachUnorderedNeighborPair(
 			(left, right) => left - right,
 		)) {
 			const targetCell = sideCells.get(targetKey);
+			if (aggregateCellPair?.(sourceCell, targetCell, radiusSq)) {
+				const count =
+					targetKey === sourceKey
+						? (sourceCell.units.length * (sourceCell.units.length - 1)) / 2
+						: sourceCell.units.length * targetCell.units.length;
+				result.candidatePairs += count;
+				result.acceptedPairs += count;
+				result.aggregatedPairs += count;
+				continue;
+			}
 			if (targetKey === sourceKey) {
 				for (
 					let leftIndex = 0;
@@ -430,6 +529,7 @@ export function forEachUnorderedNeighborPair(
 	if (grid.counters) {
 		grid.counters.candidatePairs += result.candidatePairs;
 		grid.counters.acceptedPairs += result.acceptedPairs;
+		grid.counters.aggregatedPairs += result.aggregatedPairs;
 	}
 	return result;
 

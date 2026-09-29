@@ -1,7 +1,10 @@
 import { normalizeLongitudeDelta } from "./geographic-math.js";
+import { getSimulationMetrics } from "./simulation-metrics.js";
 import { isSimulationPhaseDue } from "./simulation-phase-wheel.js";
 /** createAiPlanExecutor owns AI behavior and receives current world state through explicit accessors. */
 export function createAiPlanExecutor(context) {
+	const perf = getSimulationMetrics(context);
+	const clockNow = () => (perf._mode === "off" ? 0 : performance.now());
 	function shouldReassess(si) {
 		const REASSESS_INTERVAL = 300; // sim-ticks (was visual frames; now per-tick)
 		const HARD_COOLDOWN = 150; // minimum sim-ticks between reassessments (even forced)
@@ -14,7 +17,7 @@ export function createAiPlanExecutor(context) {
 		if (context._planReassessNeeded[si]) {
 			const gap = context._simTickCount - lastReassess;
 			if (gap >= FORCED_COOLDOWN) {
-				if (window.__perf) window.__perf.reassess_forced++;
+				if (perf) perf.reassess_forced++;
 				return true;
 			}
 			// Flag stays set; will retry in FORCED_COOLDOWN ticks
@@ -36,11 +39,11 @@ export function createAiPlanExecutor(context) {
 
 		if (context._simTickCount - lastReassess >= REASSESS_INTERVAL) {
 			result = true;
-			if (window.__perf) window.__perf.reassess_interval++;
+			if (perf) perf.reassess_interval++;
 		}
 		if (!context._warPlan[si]) {
 			result = true;
-			if (window.__perf) window.__perf.reassess_noPlan++;
+			if (perf) perf.reassess_noPlan++;
 		}
 
 		// Territory change >2%
@@ -58,7 +61,7 @@ export function createAiPlanExecutor(context) {
 				Math.abs(cur - prev) / Math.max(1, cur) > 0.02
 			) {
 				result = true;
-				if (window.__perf) window.__perf.reassess_territory++;
+				if (perf) perf.reassess_territory++;
 			}
 			context._sidePrevControlled[si] = cur;
 		}
@@ -68,7 +71,7 @@ export function createAiPlanExecutor(context) {
 		const prevPosture = context._sidePrevPosture[si];
 		if (!result && prevPosture !== undefined && prevPosture !== curPosture) {
 			result = true;
-			if (window.__perf) window.__perf.reassess_posture++;
+			if (perf) perf.reassess_posture++;
 		}
 		context._sidePrevPosture[si] = curPosture;
 
@@ -94,7 +97,7 @@ export function createAiPlanExecutor(context) {
 		) {
 			if (Math.abs(curRatio - prevRatio) / Math.max(0.01, prevRatio) > 0.2) {
 				result = true;
-				if (window.__perf) window.__perf.reassess_ratio++;
+				if (perf) perf.reassess_ratio++;
 			}
 		}
 		context._sidePrevStrengthRatio[si] = curRatio;
@@ -104,7 +107,7 @@ export function createAiPlanExecutor(context) {
 
 	function evaluateAllPlans() {
 		// ── Reassessment: run the proposal pipeline when triggers fire ──
-		const _tp = performance.now();
+		const _tp = clockNow();
 		// Detect all sides that need new plans, but only generate proposals for one
 		// side per simulation tick. Proposal generation contains bounded pathfinding
 		// and coastal analysis; spreading it across ticks prevents several coalitions
@@ -122,15 +125,16 @@ export function createAiPlanExecutor(context) {
 		if (si !== undefined) {
 			context._pendingProposalSideSet.delete(si);
 			if (context.sides[si] && context.sides[si].length > 0) {
-				window.__perf.proposalRuns++;
+				perf.proposalRuns++;
 				const forceReplace = !!context._planReassessNeeded[si];
 
 				context._planReassessNeeded[si] = false;
 				const proposals = context.generateAllProposals(si);
 
 				// Score each proposal
+				const scoringBatch = {};
 				for (const p of proposals) {
-					p.priority = context.scoreProposal(p, si);
+					p.priority = context.scoreProposal(p, si, scoringBatch);
 				}
 
 				// Select and apply plans
@@ -203,7 +207,7 @@ export function createAiPlanExecutor(context) {
 
 				// Track failed proposals (standard reassessment interval handles retry)
 				if (!context._warPlan[si]) {
-					window.__perf.proposalFailed++;
+					perf.proposalFailed++;
 				}
 
 				const selectedDebugPlans = [
@@ -256,8 +260,7 @@ export function createAiPlanExecutor(context) {
 				context._proposalReassessTick[si] = context._simTickCount;
 			}
 		}
-		window.__perf.proposals =
-			(window.__perf.proposals || 0) + performance.now() - _tp;
+		perf.proposals = (perf.proposals || 0) + clockNow() - _tp;
 
 		// Reset plan activeUnitCount every tick (cheap, no unit iteration)
 		for (let _ri = 0; _ri < context.sides.length; _ri++) {
@@ -282,7 +285,7 @@ export function createAiPlanExecutor(context) {
 			}
 		}
 
-		const _te = performance.now();
+		const _te = clockNow();
 		if (isSimulationPhaseDue(context._simTickCount, 5, 2)) {
 			// ── Naval Plan Evaluation ──
 			for (let si = 0; si < context.sides.length; si++) {
@@ -383,20 +386,6 @@ export function createAiPlanExecutor(context) {
 				} else if (np.phase === "LANDING") {
 					// After enough time in landing, the plan completes
 					if (ticksSinceProgress > 900) {
-						// Count enemies within 5 degrees of the landing zone
-						let _nearEnemies = 0;
-						let _nearFriendlies = 0;
-						for (const u of context.units) {
-							if (u.deployTicks > 0) continue;
-							const dLat = np.target.lat - u.lat;
-							const dLng = normalizeLongitudeDelta(np.target.lng - u.lng);
-							const dSq = dLat * dLat + dLng * dLng;
-							if (dSq < 25.0) {
-								if (u.sideIndex === si) _nearFriendlies++;
-								else _nearEnemies++;
-							}
-						}
-
 						// Release naval-assigned units so they join the new land plan
 						const landingUnitIds = [];
 						for (const u of context._tickUnitsBySide[si] || []) {
@@ -723,7 +712,7 @@ export function createAiPlanExecutor(context) {
 			}
 			context._defenderReactionPlan[si] = null;
 		}
-		window.__perf.eval = (window.__perf.eval || 0) + performance.now() - _te;
+		perf.eval = (perf.eval || 0) + clockNow() - _te;
 	}
 	return { shouldReassess, evaluateAllPlans };
 }
