@@ -1,4 +1,5 @@
 import {
+	AI_TASK_FORCE_DEFAULTS,
 	advanceAiTaskForce,
 	calculateTaskForceReadiness,
 	cleanupAiTaskForces,
@@ -365,90 +366,91 @@ export function createAiRuntime(context) {
 		);
 	}
 
+	function isOperationalFriendlyPoint(point, sideIndex) {
+		const idx = context.getGridIndex(point.lat, point.lng);
+		return (
+			idx >= 0 &&
+			context.landMask[idx] > 0 &&
+			(context.dominantSideMap[idx] === sideIndex ||
+				(context.dominantSideMap[idx] === -1 &&
+					context.countryToSideMap.get(context.worldControlMap[idx]) ===
+						sideIndex))
+		);
+	}
+
 	function findOperationalWithdrawalAnchor(sideIndex, taskForce, members) {
 		const sideUid = context.sideUids[sideIndex];
+		const referenceLng = members[0]?.lng || 0;
 		const origin = members.length
 			? {
 					lat:
 						members.reduce((sum, unit) => sum + unit.lat, 0) / members.length,
 					lng:
-						members.reduce((sum, unit) => sum + unit.lng, 0) / members.length,
+						referenceLng +
+						members.reduce(
+							(sum, unit) => sum + context.lngDelta(unit.lng, referenceLng),
+							0,
+						) /
+							members.length,
 				}
-			: taskForce.target || taskForce.stagingAnchor;
+			: taskForce.stagingAnchor || taskForce.target;
+		if (!origin) return null;
+		origin.lng = ((origin.lng + 540) % 360) - 180;
+
 		const candidates = [];
-		if (taskForce.stagingAnchor) {
-			const startIdx = context.getGridIndex(origin.lat, origin.lng);
-			const stagingIdx = context.getGridIndex(
-				taskForce.stagingAnchor.lat,
-				taskForce.stagingAnchor.lng,
-			);
-			const stagingFriendly =
-				stagingIdx !== -1 &&
-				context.landMask[stagingIdx] > 0 &&
-				(context.dominantSideMap[stagingIdx] === sideIndex ||
-					context.dominantSideMap[stagingIdx] === -1);
-			const stagingPath = stagingFriendly
-				? context.findLandPathSummary(startIdx, stagingIdx, sideIndex, 30000)
-				: { reachable: false };
-			if (stagingPath.reachable) {
-				candidates.push({
-					...taskForce.stagingAnchor,
-					id: "original-assembly",
-					sideUid,
-					controlStrength: 1,
-				});
+		const add = (point, id) => {
+			if (
+				!point ||
+				!isOperationalFriendlyPoint(point, sideIndex) ||
+				context.geoDistSq(origin.lat, origin.lng, point.lat, point.lng) >
+					AI_TASK_FORCE_DEFAULTS.WITHDRAWAL_MAX_DISTANCE_SQ
+			)
+				return;
+			candidates.push({ ...point, id, sideUid, controlStrength: 1 });
+		};
+		add(origin, "current-position");
+		add(taskForce.stagingAnchor, "original-assembly");
+		// Sample local friendly ground so an inland city is never the only option.
+		for (const distance of [0.5, 1, 2]) {
+			for (let direction = 0; direction < 8; direction++) {
+				const angle = (direction * Math.PI) / 4;
+				add(
+					{
+						lat: origin.lat + Math.sin(angle) * distance,
+						lng: ((origin.lng + Math.cos(angle) * distance + 540) % 360) - 180,
+					},
+					`local-${distance}-${direction}`,
+				);
 			}
 		}
-		const friendlyCities = (context.activeTheaterCities || [])
-			.filter((city) => {
-				const idx = context.getGridIndex(city.lat, city.lng);
-				return idx !== -1 && context.dominantSideMap[idx] === sideIndex;
-			})
-			.sort(
-				(left, right) =>
-					context.geoDistSq(origin.lat, origin.lng, left.lat, left.lng) -
-					context.geoDistSq(origin.lat, origin.lng, right.lat, right.lng),
-			)
-			.slice(0, 8);
-		for (const city of friendlyCities) {
-			const startIdx = context.getGridIndex(origin.lat, origin.lng);
-			const targetIdx = context.getGridIndex(city.lat, city.lng);
-			const path = context.findLandPathSummary(
-				startIdx,
-				targetIdx,
-				sideIndex,
-				30000,
-			);
-			if (!path.reachable) continue;
-			candidates.push({
-				lat: city.lat,
-				lng: city.lng,
-				name: city.name || "Defensive line",
-				id: `city-${city.id || city.name || targetIdx}`,
-				sideUid,
-				controlStrength: city.isCapital ? 1.5 : 1.1,
-			});
-		}
-
-		const enemyEstimates = context.units
-			.filter(
-				(unit) =>
-					unit.health > 0 && context.areSidesHostile(sideIndex, unit.sideIndex),
-			)
-			.map((unit) => ({
-				lat: unit.lat,
-				lng: unit.lng,
-				estimatedPower: operationalUnitPower(unit),
-				confidence: 1,
-			}));
-		return (
-			selectWithdrawalAnchor(taskForce, candidates, {
+		for (const city of context.activeTheaterCities || [])
+			add(city, `city-${city.id || city.name}`);
+		const enemyEstimates = context.units.filter(
+			(unit) =>
+				unit.health > 0 && context.areSidesHostile(sideIndex, unit.sideIndex),
+		);
+		const startIdx = context.getGridIndex(origin.lat, origin.lng);
+		// Rank first, then path-check only a few local candidates.
+		for (let attempt = 0; attempt < 4 && candidates.length; attempt++) {
+			const anchor = selectWithdrawalAnchor(taskForce, candidates, {
 				origin,
 				enemyEstimates,
-			}) ||
-			taskForce.stagingAnchor ||
-			origin
-		);
+			});
+			if (!anchor) break;
+			const targetIdx = context.getGridIndex(anchor.lat, anchor.lng);
+			if (
+				startIdx === targetIdx ||
+				context.findLandPathSummary(startIdx, targetIdx, sideIndex, 30000)
+					.reachable
+			)
+				return anchor;
+			candidates.splice(
+				candidates.findIndex((candidate) => candidate.id === anchor.id),
+				1,
+			);
+		}
+		// If no short safe route exists, release to local tactics after the timeout.
+		return { ...origin };
 	}
 
 	function _taskForceLocation(taskForce) {
@@ -572,6 +574,47 @@ export function createAiRuntime(context) {
 					0,
 					lateral,
 				);
+				const previousOrder = unit._taskForceOrder;
+				if (
+					unit._taskForceUid === taskForce.id &&
+					previousOrder?.target &&
+					["WITHDRAWING", "REGROUPING"].includes(previousOrder.phase) &&
+					isOperationalFriendlyPoint(previousOrder.target, sideIndex)
+				) {
+					target = previousOrder.target;
+				} else if (target) {
+					const distanceSq = context.geoDistSq(
+						unit.lat,
+						unit.lng,
+						target.lat,
+						target.lng,
+					);
+					if (
+						distanceSq > AI_TASK_FORCE_DEFAULTS.WITHDRAWAL_MAX_DISTANCE_SQ ||
+						!isOperationalFriendlyPoint(target, sideIndex)
+					) {
+						const travel = Math.min(
+							1,
+							Math.sqrt(
+								AI_TASK_FORCE_DEFAULTS.WITHDRAWAL_MAX_DISTANCE_SQ /
+									Math.max(0.0001, distanceSq),
+							),
+						);
+						const destination = target;
+						target = { lat: unit.lat, lng: unit.lng };
+						for (const fraction of [travel, travel / 2]) {
+							const nearby = interpolateOperationalPoint(
+								unit,
+								destination,
+								fraction,
+							);
+							if (isOperationalFriendlyPoint(nearby, sideIndex)) {
+								target = nearby;
+								break;
+							}
+						}
+					}
+				}
 				speed = taskForce.phase === "WITHDRAWING" ? 1.85 : 0.45;
 			} else if (taskForce.phase === "CULMINATED") {
 				target = { lat: unit.lat, lng: unit.lng };
@@ -612,7 +655,17 @@ export function createAiRuntime(context) {
 			const sideUid = context.sideUids[sideIndex];
 			if (!sideUid || !context.sides[sideIndex]?.length) continue;
 			discardNonHostileOperationalPlans(sideIndex);
-			const selectedPlans = getOperationalSelectedPlans(sideIndex);
+			let selectedPlans = getOperationalSelectedPlans(sideIndex);
+			const emergencyDefense =
+				context._sideWarPhase[sideIndex] === "COLLAPSING";
+			if (
+				emergencyDefense &&
+				selectedPlans.some((plan) => isOperationalDefensePlanType(plan.type))
+			) {
+				selectedPlans = selectedPlans.filter((plan) =>
+					isOperationalDefensePlanType(plan.type),
+				);
+			}
 			let landingHandoff = context._aiPendingLandingHandoffs.get(sideUid);
 			if (
 				landingHandoff &&
@@ -687,6 +740,24 @@ export function createAiRuntime(context) {
 				? handoffPlan.signature ||
 					context.getPlanSignature(sideIndex, handoffPlan)
 				: null;
+			const recovering = (taskForce) =>
+				["CULMINATED", "WITHDRAWING", "REGROUPING"].includes(taskForce.phase);
+			const previousForces = context._aiTaskForcesBySide.get(sideUid) || [];
+			const hasDefensePlan = selectedPlans.some((plan) =>
+				isOperationalDefensePlanType(plan.type),
+			);
+			if (hasDefensePlan) {
+				const recoveringSignatures = new Set(
+					previousForces.filter(recovering).map((force) => force.signature),
+				);
+				selectedPlans = selectedPlans.filter(
+					(plan) =>
+						isOperationalDefensePlanType(plan.type) ||
+						!recoveringSignatures.has(
+							plan.signature || context.getPlanSignature(sideIndex, plan),
+						),
+				);
+			}
 			const planInputs = selectedPlans.map((plan) => {
 				const signature =
 					plan.signature || context.getPlanSignature(sideIndex, plan);
@@ -699,41 +770,34 @@ export function createAiRuntime(context) {
 			const selectedSignatures = new Set(
 				planInputs.map((plan) => plan.signature),
 			);
-			const existing = context._aiTaskForcesBySide.get(sideUid) || [];
+			const existing = previousForces.filter((taskForce) => {
+				if (!recovering(taskForce) || (!emergencyDefense && !hasDefensePlan))
+					return true;
+				// A surviving defensive plan gets fresh membership while its slot stays live.
+				if (!selectedSignatures.has(taskForce.signature))
+					clearOperationalPlanForTaskForce(sideIndex, taskForce);
+				return false;
+			});
 			const retiring = [];
 			for (const taskForce of existing) {
 				if (
 					selectedSignatures.has(taskForce.signature) ||
 					taskForce.phase === "COMPLETE"
-				) {
+				)
 					continue;
-				}
+				// Changing an objective hands healthy units directly to the new plan.
+				if (!recovering(taskForce)) continue;
 				const members = taskForce.assignedUnitIds
 					.map((unitId) => unitsById.get(String(unitId)))
 					.filter(Boolean);
-				const withdrawalAnchor =
-					taskForce.withdrawalAnchor ||
-					findOperationalWithdrawalAnchor(sideIndex, taskForce, members);
-				const alreadyRetiring = [
-					"CULMINATED",
-					"WITHDRAWING",
-					"REGROUPING",
-				].includes(taskForce.phase);
 				retiring.push({
 					...taskForce,
-					phase:
-						taskForce.phase === "REGROUPING"
-							? "REGROUPING"
-							: taskForce.phase === "WITHDRAWING"
-								? "WITHDRAWING"
-								: "CULMINATED",
-					phaseStartedTick: alreadyRetiring
-						? taskForce.phaseStartedTick
-						: context._simTickCount,
-					withdrawalAnchor,
-					completionReason: taskForce.completionReason || "PLAN_CANCELLED",
+					withdrawalAnchor:
+						taskForce.withdrawalAnchor ||
+						findOperationalWithdrawalAnchor(sideIndex, taskForce, members),
 				});
 			}
+
 			const reservedUnitIds = new Set(
 				retiring.flatMap((taskForce) => taskForce.assignedUnitIds.map(String)),
 			);
@@ -772,6 +836,10 @@ export function createAiRuntime(context) {
 				const members = taskForce.assignedUnitIds
 					.map((unitId) => unitsById.get(String(unitId)))
 					.filter(Boolean);
+				if (!members.length) {
+					clearOperationalPlanForTaskForce(sideIndex, taskForce);
+					continue;
+				}
 				const readinessResult = calculateTaskForceReadiness(
 					taskForce,
 					readinessUnits,
@@ -854,47 +922,44 @@ export function createAiRuntime(context) {
 						members,
 					);
 				}
-				const withdrawalArrived = !!(
-					withdrawalAnchor &&
+				// Generate the current spread before testing arrival; previous orders can
+				// refer to a different anchor or still be an attacking order.
+				let geometry;
+				if (taskForce.phase === "WITHDRAWING") {
+					taskForce = { ...taskForce, withdrawalAnchor };
+					geometry = assignOperationalTaskForceOrders(
+						sideIndex,
+						taskForce,
+						plan,
+						unitsById,
+					);
+				}
+				const withdrawalArrived =
+					taskForce.phase === "WITHDRAWING" &&
 					members.length > 0 &&
 					members.filter(
 						(unit) =>
+							unit._taskForceOrder?.target &&
 							context.geoDistSq(
 								unit.lat,
 								unit.lng,
-								withdrawalAnchor.lat,
-								withdrawalAnchor.lng,
-							) <= 1,
-					).length >= Math.ceil(members.length * 0.65)
-				);
-				if (
-					taskForce.phase === "REGROUPING" &&
-					context._sideWarPhase[sideIndex] === "COLLAPSING"
-				) {
-					taskForce = {
-						...taskForce,
-						planType: "DEFEND",
-						readiness: readinessResult.readiness,
-						currentPower: readinessResult.currentPower,
-						completionReason: "COLLAPSING_DEFENSE",
-						outcome: null,
-					};
-				} else {
-					taskForce = advanceAiTaskForce(taskForce, {
-						tick: context._simTickCount,
-						readinessResult,
-						progress,
-						objectiveAchieved,
-
-						supplyCollapsed,
-						encirclementRiskSevere,
-						forceRatio:
-							readinessResult.currentPower /
-							Math.max(0.25, opposition.estimatedPower),
-						withdrawalAnchor,
-						withdrawalArrived,
-					});
-				}
+								unit._taskForceOrder.target.lat,
+								unit._taskForceOrder.target.lng,
+							) <= AI_TASK_FORCE_DEFAULTS.WITHDRAWAL_ARRIVAL_RADIUS_SQ,
+					).length >= Math.ceil(members.length * 0.65);
+				taskForce = advanceAiTaskForce(taskForce, {
+					tick: context._simTickCount,
+					readinessResult,
+					progress,
+					objectiveAchieved,
+					supplyCollapsed,
+					encirclementRiskSevere,
+					forceRatio:
+						readinessResult.currentPower /
+						Math.max(0.25, opposition.estimatedPower),
+					withdrawalAnchor,
+					withdrawalArrived,
+				});
 
 				if (taskForce.phase === "COMPLETE") {
 					clearOperationalPlanForTaskForce(sideIndex, taskForce);
@@ -905,12 +970,14 @@ export function createAiRuntime(context) {
 					}
 					continue;
 				}
-				const geometry = assignOperationalTaskForceOrders(
-					sideIndex,
-					taskForce,
-					plan,
-					unitsById,
-				);
+				if (!geometry || taskForce.phase !== "WITHDRAWING") {
+					geometry = assignOperationalTaskForceOrders(
+						sideIndex,
+						taskForce,
+						plan,
+						unitsById,
+					);
+				}
 				taskForce = {
 					...taskForce,
 					assemblyArea: geometry.assembly,

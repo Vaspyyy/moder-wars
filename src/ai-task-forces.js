@@ -12,7 +12,10 @@ export const AI_TASK_FORCE_DEFAULTS = Object.freeze({
 	CULMINATION_POWER_RATIO: 0.55,
 	UNFAVORABLE_STALL_TICKS: 600,
 	REGROUP_POWER_RATIO: 0.7,
-	REGROUP_PLATEAU_TICKS: 1200,
+	REGROUP_PLATEAU_TICKS: 300,
+	REGROUP_MAX_TICKS: 600,
+	WITHDRAWAL_MAX_TICKS: 900,
+	WITHDRAWAL_MAX_DISTANCE_SQ: 9,
 	CONSOLIDATION_TICKS: 300,
 	WITHDRAWAL_ARRIVAL_RADIUS_SQ: 1,
 	SPEARHEAD_POWER_SHARE: 0.2,
@@ -439,14 +442,21 @@ export function reconcileAiTaskForces(
 			taskForce.phase === "WITHDRAWING"
 				? taskForce.withdrawalAnchor || taskForce.stagingAnchor
 				: taskForce.stagingAnchor || taskForce.target;
-		const candidates = available
-			.filter((unit) => !usedUnits.has(unitKey(unit.id)))
-			.sort(
-				(left, right) =>
-					wrappedDistanceSq(left, anchor) - wrappedDistanceSq(right, anchor) ||
-					estimateUnitCombatPower(right) - estimateUnitCombatPower(left) ||
-					unitKey(left.id).localeCompare(unitKey(right.id)),
-			);
+		const recovering = ["CULMINATED", "WITHDRAWING", "REGROUPING"].includes(
+			taskForce.phase,
+		);
+		// Recovery retains its members without searching the rest of the army.
+		const candidates = recovering
+			? []
+			: available
+					.filter((unit) => !usedUnits.has(unitKey(unit.id)))
+					.sort(
+						(left, right) =>
+							wrappedDistanceSq(left, anchor) -
+								wrappedDistanceSq(right, anchor) ||
+							estimateUnitCombatPower(right) - estimateUnitCombatPower(left) ||
+							unitKey(left.id).localeCompare(unitKey(right.id)),
+					);
 		const selected = [...sticky];
 		let selectedPower = selected.reduce(
 			(sum, unit) => sum + estimateUnitCombatPower(unit),
@@ -516,13 +526,22 @@ export function selectWithdrawalAnchor(taskForce, anchors, context = {}) {
 	const origin = context.origin || taskForce.target || taskForce.stagingAnchor;
 	const enemyEstimates = context.enemyEstimates || [];
 	const friendlySideUid = taskForce.sideUid;
+	const maxDistanceSq = Math.max(
+		0,
+		finite(
+			context.maxDistanceSq,
+			AI_TASK_FORCE_DEFAULTS.WITHDRAWAL_MAX_DISTANCE_SQ,
+		),
+	);
 	const valid = (anchors || [])
 		.filter(
 			(anchor) =>
 				anchor &&
 				anchor.passable !== false &&
 				anchor.hostile !== true &&
-				(anchor.sideUid == null || String(anchor.sideUid) === friendlySideUid),
+				(anchor.sideUid == null ||
+					String(anchor.sideUid) === friendlySideUid) &&
+				wrappedDistanceSq(anchor, origin) <= maxDistanceSq,
 		)
 		.map((anchor) => {
 			let nearestEnemySq = Infinity;
@@ -532,12 +551,12 @@ export function selectWithdrawalAnchor(taskForce, anchors, context = {}) {
 					wrappedDistanceSq(anchor, enemy),
 				);
 			}
-			const rearward = Math.max(0, finite(anchor.controlStrength, 1)) * 10;
+			const control = Math.max(0, finite(anchor.controlStrength, 1)) * 2;
 			const safety = Number.isFinite(nearestEnemySq)
-				? Math.min(25, nearestEnemySq)
-				: 25;
-			const distancePenalty = wrappedDistanceSq(anchor, origin) * 0.15;
-			return { anchor, score: rearward + safety - distancePenalty };
+				? Math.min(4, nearestEnemySq) - (nearestEnemySq < 0.25 ? 8 : 0)
+				: 4;
+			const distancePenalty = wrappedDistanceSq(anchor, origin) * 2;
+			return { anchor, score: control + safety - distancePenalty };
 		})
 		.sort(
 			(left, right) =>
@@ -642,6 +661,15 @@ export function advanceAiTaskForce(taskForce, context = {}) {
 				context.withdrawalAnchor || next.withdrawalAnchor || next.stagingAnchor,
 		});
 	} else if (next.phase === "WITHDRAWING") {
+		if (
+			tick - next.phaseStartedTick >=
+			AI_TASK_FORCE_DEFAULTS.WITHDRAWAL_MAX_TICKS
+		) {
+			return transition(next, "COMPLETE", tick, {
+				completionReason: "WITHDRAWAL_TIMEOUT",
+				outcome: "WITHDRAWAL_TIMEOUT",
+			});
+		}
 		if (context.withdrawalArrived) {
 			return transition(next, "REGROUPING", tick, {
 				completionReason: null,
@@ -660,7 +688,8 @@ export function advanceAiTaskForce(taskForce, context = {}) {
 			next.currentPower / launchBaseline >=
 				AI_TASK_FORCE_DEFAULTS.REGROUP_POWER_RATIO ||
 			tick - next.lastRecoveryTick >=
-				AI_TASK_FORCE_DEFAULTS.REGROUP_PLATEAU_TICKS
+				AI_TASK_FORCE_DEFAULTS.REGROUP_PLATEAU_TICKS ||
+			tick - next.phaseStartedTick >= AI_TASK_FORCE_DEFAULTS.REGROUP_MAX_TICKS
 		) {
 			return transition(next, "COMPLETE", tick, {
 				completionReason:

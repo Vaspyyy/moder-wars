@@ -189,7 +189,7 @@ const withdrawalAnchor = selectWithdrawalAnchor(
 	culminated,
 	[
 		{ id: "unsafe", sideUid: "blue", lat: 0, lng: 0, controlStrength: 1 },
-		{ id: "rear", sideUid: "blue", lat: 5, lng: 0, controlStrength: 2 },
+		{ id: "rear", sideUid: "blue", lat: 2, lng: 0, controlStrength: 2 },
 		{ id: "hostile", sideUid: "red", lat: 10, lng: 0, controlStrength: 9 },
 	],
 	{
@@ -223,15 +223,15 @@ const steadilyRecovering = advanceAiTaskForce(
 		recoveryPower: 54,
 	},
 	{
-		tick: 1204,
+		tick: 204,
 		currentPower: 60,
 	},
 );
 assert.equal(steadilyRecovering.phase, "REGROUPING");
-assert.equal(steadilyRecovering.lastRecoveryTick, 1204);
+assert.equal(steadilyRecovering.lastRecoveryTick, 204);
 assert.equal(steadilyRecovering.recoveryPower, 60);
 const recoveryPlateau = advanceAiTaskForce(steadilyRecovering, {
-	tick: 2404,
+	tick: 504,
 	currentPower: 60,
 });
 assert.equal(recoveryPlateau.phase, "COMPLETE");
