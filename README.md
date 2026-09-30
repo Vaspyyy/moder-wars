@@ -91,3 +91,22 @@ The live overview keeps only current values. Intelligence/contact memory, econom
 Commander mode has been retired, including its menus, briefing, HUD, operation definitions, and simulation branches. Conquest AI, task forces, tactical spatial buckets, cached decisions, workers, profiling, and benchmarks remain. Task forces hand units directly to replacement plans; combat retreats use nearby friendly ground and fixed local destinations. Withdrawal and regrouping have firm time limits, and emergency defense can reclaim recovering units.
 
 Run `biome check .` after editing. Individual offline checks live in `scripts/*-smoke.mjs`; the module graph check requires `node --experimental-vm-modules scripts/module-graph-smoke.mjs`. It verifies imports and offline-cache coverage without evaluating game code. `render-passes-smoke.mjs` additionally accepts `MW_RENDER_BASELINE` for an optional renderer comparison and uses native Canvas when available for flag-clipping checks. These scripts are offline checks, not interactive playtests.
+
+## Terminal Profiling
+
+Run the actual simulation against the bundled 2022 map, without opening a browser:
+
+```sh
+node scripts/profile-performance.mjs
+node scripts/profile-performance.mjs --case regional --heap --phases
+node scripts/profile-performance.mjs --case regional --spread --output /tmp/mw-spread
+node scripts/profile-performance.mjs --compare /tmp/previous/report.json
+```
+
+The default suite covers Turkey–Iraq, Russia–China, and a four-country European FFA at standard grid resolution. It runs three fresh timing processes per case, then a separate V8 CPU sampling pass and a Node worker transport probe. `--heap` adds allocation sampling; `--phases` adds a separate intrusive timer/counter pass. `--help` lists army size, resolution, warmup, repetition, and output controls. Node 22.7+ is required; no root npm installation is needed.
+
+Reports default to the ignored `performance-results/` directory. Each output directory contains a terminal-readable `report.txt`, a machine-readable `report.json`, and `.cpuprofile` files, plus `.heapprofile` files when requested. Baseline comparisons reject changed workloads, hardware, OS, or Node versions. Keep the machine otherwise idle for timing runs. Debug console logging is suppressed in benchmark processes.
+
+These are controlled deployments using real map data, not exact menu-start reproductions. Loading and warmup are excluded from tick statistics. Worker transport exercises the production core, packed snapshots, changed map tiles, and mirror application through Node worker threads at two logical ticks per snapshot; it excludes the browser worker's real-time timer and rendering. CPU and heap sampling are separate from the reported timing runs. Heap sampling estimates allocation churn, including collected objects; ArrayBuffer memory is reported separately. This measures CPU costs, not browser FPS or GPU rendering.
+
+See [the measured bottleneck audit](docs/PERFORMANCE-AUDIT.md) for results and priorities. The harness uses [Node's V8 inspector](https://nodejs.org/api/inspector.html#cpu-profiler) and keeps all profiling machinery out of the game's runtime.

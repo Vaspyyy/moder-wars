@@ -1,5 +1,5 @@
 export const PERF_COUNTER_DEFAULTS = {
-	_version: "V0.27.38",
+	_version: "V0.27.39",
 	_mode: "off",
 	_enabled: false,
 	plans: 0,

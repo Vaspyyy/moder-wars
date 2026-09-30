@@ -12,3 +12,6 @@ AI_COMMANDER.md
 biome.json
 .mimocode/
 .opencode/
+
+# Local CLI CPU/heap profiles and measurement reports
+/performance-results/
