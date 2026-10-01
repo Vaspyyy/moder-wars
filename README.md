@@ -45,6 +45,8 @@ Find it under **Settings → Display → Style**. Existing installs adopt Atlas 
 
 Coastlines follow the selected 110m, 50m or 10m geography resolution. The small 110m asset is included in the offline shell; higher-resolution coastlines download on demand and enter the runtime cache. If geography cannot load, Atlas uses its grid coastline fallback.
 
+During wars, Atlas Political animates territory fills and frontline contours between ownership updates over 180 ms, including at normal speed. New captures during an animation continue from its current position. This is presentation only: combat, captures, statistics and selection still use the authoritative simulation. Editing, other map styles and the system's reduced-motion preference use immediate updates.
+
 ## Custom Scenarios
 
 Modern Wars can load custom scenario files and community scenarios. This is separate from the built-in era picker: the main era menu currently exposes only 2022 Modern Day, but the editor and community tools can still create, import, remix, and share other setups.
@@ -63,6 +65,8 @@ Older era data, thumbnails, hidden cards, dormant click handlers, and import pre
 Atlas coast assets contain compressed packed coordinates derived from the bundled Natural Earth data, without feature properties. Regenerate an asset with `node scripts/prepare-atlas-coast.mjs 110m` (or `50m` / `10m`). This is an asset maintenance command; serving the game still requires no build.
 
 Camera movement transforms buffered canvas layers during gestures and repaints near the buffer edge or when movement ends. Zoom detail levels retain their country geometry. Captures and recordings use a viewport-sized canvas.
+
+Border motion uses a separate Canvas surface and cached Mercator anchors, without rebuilding political chunks or projecting each animated vertex through Leaflet. Work is capped at 512 changed visible cells; excess changes appear through the normal static repaint. Animation redraws target 60 Hz and drop to 30 Hz when measured paint work exceeds 8 ms. Static repaints and camera changes refresh the animation immediately. `node scripts/border-motion-smoke.mjs` checks mesh endpoints, intermediate geometry, snapshot ordering and bounded work; set `MW_CANVAS_MODULE` to a native Canvas module for optional pixel checks. `node scripts/border-motion-benchmark.mjs` measures forced animation paints on a controlled scattered-capture fixture, excluding browser/GPU costs.
 
 Run `node scripts/camera-performance-smoke.mjs` to check exact cached half-cell projections against a full-Earth fixture. It reports Node CPU work and projection counts, not browser or GPU frame rate. For comparison, pass `--compare /path/to/previous-renderer.js` to use an earlier renderer's projection block on the same fixture.
 

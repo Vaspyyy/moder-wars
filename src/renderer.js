@@ -76,6 +76,11 @@ import {
 	worldWidthDeg,
 } from "./main.js";
 import { drawAtlasOcean, requestAtlasCoast } from "./render-atlas.js";
+import {
+	captureBorderMotion,
+	createBorderMotion,
+	drawBorderMotion,
+} from "./render-border-motion.js";
 import { paintClippedFlag, resolveRenderFlag } from "./render-flags.js";
 import { drawLabels } from "./render-labels.js";
 import { drawOverlays } from "./render-overlays.js";
@@ -413,10 +418,15 @@ const ControlMapLayer = L.Layer.extend({
 		this._container.style.pointerEvents = "none";
 		this._container.style.zIndex = "400";
 		this._staticSurface = createRenderSurface();
+		this._borderMotionSurface = createRenderSurface();
+		this._borderMotion = createBorderMotion();
+		this._borderMotionFrame = null;
+		this._borderMotionRaf = 0;
 		this._labelsSurface = createRenderSurface();
 		this._overlaysSurface = createRenderSurface();
 		this._surfaces = [
 			this._staticSurface,
+			this._borderMotionSurface,
 			this._container,
 			this._labelsSurface,
 			this._overlaysSurface,
@@ -533,6 +543,11 @@ const ControlMapLayer = L.Layer.extend({
 		this._tilePane?.addEventListener("load", this._onTileLoad, true);
 	},
 	onRemove: function (map) {
+		if (this._borderMotionRaf) cancelAnimationFrame(this._borderMotionRaf);
+		this._borderMotionRaf = 0;
+		this._borderMotion?.clear();
+		this._borderMotionFrame = null;
+		this._borderMotionProjection = null;
 		if (this._renderRaf) cancelAnimationFrame(this._renderRaf);
 		this._renderRaf = 0;
 		this._renderRequested = false;
@@ -624,6 +639,7 @@ const ControlMapLayer = L.Layer.extend({
 		if (layerMask & RENDER_LAYERS.STATIC) {
 			this._staticCacheKey = "";
 			if (!preserveWorldCache) {
+				this._borderMotion?.clear();
 				this._politicalChunkCache?.clear();
 				this._regionChunkCache?.clear();
 			}
@@ -688,6 +704,25 @@ const ControlMapLayer = L.Layer.extend({
 		this._controlChangeTrackingEnabled = Boolean(enabled);
 		this._allControlTilesDirty = true;
 		this.invalidate(RENDER_LAYERS.STATIC);
+	},
+
+	beginControlTileTransition: function (tiles) {
+		captureBorderMotion(this, tiles, performance.now());
+		this._scheduleBorderMotion();
+	},
+
+	_scheduleBorderMotion: function () {
+		if (
+			this._borderMotionRaf ||
+			!this._borderMotion?.size ||
+			this._compositeLayers
+		)
+			return;
+		this._borderMotionRaf = requestAnimationFrame(() => {
+			this._borderMotionRaf = 0;
+			drawBorderMotion(this, this._borderMotionFrame, performance.now());
+			this._scheduleBorderMotion();
+		});
 	},
 
 	/**
@@ -1386,7 +1421,7 @@ const ControlMapLayer = L.Layer.extend({
 		// bounds for UV mapping, preventing the engine from walking entire massive nations like Russia.
 		const regions = fullStaticRefresh ? [] : this._cachedRegions || [];
 
-		drawTerrain.call(this, {
+		const terrainFrame = {
 			padding,
 			createSurface: () => document.createElement("canvas"),
 			mapResolution,
@@ -1462,13 +1497,34 @@ const ControlMapLayer = L.Layer.extend({
 			staticLoopYMax,
 			staticLoopXMin,
 			staticLoopXMax,
-		});
+		};
+		drawTerrain.call(this, terrainFrame);
+		const animateBorders =
+			isAtlas &&
+			isWar &&
+			!isEditing &&
+			viewMode === "POLITICAL" &&
+			!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+		this._borderMotionFrame = animateBorders
+			? {
+					...terrainFrame,
+					materialGeneration: this._politicalChunkCache?.generation,
+				}
+			: null;
+		if (!animateBorders) this._borderMotion.clear();
+		drawBorderMotion(
+			this,
+			this._borderMotionFrame,
+			performance.now(),
+			renderStatic || cinematicMode || this._isCapturing === true,
+		);
 
 		// Let the browser composite unchanged map layers during normal viewing.
 		// Exports and recordings still receive the complete public canvas.
 		this._compositeLayers = cinematicMode || this._isCapturing === true;
 		for (const surface of [
 			this._staticSurface,
+			this._borderMotionSurface,
 			this._labelsSurface,
 			this._overlaysSurface,
 		]) {
@@ -1486,7 +1542,15 @@ const ControlMapLayer = L.Layer.extend({
 				this._container.width / dpr,
 				this._container.height / dpr,
 			);
+			mainCtx.drawImage(
+				this._borderMotionSurface,
+				0,
+				0,
+				this._container.width / dpr,
+				this._container.height / dpr,
+			);
 		}
+		this._scheduleBorderMotion();
 		ctx = mainCtx;
 
 		// Pass 4: Selection Highlight

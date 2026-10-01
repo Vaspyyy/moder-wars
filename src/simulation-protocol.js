@@ -271,6 +271,7 @@ export function createControlDeltaTracker(state) {
 	};
 }
 export function applyControlDeltas(runtime, tiles) {
+	runtime.influenceLayer?.beginControlTileTransition?.(tiles);
 	for (const tile of tiles)
 		for (const field of CONTROL_MAP_FIELDS) {
 			const values = tile[field],
