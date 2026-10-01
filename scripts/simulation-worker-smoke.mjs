@@ -127,15 +127,22 @@ try {
 	await delay(230);
 	send("CONTROL", 2, { paused: true });
 	const slow = await snapshot(2);
-	send("CONTROL", 2, { paused: false, speed: 4 });
+	send("CONTROL", 2, { paused: false, speed: 5 });
 	await delay(230);
 	send("CONTROL", 2, { paused: true });
 	const fast = await snapshot(2);
 	const slowTicks = slow.values._simTickCount, fastTicks = fast.values._simTickCount - slowTicks;
 	assert.ok(slowTicks >= 3);
-	assert.ok(fastTicks > slowTicks * 1.5, `4x control accelerates worker ticks (${slowTicks} vs ${fastTicks})`);
+	assert.ok(fastTicks > slowTicks * 1.5, `5x control accelerates worker ticks (${slowTicks} vs ${fastTicks})`);
+	send("CONTROL", 2, { paused: false, speed: 10 });
+	await delay(230);
+	send("CONTROL", 2, { paused: true });
+	const fastest = await snapshot(2);
+	const fastestTicks = fastest.values._simTickCount - fast.values._simTickCount;
+	assert.ok(fastestTicks > slowTicks * 1.5, `10x control accelerates worker ticks (${slowTicks} vs ${fastestTicks})`);
 
 	const resized = (await handoff(2, 22)).state;
+	assert.equal(resized.simSpeed, 10, "10x control survives the full-owner handoff");
 	assert.equal(resized.gridWidth, 72, "new INIT replaces grid dimensions and tracker layout");
 	assert.equal(resized.CONFIG.GRID_RES, 5);
 	assert.equal(resized.worldControlMap.length, 72 * 36);
@@ -163,7 +170,7 @@ try {
 	const overlaySnapshot = await initialize(4, overlays);
 	for (const field of ["_coastalDefensePlan", "_neutralGarrisonPlan", "_aiDebugPlans"])
 		assert.deepEqual(overlaySnapshot.values[field], overlays[field], `${field} remains visible across the worker boundary`);
-	console.log(`Actual worker INIT, snapshots/deltas, pause, ${slowTicks}/${fastTicks} speed ticks, epochs, treaty, and dense/full-unit handoff passed.`);
+	console.log(`Actual worker INIT, snapshots/deltas, pause, 1x/5x/10x ${slowTicks}/${fastTicks}/${fastestTicks} speed ticks, epochs, treaty, and dense/full-unit handoff passed.`);
 } finally {
 	await worker.terminate();
 }

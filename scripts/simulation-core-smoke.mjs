@@ -26,6 +26,8 @@ const frames144 = Array.from({ length: 144 }, (_, i) => (i + 1) * 1000 / 144);
 for (const schedule of [frames60, frames144, [7, 10, 29, 180, 191, 711, 1000], [1000]]) {
  assert.equal(runClock(schedule).ticks, 60);
  assert.equal(runClock(schedule, 3).ticks, 180);
+ assert.equal(runClock(schedule, 5).ticks, 300);
+ assert.equal(runClock(schedule, 10).ticks, 600);
 }
 let wallTime = 0;
 const budgetClock = createSimulationClock({ onTick: () => { wallTime += 3; }, now: () => wallTime, maxTurnMs: 8 });

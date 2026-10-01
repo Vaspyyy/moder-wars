@@ -6461,8 +6461,8 @@ export function _signSelectivePeace(...args) {
 	return editSimulation(() => lifecycle._signSelectivePeace(...args));
 }
 
-export const SPEED_STEPS = [1, 2, 3];
-export let currentSpeedIndex = 0; // Index for "0.1x"
+export const SPEED_STEPS = [1, 2, 3, 5, 10];
+export let currentSpeedIndex = 0; // Start at 1x.
 
 export function togglePause() {
 	isPaused = !isPaused;
