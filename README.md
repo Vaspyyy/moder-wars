@@ -55,6 +55,8 @@ Modern Wars can load custom scenario files and community scenarios. This is sepa
 - Click a country to inspect it and assign it during setup
 - Space pauses/resumes during a war; + / − changes the speed level. The speed selector also supports native radio-button arrow-key navigation.
 
+Speeds are target multipliers: large wars may reach the CPU's simulation limit before 5× or 10×. Lowering speed immediately clears accumulated catch-up time. Live clocks keep at most 60 pending ticks, so a slow period cannot leave minutes of time queued. Each completed tick still performs the full simulation; the calendar advances only for completed ticks.
+
 ## Known State
 
 Older era data, thumbnails, hidden cards, dormant click handlers, and import presets may still exist in the codebase. They are not currently exposed as supported main-menu eras unless they are visible in the **Choose Era** screen.

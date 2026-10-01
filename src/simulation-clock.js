@@ -1,4 +1,9 @@
 /** Fixed simulation time advances independently of display refresh and rendering. */
+export const LIVE_SIMULATION_CLOCK_OPTIONS = Object.freeze({
+	maxPendingTicks: 60,
+	resetBacklogOnSpeedReduction: true,
+});
+
 export function createSimulationClock(callbackOrOptions = {}, options = {}) {
 	const {
 		onTick,
@@ -6,6 +11,8 @@ export function createSimulationClock(callbackOrOptions = {}, options = {}) {
 		ticksPerSecond = 60,
 		maxTicksPerTurn = 6,
 		maxTurnMs = 8,
+		maxPendingTicks = Infinity,
+		resetBacklogOnSpeedReduction = false,
 		speed = 1,
 		paused = false,
 	} = typeof callbackOrOptions === "function"
@@ -18,6 +25,11 @@ export function createSimulationClock(callbackOrOptions = {}, options = {}) {
 	if (!Number.isInteger(maxTicksPerTurn) || maxTicksPerTurn < 1)
 		throw new RangeError("A turn must permit at least one tick");
 	if (!(maxTurnMs > 0)) throw new RangeError("Turn budget must be positive");
+	if (
+		maxPendingTicks !== Infinity &&
+		(!Number.isInteger(maxPendingTicks) || maxPendingTicks < 1)
+	)
+		throw new RangeError("Pending tick limit must be a positive integer");
 	const tickMs = 1000 / ticksPerSecond;
 	const turnLimit = Math.min(6, maxTicksPerTurn);
 	let lastTimestamp = null;
@@ -38,7 +50,10 @@ export function createSimulationClock(callbackOrOptions = {}, options = {}) {
 		if (lastTimestamp !== null && timestamp < lastTimestamp)
 			throw new RangeError("Simulation timestamps must be monotonic");
 		if (lastTimestamp !== null && !isPaused)
-			accumulatorMs += (timestamp - lastTimestamp) * currentSpeed;
+			accumulatorMs = Math.min(
+				accumulatorMs + (timestamp - lastTimestamp) * currentSpeed,
+				tickMs * maxPendingTicks,
+			);
 		lastTimestamp = timestamp;
 	}
 
@@ -79,6 +94,10 @@ export function createSimulationClock(callbackOrOptions = {}, options = {}) {
 		const nextSpeed =
 			control.speed == null ? currentSpeed : validateSpeed(control.speed);
 		accrue(timestamp);
+		// Live play follows the newly selected pace. Keeping old high-speed debt
+		// would run at full throughput long after the player asks to slow down.
+		if (resetBacklogOnSpeedReduction && nextSpeed < currentSpeed)
+			accumulatorMs = 0;
 		currentSpeed = nextSpeed;
 		if (control.paused != null) {
 			const nextPaused = Boolean(control.paused);

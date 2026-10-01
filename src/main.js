@@ -1,7 +1,10 @@
 import { createConflictPresentation } from "./conflict-presentation.js";
 import { createLiveContext } from "./runtime-context.js";
 import { createSimulationClient } from "./simulation-client.js";
-import { createSimulationClock } from "./simulation-clock.js";
+import {
+	createSimulationClock,
+	LIVE_SIMULATION_CLOCK_OPTIONS,
+} from "./simulation-clock.js";
 import { PERF_COUNTER_DEFAULTS } from "./simulation-metrics.js";
 import { resizeSimulationGrid } from "./simulation-resize.js";
 
@@ -1418,7 +1421,7 @@ const localSimulationClock = createSimulationClock(
 		tickGameTime(1000 / 60 / Math.max(simSpeed, 0.01));
 		return !ended;
 	},
-	{ speed: 1, paused: true },
+	{ ...LIVE_SIMULATION_CLOCK_OPTIONS, speed: 1, paused: true },
 );
 const simulationClient = createSimulationClient(applicationRuntime, {
 	onEvent: (type, ...args) => {

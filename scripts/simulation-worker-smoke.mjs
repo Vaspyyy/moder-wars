@@ -136,13 +136,24 @@ try {
 	assert.ok(fastTicks > slowTicks * 1.5, `5x control accelerates worker ticks (${slowTicks} vs ${fastTicks})`);
 	send("CONTROL", 2, { paused: false, speed: 10 });
 	await delay(230);
-	send("CONTROL", 2, { paused: true });
 	const fastest = await snapshot(2);
 	const fastestTicks = fastest.values._simTickCount - fast.values._simTickCount;
 	assert.ok(fastestTicks > slowTicks * 1.5, `10x control accelerates worker ticks (${slowTicks} vs ${fastestTicks})`);
+	// Reduce directly while running: pausing first would erase the very backlog
+	// that caused the reported speed lock and conceal a regression.
+	send("CONTROL", 2, { speed: 1 });
+	const slowdownStart = await snapshot(2);
+	const slowdownWallStart = performance.now();
+	await delay(230);
+	send("CONTROL", 2, { paused: true });
+	const slowed = await snapshot(2);
+	const slowdownElapsed = performance.now() - slowdownWallStart;
+	const slowedTicks = slowed.values._simTickCount - slowdownStart.values._simTickCount;
+	assert.ok(slowedTicks >= 3, "lowering speed keeps the worker running");
+	assert.ok(slowedTicks <= Math.ceil(slowdownElapsed * 60 / 1000) + 6, `1x follows current wall time instead of draining old 10x ticks (${slowedTicks} ticks in ${slowdownElapsed.toFixed(0)} ms)`);
 
 	const resized = (await handoff(2, 22)).state;
-	assert.equal(resized.simSpeed, 10, "10x control survives the full-owner handoff");
+	assert.equal(resized.simSpeed, 1, "lower speed survives the full-owner handoff");
 	assert.equal(resized.gridWidth, 72, "new INIT replaces grid dimensions and tracker layout");
 	assert.equal(resized.CONFIG.GRID_RES, 5);
 	assert.equal(resized.worldControlMap.length, 72 * 36);
@@ -170,7 +181,7 @@ try {
 	const overlaySnapshot = await initialize(4, overlays);
 	for (const field of ["_coastalDefensePlan", "_neutralGarrisonPlan", "_aiDebugPlans"])
 		assert.deepEqual(overlaySnapshot.values[field], overlays[field], `${field} remains visible across the worker boundary`);
-	console.log(`Actual worker INIT, snapshots/deltas, pause, 1x/5x/10x ${slowTicks}/${fastTicks}/${fastestTicks} speed ticks, epochs, treaty, and dense/full-unit handoff passed.`);
+	console.log(`Actual worker INIT, snapshots/deltas, pause, 1x/5x/10x/1x ${slowTicks}/${fastTicks}/${fastestTicks}/${slowedTicks} speed ticks, epochs, treaty, and dense/full-unit handoff passed.`);
 } finally {
 	await worker.terminate();
 }

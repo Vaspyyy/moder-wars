@@ -1,4 +1,7 @@
-import { createSimulationClock } from "./simulation-clock.js";
+import {
+	createSimulationClock,
+	LIVE_SIMULATION_CLOCK_OPTIONS,
+} from "./simulation-clock.js";
 import { createSimulationCore } from "./simulation-core.js";
 import {
 	applyControlDeltas,
@@ -153,6 +156,7 @@ export function createSimulationClient(
 		});
 		trackerState.tracker = createControlDeltaTracker(local.state);
 		clock = createSimulationClock(() => local.tick(), {
+			...LIVE_SIMULATION_CLOCK_OPTIONS,
 			speed: local.state.simSpeed,
 			paused: local.state.isPaused,
 		});
