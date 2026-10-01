@@ -396,24 +396,11 @@ export function createMenuControls(runtime) {
 		runtime.pauseBtn.addEventListener("click", runtime.togglePause);
 	}
 
-	function bindFfBtnClick() {
-		runtime.ffBtn.addEventListener("click", () => {
-			const nextIndex =
-				(runtime.currentSpeedIndex + 1) % runtime.SPEED_STEPS.length;
-			runtime.setSpeed(nextIndex);
-		});
-	}
-
-	function bindSpeedDownBtnClick() {
-		runtime.speedDownBtn.addEventListener("click", () => {
-			runtime.setSpeed(runtime.currentSpeedIndex - 1);
-		});
-	}
-
-	function bindSpeedUpBtnClick() {
-		runtime.speedUpBtn.addEventListener("click", () => {
-			runtime.setSpeed(runtime.currentSpeedIndex + 1);
-		});
+	function bindSpeedSelectorChange() {
+		for (const input of runtime.speedInputs)
+			input.addEventListener("change", () => {
+				if (input.checked) runtime.setSpeed(Number(input.dataset.speedIndex));
+			});
 	}
 
 	function bindCustomTrackInputChange() {
@@ -911,9 +898,7 @@ export function createMenuControls(runtime) {
 		bindResetBtnClick,
 		bindForcePeaceBtnClick,
 		bindPauseBtnClick,
-		bindFfBtnClick,
-		bindSpeedDownBtnClick,
-		bindSpeedUpBtnClick,
+		bindSpeedSelectorChange,
 		bindCustomTrackInputChange,
 		bindClearCustomTrackBtnClick,
 		bindTabScenariosBtnClick,

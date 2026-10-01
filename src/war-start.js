@@ -159,8 +159,6 @@ export function createWarStart(runtime) {
 			document.getElementById("game-status").style.display = "flex";
 			document.getElementById("stats-panel").style.display = "block";
 		}
-		runtime.pauseBtn.innerText = "Pause";
-		runtime.pauseBtn.style.background = "#f39c12";
 		runtime.lastTreatyTime = Date.now();
 		runtime.sideCasualties.fill(0);
 		runtime.countryCasualties.clear();

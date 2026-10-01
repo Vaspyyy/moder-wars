@@ -39,7 +39,7 @@ export function createConflictReset(runtime) {
 			runtime.setupPanel.style.display = "none";
 			runtime.statsPanel.style.display = "none";
 			runtime.resetBtn.style.display = "block";
-			runtime.ffBtn.style.display = "none";
+			runtime.speedControls.style.display = "none";
 			runtime.forcePeaceBtn.style.display = "none";
 			runtime.unitCountsDiv.style.display = "none";
 			runtime.updateRestartVisibility();

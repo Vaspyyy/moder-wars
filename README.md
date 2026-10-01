@@ -34,7 +34,7 @@ The current **Choose Era** menu exposes one playable era:
 - **COMMUNITY** browses, uploads, remixes, and downloads shared scenarios or countries.
 - **SETTINGS** groups preferences into Gameplay, Display, Audio, Interface, and Advanced. Benchmark and performance tuning live under Advanced.
 - Country cards keep identity and manpower visible, with buffs, allies, role, and doctrine under **Configure**.
-- The live toolbar keeps map controls and simulation speed visible, with 1×, 2×, 3×, 5× and 10× options; restart, sandbox, sound, help, fullscreen, and navigation actions live under **Menu**.
+- The live toolbar has a five-bar speed selector: click 1×, 2×, 3×, 5× or 10× directly. Filled bars show the selected level; pausing retains your chosen speed. Restart, sandbox, sound, help, fullscreen, and navigation actions live under **Menu**.
 - **God Mode** and editor tools can stage custom wars, alter borders, and test scenarios.
 
 ## Map Appearance
@@ -53,6 +53,7 @@ Modern Wars can load custom scenario files and community scenarios. This is sepa
 
 - Click-and-drag to pan, scroll to zoom
 - Click a country to inspect it and assign it during setup
+- Space pauses/resumes during a war; + / − changes the speed level. The speed selector also supports native radio-button arrow-key navigation.
 
 ## Known State
 

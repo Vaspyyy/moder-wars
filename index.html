@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://esm.sh 'sha256-UbZTXngprJmMtanNXRwZ5Pi9M0w7gaPwpxlWfxaufYA='; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.websim.ai https://*.websim.com https://*.arcgisonline.com https://*.google.com wss:; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self';">
-    <title>MW-V0.27.45</title>
+    <title>MW-V0.27.46</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous" />
     <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
@@ -397,10 +397,18 @@
 
 
 <div class="hud-control-strip hud-start-hidden" id="speed-controls">
-<button class="mini-btn hud-action hud-action--warning hud-action--icon hud-pause-action" id="pause-btn">Pause</button>
-<button class="mini-btn hud-action hud-speed-step" id="speed-down-btn">‹</button>
-<button class="mini-btn hud-action hud-speed-readout" id="ff-btn">1x</button>
-<button class="mini-btn hud-action hud-speed-step" id="speed-up-btn">›</button>
+<button class="mini-btn hud-action hud-pause-action" id="pause-btn" type="button" aria-label="Pause simulation" aria-pressed="false" title="Pause simulation (Space)">
+<svg class="hud-pause-icon" aria-hidden="true" viewBox="0 0 16 16" width="16" height="16"><rect x="3" y="3" width="4" height="10"/><rect x="9" y="3" width="4" height="10"/></svg>
+<svg class="hud-resume-icon" aria-hidden="true" viewBox="0 0 16 16" width="16" height="16"><path d="M4 2 L14 8 L4 14 Z"/></svg>
+</button>
+<fieldset class="hud-speed-selector" id="speed-selector" title="Simulation speed (+ / −)">
+<legend class="visually-hidden">Simulation speed</legend>
+<label class="hud-speed-option is-filled" title="1× speed"><input class="hud-speed-input" type="radio" name="simulation-speed" value="1" data-speed-index="0" checked/><span class="hud-speed-face"><span class="hud-speed-bar" aria-hidden="true"></span><span>1×</span></span></label>
+<label class="hud-speed-option" title="2× speed"><input class="hud-speed-input" type="radio" name="simulation-speed" value="2" data-speed-index="1"/><span class="hud-speed-face"><span class="hud-speed-bar" aria-hidden="true"></span><span>2×</span></span></label>
+<label class="hud-speed-option" title="3× speed"><input class="hud-speed-input" type="radio" name="simulation-speed" value="3" data-speed-index="2"/><span class="hud-speed-face"><span class="hud-speed-bar" aria-hidden="true"></span><span>3×</span></span></label>
+<label class="hud-speed-option" title="5× speed"><input class="hud-speed-input" type="radio" name="simulation-speed" value="5" data-speed-index="3"/><span class="hud-speed-face"><span class="hud-speed-bar" aria-hidden="true"></span><span>5×</span></span></label>
+<label class="hud-speed-option" title="10× speed"><input class="hud-speed-input" type="radio" name="simulation-speed" value="10" data-speed-index="4"/><span class="hud-speed-face"><span class="hud-speed-bar" aria-hidden="true"></span><span>10×</span></span></label>
+</fieldset>
 </div>
 
 </div>

@@ -282,12 +282,11 @@ const applicationRuntime = createLiveContext(
 		updateLoop: () => updateLoop,
 		pauseBtn: () => pauseBtn,
 		togglePause: () => togglePause,
-		ffBtn: () => ffBtn,
+		speedControls: () => speedControls,
+		speedInputs: () => speedInputs,
 		currentSpeedIndex: () => currentSpeedIndex,
 		SPEED_STEPS: () => SPEED_STEPS,
 		setSpeed: () => setSpeed,
-		speedDownBtn: () => speedDownBtn,
-		speedUpBtn: () => speedUpBtn,
 		customTrackInput: () => customTrackInput,
 		loadingStatus: () => loadingStatus,
 		loadingOverlay: () => loadingOverlay,
@@ -1034,6 +1033,7 @@ const applicationRuntime = createLiveContext(
 		},
 		isPaused: (value) => {
 			isPaused = value;
+			updateSpeedControls();
 		},
 		brushSize: (value) => {
 			brushSize = value;
@@ -3657,10 +3657,11 @@ export function updateRestartVisibility() {
 		if (leaderboardBtn) leaderboardBtn.style.display = "block";
 	}
 }
-export const ffBtn = document.getElementById("ff-btn");
 export const pauseBtn = document.getElementById("pause-btn");
-export const speedDownBtn = document.getElementById("speed-down-btn");
-export const speedUpBtn = document.getElementById("speed-up-btn");
+export const speedControls = document.getElementById("speed-controls");
+export const speedInputs = Array.from(
+	speedControls.querySelectorAll('input[name="simulation-speed"]'),
+);
 export const godModeBtn = document.getElementById("god-mode-btn");
 export const godBombBtn = document.getElementById("god-bomb-btn");
 export const forcePeaceBtn = document.getElementById("force-peace-btn");
@@ -5949,6 +5950,7 @@ export function updateLoop() {
 	if (_isBenchmarking && realNow >= _perfBenchmarkEnd) {
 		_isBenchmarking = false;
 		isPaused = true;
+		updateSpeedControls();
 		if (perfOverlay) perfOverlay.style.display = "none";
 		showBenchmarkResults();
 		animationFrameId = requestAnimationFrame(updateLoop);
@@ -6464,13 +6466,31 @@ export function _signSelectivePeace(...args) {
 export const SPEED_STEPS = [1, 2, 3, 5, 10];
 export let currentSpeedIndex = 0; // Start at 1x.
 
+export function updateSpeedControls() {
+	for (const input of speedInputs) {
+		const index = Number(input.dataset.speedIndex);
+		input.checked = index === currentSpeedIndex;
+		input.parentElement.classList.toggle(
+			"is-filled",
+			index <= currentSpeedIndex,
+		);
+	}
+	speedControls.dataset.paused = String(isPaused);
+	pauseBtn.setAttribute("aria-pressed", String(isPaused));
+	pauseBtn.setAttribute(
+		"aria-label",
+		isPaused ? "Resume simulation" : "Pause simulation",
+	);
+	pauseBtn.title = isPaused
+		? "Resume simulation (Space)"
+		: "Pause simulation (Space)";
+}
+
 export function togglePause() {
 	isPaused = !isPaused;
 	simulationClient.syncControls();
 	localSimulationClock.configure({ paused: isPaused, speed: simSpeed });
-	pauseBtn.innerText = isPaused ? "Resume" : "Pause";
-	pauseBtn.setAttribute("aria-pressed", String(isPaused));
-	pauseBtn.style.background = "";
+	updateSpeedControls();
 	statusText.innerText = isPaused
 		? getTranslation("SIM_PAUSED")
 		: ffaMode
@@ -6522,20 +6542,11 @@ export function setSpeed(index) {
 	simSpeed = SPEED_STEPS[currentSpeedIndex];
 	simulationClient.syncControls();
 	localSimulationClock.configure({ speed: simSpeed, paused: isPaused });
-	ffBtn.innerText = `${simSpeed}x`;
-	if (simSpeed === 1) {
-		ffBtn.classList.remove("active");
-	} else {
-		ffBtn.classList.add("active");
-	}
+	updateSpeedControls();
 	frameAccumulator = 0;
 }
 
-menu_controls.bindFfBtnClick();
-
-menu_controls.bindSpeedDownBtnClick();
-
-menu_controls.bindSpeedUpBtnClick();
+menu_controls.bindSpeedSelectorChange();
 
 menu_controls.bindCustomTrackInputChange();
 
