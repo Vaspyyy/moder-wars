@@ -1,4 +1,3 @@
-import { weightedBorderQuad } from "./border-geometry.js";
 import { atlasColor, atlasQuad } from "./render-atlas.js";
 
 // Political materials and meshes live in world-grid coordinates. Camera motion
@@ -173,7 +172,7 @@ function makeMaterials(frame) {
 		variants[variantIndex] = id;
 		return id;
 	};
-	const resolve = (index, control = null) => {
+	const resolve = (index) => {
 		// Extend the color field by one cell only when a precise Earth coast clips
 		// it back. The extension cannot paint unselectable islands into the ocean.
 		if (frame.atlasCoast && frame.landMask[index] === 0) {
@@ -199,10 +198,9 @@ function makeMaterials(frame) {
 				}
 			if (nearest >= 0) index = nearest;
 		}
-		const mask = control?.landMask ?? frame.landMask[index];
+		const mask = frame.landMask[index];
 		if (mask !== 1 && mask !== 2) return 0;
-		const sovereignId =
-			control?.worldControlMap ?? frame.worldControlMap[index];
+		const sovereignId = frame.worldControlMap[index];
 		const background = frame.viewMode === "FLAG";
 		const biome = frame.biomeMask[index];
 		let base;
@@ -218,13 +216,12 @@ function makeMaterials(frame) {
 				frame.isWar &&
 				mask === 2
 			) {
-				const side = control?.dominantSideMap ?? frame.dominantSideMap[index];
+				const side = frame.dominantSideMap[index];
 				if (side !== -1) {
 					if (side === frame.sovereignSideMap[sovereignId]) {
 						base = countries[sovereignId][1];
 					} else {
-						const occupier =
-							control?.primaryOccupierMap ?? frame.primaryOccupierMap[index];
+						const occupier = frame.primaryOccupierMap[index];
 						const key =
 							occupier > 0 ? occupier : -(side + 1) * 65536 - sovereignId;
 						base = occupants.get(key);
@@ -274,9 +271,7 @@ export function createPoliticalChunkCache() {
 	let dimensions;
 	let built = 0;
 	let reused = 0;
-	let generation = 0;
 	const clear = () => {
-		generation++;
 		chunks.clear();
 		styleKey = undefined;
 		palette = undefined;
@@ -494,23 +489,6 @@ export function createPoliticalChunkCache() {
 					const b = frame.dominantSideMap[index + 1];
 					const c = frame.dominantSideMap[below + 1];
 					const d = frame.dominantSideMap[below];
-					if (frame.isAtlas) {
-						if (a === b && a === c && a === d) continue;
-						if (a >= 0 && b >= 0 && c >= 0 && d >= 0) {
-							for (const edge of atlasQuad([a, b, c, d], gx, gy).borders)
-								frontlines.push(...edge);
-							continue;
-						}
-						const mesh = weightedBorderQuad(
-							[a, b, c, d].map((side) => new Map([[side, 1]])),
-							gx,
-							gy,
-						);
-						for (const edge of mesh.borders)
-							if (edge.left >= 0 && edge.right >= 0)
-								frontlines.push(...edge.from, ...edge.to);
-						continue;
-					}
 					let count = 0;
 					if (a >= 0 && b >= 0 && a !== b) {
 						crossings[count++] = gx + 0.5;
@@ -566,10 +544,6 @@ export function createPoliticalChunkCache() {
 		prepare,
 		get,
 		clear,
-		resolveMaterial: (index, control) => palette?.resolve(index, control) || 0,
-		get generation() {
-			return generation;
-		},
 		invalidateTiles(tileKeys, gridWidth, gridHeight) {
 			const columns = Math.ceil(gridWidth / CHUNK_SIZE);
 			const rows = Math.ceil(gridHeight / CHUNK_SIZE);
@@ -617,31 +591,6 @@ export function createPoliticalChunkCache() {
 	};
 }
 
-export function politicalMaterialFill(frame, ctx, material) {
-	const metadata = frame.countryMetadata[material.countryId - 1];
-	let fill = material.fill;
-	if (
-		frame.useSimplifiedBase &&
-		!frame.disableCountryGradient &&
-		metadata?.bounds
-	) {
-		const top = frame.getGridPoint(0, metadata.bounds.minY).y;
-		const bottom = frame.getGridPoint(0, metadata.bounds.maxY).y;
-		fill = ctx.createLinearGradient(0, top, 0, bottom);
-		const { r, g, b, alpha } = material;
-		fill.addColorStop(
-			0,
-			`rgba(${Math.min(255, r + (frame.isAtlas ? 8 : 25))},${Math.min(255, g + (frame.isAtlas ? 8 : 25))},${Math.min(255, b + (frame.isAtlas ? 8 : 25))},${alpha})`,
-		);
-		fill.addColorStop(0.3, material.fill);
-		fill.addColorStop(
-			1,
-			`rgba(${Math.floor(r * (frame.isAtlas ? 0.92 : 0.65))},${Math.floor(g * (frame.isAtlas ? 0.92 : 0.65))},${Math.floor(b * (frame.isAtlas ? 0.92 : 0.65))},${alpha})`,
-		);
-	}
-	return fill;
-}
-
 export function drawPoliticalChunks(layer, frame) {
 	if (!layer._politicalChunkCache)
 		layer._politicalChunkCache = createPoliticalChunkCache();
@@ -660,7 +609,27 @@ export function drawPoliticalChunks(layer, frame) {
 	const fillFor = (id) => {
 		if (fills.has(id)) return fills.get(id);
 		const material = materials[id];
-		const fill = politicalMaterialFill(frame, ctx, material);
+		const metadata = frame.countryMetadata[material.countryId - 1];
+		let fill = material.fill;
+		if (
+			frame.useSimplifiedBase &&
+			!frame.disableCountryGradient &&
+			metadata?.bounds
+		) {
+			const top = frame.getGridPoint(0, metadata.bounds.minY).y;
+			const bottom = frame.getGridPoint(0, metadata.bounds.maxY).y;
+			fill = ctx.createLinearGradient(0, top, 0, bottom);
+			const { r, g, b, alpha } = material;
+			fill.addColorStop(
+				0,
+				`rgba(${Math.min(255, r + (frame.isAtlas ? 8 : 25))},${Math.min(255, g + (frame.isAtlas ? 8 : 25))},${Math.min(255, b + (frame.isAtlas ? 8 : 25))},${alpha})`,
+			);
+			fill.addColorStop(0.3, material.fill);
+			fill.addColorStop(
+				1,
+				`rgba(${Math.floor(r * (frame.isAtlas ? 0.92 : 0.65))},${Math.floor(g * (frame.isAtlas ? 0.92 : 0.65))},${Math.floor(b * (frame.isAtlas ? 0.92 : 0.65))},${alpha})`,
+			);
+		}
 		fills.set(id, fill);
 		return fill;
 	};
