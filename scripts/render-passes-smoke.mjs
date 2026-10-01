@@ -192,7 +192,12 @@ try {
 			assert.deepEqual(split.trace, original.trace, `${draw.name} must preserve the pre-split canvas commands`);
 			assert.equal(split.layer._invalidLayers, original.layer._invalidLayers);
 			assert.equal(split.layer._labelsCacheKey, original.layer._labelsCacheKey);
-			assert.equal(split.layer._overlaysCacheKey, original.layer._overlaysCacheKey);
+			if (draw === drawOverlays) {
+				const key = split.layer._overlaysCacheKey.split(";");
+				assert.equal(key[3], "0", "new diagnostics default remains off");
+				key.splice(3, 1);
+				assert.equal(key.join(";"), original.layer._overlaysCacheKey);
+			} else assert.equal(split.layer._overlaysCacheKey, original.layer._overlaysCacheKey);
 		}
 		console.log("Pre-split terrain, units, labels, and overlays canvas traces match");
 	}

@@ -54,6 +54,7 @@ import {
 	referenceOverlay,
 	refOpacity,
 	rgbaRe,
+	showArmyDiagnostics,
 	showBattleIndicators,
 	showCountryLabels,
 	showNonCapitalCities,
@@ -198,6 +199,54 @@ function drawAiOperationsOverlay(
 	compact,
 	revealedTaskForceUid = null,
 ) {
+	if (showArmyDiagnostics && snapshot.army) {
+		ctx.save();
+		for (const sector of snapshot.army.sectors || []) {
+			ctx.strokeStyle = sector.deficit > 0 ? "#ff925e" : "#86dcc2";
+			ctx.globalAlpha = 0.7;
+			ctx.lineWidth = 3;
+			drawOperationPolyline(ctx, project, sector.points);
+			const anchor = project(sector.hold.lat, sector.hold.lng);
+			ctx.font = "9px monospace";
+			ctx.fillStyle = ctx.strokeStyle;
+			ctx.fillText(
+				`${sector.assignedUnitIds.length} · ${sector.deficit > 0 ? "NEEDS REINFORCEMENT" : "COVERED"}`,
+				anchor.x + 5,
+				anchor.y - 5,
+			);
+		}
+		for (const order of snapshot.army.orders || []) {
+			const from = project(order.from.lat, order.from.lng),
+				to = project(order.target.lat, order.target.lng);
+			ctx.strokeStyle =
+				order.type === "WITHDRAW"
+					? "#ff925e"
+					: order.type === "RESERVE"
+						? "#a8a0ed"
+						: color;
+			ctx.globalAlpha = 0.3;
+			ctx.lineWidth = 1;
+			ctx.setLineDash([2, 4]);
+			ctx.beginPath();
+			ctx.moveTo(from.x, from.y);
+			ctx.lineTo(to.x, to.y);
+			ctx.stroke();
+			ctx.setLineDash([]);
+			ctx.globalAlpha = 0.85;
+			ctx.fillStyle = ctx.strokeStyle;
+			ctx.fillRect(to.x - 2, to.y - 2, 4, 4);
+			if (!compact) {
+				ctx.font = "8px monospace";
+				ctx.fillText(
+					`${order.type} · ${order.reason.toLowerCase().replaceAll("_", " ")}`,
+					from.x + 6,
+					from.y + 10,
+				);
+			}
+		}
+		ctx.restore();
+	}
+	if (!showWarPlans) return;
 	const taskForces = Array.isArray(snapshot.taskForces)
 		? snapshot.taskForces.slice(0, 6)
 		: [];
@@ -284,7 +333,7 @@ function drawAiOperationsOverlay(
 			const objectiveLabel = compact
 				? ""
 				: String(taskForce.objective?.label || taskForce.label || "").trim();
-			const label = `${phase}${readinessLabel}${objectiveLabel ? ` · ${objectiveLabel}` : ""}`;
+			const label = `${phase}${taskForce.stage ? ` · ${taskForce.stage}` : ""}${readinessLabel}${objectiveLabel ? ` · ${objectiveLabel}` : ""}`;
 			ctx.globalAlpha = 0.92;
 			ctx.font = `800 ${compact ? 8 : 9}px monospace`;
 			const width = ctx.measureText(label).width;
@@ -1517,6 +1566,7 @@ const ControlMapLayer = L.Layer.extend({
 			viewportKey,
 			isWar,
 			showWarPlans,
+			showArmyDiagnostics,
 			isCustomTerrain,
 			refAboveTerrain,
 			referenceImageUrl,

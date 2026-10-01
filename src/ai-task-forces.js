@@ -166,6 +166,11 @@ export function createAiTaskForce(input = {}) {
 		),
 		corridor: (input.corridor || []).map((point) => ({ ...point })),
 		frontage: (input.frontage || []).map((point) => ({ ...point })),
+		encirclement: input.encirclement || null,
+		stage: input.stage || "ASSEMBLE",
+		paused: !!input.paused,
+		advance: finite(input.advance),
+		secured: finite(input.secured),
 		phase: input.phase || "ASSEMBLING",
 		posture: normalizePosture(input.posture),
 		assignedUnitIds: [
@@ -232,7 +237,9 @@ export function assignTaskForceRoles(taskForce, units, options = {}) {
 	const members = taskForce.assignedUnitIds
 		.map((id) => byId.get(unitKey(id)))
 		.filter((unit) => eligibleUnit(unit, taskForce.sideUid));
-	const roleInputs = options.roleCache ? [taskForce.posture] : null;
+	const roleInputs = options.roleCache
+		? [taskForce.posture, taskForce.planType]
+		: null;
 	if (roleInputs) {
 		for (const member of members) {
 			const key = unitKey(member.id);
@@ -362,6 +369,19 @@ export function assignTaskForceRoles(taskForce, units, options = {}) {
 			role: "LINE",
 			assignedTick: tick,
 		};
+	}
+	if (taskForce.planType === "ENCIRCLE" && members.length >= 4) {
+		let pincers = Object.values(unitRoles).filter(
+			(assignment) => assignment.role === "SPEARHEAD",
+		).length;
+		for (const member of members) {
+			if (pincers >= 2) break;
+			const key = unitKey(member.id);
+			if (unitRoles[key].role === "LINE" && member.countryRole !== "SUPPORT") {
+				unitRoles[key] = { role: "SPEARHEAD", assignedTick: tick };
+				pincers++;
+			}
+		}
 	}
 	const reserveUnitIds = members
 		.filter((member) => unitRoles[unitKey(member.id)]?.role === "RESERVE")
@@ -659,7 +679,21 @@ export function advanceAiTaskForce(taskForce, context = {}) {
 				completionReason: "OBJECTIVE_INVALID",
 			});
 		}
-		if (next.readiness >= thresholds.launchReadiness) {
+		if (tick - next.phaseStartedTick >= 1800) {
+			return transition(next, "WITHDRAWING", tick, {
+				withdrawalAnchor: next.stagingAnchor,
+				completionReason:
+					next.readiness < thresholds.launchReadiness
+						? "ASSEMBLY_TIMEOUT"
+						: context.flankUnsafe
+							? "FLANK_UNCOVERED"
+							: "NO_LOCAL_SUPERIORITY",
+			});
+		}
+		if (
+			next.readiness >= thresholds.launchReadiness &&
+			(defensivePlan || (!context.flankUnsafe && !unfavorable))
+		) {
 			return transition(next, "ATTACKING", tick, {
 				launchPower: Math.max(0.0001, next.currentPower),
 				completionReason: null,
@@ -674,6 +708,9 @@ export function advanceAiTaskForce(taskForce, context = {}) {
 		}
 		const powerRatio = next.currentPower / Math.max(0.0001, next.launchPower);
 		if (
+			context.objectiveInvalid ||
+			(!defensivePlan && context.flankUnsafe && stalledTicks >= 180) ||
+			(!defensivePlan && stalledTicks >= 1200) ||
 			powerRatio < AI_TASK_FORCE_DEFAULTS.CULMINATION_POWER_RATIO ||
 			(!defensivePlan &&
 				unfavorable &&
@@ -682,13 +719,19 @@ export function advanceAiTaskForce(taskForce, context = {}) {
 			context.encirclementRiskSevere
 		) {
 			return transition(next, "CULMINATED", tick, {
-				completionReason: context.supplyCollapsed
-					? "SUPPLY_COLLAPSE"
-					: context.encirclementRiskSevere
-						? "ENCIRCLEMENT_RISK"
-						: powerRatio < AI_TASK_FORCE_DEFAULTS.CULMINATION_POWER_RATIO
-							? "POWER_LOSS"
-							: "UNFAVORABLE_STALL",
+				completionReason: context.objectiveInvalid
+					? "OBJECTIVE_INVALID"
+					: context.flankUnsafe
+						? "FLANK_UNCOVERED"
+						: stalledTicks >= 1200
+							? "NO_PROGRESS"
+							: context.supplyCollapsed
+								? "SUPPLY_COLLAPSE"
+								: context.encirclementRiskSevere
+									? "ENCIRCLEMENT_RISK"
+									: powerRatio < AI_TASK_FORCE_DEFAULTS.CULMINATION_POWER_RATIO
+										? "POWER_LOSS"
+										: "UNFAVORABLE_STALL",
 			});
 		}
 	} else if (next.phase === "CONSOLIDATING") {

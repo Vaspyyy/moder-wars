@@ -95,6 +95,13 @@ export function createSimulationWorld(runtime) {
 		unit._taskForceUid = null;
 		unit._taskForceRole = null;
 		unit._taskForceOrder = null;
+		unit._armyOrder = null;
+		unit._armyNavigation = null;
+		unit._armySectorId = null;
+		unit._armyRecovering = false;
+		unit._armyNavalReserve = false;
+		unit._armyExhaustedHealth = null;
+		unit._armyLastNavStatus = null;
 		unit._transportPlanSignature = null;
 		unit._planWaypointSignature = null;
 		unit._planWaypointIndex = 0;

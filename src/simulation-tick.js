@@ -1374,6 +1374,8 @@ export function createSimulationTick(runtime) {
 		}
 		const _detailedPerfEnabled = perf._mode === "detailed";
 		const groundFrame = {
+			getArmyMovement: runtime.getArmyMovement,
+			isArmyCellPassable: runtime.isArmyCellPassable,
 			perf,
 			units: runtime.units,
 			_detailedPerfEnabled,

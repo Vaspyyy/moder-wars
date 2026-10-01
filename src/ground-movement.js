@@ -1,3 +1,4 @@
+import { executeArmyOrder } from "./army-navigation.js";
 import { getSimulationMetrics } from "./simulation-metrics.js";
 // Movement/combat consumes this formation's tactical decision snapshot.
 export function executeGroundTarget(input) {
@@ -74,7 +75,7 @@ export function executeGroundTarget(input) {
 
 	// Spatial Jitter: Add a small, unit-specific offset to the target destination
 	// to prevent multiple units from converging on the exact same coordinate.
-	const jitterScale = 0.08;
+	const jitterScale = target.health !== undefined || u._armyOrder ? 0 : 0.08;
 	const jitterLat = target.lat + Math.sin(u.id * 100) * jitterScale;
 	const jitterLng = target.lng + Math.cos(u.id * 100) * jitterScale;
 
@@ -93,8 +94,19 @@ export function executeGroundTarget(input) {
 	_u4 = _detailedPerfEnabled ? performance.now() : 0;
 	if (_detailedPerfEnabled) perf.unitRetreatMopUp += _u4 - _u3;
 
+	if (
+		!isAtSea &&
+		!u.navalAssigned &&
+		!u.supplyAssigned &&
+		!u.garrisonAssigned &&
+		!shouldMopUp &&
+		(target.health === undefined || dist > 0.05) &&
+		executeArmyOrder(input)
+	)
+		return _u4;
+
 	if (dist > 0.05) {
-		// Movement logic
+		// Legacy naval/garrison and mop-up movement only. Army orders return above.
 		const baseSpeed = isAtSea ? CONFIG.UNIT_NAVAL_SPEED : CONFIG.UNIT_SPEED;
 
 		// Roaming Prevention: Removed exploratory wiggle to force a focused linear push

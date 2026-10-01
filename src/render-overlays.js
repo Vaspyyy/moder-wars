@@ -4,6 +4,7 @@ export function drawOverlays(frame) {
 		viewportKey,
 		isWar,
 		showWarPlans,
+		showArmyDiagnostics,
 		isCustomTerrain,
 		refAboveTerrain,
 		referenceImageUrl,
@@ -39,6 +40,7 @@ export function drawOverlays(frame) {
 		viewportKey,
 		isWar ? 1 : 0,
 		showWarPlans ? 1 : 0,
+		showArmyDiagnostics ? 1 : 0,
 		isCustomTerrain ? 1 : 0,
 		refAboveTerrain ? 1 : 0,
 		referenceImageUrl || "",
@@ -47,7 +49,9 @@ export function drawOverlays(frame) {
 		window.__mwAiOperationReveal?.uid || "",
 	].join(";");
 	const overlaysRefreshDue =
-		isWar && showWarPlans && simFrameCount - this._lastOverlaysRenderFrame >= 5;
+		isWar &&
+		(showWarPlans || showArmyDiagnostics) &&
+		simFrameCount - this._lastOverlaysRenderFrame >= 5;
 	const renderOverlays =
 		!isWar ||
 		isPaused ||
@@ -139,7 +143,7 @@ export function drawOverlays(frame) {
 		}
 
 		// Draw war plan arrows between warring sides
-		if (isWar && showWarPlans) {
+		if (isWar && (showWarPlans || showArmyDiagnostics)) {
 			const operationsSnapshot = getAiOperationsSnapshot();
 			if (operationsSnapshot) {
 				drawAiOperationsOverlay(
@@ -151,7 +155,11 @@ export function drawOverlays(frame) {
 					window.__mwAiOperationReveal?.uid || null,
 				);
 			}
-			for (let si = 0; !operationsSnapshot && si < _warPlan.length; si++) {
+			for (
+				let si = 0;
+				showWarPlans && !operationsSnapshot && si < _warPlan.length;
+				si++
+			) {
 				const plan = _warPlan[si];
 				if (!plan) continue;
 				const owningSide = si >= sides.length ? si - sides.length : si;

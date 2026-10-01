@@ -1,3 +1,4 @@
+import { findArmyEncirclement } from "./army-encirclement.js";
 import { CONFIG as DEFAULT_CONFIG } from "./config.js";
 import { normalizeLongitudeDelta } from "./geographic-math.js";
 
@@ -397,106 +398,46 @@ export function createAiProposalPipeline(context) {
 		// Friendly targets become localized defense plans; lost targets promote the
 		// matching capture proposal into a high-priority recapture order.
 
-		// ── 2. ENCIRCLE proposals ──
+		// Geography-verified pockets, with two shoulders and an actual closure.
+		let encirclementTests = 0;
 		const frontlineKeys = Object.keys(context._frontlinePolys || {});
-		for (const key of frontlineKeys) {
+		for (const key of Object.keys(context._frontlinePolys || {})) {
 			const [a, b] = key.split("_").map(Number);
 			if (a !== sideIdx && b !== sideIdx) continue;
-			const poly = context._frontlinePolys[key];
-			if (!poly || poly.length < 5) continue;
-
-			const stride = Math.max(1, Math.floor(poly.length / 20));
-			for (let ci = 0; ci < Math.min(500, poly.length); ci += stride) {
-				const cell = poly[ci];
-				const localForces = context.estimateLocalForces(
+			const poly = context._frontlinePolys[key] || [];
+			const stride = Math.max(1, Math.floor(poly.length / 8));
+			for (let i = 0; i < poly.length && encirclementTests < 8; i += stride) {
+				const cell = poly[i];
+				const local = context.estimateLocalForces(
 					sideIdx,
 					cell.lat,
 					cell.lng,
-					1.0,
+					4,
 				);
-				const friendlyCount = localForces.friendlies,
-					enemyCount = localForces.enemies;
-				const friendlyPower = localForces.friendlyHealth;
-				const enemyPower = localForces.enemyHealth;
-				const radSq = 1.0;
-
-				const canEncircle =
-					enemyCount >= 2 && friendlyPower >= Math.max(0.25, enemyPower) * 3;
-				if (canEncircle) {
-					// Water check: verify friendly units can reach the encirclement target by land
-					let crossesWater = false;
-					let stagingPoint = null;
-					if (friendlyCount > 0) {
-						let fLat = 0,
-							fLng = 0;
-						for (let ui = 0; ui < context.units.length; ui++) {
-							const other = context.units[ui];
-							if (other.deployTicks > 0 || other.sideIndex !== sideIdx)
-								continue;
-							const dLat2 = other.lat - cell.lat;
-							const dLng2 = normalizeLongitudeDelta(other.lng - cell.lng);
-							if (dLat2 * dLat2 + dLng2 * dLng2 > radSq) continue;
-							fLat += other.lat;
-							fLng += other.lng;
-						}
-						if (friendlyCount > 0) {
-							fLat /= friendlyCount;
-							fLng /= friendlyCount;
-							stagingPoint = { lat: fLat, lng: fLng };
-							const ddLat = cell.lat - fLat;
-							const ddLng = normalizeLongitudeDelta(cell.lng - fLng);
-							const lineLen = Math.sqrt(ddLat * ddLat + ddLng * ddLng);
-							if (lineLen > 0.5) {
-								const steps = Math.min(12, Math.ceil(lineLen / 0.4));
-								let waterSamples = 0;
-								for (let s = 1; s < steps; s++) {
-									const t = s / steps;
-									const wIdx = context.getGridIndex(
-										fLat + ddLat * t,
-										fLng + ddLng * t,
-									);
-									if (wIdx !== -1 && context.landMask[wIdx] === 0)
-										waterSamples++;
-								}
-								if (waterSamples > steps * 0.4) crossesWater = true;
-							}
-						}
-					}
-					if (crossesWater) continue;
-
-					proposals.push({
-						type: "ENCIRCLE",
-						targetSideIndex: a === sideIdx ? b : a,
-						target: {
-							lat: cell.lat,
-							lng: cell.lng,
-							name: "Encirclement Pocket",
-							isCapital: false,
-						},
-						stagingCells: [],
-						arrowPoints: [
-							stagingPoint || { lat: cell.lat, lng: cell.lng },
-							{ lat: cell.lat, lng: cell.lng },
-						],
-						stagingPoint,
-						estimatedForceNeeded: Math.ceil(unitCount * 0.3),
-						theaterId: key,
-						frontIntel: frontIntel.find((f) => f.pairKey === key),
-						riskAssessment: {
-							enemyForcesNear: enemyPower,
-							ourForcesNear: friendlyPower,
-							enemyCounterWeight:
-								enemyPower / Math.max(0.25, friendlyPower + enemyPower),
-						},
-						geographicData: {
-							frontlineDistSq: 1,
-							reachesTarget: true,
-							minSeaDist: Infinity,
-							minLandDist: 1,
-						},
-					});
-					break;
-				}
+				if (local.enemies < 2 || local.friendlyHealth < local.enemyHealth * 1.5)
+					continue;
+				encirclementTests++;
+				const operation = findArmyEncirclement(context, sideIdx, cell);
+				if (!operation) continue;
+				proposals.push({
+					type: "ENCIRCLE",
+					targetSideIndex: a === sideIdx ? b : a,
+					target: { ...operation.target, name: "Close enemy pocket" },
+					stagingPoint: operation.shoulders[0],
+					stagingCells: operation.shoulders,
+					arrowPoints: [operation.shoulders[0], operation.target],
+					encirclement: operation,
+					estimatedForceNeeded: Math.max(4, Math.ceil(local.enemyHealth * 2)),
+					theaterId: key,
+					frontIntel: frontIntel.find((f) => f.pairKey === key),
+					riskAssessment: {
+						enemyForcesNear: local.enemyHealth,
+						ourForcesNear: local.friendlyHealth,
+						enemyCounterWeight:
+							local.enemyHealth /
+							Math.max(0.25, local.friendlyHealth + local.enemyHealth),
+					},
+				});
 			}
 		}
 

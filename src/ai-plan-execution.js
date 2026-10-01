@@ -223,6 +223,7 @@ export function createAiPlanExecutor(context) {
 					),
 				);
 				context._aiDebugPlans[si] = {
+					army: context._aiDebugPlans[si]?.army,
 					tick: context.simFrameCount,
 					strategy: context.getSideStrategyProfile(si).dominant,
 					selected: {

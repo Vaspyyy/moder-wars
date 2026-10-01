@@ -104,8 +104,7 @@ export function createAiPlanner(context) {
 		};
 	}
 
-	function canTraverseLandForPlan(idx, sideIdx, targetIdx) {
-		if (idx === targetIdx) return true;
+	function canTraverseLandForPlan(idx, sideIdx) {
 		if (
 			idx < 0 ||
 			idx >= context.landMask.length ||
@@ -113,13 +112,12 @@ export function createAiPlanner(context) {
 		)
 			return false;
 		const ds = context.dominantSideMap[idx];
-		const targetSide = targetIdx >= 0 ? context.dominantSideMap[targetIdx] : -1;
-		if (ds === sideIdx || ds === -1) return true;
-		return (
-			targetSide >= 0 &&
-			ds === targetSide &&
-			context.areSidesHostile(sideIdx, targetSide)
-		);
+		if (ds === sideIdx) return true;
+		if (ds === -1)
+			return (
+				context.countryToSideMap?.get(context.worldControlMap[idx]) === sideIdx
+			);
+		return ds >= 0 && context.areSidesHostile(sideIdx, ds);
 	}
 
 	function acquirePlanBfsBuffers(total) {
@@ -193,23 +191,34 @@ export function createAiPlanner(context) {
 				const waypoints = [];
 				let walk = cur;
 				let steps = 0;
-				while (walk !== -1 && walk !== startIdx && steps < 2048) {
-					if (steps === 12 || steps === 30 || steps === 60) {
-						const r = Math.floor(walk / context.gridWidth);
-						const c = walk % context.gridWidth;
-						waypoints.unshift({
-							lat: r * CONFIG.GRID_RES - 90,
-							lng: c * CONFIG.GRID_RES - 180,
-						});
-					}
+				while (walk !== -1 && walk !== startIdx && steps < total) {
+					const r = Math.floor(walk / context.gridWidth),
+						c = walk % context.gridWidth;
+					waypoints.push({
+						lat: (r + 0.5) * CONFIG.GRID_RES - 90,
+						lng: (c + 0.5) * CONFIG.GRID_RES - 180,
+					});
 					walk = parent[walk];
 					steps++;
 				}
+				waypoints.reverse();
+				// Preserve every turn. Straight runs need only their endpoints.
+				const turns = waypoints.filter((p, i) => {
+					if (i === 0 || i === waypoints.length - 1) return true;
+					const a = waypoints[i - 1],
+						b = waypoints[i + 1];
+					return (
+						Math.abs(
+							(p.lat - a.lat) * (b.lng - p.lng) -
+								(p.lng - a.lng) * (b.lat - p.lat),
+						) > 1e-8
+					);
+				});
 				return {
 					reachable: true,
 					visited,
 					distanceCells: steps,
-					waypoints: waypoints.slice(0, 3),
+					waypoints: turns,
 				};
 			}
 			const col = cur % context.gridWidth;
@@ -776,6 +785,7 @@ export function createAiPlanner(context) {
 				arrowPoints: p.arrowPoints,
 				frontlinePoints: p.frontlinePoints,
 				_waypoints: p._waypoints || [],
+				encirclement: p.encirclement || null,
 				stagingPoint: p.stagingPoint,
 				zonePolyline: p.zonePolyline,
 				borderPolyline:

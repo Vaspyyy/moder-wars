@@ -72,6 +72,7 @@ export const TRANSLATIONS = {
 		EXPERIMENT_RULES_CAPTURE: "Rules & Capture",
 
 		SHOW_AI_OPERATIONS: "Show AI Operations",
+		SHOW_ARMY_DIAGNOSTICS: "Show Army Decisions",
 		AI_OPERATIONS: "AI Operations",
 
 		MAIN_MENU: "Main Menu",

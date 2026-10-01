@@ -6,6 +6,16 @@ import {
 	reconcileAiTaskForces,
 	selectWithdrawalAnchor,
 } from "./ai-task-forces.js";
+import {
+	allocateArmyCoverage,
+	buildArmySectors,
+	formationOffset,
+	issueArmyOrder,
+	measureOperation,
+	replenishArmyFormation,
+} from "./army-command.js";
+import { armyPocketClosed } from "./army-encirclement.js";
+import { armyDistanceSq, createArmyNavigator } from "./army-navigation.js";
 import { CONFIG as DEFAULT_CONFIG } from "./config.js";
 
 /** createAiRuntime owns AI behavior and receives current world state through explicit accessors. */
@@ -14,6 +24,45 @@ export function createAiRuntime(context) {
 	const unitIndex = new Map();
 	const serializedUnitIndex = new Map();
 	const roleCache = new Map();
+	const navigator = createArmyNavigator(context);
+	const armyReports = new Map();
+	let armySideCursor = 0;
+	function getArmyMovement(unit, order) {
+		const movement = navigator.direction(unit, order, context._simTickCount);
+		if (
+			unit._armyLastNavStatus !== movement.status &&
+			["UNREACHABLE", "INVALID_DESTINATION", "BLOCKED"].includes(
+				movement.status,
+			)
+		) {
+			recordArmyEvent(unit.sideIndex, {
+				unitId: unit.id,
+				type: order.type,
+				owner: order.owner,
+				reason: movement.status,
+			});
+			const report = armyReports.get(unit.sideIndex);
+			if (
+				movement.status === "UNREACHABLE" &&
+				["MOVE", "ASSAULT"].includes(order.type) &&
+				context._simTickCount - (report?.lastRouteReassess ?? -Infinity) >= 300
+			) {
+				context._planReassessNeeded[unit.sideIndex] = true;
+				if (report) report.lastRouteReassess = context._simTickCount;
+			}
+		}
+		unit._armyLastNavStatus = movement.status;
+		return movement;
+	}
+	function isArmyCellPassable(idx, side, friendlyOnly) {
+		return navigator.passable(idx, side, friendlyOnly);
+	}
+	function recordArmyEvent(sideIndex, event) {
+		const report = armyReports.get(sideIndex);
+		if (!report) return;
+		report.events.push({ tick: context._simTickCount, ...event });
+		if (report.events.length > 64) report.events.shift();
+	}
 
 	function operationalUnitPower(unit, country = undefined) {
 		if (!unit || unit.health <= 0) return 0;
@@ -58,8 +107,17 @@ export function createAiRuntime(context) {
 			combatPower: operationalUnitPower(unit, country),
 			deployed: unit.deployTicks <= 0 && !unit.isAtSea,
 			commandEligible:
-				!unit.navalAssigned && !unit.supplyAssigned && !unit.garrisonAssigned,
+				!unit.navalAssigned &&
+				!unit.supplyAssigned &&
+				!unit.garrisonAssigned &&
+				!unit.coastalAssigned &&
+				!unit._armyNavalReserve,
 			taskForceId: unit._taskForceUid,
+			sectorId: unit._armySectorId,
+			recovering: unit._armyRecovering,
+			rotationEligible:
+				!unit._armyExhaustedHealth ||
+				unit.health < unit._armyExhaustedHealth * 0.8,
 		});
 	}
 
@@ -163,6 +221,14 @@ export function createAiRuntime(context) {
 		unitIndex.clear();
 		serializedUnitIndex.clear();
 		roleCache.clear();
+		navigator.reset();
+		armyReports.clear();
+		for (const unit of context.units) {
+			unit._armyOrder = null;
+			unit._armyNavigation = null;
+			unit._armySectorId = null;
+			unit._armyRecovering = false;
+		}
 		context.resetOperationalAiRuntime();
 		context.onOperationalAiReset?.();
 		context.ensureSideIdentities();
@@ -313,6 +379,7 @@ export function createAiRuntime(context) {
 			target: plan.target ? { ...plan.target } : stagingAnchor,
 			stagingAnchor: stagingAnchor ? { ...stagingAnchor } : null,
 			route,
+			encirclement: plan.encirclement || null,
 			posture: summary.posture,
 			assignedUnitIds: landingHandoff?.unitIds || [],
 			desiredPower: Math.max(1, requestedPower, landingPower),
@@ -329,7 +396,7 @@ export function createAiRuntime(context) {
 		if (!start && !end) return null;
 		if (!start) return { lat: end.lat, lng: end.lng };
 		if (!end) return { lat: start.lat, lng: start.lng };
-		const clamped = Math.max(0, Math.min(1, progress));
+		const clamped = Math.max(-1, Math.min(1, progress));
 		const dLat = end.lat - start.lat;
 		const dLng = context.lngDelta(end.lng, start.lng);
 		const distance = Math.sqrt(dLat * dLat + dLng * dLng) || 1;
@@ -526,6 +593,9 @@ export function createAiRuntime(context) {
 		const assembly = taskForce.stagingAnchor || taskForce.target;
 		const objective = taskForce.target || assembly;
 		const frontage = getOperationalFrontage(sideIndex, plan || taskForce);
+		const occupied = new Set();
+		const operation = taskForce.encirclement;
+		const report = armyReports.get(sideIndex);
 		const byRole = new Map();
 		for (const unit of members) {
 			const role = taskForce.unitRoles[String(unit.id)]?.role || "LINE";
@@ -547,15 +617,14 @@ export function createAiRuntime(context) {
 			const role = taskForce.unitRoles[String(unit.id)]?.role || "LINE";
 			const roleMembers = byRole.get(role) || [unit];
 			const roleIndex = roleIndexByUnit.get(unit);
-			const centeredIndex = roleIndex - (roleMembers.length - 1) / 2;
-			const lateralSpacing =
-				role === "LINE" ? 0.16 : role === "RESERVE" ? 0.12 : 0.1;
-			const lateralLimit =
-				role === "LINE" ? 2.4 : role === "RESERVE" ? 1.8 : 1.2;
-			const lateral = Math.max(
-				-lateralLimit,
-				Math.min(lateralLimit, centeredIndex * lateralSpacing),
+			const spacing = Math.max(0.12, CONFIG.GRID_RES);
+			const offset = formationOffset(
+				roleIndex,
+				roleMembers.length,
+				spacing,
+				role === "LINE" ? 2.4 : 1.8,
 			);
+			const lateral = offset.lateral;
 			let target = assembly;
 			let speed = 1;
 			if (taskForce.phase === "ASSEMBLING") {
@@ -574,28 +643,43 @@ export function createAiRuntime(context) {
 					lateral,
 				);
 				speed = role === "RESERVE" ? 1.05 : 1.55;
+				if (operation && role === "SPEARHEAD")
+					target = interpolateOperationalPoint(
+						operation.shoulders[roleIndex % 2],
+						operation.target,
+						0,
+						lateral,
+					);
 			} else if (taskForce.phase === "ATTACKING") {
 				if (
 					isOperationalDefensePlanType(taskForce.planType) &&
 					frontage.length
 				) {
-					target = frontage[roleIndex % frontage.length];
+					target =
+						frontage[
+							Math.min(
+								frontage.length - 1,
+								Math.floor(
+									((roleIndex + 0.5) * frontage.length) / roleMembers.length,
+								),
+							)
+						];
 					speed = 0.7;
 				} else {
 					let routeProgress = 0;
 					if (role === "SPEARHEAD") {
-						routeProgress = Math.min(1, 0.35 + taskForce.progress * 0.75);
+						routeProgress = Math.min(1, taskForce.progress + 0.18);
 						speed = 2.15;
 					} else if (role === "LINE") {
-						routeProgress = Math.min(1, 0.2 + taskForce.progress * 0.85);
+						routeProgress = Math.min(1, taskForce.progress + 0.12);
 						speed = 1.65;
 					} else if (role === "SUPPORT") {
-						routeProgress = Math.min(0.72, 0.1 + taskForce.progress * 0.58);
+						routeProgress = Math.max(0, taskForce.progress - 0.04);
 						speed = 1.4;
 					} else {
 						routeProgress =
 							taskForce.progress >= 0.4
-								? Math.min(0.45, taskForce.progress * 0.5)
+								? Math.max(0, taskForce.progress - 0.12)
 								: 0;
 						speed = routeProgress > 0 ? 1.3 : 0.35;
 					}
@@ -666,29 +750,136 @@ export function createAiRuntime(context) {
 				target = { lat: unit.lat, lng: unit.lng };
 				speed = 0.25;
 			}
+			let type = "MOVE";
+			let reason = "ASSEMBLE_OPERATION";
+			if (taskForce.phase === "ATTACKING") {
+				type =
+					role === "RESERVE"
+						? "RESERVE"
+						: role === "SUPPORT"
+							? "SCREEN"
+							: "ASSAULT";
+				reason = taskForce.stage || "BREACH";
+				if (isOperationalDefensePlanType(taskForce.planType)) {
+					type = "HOLD";
+					reason = "DEFEND_OBJECTIVE";
+				}
+				if (operation) {
+					if (role === "LINE" || role === "SUPPORT") {
+						target = operation.pinTarget;
+						type = "SCREEN";
+						reason = "PIN_AND_PROTECT_SHOULDERS";
+					} else if (role === "SPEARHEAD") {
+						const shoulder = operation.shoulders[roleIndex % 2];
+						target = interpolateOperationalPoint(
+							shoulder,
+							operation.target,
+							Math.min(1, taskForce.progress + 0.25),
+							lateral,
+						);
+						type = "ASSAULT";
+						reason = "CLOSE_PINCER";
+					}
+				}
+			} else if (
+				["WITHDRAWING", "REGROUPING", "CULMINATED"].includes(taskForce.phase)
+			) {
+				type = taskForce.phase === "WITHDRAWING" ? "WITHDRAW" : "RESERVE";
+				reason = taskForce.completionReason || "RECOVER_FORMATION";
+			} else if (taskForce.phase === "CONSOLIDATING") {
+				type = "HOLD";
+				reason = "SECURE_CAPTURED_CORRIDOR";
+			}
+			if (taskForce.paused && taskForce.phase === "ATTACKING") {
+				target = { lat: unit.lat, lng: unit.lng };
+				type = "HOLD";
+				reason = "ATTACK_PAUSED_FLANK_UNCOVERED";
+			}
+			if (
+				taskForce.phase === "WITHDRAWING" &&
+				role === "SUPPORT" &&
+				context._simTickCount - taskForce.phaseStartedTick < 120 &&
+				unit.health / (unit.maxHealth || 100) > 0.6 &&
+				unit.lastCombatTick != null &&
+				context._simTickCount - unit.lastCombatTick < 30
+			) {
+				target = { lat: unit.lat, lng: unit.lng };
+				type = "ASSAULT";
+				speed = 0.5;
+				reason = "COVER_WITHDRAWAL";
+			}
+			if (
+				taskForce.phase === "ATTACKING" &&
+				role === "RESERVE" &&
+				taskForce.progress >= 0.4
+			) {
+				type = "ASSAULT";
+				speed = 1.4;
+				reason = "EXPLOIT_BREACH";
+			}
+			if (target && offset.depth > 0 && assembly && objective) {
+				const dl = objective.lat - assembly.lat,
+					dg = context.lngDelta(objective.lng, assembly.lng);
+				const length = Math.hypot(dl, dg) || 1;
+				target = {
+					...target,
+					lat: target.lat - (dl / length) * offset.depth,
+					lng: ((target.lng - (dg / length) * offset.depth + 540) % 360) - 180,
+				};
+			}
+			if (target && context.gridWidth && context.gridHeight) {
+				const safe = navigator.safePosition(
+					target,
+					sideIndex,
+					taskForce.phase === "ASSEMBLING" ||
+						["HOLD", "RESERVE", "SCREEN", "WITHDRAW"].includes(type),
+					10,
+					occupied,
+				);
+				if (safe) target = safe;
+				else {
+					target = { lat: unit.lat, lng: unit.lng };
+					type = "HOLD";
+					reason = "FORMATION_CAPACITY_EXCEEDED";
+				}
+			}
 			unit._taskForceUid = taskForce.id;
 			unit._taskForceRole = role;
 			unit._taskForceOrder = target
 				? {
 						target,
 						phase: taskForce.phase,
+						friendlyOnly: taskForce.phase === "ASSEMBLING",
 						role,
 						speed,
 						tick: context._simTickCount,
 					}
 				: null;
+			if (target)
+				issueArmyOrder(
+					unit,
+					{
+						target,
+						type,
+						owner: taskForce.id,
+						phase: taskForce.phase,
+						friendlyOnly: taskForce.phase === "ASSEMBLING",
+						role,
+						speed,
+						reason,
+					},
+					context._simTickCount,
+					report?.events,
+				);
 		}
 		return { assembly, objective, frontage, members };
 	}
 
 	function updateOperationalAiTaskForces() {
+		if (context.gridWidth && context.gridHeight)
+			navigator.beginTick(context._simTickCount);
 		if (context._aiTaskForcesBySide.size === 0) return;
-		if (
-			!context._aiOperationsDirty &&
-			context._simTickCount - context._aiLastOperationsTick < 15
-		) {
-			return;
-		}
+		const forceAll = context._aiOperationsDirty;
 		context._aiLastOperationsTick = context._simTickCount;
 		context._aiOperationsDirty = false;
 		unitIndex.clear();
@@ -699,10 +890,30 @@ export function createAiRuntime(context) {
 		}
 		const allAssignedUnitIds = new Set();
 		const liveTaskForceIds = new Set();
+		const orderedUnitIds = new Set();
+		const processedSides = new Set();
+		let processedCount = 0;
 
-		for (let sideIndex = 0; sideIndex < context.sides.length; sideIndex++) {
+		for (let step = 0; step < context.sides.length; step++) {
+			const sideIndex = (armySideCursor + step) % context.sides.length;
 			const sideUid = context.sideUids[sideIndex];
 			if (!sideUid || !context.sides[sideIndex]?.length) continue;
+			if (
+				armyReports.has(sideIndex) &&
+				armyReports.get(sideIndex).sideUid !== sideUid
+			)
+				armyReports.delete(sideIndex);
+			const lastUpdate = armyReports.get(sideIndex)?.lastUpdate ?? -Infinity;
+			if (
+				!forceAll &&
+				(processedCount > 0 || context._simTickCount - lastUpdate < 15)
+			) {
+				for (const force of context._aiTaskForcesBySide.get(sideUid) || [])
+					liveTaskForceIds.add(force.id);
+				continue;
+			}
+			processedSides.add(sideIndex);
+			processedCount++;
 			discardNonHostileOperationalPlans(sideIndex);
 			let selectedPlans = getOperationalSelectedPlans(sideIndex);
 			const emergencyDefense =
@@ -807,15 +1018,223 @@ export function createAiRuntime(context) {
 						),
 				);
 			}
+			const seaReserved = new Set();
+			for (const plan of [
+				context._navalPlan?.[sideIndex],
+				context._navalSupplyPlan?.[sideIndex],
+			]) {
+				if (
+					!plan?.stagingPoint ||
+					["DELIVERED", "CONSOLIDATION"].includes(plan.phase)
+				)
+					continue;
+				const candidates = (context._tickUnitsBySide[sideIndex] || [])
+					.filter(
+						(u) =>
+							u.health > 0 &&
+							u.deployTicks <= 0 &&
+							!u.garrisonAssigned &&
+							armyDistanceSq(u, plan.stagingPoint) <
+								(plan.type === "NAVAL_INVASION" ? 4 : 64),
+					)
+					.sort(
+						(a, b) =>
+							armyDistanceSq(a, plan.stagingPoint) -
+							armyDistanceSq(b, plan.stagingPoint),
+					);
+				for (const unit of candidates.slice(0, plan.maxAssignedUnits || 0))
+					seaReserved.add(String(unit.id));
+			}
+			for (const unit of context._tickUnitsBySide[sideIndex] || []) {
+				unit._armyNavalReserve = seaReserved.has(String(unit.id));
+				if (unit._armyNavalReserve) {
+					unit._armyOrder = null;
+					unit._taskForceUid = null;
+					unit._taskForceOrder = null;
+				}
+				if (
+					unit._cachedLocalEnemyCount >
+						Math.max(3, (unit._tickLocalAllyCount || 1) * 3) &&
+					unit.health / (unit.maxHealth || 100) < 0.7 &&
+					!unit.navalAssigned &&
+					!unit.supplyAssigned &&
+					!unit.garrisonAssigned
+				) {
+					const local = context.estimateLocalForces(
+						sideIndex,
+						unit.lat,
+						unit.lng,
+						4,
+					);
+					if (local.enemyHealth > (local.friendlyHealth || 0) * 2) {
+						if (!unit._armyRecovering)
+							unit._armyRecoveryTick = context._simTickCount;
+						unit._armyRecovering = true;
+					}
+				}
+				if (
+					unit._armyRecovering &&
+					context._simTickCount - (unit._armyRecoveryTick || 0) >= 600
+				) {
+					unit._armyRecovering = false;
+					unit._armyExhaustedHealth = unit.health;
+				}
+				replenishArmyFormation(unit, context, context._simTickCount);
+			}
 			const sideSummary = prepareOperationalSide(sideIndex);
+			let report = armyReports.get(sideIndex);
+			if (!report) {
+				const saved = context._aiDebugPlans[sideIndex]?.army;
+				report = {
+					sideUid,
+					sectors: saved?.sectors || [],
+					events: saved?.events || [],
+					stats: {},
+					sectorTick: -Infinity,
+				};
+				armyReports.set(sideIndex, report);
+			}
+			if (
+				context.gridWidth &&
+				context.gridHeight &&
+				(context._simTickCount - (report.sectorTick ?? -Infinity) >= 60 ||
+					!report.sectors.length)
+			) {
+				report.sectors = buildArmySectors(
+					context,
+					sideIndex,
+					report.sectors,
+					navigator,
+					operationalUnitPower,
+				);
+				report.sectorTick = context._simTickCount;
+			}
+			const coverage = allocateArmyCoverage(
+				report.sectors,
+				sideSummary.units.map((unit) =>
+					previousForces.some(
+						(force) =>
+							recovering(force) &&
+							force.assignedUnitIds.some(
+								(id) => String(id) === String(unit.id),
+							),
+					)
+						? { ...unit, commandEligible: false }
+						: unit,
+				),
+				sideSummary.posture,
+			);
+			const occupiedCoverage = new Set();
+			for (const allocation of coverage.allocations) {
+				const unit = unitsById.get(String(allocation.unit.id));
+				const sector = allocation.sector;
+				let target = sector.hold;
+				if (allocation.type === "RESERVE") {
+					const nearby = sideSummary.units.filter(
+						(u) => armyDistanceSq(u, sector.anchor) < 16,
+					);
+					if (nearby.length)
+						target = {
+							lat: nearby.reduce((sum, u) => sum + u.lat, 0) / nearby.length,
+							lng: nearby[0].lng,
+						};
+				}
+				target =
+					navigator.safePosition(
+						target,
+						sideIndex,
+						true,
+						10,
+						occupiedCoverage,
+					) || sector.hold;
+				unit._armySectorId = sector.id;
+				unit._armyRecovering = false;
+				issueArmyOrder(
+					unit,
+					{
+						type: allocation.type,
+						target,
+						owner: sector.id,
+						role: allocation.type === "RESERVE" ? "RESERVE" : "LINE",
+						speed: 1,
+						reason: allocation.reason,
+					},
+					context._simTickCount,
+					report.events,
+				);
+				orderedUnitIds.add(String(unit.id));
+			}
+			for (const serialized of coverage.recovering) {
+				const unit = unitsById.get(String(serialized.id));
+				if (!unit._armyRecovering)
+					unit._armyRecoveryTick = context._simTickCount;
+				unit._armyRecovering = true;
+				const sector = [...report.sectors].sort(
+					(a, b) => armyDistanceSq(unit, a.hold) - armyDistanceSq(unit, b.hold),
+				)[0];
+				const previousRecovery =
+					unit._armyOrder?.reason === "ROTATE_DEPLETED_FORMATION"
+						? unit._armyOrder.target
+						: null;
+				const target =
+					previousRecovery &&
+					isOperationalFriendlyPoint(previousRecovery, sideIndex)
+						? previousRecovery
+						: findOperationalWithdrawalAnchor(
+								sideIndex,
+								{ stagingAnchor: sector.hold, target: sector.hold },
+								[unit],
+							);
+				issueArmyOrder(
+					unit,
+					{
+						type: "WITHDRAW",
+						target,
+						owner: `recovery:${sideUid}`,
+						role: "RESERVE",
+						speed: 1.4,
+						reason: "ROTATE_DEPLETED_FORMATION",
+					},
+					context._simTickCount,
+					report.events,
+				);
+				orderedUnitIds.add(String(unit.id));
+			}
+			const freeUnits = sideSummary.units.filter(
+				(unit) =>
+					unit.commandEligible &&
+					unit.deployed &&
+					!coverage.reserved.has(String(unit.id)),
+			);
+			const freePower = freeUnits.reduce(
+				(sum, unit) => sum + unit.combatPower,
+				0,
+			);
+			const requestedCount = selectedPlans.reduce(
+				(sum, plan) => sum + Math.max(1, plan.maxAssignedUnits || 5),
+				0,
+			);
 			const planInputs = selectedPlans.map((plan) => {
 				const signature =
 					plan.signature || context.getPlanSignature(sideIndex, plan);
 				return operationalPlanInput(
 					sideIndex,
-					plan,
+					{
+						...plan,
+						maxAssignedUnits: Math.max(
+							1,
+							Math.floor(
+								(freeUnits.length * Math.max(1, plan.maxAssignedUnits || 5)) /
+									Math.max(1, requestedCount),
+							),
+						),
+					},
 					signature === handoffPlanSignature ? landingHandoff : null,
-					sideSummary,
+					{
+						...sideSummary,
+						availableCount: freeUnits.length,
+						availablePower: freePower,
+					},
 				);
 			});
 			const selectedSignatures = new Set(
@@ -853,13 +1272,15 @@ export function createAiRuntime(context) {
 				retiring.flatMap((taskForce) => taskForce.assignedUnitIds.map(String)),
 			);
 			const readinessUnits = sideSummary.units;
-			const operationalUnits = reservedUnitIds.size
-				? readinessUnits.map((serialized) =>
-						reservedUnitIds.has(String(serialized.id))
-							? { ...serialized, commandEligible: false }
-							: serialized,
-					)
-				: readinessUnits;
+			const operationalUnits =
+				reservedUnitIds.size || coverage.reserved.size
+					? readinessUnits.map((serialized) =>
+							reservedUnitIds.has(String(serialized.id)) ||
+							coverage.reserved.has(String(serialized.id))
+								? { ...serialized, commandEligible: false }
+								: serialized,
+						)
+					: readinessUnits;
 			const taskForces = reconcileAiTaskForces(
 				existing.filter((taskForce) =>
 					selectedSignatures.has(taskForce.signature),
@@ -898,58 +1319,102 @@ export function createAiRuntime(context) {
 						unitsById: sideSummary.unitsById,
 					},
 				);
-				const targetIdx = taskForce.target
-					? context.getGridIndex(taskForce.target.lat, taskForce.target.lng)
-					: -1;
+				const assessment = measureOperation(taskForce, members, {
+					CONFIG,
+					operationalUnitPower,
+					getGridIndex: context.getGridIndex,
+					dominantSideMap: context.dominantSideMap,
+				});
+				const objectiveInvalid = taskForce.encirclement?.shoulders.some(
+					(point) => !isOperationalFriendlyPoint(point, sideIndex),
+				);
 				const objectiveAchieved =
 					!isOperationalDefensePlanType(taskForce.planType) &&
-					targetIdx !== -1 &&
-					context.dominantSideMap[targetIdx] === sideIndex;
-				const closestObjectiveDistance = taskForce.target
-					? members.reduce(
-							(best, unit) =>
-								Math.min(
-									best,
-									Math.sqrt(
-										context.geoDistSq(
-											unit.lat,
-											unit.lng,
-											taskForce.target.lat,
-											taskForce.target.lng,
-										),
-									),
-								),
-							Infinity,
+					(taskForce.encirclement
+						? armyPocketClosed(context, sideIndex, taskForce.encirclement)
+						: assessment.achieved);
+				const initialDistance = runtime.initialObjectiveDistance || 1;
+				if (taskForce.encirclement) {
+					const arms = [[], []];
+					const spearheads = members
+						.filter(
+							(unit) =>
+								taskForce.unitRoles[String(unit.id)]?.role === "SPEARHEAD",
 						)
-					: 0;
-				const initialDistance =
-					Number.isFinite(runtime.initialObjectiveDistance) &&
-					runtime.initialObjectiveDistance > 0
-						? runtime.initialObjectiveDistance
-						: Number.isFinite(closestObjectiveDistance)
-							? Math.max(0.5, closestObjectiveDistance)
-							: null;
-				const progress = objectiveAchieved
-					? 1
-					: isOperationalDefensePlanType(taskForce.planType)
-						? taskForce.progress
-						: !Number.isFinite(closestObjectiveDistance) || !initialDistance
-							? taskForce.progress
-							: Math.max(
-									taskForce.progress,
-									1 - closestObjectiveDistance / Math.max(0.5, initialDistance),
-								);
-
+						.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+					for (let index = 0; index < spearheads.length; index++) {
+						const unit = spearheads[index],
+							anchor = taskForce.encirclement.shoulders[index % 2];
+						const distance = Math.sqrt(
+							armyDistanceSq(anchor, taskForce.target),
+						);
+						arms[index % 2].push(
+							Math.max(
+								0,
+								Math.min(
+									1,
+									1 -
+										Math.sqrt(armyDistanceSq(unit, taskForce.target)) /
+											Math.max(CONFIG.GRID_RES, distance),
+								),
+							),
+						);
+					}
+					assessment.progress = Math.min(
+						...arms.map((arm) =>
+							arm.length
+								? arm.reduce((sum, value) => sum + value, 0) / arm.length
+								: 0,
+						),
+					);
+				}
+				const progress = isOperationalDefensePlanType(taskForce.planType)
+					? taskForce.progress
+					: Math.max(taskForce.progress, assessment.progress);
+				taskForce.stage =
+					taskForce.phase === "ASSEMBLING"
+						? "ASSEMBLE"
+						: objectiveAchieved
+							? "SECURE"
+							: progress < 0.25
+								? "BREACH"
+								: "EXPLOIT";
+				const relevantSectors = report.sectors.filter(
+					(sector) =>
+						!taskForce.theaterId || sector.pairKey === taskForce.theaterId,
+				);
+				const flankUnsafe = relevantSectors.some(
+					(sector) =>
+						sector.enemyPower > 0 &&
+						(sector.assignedUnitIds.length === 0 ||
+							sector.enemyPower >
+								Math.max(1, sector.assignedPower, sector.friendlyPower) * 2.5),
+				);
+				taskForce.paused =
+					!isOperationalDefensePlanType(taskForce.planType) && flankUnsafe;
+				taskForce.advance = assessment.advance;
+				taskForce.secured = assessment.secured;
+				// Launch against opposition at the breach, not every enemy within a
+				// four-degree circle around a distant final objective.
+				const contact =
+					interpolateOperationalCorridor(
+						taskForce,
+						Math.min(1, taskForce.progress + 0.12),
+					) || taskForce.target;
 				const opposition = {
-					estimatedPower: taskForce.target
+					estimatedPower: contact
 						? context.estimateLocalForces(
 								sideIndex,
-								taskForce.target.lat,
-								taskForce.target.lng,
-								16,
+								contact.lat,
+								contact.lng,
+								1,
 							).enemyHealth
 						: 0,
 				};
+				taskForce.flankUnsafe = flankUnsafe;
+				taskForce.forceRatio =
+					readinessResult.currentPower /
+					Math.max(0.25, opposition.estimatedPower);
 				const supplyCollapsed =
 					members.length > 0 &&
 					members.filter(
@@ -1005,12 +1470,25 @@ export function createAiRuntime(context) {
 					objectiveAchieved,
 					supplyCollapsed,
 					encirclementRiskSevere,
-					forceRatio:
-						readinessResult.currentPower /
-						Math.max(0.25, opposition.estimatedPower),
+					flankUnsafe,
+					objectiveInvalid,
+					forceRatio: taskForce.forceRatio,
 					withdrawalAnchor,
 					withdrawalArrived,
 				});
+				if (taskForce.phase !== "ATTACKING") {
+					taskForce.stage =
+						{
+							ASSEMBLING: "ASSEMBLE",
+							CONSOLIDATING: "SECURE",
+							CULMINATED: "HALT",
+							WITHDRAWING: "WITHDRAW",
+							REGROUPING: "REGROUP",
+							COMPLETE: "COMPLETE",
+						}[taskForce.phase] || taskForce.phase;
+				} else if (taskForce.stage === "ASSEMBLE") {
+					taskForce.stage = "BREACH";
+				}
 
 				if (taskForce.phase === "COMPLETE") {
 					clearOperationalPlanForTaskForce(sideIndex, taskForce);
@@ -1041,6 +1519,7 @@ export function createAiRuntime(context) {
 				};
 				for (const unitId of taskForce.assignedUnitIds) {
 					allAssignedUnitIds.add(String(unitId));
+					orderedUnitIds.add(String(unitId));
 				}
 				liveTaskForceIds.add(taskForce.id);
 				context._aiTaskForceTransitionById.set(taskForce.id, {
@@ -1050,6 +1529,86 @@ export function createAiRuntime(context) {
 				retained.push(taskForce);
 			}
 			context._aiTaskForcesBySide.set(sideUid, retained);
+			for (const serialized of sideSummary.units) {
+				const unit = unitsById.get(String(serialized.id));
+				if (
+					orderedUnitIds.has(String(unit.id)) ||
+					!serialized.commandEligible ||
+					!serialized.deployed ||
+					!report.sectors.length
+				)
+					continue;
+				const sector = [...report.sectors].sort(
+					(a, b) => armyDistanceSq(unit, a.hold) - armyDistanceSq(unit, b.hold),
+				)[0];
+				const target = navigator.safePosition(
+					sector.hold,
+					sideIndex,
+					true,
+					12,
+					occupiedCoverage,
+				) || { lat: unit.lat, lng: unit.lng };
+				issueArmyOrder(
+					unit,
+					{
+						type: "SCREEN",
+						target,
+						owner: sector.id,
+						role: "SUPPORT",
+						speed: 1,
+						reason: "PROTECT_OPERATION_FLANK",
+					},
+					context._simTickCount,
+					report.events,
+				);
+				orderedUnitIds.add(String(unit.id));
+			}
+			report.lastUpdate = context._simTickCount;
+			report.stats = {
+				sectors: report.sectors.length,
+				uncovered: report.sectors.filter((s) => !s.assignedUnitIds.length)
+					.length,
+				reserveCount: coverage.reserveCount,
+				recovering: coverage.recovering.length,
+				blocked: sideSummary.units.filter((u) =>
+					["BLOCKED", "UNREACHABLE", "INVALID_DESTINATION"].includes(
+						unitsById.get(String(u.id))._armyMoveStatus,
+					),
+				).length,
+				assignmentChanges: report.events.filter(
+					(e) => context._simTickCount - e.tick <= 60,
+				).length,
+				...navigator.stats(),
+			};
+			const debug = context._aiDebugPlans[sideIndex] || {};
+			debug.army = {
+				sectors: report.sectors,
+				events: [...report.events],
+				orders: sideSummary.units
+					.filter(
+						(_, index) =>
+							index % Math.max(1, Math.ceil(sideSummary.units.length / 96)) ===
+							0,
+					)
+					.map((serialized) => {
+						const unit = unitsById.get(String(serialized.id));
+						return unit._armyOrder
+							? {
+									unitId: unit.id,
+									from: { lat: unit.lat, lng: unit.lng },
+									target: unit._armyOrder.target,
+									type: unit._armyOrder.type,
+									reason: unit._armyOrder.reason,
+									role: unit._armyOrder.role,
+									status: unit._armyMoveStatus || "ORDERED",
+								}
+							: null;
+					})
+					.filter(Boolean),
+				stats: report.stats,
+				tick: context._simTickCount,
+			};
+			context._aiDebugPlans[sideIndex] = debug;
 			const receivingTaskForce = landingHandoff
 				? retained.find(
 						(taskForce) => taskForce.signature === handoffPlanSignature,
@@ -1076,7 +1635,15 @@ export function createAiRuntime(context) {
 				context._aiPendingLandingHandoffs.delete(sideUid);
 			}
 		}
+		armySideCursor =
+			(armySideCursor + Math.max(1, processedCount)) %
+			Math.max(1, context.sides.length);
 		for (const unit of context.units) {
+			if (!processedSides.has(unit.sideIndex)) continue;
+			if (!orderedUnitIds.has(String(unit.id))) {
+				unit._armyOrder = null;
+				unit._armySectorId = null;
+			}
 			if (allAssignedUnitIds.has(String(unit.id))) continue;
 			unit._taskForceUid = null;
 			unit._taskForceRole = null;
@@ -1094,6 +1661,9 @@ export function createAiRuntime(context) {
 		}
 	}
 	return {
+		getArmyMovement,
+		isArmyCellPassable,
+		recordArmyEvent,
 		operationalUnitPower,
 		serializeOperationalUnit,
 		reconcileOperationalAiLifecycle,

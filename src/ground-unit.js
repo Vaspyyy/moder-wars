@@ -449,15 +449,15 @@ export function updateGroundFormation(frame, i) {
 		idleTicks < 600 && // force re-scan after 600 idle frames to break perpetual idle loop
 		u.mopUpTargetId === 0;
 
-	const hasOperationalAssignment = !!u._taskForceUid;
+	const hasOperationalAssignment = !!(u._armyOrder || u._taskForceUid);
 	const operationalFastLane = !!(
 		hasOperationalAssignment &&
-		u._taskForceOrder?.target &&
+		(u._armyOrder?.target || u._taskForceOrder?.target) &&
 		!u._tickHasNearbyHostile &&
 		!isAtSea
 	);
 	if (operationalFastLane) {
-		target = u._taskForceOrder.target;
+		target = u._armyOrder?.target || u._taskForceOrder.target;
 		perf.tacticalFastLaneUnits++;
 	}
 
@@ -1346,8 +1346,12 @@ export function updateGroundFormation(frame, i) {
 	if (_detailedPerfEnabled) {
 		perf.unitMopUpSearch += _u3CityDone - _u3c;
 	}
-	if (u._taskForceOrder?.target) {
-		target = u._taskForceOrder.target;
+	if (
+		(u._armyOrder?.target || u._taskForceOrder?.target) &&
+		!shouldMopUp &&
+		target?.health === undefined
+	) {
+		target = u._armyOrder?.target || u._taskForceOrder.target;
 	}
 
 	// CITY-FOCUS COMBAT MODE:

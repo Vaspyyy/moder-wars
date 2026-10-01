@@ -140,6 +140,8 @@ const applicationRuntime = createLiveContext(
 		_sidePosture: () => _sidePosture,
 		evaluateAllPlans: () => evaluateAllPlans,
 		updateOperationalAiTaskForces: () => updateOperationalAiTaskForces,
+		getArmyMovement: () => getArmyMovement,
+		isArmyCellPassable: () => isArmyCellPassable,
 		recordPerfMeasure: () => recordPerfMeasure,
 		_politicalMapRevision: () => _politicalMapRevision,
 		adjacencyCache: () => adjacencyCache,
@@ -2123,6 +2125,7 @@ export let showNonCapitalCities = true;
 export const countryLabelAnchors = new Map(); // key: `${countryId}:${regionIndex}` -> { name, points, fontSize }
 export let showBattleIndicators = true;
 export let showWarPlans = true;
+export let showArmyDiagnostics = false;
 // Side leaders used to coordinate strong plans.
 export let generals = [];
 export const DEFAULT_SIDE_COLORS = [
@@ -5508,12 +5511,18 @@ export function getAiOperationsSnapshot(
 	return {
 		sideUid,
 		sideIndex,
+		army: _aiDebugPlans[sideIndex]?.army || null,
 		taskForces: (_aiTaskForcesBySide.get(sideUid) || []).map((task) => ({
 			uid: task.id,
 			id: task.id,
 			label: task.target?.name || task.planType,
 			phase: task.phase,
 			readiness: task.readiness,
+			stage: task.stage,
+			progress: task.progress,
+			advance: task.advance,
+			secured: task.secured,
+			reason: task.completionReason,
 			objective: task.target,
 			assemblyArea: task.assemblyArea || task.stagingAnchor,
 			frontage: task.frontage || [],
@@ -5806,6 +5815,8 @@ const {
 	reconcileOperationalAiLifecycle,
 	initializeOperationalAiRuntime,
 	updateOperationalAiTaskForces,
+	getArmyMovement,
+	isArmyCellPassable,
 } = aiRuntime;
 
 const aiProposalPipeline = createAiProposalPipeline(applicationRuntime);
@@ -6366,6 +6377,19 @@ const showLabelsCheckbox = document.getElementById("show-labels-checkbox");
 const showCitiesCheckbox = document.getElementById("show-cities-checkbox");
 const showBattlesCheckbox = document.getElementById("show-battles-checkbox");
 const showAllianceCheckbox = document.getElementById("show-alliance-checkbox");
+
+const armyDiagnosticsCheckbox = document.getElementById(
+	"show-army-diagnostics-checkbox",
+);
+showArmyDiagnostics = getCookie("mw_show_army_decisions") === "true";
+if (armyDiagnosticsCheckbox) {
+	armyDiagnosticsCheckbox.checked = showArmyDiagnostics;
+	armyDiagnosticsCheckbox.addEventListener("change", (event) => {
+		showArmyDiagnostics = event.target.checked;
+		setCookie("mw_show_army_decisions", showArmyDiagnostics ? "true" : "false");
+		influenceLayer?.render();
+	});
+}
 
 // Load saved UI preferences
 if (getCookie("mw_show_warplans") === "false") {
