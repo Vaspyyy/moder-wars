@@ -4048,14 +4048,14 @@ function dispatchFrontlineWork(includeField = false, includeLayout = false) {
 export let baseImageryLayer = null;
 export const imagerySelect = document.getElementById("imagery-select");
 
-let _selectedImageryProvider = "arcgis";
+let _selectedImageryProvider = "atlas";
 
 export function setImageryProvider(
 	provider,
 	persist = true,
 	activate = gameState !== "MAIN_MENU",
 ) {
-	if (!provider || provider === "undefined") provider = "arcgis";
+	if (!provider || provider === "undefined") provider = "atlas";
 	_selectedImageryProvider = provider;
 
 	if (baseImageryLayer) {
@@ -4105,7 +4105,7 @@ export function setImageryProvider(
 	if (imagerySelect) imagerySelect.value = provider;
 
 	const c = map.getContainer();
-	if (c) c.style.background = "#000";
+	if (c) c.style.background = provider === "atlas" ? "#142332" : "#000";
 
 	if (influenceLayer) {
 		influenceLayer._forceRender = true;
@@ -4120,7 +4120,11 @@ export function activateImageryProvider() {
 /*
  * Initialize imagery style based on saved preference.
  */
-setImageryProvider(getCookie("mw_imagery") || "arcgis");
+// Adopt the atlas once for existing installs, then honor subsequent choices.
+setImageryProvider(
+	getCookie("mw_atlas_style_v1") ? getCookie("mw_imagery") || "atlas" : "atlas",
+);
+setCookie("mw_atlas_style_v1", "true");
 
 menu_controls.bindImagerySelectChange();
 

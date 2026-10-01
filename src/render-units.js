@@ -1,3 +1,4 @@
+import { atlasCityVisible } from "./render-atlas.js";
 import {
 	collectSelectionQuads,
 	containsRenderPoint,
@@ -7,6 +8,7 @@ import {
 export function drawUnits(frame) {
 	const {
 		gameState,
+		isAtlas,
 		viewBounds,
 		explosions,
 		bombs,
@@ -25,7 +27,7 @@ export function drawUnits(frame) {
 		xMax,
 		gridWidth,
 		worldControlMap,
-		getGridPoint,
+		getGridPoint: projectGridPoint,
 		sideColors,
 		rgbaRe,
 		countryMetadata,
@@ -47,13 +49,16 @@ export function drawUnits(frame) {
 		simFrameCount,
 	} = frame;
 	const { ctx } = frame;
+	const getGridPoint = isAtlas
+		? (x, y) => projectGridPoint(x + 0.5, y + 0.5)
+		: projectGridPoint;
 	if (gameState !== "SIMULATING") {
 		const drawInspectorHighlight = (id) => {
 			if (id <= 0) return;
 			ctx.beginPath();
-			ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
-			ctx.setLineDash([5, 5]);
-			ctx.lineWidth = 2;
+			ctx.strokeStyle = isAtlas ? "#e9c780" : "rgba(255, 255, 255, 0.8)";
+			ctx.setLineDash(isAtlas ? [] : [5, 5]);
+			ctx.lineWidth = isAtlas ? 1.5 : 2;
 			for (let y = yMin; y < yMax; y++) {
 				for (let x = xMin; x < xMax; x++) {
 					const i1 = y * gridWidth + x;
@@ -148,7 +153,7 @@ export function drawUnits(frame) {
 		const drawSelectionHighlight = (id, sideIdx) => {
 			ctx.beginPath();
 			ctx.strokeStyle = sideColors[sideIdx].replace(rgbaRe, "1)");
-			ctx.lineWidth = 3;
+			ctx.lineWidth = isAtlas ? 2 : 3;
 
 			for (const i1 of selectionQuads.get(id) || []) {
 				const y = Math.floor(i1 / gridWidth);
@@ -364,7 +369,9 @@ export function drawUnits(frame) {
 
 	// Draw cities
 	const zoom = map.getZoom();
-	const citySize = Math.max(2, zoom - 2);
+	const citySize = isAtlas
+		? Math.min(3.2, Math.max(1.3, zoom * 0.4))
+		: Math.max(2, zoom - 2);
 
 	// Single-pass filter into reused scratch array
 	if (!this._citiesScratch) this._citiesScratch = [];
@@ -373,10 +380,24 @@ export function drawUnits(frame) {
 
 	const skipNonCapital = !showNonCapitalCities;
 	const minPop = zoom >= 5 ? 100000 : zoom >= 4 ? 400000 : 1000000;
-	const allSource = zoom >= 3 ? cities : activeTheaterCities;
+	const allSource = isAtlas || zoom >= 3 ? cities : activeTheaterCities;
 	const len = allSource.length;
 	for (let i = 0; i < len; i++) {
 		const c = allSource[i];
+		if (isAtlas) {
+			if (
+				!containsRenderPoint(viewBounds, c.lat, c.lng) ||
+				!atlasCityVisible(
+					c,
+					zoom,
+					activeCitySet.has(c.id ?? c),
+					showNonCapitalCities,
+				)
+			)
+				continue;
+			citiesToDraw.push(c);
+			continue;
+		}
 		if (skipNonCapital && !c.isCapital) continue;
 		if (zoom >= 3) {
 			if (zoom >= 6) {
@@ -391,12 +412,32 @@ export function drawUnits(frame) {
 		citiesToDraw.push(c);
 	}
 
+	if (isAtlas)
+		citiesToDraw.sort(
+			(a, b) =>
+				Number(activeCitySet.has(b.id ?? b)) * 2 +
+					Number(b.isCapital) -
+					(Number(activeCitySet.has(a.id ?? a)) * 2 + Number(a.isCapital)) ||
+				(b.pop || 0) - (a.pop || 0),
+		);
+	const citySlots = new Set(),
+		cityLabelBoxes = [];
 	citiesToDraw.forEach((city) => {
 		let p;
 		try {
 			p = project(city.lat, city.lng);
 		} catch (_e) {
 			return;
+		}
+		if (isAtlas) {
+			const slot = `${Math.floor(p.x / 10)}:${Math.floor(p.y / 10)}`;
+			if (
+				citySlots.has(slot) &&
+				!city.isCapital &&
+				!activeCitySet.has(city.id ?? city)
+			)
+				return;
+			citySlots.add(slot);
 		}
 		const gIdx = getGridIndex(city.lat, city.lng);
 		const ds = gIdx !== -1 && dominantSideMap ? dominantSideMap[gIdx] : -1;
@@ -415,7 +456,7 @@ export function drawUnits(frame) {
 			ctx.fillStyle = sideColors[ds].replace(rgbaRe, "1)");
 			ctx.strokeStyle = "rgba(0,0,0,0.4)";
 		} else {
-			ctx.fillStyle = "#fff";
+			ctx.fillStyle = isAtlas ? (isCapital ? "#dfb96f" : "#b9c5bb") : "#fff";
 			ctx.strokeStyle = "rgba(0,0,0,0.6)";
 		}
 
@@ -424,12 +465,28 @@ export function drawUnits(frame) {
 		ctx.stroke();
 
 		// City labels at high zoom
-		if (zoom >= 6) {
+		if (zoom >= 6 || (isAtlas && isCapital && zoom >= 5)) {
 			ctx.fillStyle = "#fff";
-			ctx.font = "bold 10px monospace";
+			ctx.font = isAtlas ? "500 11px Arial, sans-serif" : "bold 10px monospace";
 			ctx.shadowBlur = 4;
 			ctx.shadowColor = "black";
-			ctx.fillText(city.name, p.x + citySize + 2, p.y + 4);
+			const left = p.x + (isAtlas ? actualSize + 3 : citySize + 2),
+				top = p.y - 7,
+				right = left + ctx.measureText(city.name).width;
+			if (
+				!isAtlas ||
+				!cityLabelBoxes.some(
+					(box) =>
+						left < box.right + 3 &&
+						right > box.left - 3 &&
+						top < box.bottom + 3 &&
+						top + 12 > box.top - 3,
+				)
+			) {
+				ctx.fillText(city.name, left, p.y + 4);
+				if (isAtlas)
+					cityLabelBoxes.push({ left, right, top, bottom: top + 12 });
+			}
 			ctx.shadowBlur = 0;
 		}
 	});

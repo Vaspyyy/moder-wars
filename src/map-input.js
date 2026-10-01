@@ -119,7 +119,7 @@ export function createMapInput(runtime) {
 				// Before starting terrain paint, ensure we're in Simplified (wargames) mode unless this is a custom canvas.
 				const currentImagery = runtime.imagerySelect
 					? runtime.imagerySelect.value
-					: runtime.getCookie("mw_imagery") || "arcgis";
+					: runtime.getCookie("mw_imagery") || "atlas";
 
 				// Only prompt/switch if we're NOT already wargames and NOT on a blank/custom terrain map.
 				if (currentImagery !== "wargames" && !runtime.isCustomTerrain) {

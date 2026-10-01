@@ -2,6 +2,7 @@
 export function drawLabels(frame) {
 	const {
 		viewportKey,
+		isAtlas,
 		isWar,
 		hideCurvedLabels,
 		showCountryLabels,
@@ -23,7 +24,7 @@ export function drawLabels(frame) {
 	} = frame;
 	let { ctx } = frame;
 	const labelsCacheKey = [
-		viewportKey,
+		isAtlas ? `${viewportKey}:atlas` : viewportKey,
 		isWar ? 1 : 0,
 		hideCurvedLabels ? 1 : 0,
 		showCountryLabels ? 1 : 0,
@@ -88,7 +89,11 @@ export function drawLabels(frame) {
 				}
 			};
 
-			regions.forEach((region) => {
+			const occupied = [];
+			const orderedRegions = isAtlas
+				? [...regions].sort((a, b) => b.count - a.count)
+				: regions;
+			orderedRegions.forEach((region) => {
 				const meta = countryMetadata[region.id - 1];
 				if (!meta) return;
 
@@ -126,7 +131,9 @@ export function drawLabels(frame) {
 				);
 
 				const zoom = map.getZoom();
-				let fontSize = Math.max(8, Math.min(zoom * 12, areaScale / 4.5));
+				let fontSize = isAtlas
+					? Math.max(8, Math.min(26, 10 + zoom * 2, areaScale / 7))
+					: Math.max(8, Math.min(zoom * 12, areaScale / 4.5));
 
 				// Build control points from region bins in lat/lng -> screen space
 				const points = (region.bins || []).map((bin) => {
@@ -189,12 +196,48 @@ export function drawLabels(frame) {
 				}
 
 				const charFactor = 0.65;
-				const spacingFactor = 0.35;
+				const spacingFactor = isAtlas ? 0.22 : 0.35;
 				const idealFontSize =
 					(pathLength * 0.9) / (name.length * (charFactor + spacingFactor));
 				fontSize = Math.min(idealFontSize, fontSize);
 				if (fontSize < 7) return;
 
+				if (isAtlas) {
+					const bounds = {
+						left: Infinity,
+						top: Infinity,
+						right: -Infinity,
+						bottom: -Infinity,
+					};
+					const textFraction = Math.min(
+						1,
+						(name.length * fontSize * (0.6 + spacingFactor)) / pathLength,
+					);
+					for (let i = 0; i <= 10; i++) {
+						const p = this.getBezierPoint(
+							0.5 - textFraction / 2 + (i / 10) * textFraction,
+							points[0],
+							points[1],
+							points[2],
+							points[3],
+						);
+						bounds.left = Math.min(bounds.left, p.x - fontSize / 2);
+						bounds.right = Math.max(bounds.right, p.x + fontSize / 2);
+						bounds.top = Math.min(bounds.top, p.y - fontSize / 2);
+						bounds.bottom = Math.max(bounds.bottom, p.y + fontSize / 2);
+					}
+					if (
+						occupied.some(
+							(box) =>
+								bounds.left < box.right + 5 &&
+								bounds.right > box.left - 5 &&
+								bounds.top < box.bottom + 5 &&
+								bounds.bottom > box.top - 5,
+						)
+					)
+						return;
+					occupied.push(bounds);
+				}
 				this.drawTextOnCurve(
 					ctx,
 					name,
@@ -204,6 +247,7 @@ export function drawLabels(frame) {
 					points[3],
 					fontSize,
 					fontSize * spacingFactor,
+					isAtlas,
 				);
 			});
 		}

@@ -74,6 +74,7 @@ import {
 	worldHeightDeg,
 	worldWidthDeg,
 } from "./main.js";
+import { drawAtlasOcean, requestAtlasCoast } from "./render-atlas.js";
 import { paintClippedFlag, resolveRenderFlag } from "./render-flags.js";
 import { drawLabels } from "./render-labels.js";
 import { drawOverlays } from "./render-overlays.js";
@@ -818,10 +819,24 @@ const ControlMapLayer = L.Layer.extend({
 		// Use the active dropdown value rather than the cookie to support non-persisted session-only mode switches
 		const currentImagery = imagerySelect
 			? imagerySelect.value
-			: getCookie("mw_imagery") || "arcgis";
-		const isSimplifiedMode = currentImagery === "wargames";
+			: getCookie("mw_imagery") || "atlas";
+		const isAtlas = currentImagery === "atlas";
+		const isSimplifiedMode = currentImagery === "wargames" || isAtlas;
 		// Custom terrain maps always use the Simplified/WarGames base (ocean/neutral land) for visual clarity
 		const useSimplifiedBase = isSimplifiedMode || isCustomTerrain;
+		const mapResolution =
+			document.getElementById("map-res-select")?.value || "110m";
+		if (
+			isAtlas &&
+			!isCustomTerrain &&
+			this._atlasCoastRequested !== mapResolution
+		) {
+			this._atlasCoastRequested = mapResolution;
+			requestAtlasCoast(() => {
+				this.invalidate(RENDER_LAYERS.STATIC);
+				this.render();
+			}, mapResolution);
+		}
 		const isEditing =
 			gameMode === "EDITOR" || gameMode === "EDITOR_TEST" || godModeActive;
 		if (!this._countryStyleChanged)
@@ -835,7 +850,7 @@ const ControlMapLayer = L.Layer.extend({
 		const staticCacheKey = [
 			viewportKey,
 			viewMode,
-			currentImagery,
+			isAtlas ? `${currentImagery}:${mapResolution}` : currentImagery,
 			useSimplifiedBase ? 1 : 0,
 			mountainsEnabled ? 1 : 0,
 			disableCountryGradient ? 1 : 0,
@@ -1124,7 +1139,9 @@ const ControlMapLayer = L.Layer.extend({
 		}
 
 		if (renderStatic) {
-			if (useSimplifiedBase) {
+			if (isAtlas) {
+				drawAtlasOcean(ctx, map, project);
+			} else if (useSimplifiedBase) {
 				const size = map.getSize();
 				// Always render the procedural ocean/land gradient; custom satellite imagery is disabled.
 				const centerLng = map.getCenter().lng;
@@ -1189,7 +1206,7 @@ const ControlMapLayer = L.Layer.extend({
 		const vArea = (xMax - xMin) * (yMax - yMin);
 
 		// Dynamic sampling based on zoom level and engine load
-		if (isEditing) {
+		if (isEditing || isAtlas) {
 			step = 1;
 		} else if (this._zooming) {
 			step = currentZoom <= 3 ? 4 : currentZoom <= 5 ? 2 : 1;
@@ -1265,6 +1282,16 @@ const ControlMapLayer = L.Layer.extend({
 		const regions = fullStaticRefresh ? [] : this._cachedRegions || [];
 
 		drawTerrain.call(this, {
+			createSurface: () => document.createElement("canvas"),
+			mapResolution,
+			viewBounds,
+			mapSize,
+			isAtlas,
+			isEditing,
+			worldWidthDeg,
+			worldHeightDeg,
+			viewportKey,
+			project,
 			renderStatic,
 			fullStaticRefresh,
 			viewMode,
@@ -1357,6 +1384,7 @@ const ControlMapLayer = L.Layer.extend({
 
 		// Pass 4: Selection Highlight
 		drawUnits.call(this, {
+			isAtlas,
 			gameState,
 			viewBounds,
 			explosions,
@@ -1401,6 +1429,7 @@ const ControlMapLayer = L.Layer.extend({
 		this._invalidLayers &= ~RENDER_LAYERS.DYNAMIC;
 
 		drawLabels.call(this, {
+			isAtlas,
 			viewportKey,
 			isWar,
 			hideCurvedLabels,
@@ -1600,9 +1629,12 @@ const ControlMapLayer = L.Layer.extend({
 		p3,
 		fontSize,
 		letterSpacing,
+		atlas = false,
 	) {
 		if (!text || Number.isNaN(fontSize) || fontSize <= 0) return;
-		ctx.font = `bold ${fontSize}px "Times New Roman", Times, serif`;
+		ctx.font = atlas
+			? `500 ${fontSize}px "Barlow Condensed", "Arial Narrow", sans-serif`
+			: `bold ${fontSize}px "Times New Roman", Times, serif`;
 		ctx.textAlign = "center";
 		ctx.textBaseline = "middle";
 
@@ -1641,10 +1673,10 @@ const ControlMapLayer = L.Layer.extend({
 			// Optimization: Skip expensive stroke operations for labels during active zoom/pan
 			if (!isZooming) {
 				ctx.strokeStyle = "rgba(0,0,0,0.8)";
-				ctx.lineWidth = Math.max(2, fontSize / 5);
+				ctx.lineWidth = atlas ? 1.5 : Math.max(2, fontSize / 5);
 				ctx.strokeText(char, 0, 0);
 			}
-			ctx.fillStyle = "white";
+			ctx.fillStyle = atlas ? "#e5dcc7" : "white";
 			ctx.fillText(char, 0, 0);
 
 			ctx.restore();

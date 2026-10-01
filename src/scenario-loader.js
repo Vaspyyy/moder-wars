@@ -18,7 +18,7 @@ export function createScenarioLoader(context, loadSession) {
 			cities: context.cities,
 			gridRes: CONFIG.GRID_RES,
 			mapRes: document.getElementById("map-res-select").value,
-			imagery: context.getCookie("mw_imagery") || "arcgis",
+			imagery: context.getCookie("mw_imagery") || "atlas",
 			disableCountryGradient: context.disableCountryGradient,
 			customSatelliteUrl: context.customSatelliteUrl,
 			worldWidthDeg: context.worldWidthDeg,
@@ -180,7 +180,7 @@ export function createScenarioLoader(context, loadSession) {
 					// But handle the case where it might need a fallback if none selected
 					const currentUserImagery = context.imagerySelect
 						? context.imagerySelect.value
-						: context.getCookie("mw_imagery") || "arcgis";
+						: context.getCookie("mw_imagery") || "atlas";
 					context.setImageryProvider(currentUserImagery, true, false);
 				}
 			}

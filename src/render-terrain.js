@@ -1,3 +1,4 @@
+import { drawAtlasTexture, getAtlasCoastPaths } from "./render-atlas.js";
 import {
 	drawPoliticalBorders,
 	drawPoliticalChunks,
@@ -47,6 +48,21 @@ export function drawTerrain(frame) {
 			}
 		}
 
+		const coast = frame.isAtlas ? getAtlasCoastPaths(this, frame) : null;
+		frame.atlasCoast = Boolean(coast);
+		if (coast) {
+			ctx.save();
+			ctx.fillStyle = "#667265";
+			ctx.fill(coast.land);
+			// One shadowed shore path gives a narrow shelf without blurring inland borders.
+			ctx.strokeStyle = "rgba(118,169,182,0.18)";
+			ctx.lineWidth = 3;
+			ctx.shadowColor = "rgba(133,189,199,0.2)";
+			ctx.shadowBlur = 5;
+			ctx.stroke(coast.shore);
+			ctx.shadowBlur = 0;
+			ctx.clip(coast.land);
+		}
 		drawPoliticalChunks(this, frame);
 
 		// PASS 1.5: Flag Overlays (Only in Flag View)
@@ -257,7 +273,14 @@ export function drawTerrain(frame) {
 			}
 		}
 
+		if (frame.isAtlas) drawAtlasTexture(this, frame);
 		drawPoliticalBorders(this, frame);
+		if (coast) {
+			ctx.restore();
+			ctx.strokeStyle = "rgba(9,24,35,0.85)";
+			ctx.lineWidth = Math.min(1.6, 0.7 + frame.currentZoom * 0.1);
+			ctx.stroke(coast.shore);
+		}
 		ctx.restore();
 		if (fullStaticRefresh) {
 			this._cachedRegions = regions;

@@ -1,3 +1,5 @@
+import { atlasColor, atlasQuad } from "./render-atlas.js";
+
 // Political materials and meshes live in world-grid coordinates. Camera motion
 // only projects cached rectangles; it never creates a color string per cell.
 const CHUNK_SIZE = 32;
@@ -57,15 +59,22 @@ function makeMaterials(frame) {
 	const sideRgba = frame.sideColors.map((color) =>
 		(color.match(/[\d.]+/g) || [180, 180, 180]).map(Number),
 	);
-	const baseAlpha = frame.isSimplifiedMode && !frame.isCustomTerrain ? 1 : 0.65;
-	const createBase = (r, g, b, alpha, id) => ({
-		r,
-		g,
-		b,
-		alpha,
-		id,
-		variants: new Map(),
-	});
+	const baseAlpha = frame.isAtlas
+		? 1
+		: frame.isSimplifiedMode && !frame.isCustomTerrain
+			? 1
+			: 0.65;
+	const createBase = (r, g, b, alpha, id) => {
+		if (frame.isAtlas) [r, g, b] = atlasColor(r, g, b);
+		return {
+			r,
+			g,
+			b,
+			alpha,
+			id,
+			variants: new Map(),
+		};
+	};
 	const neutral = [
 		createBase(20, 38, 20, 1, 0),
 		createBase(140, 120, 70, 1, 0),
@@ -96,7 +105,7 @@ function makeMaterials(frame) {
 			: baseAlpha;
 		countries[id] = [
 			createBase(rgba[0], rgba[1], rgba[2], alpha, id),
-			createBase(rgba[0], rgba[1], rgba[2], 0.7, id),
+			createBase(rgba[0], rgba[1], rgba[2], frame.isAtlas ? 0.96 : 0.7, id),
 		];
 	}
 	const materialFor = (base, intensity, biome, sovereignId) => {
@@ -105,7 +114,8 @@ function makeMaterials(frame) {
 			variants = [];
 			base.variants.set(intensity, variants);
 		}
-		const desert = frame.useSimplifiedBase && biome === 1 ? 1 : 0;
+		const desert =
+			frame.useSimplifiedBase && !frame.isAtlas && biome === 1 ? 1 : 0;
 		const variantIndex =
 			desert + (frame.useSimplifiedBase && sovereignId === 0 ? 2 : 0);
 		if (variants[variantIndex]) return variants[variantIndex];
@@ -118,11 +128,13 @@ function makeMaterials(frame) {
 				b = Math.min(255, b + lift);
 				alpha = 0.95;
 			} else {
-				const dim = 0.7 - intensity * 0.25;
+				const dim = frame.isAtlas
+					? 1 - intensity * 0.12
+					: 0.7 - intensity * 0.25;
 				r = Math.floor(r * dim);
 				g = Math.floor(g * dim);
 				b = Math.floor(b * dim);
-				alpha = frame.isWar ? alpha * 0.75 : 0.75;
+				alpha = frame.isAtlas ? alpha : frame.isWar ? alpha * 0.75 : 0.75;
 			}
 		}
 		if (desert) {
@@ -161,6 +173,31 @@ function makeMaterials(frame) {
 		return id;
 	};
 	const resolve = (index) => {
+		// Extend the color field by one cell only when a precise Earth coast clips
+		// it back. The extension cannot paint unselectable islands into the ocean.
+		if (frame.atlasCoast && frame.landMask[index] === 0) {
+			const x = index % frame.gridWidth,
+				y = Math.floor(index / frame.gridWidth);
+			let nearest = -1,
+				distance = Infinity;
+			for (let dy = -1; dy <= 1; dy++)
+				for (let dx = -1; dx <= 1; dx++) {
+					if (
+						x + dx < 0 ||
+						x + dx >= frame.gridWidth ||
+						y + dy < 0 ||
+						y + dy >= frame.gridHeight
+					)
+						continue;
+					const candidate = (y + dy) * frame.gridWidth + x + dx,
+						d = dx * dx + dy * dy;
+					if (frame.landMask[candidate] > 0 && d < distance) {
+						nearest = candidate;
+						distance = d;
+					}
+				}
+			if (nearest >= 0) index = nearest;
+		}
 		const mask = frame.landMask[index];
 		if (mask !== 1 && mask !== 2) return 0;
 		const sovereignId = frame.worldControlMap[index];
@@ -206,7 +243,12 @@ function makeMaterials(frame) {
 		}
 		const intensity =
 			frame.mountainsEnabled && frame.terrain ? frame.terrain[index] || 0 : 0;
-		return materialFor(base, intensity, biome, sovereignId);
+		return materialFor(
+			base,
+			frame.isAtlas ? Math.round(intensity * 4) / 4 : intensity,
+			biome,
+			sovereignId,
+		);
 	};
 	return {
 		materials,
@@ -238,8 +280,8 @@ export function createPoliticalChunkCache() {
 		dimensions = undefined;
 	};
 	const prepare = (frame) => {
-		const nextDimensions = `${frame.gridWidth}:${frame.gridHeight}:${frame.step}:${frame.currentZoom < 5 ? 2 : 1}`;
-		const nextStyle = frame.politicalStyleKey || frame.staticCacheKey;
+		const nextDimensions = `${frame.gridWidth}:${frame.gridHeight}:${frame.isAtlas ? "atlas" : `${frame.step}:${frame.currentZoom < 5 ? 2 : 1}`}`;
+		const nextStyle = `${frame.politicalStyleKey || frame.staticCacheKey}:${frame.isAtlas ? 1 : 0}:${frame.atlasCoast ? 1 : 0}`;
 		const changedPalette = styleInputsChanged(frame);
 		if (
 			changedPalette ||
@@ -275,7 +317,7 @@ export function createPoliticalChunkCache() {
 		const step = frame.step;
 		values.fill(0);
 		processed.fill(0);
-		for (let row = 0; row < height; row += step) {
+		for (let row = 0; row < height && !frame.isAtlas; row += step) {
 			for (let column = 0; column < width; column += step) {
 				values[row * CHUNK_SIZE + column] = palette.resolve(
 					(y + row) * frame.gridWidth + x + column,
@@ -283,7 +325,7 @@ export function createPoliticalChunkCache() {
 			}
 		}
 		const rectangles = [];
-		for (let row = 0; row < height; row += step) {
+		for (let row = 0; row < height && !frame.isAtlas; row += step) {
 			for (let column = 0; column < width; column += step) {
 				const index = row * CHUNK_SIZE + column;
 				const material = values[index];
@@ -317,6 +359,7 @@ export function createPoliticalChunkCache() {
 				}
 			}
 		}
+		const polygons = [];
 		const borders = [];
 		const frontlines = [];
 		const effectiveOwner = (index) => {
@@ -333,7 +376,7 @@ export function createPoliticalChunkCache() {
 			return owner;
 		};
 		const borderStep = frame.currentZoom < 5 ? 2 : 1;
-		for (let row = 0; row < height; row += borderStep) {
+		for (let row = 0; row < height && !frame.isAtlas; row += borderStep) {
 			const gy = y + row;
 			for (let column = 0; column < width; column += borderStep) {
 				const gx = x + column;
@@ -350,6 +393,80 @@ export function createPoliticalChunkCache() {
 				)
 					borders.push(gx, gy + borderStep, gx + borderStep, gy + borderStep);
 			}
+		}
+		if (frame.isAtlas) {
+			rectangles.length = 0;
+			borders.length = 0;
+			const stride = width + 1,
+				samples = new Uint32Array(stride * (height + 1)),
+				ownersCache = new Int32Array(samples.length);
+			for (let row = 0; row <= height; row++)
+				for (let column = 0; column <= width; column++) {
+					const gx = Math.min(frame.gridWidth - 1, x + column),
+						gy = Math.min(frame.gridHeight - 1, y + row),
+						index = gy * frame.gridWidth + gx;
+					samples[row * stride + column] = palette.resolve(index);
+					ownersCache[row * stride + column] = effectiveOwner(index);
+				}
+			const sample = (gx, gy) => samples[(gy - y) * stride + gx - x];
+			const owner = (gx, gy) => ownersCache[(gy - y) * stride + gx - x];
+			for (let row = 0; row < height; row++)
+				for (let column = 0; column < width; column++) {
+					const gx = x + column,
+						gy = y + row;
+					const ids = [
+						sample(gx, gy),
+						sample(gx + 1, gy),
+						sample(gx + 1, gy + 1),
+						sample(gx, gy + 1),
+					];
+					const owners = [
+						owner(gx, gy),
+						owner(gx + 1, gy),
+						owner(gx + 1, gy + 1),
+						owner(gx, gy + 1),
+					];
+					const outlines = owners.every((id) => id === owners[0])
+						? null
+						: atlasQuad(owners, gx + 0.5, gy + 0.5);
+					// Earth's shoreline is drawn separately; custom maps retain grid contours.
+					if (outlines && (!frame.atlasCoast || owners.every((id) => id >= 0)))
+						for (const edge of outlines.borders) borders.push(...edge);
+					if (ids.every((id) => id === ids[0])) {
+						let run = 1;
+						while (
+							column + run < width &&
+							sample(gx + run + 1, gy) === ids[0] &&
+							sample(gx + run + 1, gy + 1) === ids[0]
+						)
+							run++;
+						// Skipped quads have the same material but can have country borders
+						// (e.g. alliance colors). Do not skip their owner contours.
+						for (let j = 1; j < run; j++) {
+							const labels = [
+								owner(gx + j, gy),
+								owner(gx + j + 1, gy),
+								owner(gx + j + 1, gy + 1),
+								owner(gx + j, gy + 1),
+							];
+							if (
+								!labels.every((id) => id === labels[0]) &&
+								(!frame.atlasCoast || labels.every((id) => id >= 0))
+							)
+								for (const edge of atlasQuad(labels, gx + j + 0.5, gy + 0.5)
+									.borders)
+									borders.push(...edge);
+						}
+						if (ids[0]) rectangles.push(ids[0], gx + 0.5, gy + 0.5, run, 1);
+						column += run - 1;
+					} else {
+						for (const polygon of atlasQuad(ids, gx + 0.5, gy + 0.5).polygons) {
+							if (!polygon.id) continue;
+							polygons.push(polygon.id, polygon.points.length);
+							for (const point of polygon.points) polygons.push(...point);
+						}
+					}
+				}
 		}
 		if (frame.isWar) {
 			const crossings = new Float32Array(8);
@@ -410,12 +527,16 @@ export function createPoliticalChunkCache() {
 			}
 		}
 		chunk = {
-			rectangles: new Uint32Array(rectangles),
+			rectangles: frame.isAtlas
+				? new Float32Array(rectangles)
+				: new Uint32Array(rectangles),
+			polygons: new Float32Array(polygons),
 			borders: new Float32Array(borders),
 			frontlines: new Float32Array(frontlines),
 		};
 		chunks.set(key, chunk);
-		if (chunks.size > MAX_CHUNKS) chunks.delete(chunks.keys().next().value);
+		if (chunks.size > (frame.isAtlas ? 32768 : MAX_CHUNKS))
+			chunks.delete(chunks.keys().next().value);
 		built++;
 		return chunk;
 	};
@@ -483,6 +604,7 @@ export function drawPoliticalChunks(layer, frame) {
 	const visibleChunks = layer._visiblePoliticalChunks;
 	visibleChunks.length = 0;
 	const fills = new Map();
+	const polygonBatches = new Map();
 	const { ctx } = frame;
 	const fillFor = (id) => {
 		if (fills.has(id)) return fills.get(id);
@@ -500,25 +622,47 @@ export function drawPoliticalChunks(layer, frame) {
 			const { r, g, b, alpha } = material;
 			fill.addColorStop(
 				0,
-				`rgba(${Math.min(255, r + 25)},${Math.min(255, g + 25)},${Math.min(255, b + 25)},${alpha})`,
+				`rgba(${Math.min(255, r + (frame.isAtlas ? 8 : 25))},${Math.min(255, g + (frame.isAtlas ? 8 : 25))},${Math.min(255, b + (frame.isAtlas ? 8 : 25))},${alpha})`,
 			);
 			fill.addColorStop(0.3, material.fill);
 			fill.addColorStop(
 				1,
-				`rgba(${Math.floor(r * 0.65)},${Math.floor(g * 0.65)},${Math.floor(b * 0.65)},${alpha})`,
+				`rgba(${Math.floor(r * (frame.isAtlas ? 0.92 : 0.65))},${Math.floor(g * (frame.isAtlas ? 0.92 : 0.65))},${Math.floor(b * (frame.isAtlas ? 0.92 : 0.65))},${alpha})`,
 			);
 		}
 		fills.set(id, fill);
 		return fill;
 	};
-	const minX = Math.floor(frame.staticLoopXMin / CHUNK_SIZE);
+	const minX = Math.max(
+		0,
+		Math.floor((frame.staticLoopXMin - (frame.isAtlas ? 0.5 : 0)) / CHUNK_SIZE),
+	);
 	const maxX = Math.floor((frame.staticPaintXMax ?? frame.xMax) / CHUNK_SIZE);
-	const minY = Math.floor(frame.staticLoopYMin / CHUNK_SIZE);
+	const minY = Math.max(
+		0,
+		Math.floor((frame.staticLoopYMin - (frame.isAtlas ? 0.5 : 0)) / CHUNK_SIZE),
+	);
 	const maxY = Math.floor((frame.staticPaintYMax ?? frame.yMax) / CHUNK_SIZE);
 	for (let cy = minY; cy <= maxY; cy++) {
 		for (let cx = minX; cx <= maxX; cx++) {
 			const chunk = cache.get(frame, cx, cy);
 			visibleChunks.push(chunk);
+			const mesh = chunk.polygons;
+			for (let offset = 0; offset < mesh.length; ) {
+				const id = mesh[offset++],
+					count = mesh[offset++],
+					points = [];
+				for (let i = 0; i < count; i++) {
+					const p = frame.getGridPoint(mesh[offset++], mesh[offset++]);
+					points.push(p.x, p.y);
+				}
+				let batch = polygonBatches.get(id);
+				if (!batch) {
+					batch = [];
+					polygonBatches.set(id, batch);
+				}
+				batch.push(points);
+			}
 			const rectangles = chunk.rectangles;
 			for (let offset = 0; offset < rectangles.length; offset += 5) {
 				const id = rectangles[offset];
@@ -527,8 +671,8 @@ export function drawPoliticalChunks(layer, frame) {
 				const width = rectangles[offset + 3];
 				const height = rectangles[offset + 4];
 				if (
-					x > frame.xMax ||
-					y > frame.yMax ||
+					x > frame.xMax + (frame.isAtlas ? 1 : 0) ||
+					y > frame.yMax + (frame.isAtlas ? 1 : 0) ||
 					x + width <= frame.xMin ||
 					y + height <= frame.yMin
 				)
@@ -541,14 +685,16 @@ export function drawPoliticalChunks(layer, frame) {
 					batches.set(id, batch);
 				}
 				batch.push(
-					Math.min(a.x, b.x) - 0.25,
-					Math.min(a.y, b.y) - 0.25,
-					Math.abs(b.x - a.x) + 0.5,
-					Math.abs(b.y - a.y) + 0.5,
+					Math.min(a.x, b.x) - (frame.isAtlas ? 0 : 0.25),
+					Math.min(a.y, b.y) - (frame.isAtlas ? 0 : 0.25),
+					Math.abs(b.x - a.x) + (frame.isAtlas ? 0 : 0.5),
+					Math.abs(b.y - a.y) + (frame.isAtlas ? 0 : 0.5),
 				);
 			}
 		}
 	}
+	for (const id of polygonBatches.keys())
+		if (!batches.has(id)) batches.set(id, []);
 	for (const [id, rectangles] of batches) {
 		ctx.fillStyle = fillFor(id);
 		ctx.beginPath();
@@ -559,6 +705,12 @@ export function drawPoliticalChunks(layer, frame) {
 				rectangles[offset + 2],
 				rectangles[offset + 3],
 			);
+		for (const points of polygonBatches.get(id) || []) {
+			ctx.moveTo(points[0], points[1]);
+			for (let i = 2; i < points.length; i += 2)
+				ctx.lineTo(points[i], points[i + 1]);
+			ctx.closePath();
+		}
 		ctx.fill();
 	}
 }
@@ -581,8 +733,9 @@ export function drawPoliticalBorders(layer, frame) {
 					Math.min(y1, y2) > frame.yMax + 1
 				)
 					continue;
-				const a = frame.getGridPoint(x1, y1);
-				const b = frame.getGridPoint(x2, y2);
+				const shift = frame.isAtlas && field === "frontlines" ? 0.5 : 0;
+				const a = frame.getGridPoint(x1 + shift, y1 + shift);
+				const b = frame.getGridPoint(x2 + shift, y2 + shift);
 				ctx.moveTo(a.x, a.y);
 				ctx.lineTo(b.x, b.y);
 			}
@@ -597,7 +750,19 @@ export function drawPoliticalBorders(layer, frame) {
 		draw("frontlines");
 	}
 	const flag = frame.viewMode === "FLAG";
-	ctx.strokeStyle = flag ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.3)";
-	ctx.lineWidth = flag ? 1.5 : 1;
+	ctx.strokeStyle = flag
+		? "rgba(255,255,255,0.45)"
+		: frame.isAtlas
+			? "rgba(12,25,36,0.8)"
+			: "rgba(0,0,0,0.3)";
+	ctx.lineWidth = flag
+		? 1.5
+		: frame.isAtlas
+			? Math.min(1.4, 0.65 + frame.currentZoom * 0.09)
+			: 1;
+	if (frame.isAtlas) {
+		ctx.lineJoin = "round";
+		ctx.lineCap = "round";
+	}
 	draw("borders");
 }

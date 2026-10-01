@@ -37,6 +37,14 @@ The current **Choose Era** menu exposes one playable era:
 - The live toolbar keeps map controls and simulation speed visible; restart, sandbox, sound, help, fullscreen, and navigation actions live under **Menu**.
 - **God Mode** and editor tools can stage custom wars, alter borders, and test scenarios.
 
+## Map Appearance
+
+The default **Atlas (Menu Style)** view uses a blue ocean, restrained country colors, geographic coastlines, coastal shading, fine territory contours, and smaller labels. Capitals remain visible at world scale; other cities appear as you zoom in, with active theater cities retained. Country and city labels avoid overlapping their peers.
+
+Find it under **Settings → Display → Style**. Existing installs adopt Atlas once; subsequent style choices are remembered. Satellite imagery and Simplified Mode remain available. Custom terrain, resized worlds, and editing use contours from the live grid so painted land is preserved. Ownership, occupation and hit testing continue to use the simulation grid.
+
+Coastlines follow the selected 110m, 50m or 10m geography resolution. The small 110m asset is included in the offline shell; higher-resolution coastlines download on demand and enter the runtime cache. If geography cannot load, Atlas uses its grid coastline fallback.
+
 ## Custom Scenarios
 
 Modern Wars can load custom scenario files and community scenarios. This is separate from the built-in era picker: the main era menu currently exposes only 2022 Modern Day, but the editor and community tools can still create, import, remix, and share other setups.
@@ -51,6 +59,10 @@ Modern Wars can load custom scenario files and community scenarios. This is sepa
 Older era data, thumbnails, hidden cards, dormant click handlers, and import presets may still exist in the codebase. They are not currently exposed as supported main-menu eras unless they are visible in the **Choose Era** screen.
 
 ## Development Notes
+
+Atlas coast assets contain compressed packed coordinates derived from the bundled Natural Earth data, without feature properties. Regenerate an asset with `node scripts/prepare-atlas-coast.mjs 110m` (or `50m` / `10m`). This is an asset maintenance command; serving the game still requires no build.
+
+Run `node scripts/atlas-smoke.mjs` for atlas topology, coastline, occupation, edited-map, full-Earth cache, and offline-shell checks. Verification remains source inspection, Biome, and Node smoke checks; these checks do not establish browser rendering or frame rate.
 
 The title screen uses a dedicated vector backdrop with bundled 50m geography and scenario colors. Regenerate it with `node scripts/build-title-backdrop.mjs` after changing those source assets.
 

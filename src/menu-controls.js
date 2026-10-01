@@ -494,7 +494,7 @@ export function createMenuControls(runtime) {
 				"disable-country-gradient-checkbox": false,
 				"disable-mountains-checkbox": false,
 			});
-			runtime.setImageryProvider("google");
+			runtime.setImageryProvider("atlas");
 			runtime.presetDefaultBtn.style.boxShadow =
 				"0 0 15px rgba(46, 134, 222, 0.5)";
 			runtime.presetLowBtn.style.boxShadow = "none";
@@ -789,7 +789,7 @@ export function createMenuControls(runtime) {
 				if (sizeChanged) {
 					const currentImagery = runtime.imagerySelect
 						? runtime.imagerySelect.value
-						: runtime.getCookie("mw_imagery") || "arcgis";
+						: runtime.getCookie("mw_imagery") || "atlas";
 					const allowSwitch = currentImagery !== "wargames";
 					runtime.applyWorldBounds(newW, newH, allowSwitch);
 				} else {
