@@ -36,13 +36,17 @@ assert.throws(()=>decodeAtlasCoast(new ArrayBuffer(16)),/Unsupported/);
 for(const ring of coast.rings)for(let i=0;i<ring.length;i+=2){assert.ok(Math.abs(ring[i])<=180);assert.ok(Math.abs(ring[i+1])<86);}
 let downloads=0;const originalFetch=globalThis.fetch, originalPath=globalThis.Path2D;
 globalThis.fetch=async()=>{downloads++;return {ok:true,arrayBuffer:async()=>compressed.buffer.slice(compressed.byteOffset,compressed.byteOffset+compressed.byteLength)};};
-class MockPath {constructor(){this.commands=[];}moveTo(...p){this.commands.push(['M',...p]);}lineTo(...p){this.commands.push(['L',...p]);}closePath(){this.commands.push(['Z']);}}
+class MockPath {constructor(){this.commands=[];}moveTo(...p){this.commands.push(['M',...p]);}lineTo(...p){this.commands.push(['L',...p]);}closePath(){this.commands.push(['Z']);}addPath(path,m){for(const [op,x,y] of path.commands)this.commands.push(op==='Z'?['Z']:[op,m.a*x+m.e,m.d*y+m.f]);}}
 globalThis.Path2D=MockPath;
 try {
  await Promise.all([new Promise(resolve=>requestAtlasCoast(resolve)),new Promise(resolve=>requestAtlasCoast(resolve))]);
  assert.equal(downloads,1,'coast download is shared');
- const layer={}, geographic={viewportKey:'a',project:(lat,lng)=>({x:lng,y:-lat})};
+ let projections=0;
+ const layer={}, geographic={viewportKey:'a',project:(lat,lng)=>{projections++;const sine=Math.sin(lat*Math.PI/180);return{x:(lng+180)/360*1024+13,y:(0.5-Math.log((1+sine)/(1-sine))/(4*Math.PI))*1024-21};}};
  const paths=getAtlasCoastPaths(layer,geographic);assert.ok(paths.land.commands.length>10000);
+ assert.equal(projections,2,'camera path transform uses two Leaflet anchors, regardless of coastline detail');
+ const expected=geographic.project(coast.edges[1],coast.edges[0]), actual=paths.shore.commands[0];
+ assert.ok(Math.abs(actual[1]-expected.x)<1e-6&&Math.abs(actual[2]-expected.y)<1e-6,'native path transforms preserve Mercator geography');
  assert.equal(getAtlasCoastPaths(layer,{...geographic,worldControlMap:new Uint16Array(4)}),paths,'ownership updates reuse projected coast');
  assert.notEqual(getAtlasCoastPaths(layer,{...geographic,viewportKey:'b'}),paths);
  assert.equal(getAtlasCoastPaths(layer,{...geographic,isEditing:true}),null);

@@ -55,6 +55,7 @@ export function drawLabels(frame) {
 		);
 		labelsCtx.save();
 		labelsCtx.scale(dpr, dpr);
+		if (frame.padding) labelsCtx.translate(frame.padding, frame.padding);
 		ctx = labelsCtx;
 
 		// PASS 6: Curved Soldier Labels (HOI4 Style)
@@ -77,7 +78,7 @@ export function drawLabels(frame) {
 		// recomputed every frame in map-space so they move naturally with the camera.
 		if (showCountryLabels && regions?.length && countryMetadata) {
 			const mapSize = map.getSize();
-			const viewBounds = map.getBounds();
+			const viewBounds = frame.viewBounds || map.getBounds();
 			const res = CONFIG.GRID_RES;
 
 			const safeLatLngToPoint = (lat, lng) => {

@@ -1,7 +1,7 @@
 // Country geometry is segmented once per world chunk. Camera movement joins
 // cached components along chunk edges instead of flood-filling visible land.
 const SIZE = 32;
-const LIMIT = 2048;
+const LIMIT = 32768;
 
 export function createRegionChunkCache() {
 	const chunks = new Map();
@@ -22,10 +22,11 @@ export function createRegionChunkCache() {
 	const getChunk = (frame, cx, cy, step) => {
 		const columns = Math.ceil(frame.gridWidth / SIZE);
 		const id = cy * columns + cx;
-		let chunk = chunks.get(id);
+		const cacheKey = `${step}:${id}`;
+		let chunk = chunks.get(cacheKey);
 		if (chunk) {
-			chunks.delete(id);
-			chunks.set(id, chunk);
+			chunks.delete(cacheKey);
+			chunks.set(cacheKey, chunk);
 			return chunk;
 		}
 		const x0 = cx * SIZE,
@@ -111,7 +112,7 @@ export function createRegionChunkCache() {
 			}
 		}
 		chunk = { id, cx, cy, width, height, labels, owners, components };
-		chunks.set(id, chunk);
+		chunks.set(cacheKey, chunk);
 		if (chunks.size > LIMIT) chunks.delete(chunks.keys().next().value);
 		built++;
 		return chunk;
@@ -119,7 +120,8 @@ export function createRegionChunkCache() {
 	return {
 		clear,
 		invalidateTiles(tileKeys) {
-			for (const id of tileKeys) chunks.delete(id);
+			for (const id of tileKeys)
+				for (const step of [1, 2, 4]) chunks.delete(`${step}:${id}`);
 			revision++;
 			view = undefined;
 		},
@@ -136,7 +138,6 @@ export function createRegionChunkCache() {
 				frame.gridWidth,
 				frame.gridHeight,
 				frame.CONFIG.GRID_RES,
-				step,
 				frame.isWar ? 1 : 0,
 				frame.viewMode === "FLAG" ? 1 : 0,
 				frame.sideKey,
@@ -159,7 +160,7 @@ export function createRegionChunkCache() {
 				maxY = Math.floor(
 					Math.min(frame.gridHeight - 1, frame.yMax + 25) / SIZE,
 				);
-			const viewKey = `${minX}:${maxX}:${minY}:${maxY}:${revision}`;
+			const viewKey = `${step}:${minX}:${maxX}:${minY}:${maxY}:${revision}`;
 			if (view?.key === viewKey) return view.regions;
 			const visible = new Map(),
 				nodes = [],

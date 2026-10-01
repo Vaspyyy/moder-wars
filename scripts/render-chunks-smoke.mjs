@@ -113,6 +113,15 @@ geography.invalidateTiles([0]);
 const joined = geography.get(regionState);
 assert.equal(joined.filter((region) => region.id === 1).length, 1, "a changed bridge joins previously disconnected geometry");
 assert.equal(geography.stats.built, regionBuilds + 1, "only changed component chunks rebuild");
+const coarse=geography.get({...regionState,currentZoom:3});
+const lodBuilds=geography.stats.built;
+geography.get(regionState);
+assert.equal(geography.stats.built,lodBuilds,"zooming back to a previously built detail level reuses its world chunks");
+geography.invalidateTiles([0]);geography.get(regionState);
+assert.equal(geography.stats.built,lodBuilds+1,"changed geometry rebuilds the detailed tile");
+geography.get({...regionState,currentZoom:3});
+assert.equal(geography.stats.built,lodBuilds+2,"the same mutation also invalidates the coarse tile");
+assert.ok(coarse.length>0);
 const flagGroups = geography.get({ ...regionState, viewMode: "FLAG" });
 assert.equal(flagGroups.reduce((total, region) => total + region.pixels.length, 0), 96 * 96, "flag clipping gets the full cached country mask");
 assert.ok(flagGroups.every((region) => region.bins.length === 4 && region.bins.every((bin) => Number.isFinite(bin.latSum / bin.count) && Number.isFinite(bin.lngSum / bin.count))));
@@ -162,7 +171,7 @@ const Layer = vm.runInNewContext(`${source}\nControlMapLayer;`, globals);
 const view = new Layer();
 view.onAdd(map);
 assert.equal(children.length, 4, "unchanged layers are presented by the DOM compositor");
-assert.ok(children.every((surface) => surface.style.width === "100px" && surface.style.height === "60px"));
+assert.ok(children.every((surface) => surface.style.width === "484px" && surface.style.height === "444px"));
 assert.equal(view._compositeLayers, false);
 view._onZoomStart();
 view._onZoomAnim({ center: { lat: 3, lng: 4 }, zoom: 7 });
@@ -176,6 +185,37 @@ view.requestRender(15, true);
 assert.equal(clears, 0, "camera paint requests preserve world chunks");
 view.invalidate(1);
 assert.equal(clears, 1, "bulk and political style updates invalidate world chunks");
+// Real layer event scheduling and render guards, still entirely in Node.
+let center={lat:0,lng:0}, queued=null, nextRaf=10, paints=0;
+map.getCenter=()=>center;map.getBounds=()=>({equals:()=>false});
+globals.requestAnimationFrame=callback=>{queued=callback;return nextRaf++;};
+view._renderRaf=0;view._lastCameraPaintTime=performance.now();
+view._onMoveStart();
+for(let i=1;i<=100;i++){center={lat:0,lng:i/10};view._onMove();}
+assert.equal(queued,null,"small drag samples only transform the buffered surfaces");
+assert.ok(children.every(surface=>surface.style.transform==='-10,0,1'));
+// Supplying a world makes the actual render guard observable: if it falls
+// through, the deliberately absent application bindings would throw.
+globals.worldControlMap=new Uint16Array(1);globals.landMask=new Uint8Array(1);
+assert.doesNotThrow(()=>Layer.prototype.render.call(view),"simulation render calls are suspended inside a short gesture");
+const actualRender=view.render;view.render=()=>{paints++;view._renderRaf=0;view._commitZoomSettle();};
+view._onMoveEnd();assert.ok(queued);queued();queued=null;
+assert.equal(paints,1,"one final paint replaces the translated frame");
+assert.ok(children.every(surface=>surface.style.transform===''));
+view._onMoveStart();view._lastCameraPaintTime=performance.now()-1000;
+center={lat:0,lng:300};view._onMove();assert.equal(view._cameraRepaintPending,true);assert.ok(queued);
+queued();queued=null;view._lastCameraPaintTime=performance.now();view._renderedCenter=center;
+for(let i=0;i<100;i++){center={lat:0,lng:301+i/100};view._onMove();}
+assert.equal(queued,null,"long-drag replenishment cannot run at pointer-event frequency");
+view._onMoveEnd();queued();queued=null;
+// Captures keep the public viewport canvas size, with no overscan margin.
+view._isCapturing=true;view._resizeSurfaces();assert.equal(view._surfacePadding,0);assert.equal(view._container.width,200);assert.equal(view._container.height,120);
+view._isCapturing=false;view._resizeSurfaces();assert.equal(view._surfacePadding,192);assert.equal(view._container.width,968);
+// Camera settle remains force-admitted by the active simulation, without a
+// second renderer-owned rAF bypassing its render admission policy.
+globals.gameState="SIMULATING";globals.isPaused=false;view._renderRaf=0;
+view._onMoveStart();view._onMoveEnd();assert.equal(queued,null);assert.equal(view.hasPendingZoomSettle(),true);
+view._commitZoomSettle();view.render=actualRender;globals.worldControlMap=null;globals.landMask=null;
 view.onRemove(map);
 assert.equal(children.length, 0);
 console.log("World chunk cache, political materials, culling, selection, stacked surfaces, and zoom smoke checks passed");

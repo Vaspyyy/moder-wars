@@ -22,11 +22,13 @@ export function paintClippedFlag(
 	height,
 	viewWidth,
 	viewHeight,
+	padding = 0,
 ) {
-	const left = Math.max(0, x),
-		top = Math.max(0, y);
-	const right = Math.min(viewWidth, x + width),
-		bottom = Math.min(viewHeight, y + height);
+	const min = padding ? -padding : 0;
+	const left = Math.max(min, x),
+		top = Math.max(min, y);
+	const right = Math.min(viewWidth - padding, x + width),
+		bottom = Math.min(viewHeight - padding, y + height);
 	const w = right - left,
 		h = bottom - top;
 	if (!(w > 0 && h > 0 && Number.isFinite(w) && Number.isFinite(h))) return;

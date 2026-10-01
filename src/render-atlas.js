@@ -42,21 +42,7 @@ export function decodeAtlasCoast(buffer) {
 	for (let i = 0; i < edges.length; i++) edges[i] = float();
 	if (offset !== view.byteLength)
 		throw new Error("Unexpected atlas coast data");
-	const bounds = new Map();
-	for (const ring of rings) {
-		let west = Infinity,
-			south = Infinity,
-			east = -Infinity,
-			north = -Infinity;
-		for (let i = 0; i < ring.length; i += 2) {
-			west = Math.min(west, ring[i]);
-			east = Math.max(east, ring[i]);
-			south = Math.min(south, ring[i + 1]);
-			north = Math.max(north, ring[i + 1]);
-		}
-		bounds.set(ring, [west, south, east, north]);
-	}
-	return { rings, edges, bounds };
+	return { rings, edges };
 }
 const coasts = new Map(),
 	coastRequests = new Map();
@@ -108,59 +94,71 @@ export function getAtlasCoastPaths(layer, frame) {
 	)
 		return null;
 	if (layer._atlasCoastPaths?.key === key) return layer._atlasCoastPaths;
+	if (!coast.worldPaths) {
+		const land = new Path2D(),
+			shore = new Path2D();
+		const normalized = (lng, lat) => {
+			const sine = Math.sin(
+				(Math.max(-85.05112878, Math.min(85.05112878, lat)) * Math.PI) / 180,
+			);
+			return [
+				(lng + 180) / 360,
+				0.5 - Math.log((1 + sine) / (1 - sine)) / (4 * Math.PI),
+			];
+		};
+		for (const ring of coast.rings) {
+			for (let i = 0; i < ring.length; i += 2) {
+				const p = normalized(ring[i], ring[i + 1]);
+				if (i === 0) land.moveTo(...p);
+				else land.lineTo(...p);
+			}
+			land.closePath();
+		}
+		for (let i = 0; i < coast.edges.length; i += 4) {
+			shore.moveTo(...normalized(coast.edges[i], coast.edges[i + 1]));
+			shore.lineTo(...normalized(coast.edges[i + 2], coast.edges[i + 3]));
+		}
+		coast.worldPaths = { land, shore };
+	}
+	// Leaflet's default Mercator camera is affine in these normalized world
+	// coordinates. Project two anchors, then transform the native paths rather
+	// than walking every geographic vertex through Leaflet after every move.
+	const west = frame.project(0, -180),
+		east = frame.project(0, 180),
+		scale = east.x - west.x;
+	const transform = {
+		a: scale,
+		b: 0,
+		c: 0,
+		d: scale,
+		e: west.x,
+		f: west.y - scale / 2,
+	};
 	const land = new Path2D(),
 		shore = new Path2D();
-	const project = (lng, lat) => frame.project(lat, lng);
-	const view = frame.viewBounds;
-	const intersects = (west, south, east, north) =>
-		!view ||
-		!(
-			east < view.getWest() ||
-			west > view.getEast() ||
-			north < view.getSouth() ||
-			south > view.getNorth()
-		);
-	for (const ring of coast.rings) {
-		const bounds = coast.bounds.get(ring);
-		if (!intersects(...bounds)) continue;
-		for (let i = 0; i < ring.length; i += 2) {
-			const lng = ring[i],
-				p = project(lng, ring[i + 1]);
-			if (i === 0) land.moveTo(p.x, p.y);
-			else land.lineTo(p.x, p.y);
-		}
-		land.closePath();
-	}
-	for (let i = 0; i < coast.edges.length; i += 4) {
-		if (
-			!intersects(
-				Math.min(coast.edges[i], coast.edges[i + 2]),
-				Math.min(coast.edges[i + 1], coast.edges[i + 3]),
-				Math.max(coast.edges[i], coast.edges[i + 2]),
-				Math.max(coast.edges[i + 1], coast.edges[i + 3]),
-			)
-		)
-			continue;
-		const a = project(coast.edges[i], coast.edges[i + 1]),
-			b = project(coast.edges[i + 2], coast.edges[i + 3]);
-		shore.moveTo(a.x, a.y);
-		shore.lineTo(b.x, b.y);
-	}
+	land.addPath(coast.worldPaths.land, transform);
+	shore.addPath(coast.worldPaths.shore, transform);
 	const paths = { key, land, shore };
 	layer._atlasCoastPaths = paths;
 	return paths;
 }
 
-export function drawAtlasOcean(ctx, map, project) {
+export function drawAtlasOcean(
+	ctx,
+	map,
+	project,
+	padding = 0,
+	renderBounds = map.getBounds(),
+) {
 	const size = map.getSize(),
 		gradient = ctx.createLinearGradient(0, 0, 0, size.y);
 	gradient.addColorStop(0, "#142332");
 	gradient.addColorStop(0.5, "#243e4e");
 	gradient.addColorStop(1, "#122231");
 	ctx.fillStyle = gradient;
-	ctx.fillRect(0, 0, size.x, size.y);
+	ctx.fillRect(-padding, -padding, size.x + padding * 2, size.y + padding * 2);
 	// Geographic grid moves with the world; density stays quiet at every zoom.
-	const bounds = map.getBounds(),
+	const bounds = renderBounds,
 		spacing = map.getZoom() < 4 ? 30 : map.getZoom() < 6 ? 10 : 5;
 	ctx.save();
 	ctx.strokeStyle = "rgba(187,217,229,0.055)";
@@ -172,8 +170,8 @@ export function drawAtlasOcean(ctx, map, project) {
 		lng += spacing
 	) {
 		const p = project(0, lng);
-		ctx.moveTo(p.x, 0);
-		ctx.lineTo(p.x, size.y);
+		ctx.moveTo(p.x, -padding);
+		ctx.lineTo(p.x, size.y + padding);
 	}
 	for (
 		let lat = Math.ceil(bounds.getSouth() / spacing) * spacing;
@@ -181,8 +179,8 @@ export function drawAtlasOcean(ctx, map, project) {
 		lat += spacing
 	) {
 		const p = project(lat, 0);
-		ctx.moveTo(0, p.y);
-		ctx.lineTo(size.x, p.y);
+		ctx.moveTo(-padding, p.y);
+		ctx.lineTo(size.x + padding, p.y);
 	}
 	ctx.stroke();
 	ctx.restore();
@@ -268,6 +266,12 @@ export function drawAtlasTexture(layer, frame) {
 	const ctx = frame.ctx;
 	ctx.save();
 	ctx.fillStyle = ctx.createPattern(layer._atlasTexture, "repeat");
-	ctx.fillRect(0, 0, frame.mapSize.x, frame.mapSize.y);
+	const padding = frame.padding || 0;
+	ctx.fillRect(
+		-padding,
+		-padding,
+		frame.mapSize.x + padding * 2,
+		frame.mapSize.y + padding * 2,
+	);
 	ctx.restore();
 }

@@ -162,6 +162,7 @@ export function drawTerrain(frame) {
 							drawH,
 							this._container.width / dpr,
 							this._container.height / dpr,
+							frame.padding || 0,
 						);
 					} else if (
 						Number.isFinite(drawX) &&
@@ -256,6 +257,7 @@ export function drawTerrain(frame) {
 							drawH,
 							this._container.width / dpr,
 							this._container.height / dpr,
+							frame.padding || 0,
 						);
 					} else if (
 						Number.isFinite(drawX) &&

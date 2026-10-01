@@ -62,6 +62,10 @@ Older era data, thumbnails, hidden cards, dormant click handlers, and import pre
 
 Atlas coast assets contain compressed packed coordinates derived from the bundled Natural Earth data, without feature properties. Regenerate an asset with `node scripts/prepare-atlas-coast.mjs 110m` (or `50m` / `10m`). This is an asset maintenance command; serving the game still requires no build.
 
+Camera movement transforms buffered canvas layers during gestures and repaints near the buffer edge or when movement ends. Zoom detail levels retain their country geometry. Captures and recordings use a viewport-sized canvas.
+
+Run `node scripts/camera-performance-smoke.mjs` to check exact cached half-cell projections against a full-Earth fixture. It reports Node CPU work and projection counts, not browser or GPU frame rate. For comparison, pass `--compare /path/to/previous-renderer.js` to use an earlier renderer's projection block on the same fixture.
+
 Run `node scripts/atlas-smoke.mjs` for atlas topology, coastline, occupation, edited-map, full-Earth cache, and offline-shell checks. Verification remains source inspection, Biome, and Node smoke checks; these checks do not establish browser rendering or frame rate.
 
 The title screen uses a dedicated vector backdrop with bundled 50m geography and scenario colors. Regenerate it with `node scripts/build-title-backdrop.mjs` after changing those source assets.

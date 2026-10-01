@@ -66,6 +66,7 @@ export function drawOverlays(frame) {
 		);
 		overlaysCtx.save();
 		overlaysCtx.scale(dpr, dpr);
+		if (frame.padding) overlaysCtx.translate(frame.padding, frame.padding);
 		ctx = overlaysCtx;
 
 		// Show the custom map extent only while editing it. Keeping this frame out of

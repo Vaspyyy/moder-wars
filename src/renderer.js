@@ -315,6 +315,8 @@ const RENDER_LAYERS = Object.freeze({
 });
 
 const CONTROL_DIRTY_TILE_SIZE = 32;
+const CAMERA_PADDING = 192;
+const CAMERA_REPAINT_INTERVAL = 120;
 
 // Partial redraw clips include a one-cell halo. Sampling blocks that touch it
 // must also be repainted, including blocks starting in a neighboring tile.
@@ -338,6 +340,7 @@ const CONTROL_DIRTY_TILE_LIMIT = 4096;
 function createRenderSurface() {
 	const canvas = document.createElement("canvas");
 	canvas.setAttribute("aria-hidden", "true");
+	canvas.className = "leaflet-zoom-animated";
 	return canvas;
 }
 
@@ -354,7 +357,7 @@ const ControlMapLayer = L.Layer.extend({
 	onAdd: function (map) {
 		// Create a canvas that is viewport-locked rather than layer-locked to ensure
 		// screen-space coordinates (container points) map 1:1 without parent transform interference.
-		this._container = L.DomUtil.create("canvas", "");
+		this._container = L.DomUtil.create("canvas", "leaflet-zoom-animated");
 		this._container.style.position = "absolute";
 		this._container.style.top = "0";
 		this._container.style.left = "0";
@@ -397,6 +400,10 @@ const ControlMapLayer = L.Layer.extend({
 		this._overlaysCacheKey = "";
 		this._regionsRevision = 0;
 		this._zooming = false;
+		this._cameraMoving = false;
+		this._cameraRepaintPending = false;
+		this._surfacePadding = 0;
+		this._lastCameraPaintTime = 0;
 		this._zoomSettlePending = false;
 		this._renderedZoom = map.getZoom();
 		this._renderedCenter = map.getCenter();
@@ -407,10 +414,38 @@ const ControlMapLayer = L.Layer.extend({
 
 		this._update();
 
+		this._onMoveStart = () => {
+			this._cameraMoving = true;
+			for (const surface of this._surfaces)
+				surface.style.willChange = "transform";
+		};
 		this._onMove = () => {
+			if (this._zooming) return;
 			const nextBounds = map.getBounds();
-			if (this._lastBounds?.equals(nextBounds)) return;
-			this._lastBounds = nextBounds;
+			if (!this._cameraMoving && this._lastBounds?.equals(nextBounds)) return;
+			const offset = this._applyCameraTransform(map.getCenter(), map.getZoom());
+			if (cinematicMode || this._isCapturing) {
+				this._cameraRepaintPending = true;
+				this.requestRender(RENDER_LAYERS.ALL, true);
+				return;
+			}
+			// A buffered frame follows short drags on the compositor. Only replenish
+			// it near its edge, at most once per interval during a long drag/inertia.
+			if (
+				this._cameraMoving &&
+				Math.max(Math.abs(offset.x), Math.abs(offset.y)) >
+					this._surfacePadding * 0.75 &&
+				performance.now() - this._lastCameraPaintTime >= CAMERA_REPAINT_INTERVAL
+			) {
+				this._cameraRepaintPending = true;
+				this.requestRender(RENDER_LAYERS.ALL, true);
+			}
+		};
+		this._onMoveEnd = () => {
+			this._cameraMoving = false;
+			if (this._zooming) return;
+			this._lastBounds = map.getBounds();
+			this._zoomSettlePending = true;
 			this.requestRender(RENDER_LAYERS.ALL, true);
 		};
 		this._onTileLoad = () => {
@@ -425,23 +460,7 @@ const ControlMapLayer = L.Layer.extend({
 		};
 
 		this._onZoomAnim = (e) => {
-			// The canvas is viewport-locked, so it does not inherit Leaflet's
-			// animated map-pane transform. Always transform from the last completed
-			// canvas render so chained wheel gestures cannot accumulate drift.
-			const baseZoom = this._renderedZoom ?? map.getZoom();
-			const baseCenter = this._renderedCenter ?? map.getCenter();
-			const viewportCenter = map.getSize().divideBy(2);
-			const baseCenterWorld = map.project(baseCenter, baseZoom);
-			const targetCenterWorld = map.project(e.center, baseZoom);
-			const oldTargetCenter = targetCenterWorld
-				.subtract(baseCenterWorld)
-				.add(viewportCenter);
-			const scale = map.getZoomScale(e.zoom, baseZoom);
-			const offset = viewportCenter.subtract(oldTargetCenter.multiplyBy(scale));
-			for (const surface of this._surfaces) {
-				surface.style.transformOrigin = "0 0";
-				L.DomUtil.setTransform(surface, offset, scale);
-			}
+			this._applyCameraTransform(e.center, e.zoom);
 		};
 
 		this._onZoomEnd = () => {
@@ -454,8 +473,9 @@ const ControlMapLayer = L.Layer.extend({
 			this.requestRender(RENDER_LAYERS.ALL, true);
 		};
 
+		map.on("movestart", this._onMoveStart, this);
 		map.on("move", this._onMove, this);
-		map.on("moveend", this._onMove, this);
+		map.on("moveend", this._onMoveEnd, this);
 		map.on("zoomstart", this._onZoomStart, this);
 		map.on("zoomanim", this._onZoomAnim, this);
 		map.on("zoomend", this._onZoomEnd, this);
@@ -468,19 +488,79 @@ const ControlMapLayer = L.Layer.extend({
 		this._renderRaf = 0;
 		this._renderRequested = false;
 		this._zoomSettlePending = false;
+		this._cameraMoving = false;
+		this._cameraRepaintPending = false;
 		for (const surface of this._surfaces || []) {
 			surface.parentNode?.removeChild(surface);
 		}
 		this._politicalChunkCache?.clear();
 		this._regionChunkCache?.clear();
+		map.off("movestart", this._onMoveStart, this);
 		map.off("move", this._onMove, this);
-		map.off("moveend", this._onMove, this);
+		map.off("moveend", this._onMoveEnd, this);
 		map.off("zoomstart", this._onZoomStart, this);
 		map.off("zoomanim", this._onZoomAnim, this);
 		map.off("zoomend", this._onZoomEnd, this);
 		map.off("tileload", this._onTileLoad, this);
 		this._tilePane?.removeEventListener("load", this._onTileLoad, true);
 		this._tilePane = null;
+	},
+
+	_applyCameraTransform: function (center, zoom) {
+		const baseZoom = this._renderedZoom ?? map.getZoom(),
+			baseCenter = this._renderedCenter ?? map.getCenter();
+		const viewportCenter = map.getSize().divideBy(2);
+		const oldCenter = map
+			.project(center, baseZoom)
+			.subtract(map.project(baseCenter, baseZoom))
+			.add(viewportCenter);
+		const scale = map.getZoomScale(zoom, baseZoom),
+			offset = viewportCenter.subtract(oldCenter.multiplyBy(scale));
+		// Surface coordinates include an overscan border; compensate its origin
+		// while scaling so the geographic point under the cursor stays anchored.
+		const padding = this._surfacePadding || 0;
+		const adjusted = offset.add({
+			x: (1 - scale) * padding,
+			y: (1 - scale) * padding,
+		});
+		for (const surface of this._surfaces) {
+			surface.style.transformOrigin = "0 0";
+			L.DomUtil.setTransform(surface, adjusted, scale);
+		}
+		return offset;
+	},
+	_resizeSurfaces: function () {
+		const size = map.getSize(),
+			dpr = window.devicePixelRatio || 1;
+		const padding = cinematicMode || this._isCapturing ? 0 : CAMERA_PADDING;
+		const width = Math.round((size.x + padding * 2) * dpr),
+			height = Math.round((size.y + padding * 2) * dpr);
+		if (
+			this._container.width === width &&
+			this._container.height === height &&
+			this._surfacePadding === padding
+		)
+			return;
+		this._surfacePadding = padding;
+		for (const surface of this._surfaces) {
+			surface.width = width;
+			surface.height = height;
+			surface.style.width = `${size.x + padding * 2}px`;
+			surface.style.height = `${size.y + padding * 2}px`;
+			surface.style.left = `${-padding}px`;
+			surface.style.top = `${-padding}px`;
+		}
+		this._gridProjectionCache = null;
+		this.invalidate(RENDER_LAYERS.ALL, true);
+	},
+	_getRenderBounds: function (viewBounds) {
+		const padding = this._surfacePadding || 0,
+			size = map.getSize();
+		if (!padding || !map.containerPointToLatLng) return viewBounds;
+		return L.latLngBounds(
+			map.containerPointToLatLng([-padding, size.y + padding]),
+			map.containerPointToLatLng([size.x + padding, -padding]),
+		);
 	},
 
 	/**
@@ -509,16 +589,21 @@ const ControlMapLayer = L.Layer.extend({
 			(godModeActive && preGodModeState === "SIMULATING")),
 
 	hasPendingZoomSettle: function () {
-		return this._zoomSettlePending === true && !this._zooming;
+		return (
+			(this._zoomSettlePending === true ||
+				this._cameraRepaintPending === true) &&
+			!this._zooming
+		);
 	},
 
 	_commitZoomSettle: function () {
-		if (!this._zoomSettlePending) return;
+		if (!this._zoomSettlePending && !this._cameraRepaintPending) return;
 		this._zoomSettlePending = false;
+		this._cameraRepaintPending = false;
 		for (const surface of this._surfaces) {
 			surface.style.transform = "";
 			surface.style.transformOrigin = "";
-			surface.style.willChange = "";
+			surface.style.willChange = this._cameraMoving ? "transform" : "";
 		}
 	},
 
@@ -694,31 +779,10 @@ const ControlMapLayer = L.Layer.extend({
 	_update: function () {
 		// During zoom animation, CSS transform handles the visual zoom.
 		// Skip expensive canvas re-render — zoomend will re-render at final zoom.
-		if (this._zooming) return;
+		if (this._zooming || (this._cameraMoving && !this._cameraRepaintPending))
+			return;
 
-		const size = map.getSize();
-		const dpr = window.devicePixelRatio || 1;
-		const newW = Math.round(size.x * dpr);
-		const newH = Math.round(size.y * dpr);
-
-		if (this._container.width !== newW || this._container.height !== newH) {
-			this._container.width = newW;
-			this._container.height = newH;
-			this._container.style.width = `${size.x}px`;
-			this._container.style.height = `${size.y}px`;
-			this._staticSurface.width = newW;
-			this._staticSurface.height = newH;
-			this._labelsSurface.width = newW;
-			this._labelsSurface.height = newH;
-			this._overlaysSurface.width = newW;
-			this._overlaysSurface.height = newH;
-			this._gridProjectionCache = null;
-			for (const surface of this._surfaces) {
-				surface.style.width = this._container.style.width;
-				surface.style.height = this._container.style.height;
-			}
-			this.invalidate(RENDER_LAYERS.ALL, true);
-		}
+		this._resizeSurfaces();
 
 		const isSimulating =
 			(gameState === "SIMULATING" ||
@@ -741,7 +805,8 @@ const ControlMapLayer = L.Layer.extend({
 		// The animated CSS transform owns presentation until zoomend. The main
 		// simulation loop calls render() directly, so it needs the same guard as
 		// renderer-owned requestAnimationFrame callbacks.
-		if (this._zooming) return;
+		if (this._zooming || (this._cameraMoving && !this._cameraRepaintPending))
+			return;
 		if (this._renderRaf) {
 			cancelAnimationFrame(this._renderRaf);
 			this._renderRaf = 0;
@@ -751,8 +816,9 @@ const ControlMapLayer = L.Layer.extend({
 			this.invalidate(RENDER_LAYERS.ALL);
 			this._forceRender = false;
 		}
-		const viewBounds = map.getBounds();
-		this._lastBounds = viewBounds;
+		this._resizeSurfaces();
+		const viewBounds = this._getRenderBounds(map.getBounds());
+		this._lastBounds = map.getBounds();
 		const bounds = viewBounds;
 		const res = CONFIG.GRID_RES;
 		const currentZoom = map.getZoom();
@@ -790,29 +856,8 @@ const ControlMapLayer = L.Layer.extend({
 		});
 		const dpr = window.devicePixelRatio || 1;
 		const mapSize = map.getSize();
-		const surfaceWidth = Math.round(mapSize.x * dpr);
-		const surfaceHeight = Math.round(mapSize.y * dpr);
-		if (
-			this._container.width !== surfaceWidth ||
-			this._container.height !== surfaceHeight
-		) {
-			this._container.width = surfaceWidth;
-			this._container.height = surfaceHeight;
-			this._container.style.width = `${mapSize.x}px`;
-			this._container.style.height = `${mapSize.y}px`;
-			this._staticSurface.width = surfaceWidth;
-			this._staticSurface.height = surfaceHeight;
-			this._labelsSurface.width = surfaceWidth;
-			this._labelsSurface.height = surfaceHeight;
-			this._overlaysSurface.width = surfaceWidth;
-			this._overlaysSurface.height = surfaceHeight;
-			this._gridProjectionCache = null;
-			for (const surface of this._surfaces) {
-				surface.style.width = this._container.style.width;
-				surface.style.height = this._container.style.height;
-			}
-			this.invalidate(RENDER_LAYERS.ALL, true);
-		}
+		const padding = this._surfacePadding || 0;
+
 		const isWar =
 			gameState === "SIMULATING" ||
 			(godModeActive && preGodModeState === "SIMULATING");
@@ -971,6 +1016,7 @@ const ControlMapLayer = L.Layer.extend({
 			}
 			ctx.save();
 			ctx.scale(dpr, dpr);
+			if (padding) ctx.translate(padding, padding);
 			if (partialControlRedraw) {
 				ctx.beginPath();
 				for (const tileKey of dirtyControlPaintTiles) {
@@ -995,7 +1041,12 @@ const ControlMapLayer = L.Layer.extend({
 					ctx.rect(left, top, width, height);
 				}
 				ctx.clip();
-				ctx.clearRect(0, 0, mapSize.x, mapSize.y);
+				ctx.clearRect(
+					-padding,
+					-padding,
+					mapSize.x + padding * 2,
+					mapSize.y + padding * 2,
+				);
 			}
 
 			// --- COMPOSITE LEAFLET TILES INTO CANVAS ---
@@ -1140,7 +1191,7 @@ const ControlMapLayer = L.Layer.extend({
 
 		if (renderStatic) {
 			if (isAtlas) {
-				drawAtlasOcean(ctx, map, project);
+				drawAtlasOcean(ctx, map, project, padding, bounds);
 			} else if (useSimplifiedBase) {
 				const size = map.getSize();
 				// Always render the procedural ocean/land gradient; custom satellite imagery is disabled.
@@ -1174,7 +1225,12 @@ const ControlMapLayer = L.Layer.extend({
 					grad.addColorStop(pct, `rgb(${r},${g},${b})`);
 				}
 				ctx.fillStyle = grad;
-				ctx.fillRect(0, 0, size.x, size.y);
+				ctx.fillRect(
+					-padding,
+					-padding,
+					size.x + padding * 2,
+					size.y + padding * 2,
+				);
 			}
 
 			// Draw reference image underneath terrain/countries but above ocean/background
@@ -1243,21 +1299,21 @@ const ControlMapLayer = L.Layer.extend({
 		const projectionKey = `${viewportKey}:${xMin}:${xMax}:${yMin}:${yMax}`;
 		let gridProjection = this._gridProjectionCache;
 		if (gridProjection?.key !== projectionKey) {
-			const x = new Float32Array(vWidth + 1);
-			const y = new Float32Array(vHeight + 1);
-			for (let offset = 0; offset <= vWidth; offset++) {
-				x[offset] = project(yMin * res - 90, (xMin + offset) * res - 180).x;
+			const x = new Float32Array((vWidth + 1) * 2 + 1);
+			const y = new Float32Array((vHeight + 1) * 2 + 1);
+			for (let offset = 0; offset <= (vWidth + 1) * 2; offset++) {
+				x[offset] = project(yMin * res - 90, (xMin + offset / 2) * res - 180).x;
 			}
-			for (let offset = 0; offset <= vHeight; offset++) {
-				y[offset] = project((yMin + offset) * res - 90, xMin * res - 180).y;
+			for (let offset = 0; offset <= (vHeight + 1) * 2; offset++) {
+				y[offset] = project((yMin + offset / 2) * res - 90, xMin * res - 180).y;
 			}
 			gridProjection = { key: projectionKey, x, y };
 			this._gridProjectionCache = gridProjection;
 		}
 
 		const getGridPoint = (gx, gy) => {
-			const xOffset = gx - xMin;
-			const yOffset = gy - yMin;
+			const xOffset = (gx - xMin) * 2;
+			const yOffset = (gy - yMin) * 2;
 			const hasCachedX =
 				Number.isInteger(xOffset) &&
 				xOffset >= 0 &&
@@ -1282,6 +1338,7 @@ const ControlMapLayer = L.Layer.extend({
 		const regions = fullStaticRefresh ? [] : this._cachedRegions || [];
 
 		drawTerrain.call(this, {
+			padding,
 			createSurface: () => document.createElement("canvas"),
 			mapResolution,
 			viewBounds,
@@ -1371,6 +1428,7 @@ const ControlMapLayer = L.Layer.extend({
 		mainCtx.clearRect(0, 0, this._container.width, this._container.height);
 		mainCtx.save();
 		mainCtx.scale(dpr, dpr);
+		if (padding) mainCtx.translate(padding, padding);
 		if (this._compositeLayers) {
 			mainCtx.drawImage(
 				this._staticSurface,
@@ -1429,6 +1487,8 @@ const ControlMapLayer = L.Layer.extend({
 		this._invalidLayers &= ~RENDER_LAYERS.DYNAMIC;
 
 		drawLabels.call(this, {
+			padding,
+			viewBounds,
 			isAtlas,
 			viewportKey,
 			isWar,
@@ -1453,6 +1513,7 @@ const ControlMapLayer = L.Layer.extend({
 		});
 
 		drawOverlays.call(this, {
+			padding,
 			viewportKey,
 			isWar,
 			showWarPlans,
@@ -1489,6 +1550,7 @@ const ControlMapLayer = L.Layer.extend({
 		});
 		this._renderedZoom = currentZoom;
 		this._renderedCenter = map.getCenter();
+		this._lastCameraPaintTime = performance.now();
 		this._commitZoomSettle();
 
 		if (_r0)
