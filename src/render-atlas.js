@@ -120,9 +120,9 @@ export function getAtlasCoastPaths(layer, frame) {
 		}
 		coast.worldPaths = { land, shore };
 	}
-	// Leaflet's default Mercator camera is affine in these normalized world
+	// the map camera's default Mercator camera is affine in these normalized world
 	// coordinates. Project two anchors, then transform the native paths rather
-	// than walking every geographic vertex through Leaflet after every move.
+	// than walking every geographic vertex through the map camera after every move.
 	const west = frame.project(0, -180),
 		east = frame.project(0, 180),
 		scale = east.x - west.x;

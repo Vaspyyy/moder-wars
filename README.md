@@ -12,13 +12,14 @@ Open https://vaspyyy.github.io/moder-wars/ in a browser.
 
 The game opens directly at the main menu with default or remembered preferences. Fullscreen is available only through an explicit menu action.
 
-For local development, serve the repository as static files:
+For local development, use Node 24 or newer:
 
 ```sh
-python3 -m http.server 8000
+npm ci --ignore-scripts
+npm run dev
 ```
 
-Then open http://127.0.0.1:8000/.
+`npm run check` runs strict TypeScript checks for the new engine modules, lint, Node regressions, a production build, and offline asset checks. `npm run build` outputs the static site to `dist/`; `npm run preview` serves that output. See [the migration and deployment notes](docs/MODERNIZATION.md) before merging or deploying.
 
 ## Current Era
 
@@ -41,7 +42,7 @@ The current **Choose Era** menu exposes one playable era:
 
 The default **Atlas (Menu Style)** view uses a blue ocean, restrained country colors, geographic coastlines, coastal shading, fine territory contours, and smaller labels. Capitals remain visible at world scale; other cities appear as you zoom in, with active theater cities retained. Country and city labels avoid overlapping their peers.
 
-Find it under **Settings → Display → Style**. Existing installs adopt Atlas once; subsequent style choices are remembered. Satellite imagery and Simplified Mode remain available. Custom terrain, resized worlds, and editing use contours from the live grid so painted land is preserved. Ownership, occupation and hit testing continue to use the simulation grid.
+Atlas is the only visual style. Custom terrain, resized worlds, and editing use contours from the live grid so painted land is preserved. Ownership, occupation, and hit testing continue to use the simulation grid. The native camera handles dragging and zoom; PixiJS retains GPU country meshes and unit sprites, with cached Canvas overlays and a complete Canvas fallback for capture, flag view, and devices without WebGL.
 
 Coastlines follow the selected 110m, 50m or 10m geography resolution. The small 110m asset is included in the offline shell; higher-resolution coastlines download on demand and enter the runtime cache. If geography cannot load, Atlas uses its grid coastline fallback.
 
@@ -63,13 +64,13 @@ Older era data, thumbnails, hidden cards, dormant click handlers, and import pre
 
 ## Development Notes
 
-Atlas coast assets contain compressed packed coordinates derived from the bundled Natural Earth data, without feature properties. Regenerate an asset with `node scripts/prepare-atlas-coast.mjs 110m` (or `50m` / `10m`). This is an asset maintenance command; serving the game still requires no build.
+Atlas coast assets contain compressed packed coordinates derived from the bundled Natural Earth data, without feature properties. Regenerate an asset with `node scripts/prepare-atlas-coast.mjs 110m` (or `50m` / `10m`), then rebuild the static site.
 
 Camera movement transforms buffered canvas layers during gestures and repaints near the buffer edge or when movement ends. Zoom detail levels retain their country geometry. Captures and recordings use a viewport-sized canvas.
 
-`src/smooth-zoom.js` owns wheel input and advances the pinned Leaflet 1.9.4 camera once per display frame. Canvas and imagery transforms follow that camera; tile-grid updates wait until the gesture ends. Buffered canvases replenish at most once per 120 ms when zooming exposes an edge or doubles their scale, with a sharp final paint after easing. Reduced-motion preferences skip easing. The adapter uses Leaflet's private camera methods, so recheck it before changing the CDN version.
+`src/camera-input.ts` owns pointer, wheel, touch, and keyboard camera input. It publishes camera changes at most once per display frame, anchors wheel zoom at the cursor, and cancels momentum on resets. Reduced-motion preferences skip easing and inertia. Buffered Canvas overlays replenish near their edges, while GPU country meshes follow the camera matrix.
 
-Run `node scripts/smooth-zoom-smoke.mjs` for cursor anchoring, wheel reversal, refresh-rate independence, zoom limits, gesture interruptions, deferred tile updates, and bounded canvas repaint scheduling in paused and live-war states. These are Node checks with map/layer doubles; no browser or game is launched. Optionally set `MW_LEAFLET_SOURCE` to a local Leaflet 1.9.4 `leaflet-src.js` to also exercise its real camera and GridLayer methods in Node.
+Run `node scripts/native-camera-smoke.mjs` for projection round trips, cursor anchoring, coalesced dragging, pinch transitions, inertia, cancellation, editor ownership, and camera bounds. `atlas-scene-smoke.mjs` checks retained geometry and neighboring chunk invalidation; `atlas-gpu-smoke.mjs` checks real Pixi drawing instructions and fallback control flow in Node. These do not launch a browser or execute GPU rendering.
 
 Run `node scripts/camera-performance-smoke.mjs` to check exact cached half-cell projections against a full-Earth fixture. It reports Node CPU work and projection counts, not browser or GPU frame rate. For comparison, pass `--compare /path/to/previous-renderer.js` to use an earlier renderer's projection block on the same fixture.
 
@@ -77,20 +78,20 @@ Run `node scripts/atlas-smoke.mjs` for atlas topology, coastline, occupation, ed
 
 The title screen uses a dedicated vector backdrop with bundled 50m geography and scenario colors. Regenerate it with `node scripts/build-title-backdrop.mjs` after changing those source assets.
 
-- There is no build step and no root npm install requirement for the main app.
-- Serve the repo as static files during local development.
+- Install the locked npm dependencies and use Vite for local development.
+- Deploy the production output from `dist/` through the GitHub Actions Pages workflow.
 - The service worker caches aggressively. After source changes, hard-refresh the browser or bump `CACHE_VERSION`.
 - Game version appears in both `index.html` and `workers/service-worker.js`; keep them in sync.
 
 ## Tech
 
-Vanilla JavaScript, Leaflet map, Canvas overlays, IndexedDB caching, and a resident simulation worker. The simulation advances on a fixed logical clock independent of rendering; the UI receives packed unit positions and changed 32-cell map tiles. Editing and diplomacy take an acknowledged state handoff. Canvas meshes and country geometry cache world chunks across camera movement.
+Vite, strict TypeScript camera/scene modules, PixiJS WebGL with Canvas overlays and fallback, existing JavaScript menus and simulation, IndexedDB caching, and a resident simulation worker. The simulation advances on a fixed logical clock independent of rendering; the UI receives packed unit positions and changed 32-cell map tiles. Editing and diplomacy take an acknowledged state handoff. Country geometry caches world chunks across camera movement.
 
 Compiled scenarios use MWSC v3 with compact saved-territory runs and deduplicated flag blobs; the v2 decoder and JSON import/export remain supported. Raw reference geography is loaded only when an editing tool needs it. Worker influence grids use lazy Float32 pages; legacy editing receives dense arrays on demand.
 
 ## Offline Verification
 
-Run `biome check .` and `node scripts/<name>-smoke.mjs`. The module-graph check requires `node --experimental-vm-modules scripts/module-graph-smoke.mjs`. Worker/core/client checks use actual simulation code and Node worker threads without a browser.
+Run `npm run check` for the integration suite and production output checks. Individual checks use `node scripts/<name>-smoke.mjs`; the module-graph check requires `node --experimental-vm-modules scripts/module-graph-smoke.mjs`. Worker/core/client checks use actual simulation code and Node worker threads without a browser.
 
 Measured CPU probes during the performance refactor (synthetic fixtures, not browser FPS):
 
@@ -128,7 +129,7 @@ node scripts/profile-performance.mjs --case regional --spread --output /tmp/mw-s
 node scripts/profile-performance.mjs --compare /tmp/previous/report.json
 ```
 
-The default suite covers Turkey–Iraq, Russia–China, and a four-country European FFA at standard grid resolution. It runs three fresh timing processes per case, then a separate V8 CPU sampling pass and a Node worker transport probe. `--heap` adds allocation sampling; `--phases` adds a separate intrusive timer/counter pass. `--help` lists army size, resolution, warmup, repetition, and output controls. Node 22.7+ is required; no root npm installation is needed.
+The default suite covers Turkey–Iraq, Russia–China, and a four-country European FFA at standard grid resolution. It runs three fresh timing processes per case, then a separate V8 CPU sampling pass and a Node worker transport probe. `--heap` adds allocation sampling; `--phases` adds a separate intrusive timer/counter pass. `--help` lists army size, resolution, warmup, repetition, and output controls. Use the project's supported Node version and installed dependencies.
 
 Reports default to the ignored `performance-results/` directory. Each output directory contains a terminal-readable `report.txt`, a machine-readable `report.json`, and `.cpuprofile` files, plus `.heapprofile` files when requested. Baseline comparisons reject changed workloads, hardware, OS, or Node versions. Keep the machine otherwise idle for timing runs. Debug console logging is suppressed in benchmark processes.
 

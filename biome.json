@@ -1,0 +1,36 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.4.13/schema.json",
+	"files": {
+		"maxSize": 2000000,
+		"includes": [
+			"*.js",
+			"*.ts",
+			"*.json",
+			"*.html",
+			"*.css",
+			"src/**/*.js",
+			"src/**/*.ts",
+			"scripts/modernization-smoke.mjs",
+			"scripts/native-camera-smoke.mjs",
+			"scripts/native-reference-smoke.mjs",
+			"scripts/atlas-scene-smoke.mjs",
+			"scripts/atlas-gpu-smoke.mjs",
+			"scripts/register-types.mjs",
+			"scripts/build-output-smoke.mjs",
+			"workers/**/*.js",
+			"styles/**/*.css"
+		]
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"a11y": {
+				"useButtonType": "off",
+				"noSvgWithoutTitle": "off"
+			},
+			"style": {
+				"noDescendingSpecificity": "off"
+			}
+		}
+	}
+}

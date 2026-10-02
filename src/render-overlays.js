@@ -20,7 +20,7 @@ export function drawOverlays(frame) {
 		map,
 		worldWidthDeg,
 		worldHeightDeg,
-		L,
+		mapRuntime,
 		getAiOperationsSnapshot,
 		_aiDebugPlans,
 		_navalPlan,
@@ -84,9 +84,9 @@ export function drawOverlays(frame) {
 			} else {
 				const halfW = (worldWidthDeg || 360) / 2;
 				const halfH = (worldHeightDeg || 180) / 2;
-				boundsToUse = L.latLngBounds(
-					L.latLng(-halfH, -halfW),
-					L.latLng(halfH, halfW),
+				boundsToUse = mapRuntime.latLngBounds(
+					mapRuntime.latLng(-halfH, -halfW),
+					mapRuntime.latLng(halfH, halfW),
 				);
 			}
 

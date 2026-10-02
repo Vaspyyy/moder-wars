@@ -3,7 +3,7 @@ window.onerror = (msg, _url, line, _col, err) => {
 	return true;
 };
 
-if ("serviceWorker" in navigator) {
+if ("serviceWorker" in navigator && !import.meta.env.DEV) {
 	// Register from the project root so the worker controls the game, not only
 	// requests below /workers/. Delay install/update traffic until the initial
 	// document and module graph are settled so first-load downloads do not compete.

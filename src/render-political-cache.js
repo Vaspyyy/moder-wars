@@ -633,6 +633,27 @@ export function drawPoliticalChunks(layer, frame) {
 		fills.set(id, fill);
 		return fill;
 	};
+	if (layer._gpu?.active) {
+		for (
+			let cy = Math.max(0, Math.floor((frame.yMin - 0.5) / CHUNK_SIZE));
+			cy <= Math.floor(frame.yMax / CHUNK_SIZE);
+			cy++
+		) {
+			for (
+				let cx = Math.max(0, Math.floor((frame.xMin - 0.5) / CHUNK_SIZE));
+				cx <= Math.floor(frame.xMax / CHUNK_SIZE);
+				cx++
+			)
+				visibleChunks.push(cache.get(frame, cx, cy));
+		}
+		layer._gpu.updateChunks(
+			visibleChunks,
+			materials,
+			frame,
+			frame.coast?.land || null,
+		);
+		return;
+	}
 	const minX = Math.max(
 		0,
 		Math.floor((frame.staticLoopXMin - (frame.isAtlas ? 0.5 : 0)) / CHUNK_SIZE),

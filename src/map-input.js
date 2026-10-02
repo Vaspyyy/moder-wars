@@ -115,31 +115,6 @@ export function createMapInput(runtime) {
 				return;
 			}
 
-			if (runtime.gameState === "EDITOR_PAINTING_TERRAIN") {
-				// Before starting terrain paint, ensure we're in Simplified (wargames) mode unless this is a custom canvas.
-				const currentImagery = runtime.imagerySelect
-					? runtime.imagerySelect.value
-					: runtime.getCookie("mw_imagery") || "atlas";
-
-				// Only prompt/switch if we're NOT already wargames and NOT on a blank/custom terrain map.
-				if (currentImagery !== "wargames" && !runtime.isCustomTerrain) {
-					if (
-						confirm(
-							"Satellite Directive: Terrain modification requires 'Simplified Mode' to correctly align geography. Switch now?",
-						)
-					) {
-						runtime.setImageryProvider("wargames", false);
-						if (runtime.disableCountryGradientCheckbox) {
-							runtime.disableCountryGradientCheckbox.checked = true;
-							runtime.disableCountryGradient = true;
-						}
-					}
-					// After switching (or cancelling), do not treat this same click as a paint event;
-					// the user can click again to start painting, which prevents stray lines.
-					return;
-				}
-			}
-
 			if (
 				runtime.gameState === "EDITOR_PAINTING" ||
 				runtime.gameState === "EDITOR_UNCLAIMING" ||

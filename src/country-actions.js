@@ -36,7 +36,7 @@ export function createCountryActions(runtime) {
 			}
 
 			if (!hasExplicitSavedCells && !cellList && meta.feature) {
-				const bounds = runtime.L.geoJSON(meta.feature).getBounds();
+				const bounds = runtime.mapRuntime.geoJSON(meta.feature).getBounds();
 				const res = runtime.CONFIG.GRID_RES;
 				const sLat = Math.max(0, Math.floor((bounds.getSouth() + 90) / res));
 				const eLat = Math.min(

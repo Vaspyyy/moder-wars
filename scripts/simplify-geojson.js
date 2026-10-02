@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Simplify geojson files: reduce coordinate precision, strip unnecessary properties, compact JSON
-const fs = require('fs');
-const path = require('path');
+import fs from "node:fs";
+import path from "node:path";
+const __dirname = import.meta.dirname;
 
 const GEODATA_DIR = path.join(__dirname, '..', 'assets', 'geodata');
 const PRECISION = 4; // ~11m accuracy

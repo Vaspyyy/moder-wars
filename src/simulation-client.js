@@ -18,7 +18,11 @@ import {
 export function createSimulationClient(
 	runtime,
 	{
-		workerFactory = (url) => new Worker(url, { type: "module" }),
+		workerFactory = () =>
+			new Worker(
+				new URL("../workers/war-simulation-worker.js", import.meta.url),
+				{ type: "module" },
+			),
 		onEvent = () => {},
 		onSnapshot = () => {},
 	} = {},
@@ -197,9 +201,7 @@ export function createSimulationClient(
 		const initial = captureSimulationState(runtime);
 		active = true;
 		try {
-			worker = workerFactory(
-				new URL("../workers/war-simulation-worker.js", import.meta.url),
-			);
+			worker = workerFactory();
 			await new Promise((resolve, reject) => {
 				const timeout = setTimeout(
 					() =>

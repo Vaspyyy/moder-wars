@@ -23,7 +23,7 @@ export function createSimulationControls(runtime) {
 					(runtime.godModeActive && runtime.preGodModeState === "SIMULATING");
 				if (simulating && ["+", "=", "-"].includes(e.key)) {
 					e.preventDefault();
-					e.stopPropagation(); // Speed shortcuts must not also zoom Leaflet.
+					e.stopPropagation(); // Speed shortcuts must not also zoom the map camera.
 					runtime.setSpeed(
 						runtime.currentSpeedIndex + (e.key === "-" ? -1 : 1),
 					);

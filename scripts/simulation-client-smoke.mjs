@@ -76,8 +76,7 @@ function harness(options) {
 	const runtime = createBoundRuntime(), workers = [], events = [];
 	let snapshots = 0;
 	const client = createSimulationClient(runtime, {
-		workerFactory: url => {
-			assert.ok(url.href.endsWith("/workers/war-simulation-worker.js"));
+		workerFactory: () => {
 			const worker = new FakeWorker(options); workers.push(worker); return worker;
 		},
 		onEvent: (type, ...args) => events.push({ type, args }), onSnapshot: () => { snapshots++; },

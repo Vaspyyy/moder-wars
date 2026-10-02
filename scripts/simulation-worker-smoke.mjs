@@ -10,7 +10,7 @@ import { createTinySimulationState as fixture } from "./simulation-fixture.mjs";
 
 // This is the actual browser worker module inside a Node port shim. No browser,
 // rendering loop, or main-module/UI imports participate in these checks.
-const workerUrl = new URL("../workers/war-simulation-worker.js", import.meta.url).href;
+const workerUrl = process.env.MW_WORKER_URL || new URL("../workers/war-simulation-worker.js", import.meta.url).href;
 const adapter = `import { parentPort } from "node:worker_threads";
  globalThis.self = { postMessage: (message, transfers) => parentPort.postMessage(message, transfers) };
  await import(${JSON.stringify(workerUrl)});

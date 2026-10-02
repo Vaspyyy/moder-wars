@@ -491,6 +491,7 @@ export function drawUnits(frame) {
 		}
 	});
 
+	this._gpu?.beginMarkers();
 	// Draw units - Small flags for land, ships for water
 	if (showUnitsVisually) {
 		const currentZoom = map.getZoom();
@@ -559,15 +560,22 @@ export function drawUnits(frame) {
 			const mountainIntensity = u.mountainIntensity || 0;
 
 			if (isAtSea) {
-				// Draw a simple ship icon
-				ctx.fillStyle = sideColors[u.sideIndex].replace(rgbaRe, "1)");
-				ctx.beginPath();
-				ctx.moveTo(p.x - w / 2, p.y + h / 4);
-				ctx.lineTo(p.x + w / 2, p.y + h / 4);
-				ctx.lineTo(p.x + w / 4, p.y + h / 2);
-				ctx.lineTo(p.x - w / 4, p.y + h / 2);
-				ctx.closePath();
-				ctx.fill();
+				const gpuMarker = this._gpu?.marker(
+					u,
+					null,
+					sideColors[u.sideIndex].replace(rgbaRe, "1)"),
+				);
+				if (!gpuMarker) {
+					// Draw a simple ship icon
+					ctx.fillStyle = sideColors[u.sideIndex].replace(rgbaRe, "1)");
+					ctx.beginPath();
+					ctx.moveTo(p.x - w / 2, p.y + h / 4);
+					ctx.lineTo(p.x + w / 2, p.y + h / 4);
+					ctx.lineTo(p.x + w / 4, p.y + h / 2);
+					ctx.lineTo(p.x - w / 4, p.y + h / 2);
+					ctx.closePath();
+					ctx.fill();
+				}
 				// Sail
 				ctx.beginPath();
 				ctx.moveTo(p.x, p.y + h / 4);
@@ -610,12 +618,17 @@ export function drawUnits(frame) {
 					allianceViewEnabled && flagMeta?.allianceFlagTempFlag
 						? flagMeta.allianceFlagTempFlag
 						: flagMeta?.tempFlag || country?.flag || country?.tempFlag;
-				if (flag?.complete && flag.naturalWidth > 0) {
+				const gpuMarker = this._gpu?.marker(
+					u,
+					flag || null,
+					sideColors[u.sideIndex].replace(rgbaRe, "1)"),
+				);
+				if (!gpuMarker && flag?.complete && flag.naturalWidth > 0) {
 					ctx.drawImage(flag, p.x - sw / 2, p.y - sh / 2, sw, sh);
 					ctx.strokeStyle = "rgba(0,0,0,0.3)";
 					ctx.lineWidth = Math.max(0.3, 0.3 * zoomScale);
 					ctx.strokeRect(p.x - sw / 2, p.y - sh / 2, sw, sh);
-				} else {
+				} else if (!gpuMarker) {
 					ctx.fillStyle = sideColors[u.sideIndex].replace(rgbaRe, "1)");
 					ctx.fillRect(p.x - sw / 2, p.y - sh / 2, sw, sh);
 				}
@@ -701,6 +714,7 @@ export function drawUnits(frame) {
 		});
 	}
 
+	this._gpu?.endMarkers();
 	// PASS 5: Battle Clusters (Sword Emojis) - Viewport Culled
 	if (isWar && showBattleIndicators) {
 		const zoomScale = 1.3 ** (map.getZoom() - 3);

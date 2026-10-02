@@ -5,19 +5,25 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
+import ts from "typescript";
 
 assert.equal(typeof vm.SourceTextModule, "function", "Run Node with --experimental-vm-modules");
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const context = vm.createContext({});
 const modules = new Map();
 const sources = new Map();
-const externals = new Map(["leaflet", "jszip"].map((name) => [name,
+const externals = new Map(["jszip"].map((name) => [name,
 	new vm.SyntheticModule(["default"], function () { this.setExport("default", {}); }, { context, identifier: name }),
 ]));
+for (const name of ["pixi.js", "pixi.js/unsafe-eval"]) {
+ const names = name === "pixi.js" ? ["Container", "FillGradient", "Graphics", "Sprite", "Texture", "WebGLRenderer"] : [];
+ externals.set(name, new vm.SyntheticModule(names, function () { for (const key of names) this.setExport(key, {}); }, {context,identifier:name}));
+}
 for (const directory of ["src", "workers"]) {
-for (const name of readdirSync(join(root, directory)).filter((name) => name.endsWith(".js"))) {
+for (const name of readdirSync(join(root, directory)).filter((name) => /\.(?:js|ts)$/.test(name))) {
 	const path = join(root, directory, name);
-	const source = readFileSync(path, "utf8");
+	const raw = readFileSync(path, "utf8");
+	const source = path.endsWith(".ts") ? ts.transpileModule(raw,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext,verbatimModuleSyntax:true}}).outputText : raw;
 	sources.set(path, source);
 	modules.set(path, new vm.SourceTextModule(source, { context, identifier: path }));
 }
@@ -58,7 +64,7 @@ function visit(path) {
 		visit(resolve(dirname(path), match[2]));
 	}
 }
-visit(join(root, "src/main.js"));
+visit(join(root, "src/entry.js"));
 visit(join(root, "src/bootstrap.js"));
 for (const path of modules.keys()) if (path.startsWith(join(root, "workers") + "/")) visit(path);
 for (const path of shell) assert.ok(existsSync(join(root, path)), `Stale application shell entry: ${path}`);

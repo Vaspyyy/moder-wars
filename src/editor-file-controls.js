@@ -353,7 +353,7 @@ export function createEditorFileControls(runtime) {
 				for (let i = 0; i < runtime.worldControlMap.length; i++) {
 					const lm = runtime.landMask[i];
 
-					// Base Palette (Matches 'wargames' mode)
+					// Base palette for the Atlas editor
 					let r = 5,
 						g = 52,
 						b = 72; // Deep Ocean Blue

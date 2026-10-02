@@ -9,9 +9,11 @@ Thumbs.db
 # Local project docs/tooling
 AGENTS.md
 AI_COMMANDER.md
-biome.json
 .mimocode/
 .opencode/
 
 # Local CLI CPU/heap profiles and measurement reports
 /performance-results/
+
+/node_modules/
+/dist/

@@ -19,10 +19,10 @@ function measure(source) {
  }
  drawPoliticalChunks(layer,state);calls=0;const start=performance.now();
  for(let i=0;i<5;i++)drawPoliticalChunks(layer,state);
- return {warmPaintMs:(performance.now()-start)/5,leafletProjectionCallsPerPaint:calls/5,cache:layer._politicalChunkCache.stats};
+ return {warmPaintMs:(performance.now()-start)/5,projectionCallsPerPaint:calls/5,cache:layer._politicalChunkCache.stats};
 }
 const current=measure(readFileSync(new URL('src/renderer.js',root),'utf8'));
-assert.equal(current.leafletProjectionCallsPerPaint,0,'steady atlas paints must not send half-cell vertices back through Leaflet');
+assert.equal(current.projectionCallsPerPaint,0,'steady atlas paints must not send half-cell vertices back through the camera');
 assert.equal(current.cache.built,2850);assert.equal(current.cache.reused,14250);
 const comparison=process.argv[2]==='--compare'?measure(readFileSync(process.argv[3],'utf8')):null;
 console.log(JSON.stringify({scope:'Node projection and paint command CPU; no browser or GPU',current,...comparison&&{comparison}},null,2));

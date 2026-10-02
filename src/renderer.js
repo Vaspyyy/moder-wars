@@ -1,4 +1,3 @@
-import L from "leaflet";
 import { CONFIG } from "./config.js";
 import {
 	getFormationPersonnel,
@@ -31,13 +30,11 @@ import {
 	gameMode,
 	gameState,
 	getAiOperationsSnapshot,
-	getCookie,
 	getGridIndex,
 	godModeActive,
 	gridHeight,
 	gridWidth,
 	hideCurvedLabels,
-	imagerySelect,
 	influenceLayer,
 	initialCombatants,
 	isCustomTerrain,
@@ -75,6 +72,7 @@ import {
 	worldHeightDeg,
 	worldWidthDeg,
 } from "./main.js";
+import mapRuntime from "./map-runtime.ts";
 import { drawAtlasOcean, requestAtlasCoast } from "./render-atlas.js";
 import { paintClippedFlag, resolveRenderFlag } from "./render-flags.js";
 import { drawLabels } from "./render-labels.js";
@@ -389,7 +387,7 @@ const CONTROL_DIRTY_TILE_LIMIT = 4096;
 function createRenderSurface() {
 	const canvas = document.createElement("canvas");
 	canvas.setAttribute("aria-hidden", "true");
-	canvas.className = "leaflet-zoom-animated";
+	canvas.className = "mw-map-surface";
 	return canvas;
 }
 
@@ -402,20 +400,22 @@ function getBoundsCacheKey(bounds) {
 	].join(":");
 }
 
-const ControlMapLayer = L.Layer.extend({
+const ControlMapLayer = mapRuntime.Layer.extend({
 	onAdd: function (map) {
 		// Create a canvas that is viewport-locked rather than layer-locked to ensure
 		// screen-space coordinates (container points) map 1:1 without parent transform interference.
-		this._container = L.DomUtil.create("canvas", "leaflet-zoom-animated");
+		this._container = mapRuntime.DomUtil.create("canvas", "mw-map-surface");
 		this._container.style.position = "absolute";
 		this._container.style.top = "0";
 		this._container.style.left = "0";
 		this._container.style.pointerEvents = "none";
 		this._container.style.zIndex = "400";
+		this._backgroundSurface = createRenderSurface();
 		this._staticSurface = createRenderSurface();
 		this._labelsSurface = createRenderSurface();
 		this._overlaysSurface = createRenderSurface();
 		this._surfaces = [
+			this._backgroundSurface,
 			this._staticSurface,
 			this._container,
 			this._labelsSurface,
@@ -462,6 +462,13 @@ const ControlMapLayer = L.Layer.extend({
 		for (const surface of this._surfaces)
 			map.getContainer().appendChild(surface);
 
+		this._backgroundSurface.style.zIndex = "398";
+		this._container.style.zIndex = "402";
+		this._labelsSurface.style.zIndex = "403";
+		this._overlaysSurface.style.zIndex = "404";
+		this._gpu = null;
+		this._gpuRequested = false;
+		this._disposed = false;
 		this._update();
 
 		this._onMoveStart = () => {
@@ -498,17 +505,13 @@ const ControlMapLayer = L.Layer.extend({
 			this._zoomSettlePending = true;
 			this.requestRender(RENDER_LAYERS.ALL, true);
 		};
-		this._onTileLoad = () => {
-			if (!cinematicMode && !this._isCapturing) return;
-			this.requestRender(RENDER_LAYERS.STATIC);
-		};
 
 		this._onZoomStart = () => {
 			this._zooming = true;
 			this._smoothZooming = false;
 			for (const surface of this._surfaces) {
 				surface.style.willChange = "transform";
-				// These canvases live outside Leaflet's animated map pane, so they
+				// These canvases live outside the map camera's animated map pane, so they
 				// need the same transition explicitly for keyboard/double-click zoom.
 				surface.style.transition =
 					"transform 250ms cubic-bezier(0, 0, 0.25, 1)";
@@ -553,17 +556,21 @@ const ControlMapLayer = L.Layer.extend({
 			this.requestRender(RENDER_LAYERS.ALL, true);
 		};
 
+		this._onReferenceChange = () => {
+			this.invalidate(RENDER_LAYERS.STATIC | RENDER_LAYERS.OVERLAYS);
+			this.requestRender(RENDER_LAYERS.ALL, true);
+		};
+		map.on("referencechange", this._onReferenceChange, this);
 		map.on("movestart", this._onMoveStart, this);
 		map.on("move", this._onMove, this);
 		map.on("moveend", this._onMoveEnd, this);
 		map.on("zoomstart", this._onZoomStart, this);
 		map.on("zoomanim", this._onZoomAnim, this);
 		map.on("zoomend", this._onZoomEnd, this);
-		map.on("tileload", this._onTileLoad, this);
-		this._tilePane = map.getPane("tilePane");
-		this._tilePane?.addEventListener("load", this._onTileLoad, true);
 	},
 	onRemove: function (map) {
+		this._disposed = true;
+		this._gpu?.destroy();
 		if (this._renderRaf) cancelAnimationFrame(this._renderRaf);
 		this._renderRaf = 0;
 		this._renderRequested = false;
@@ -577,15 +584,13 @@ const ControlMapLayer = L.Layer.extend({
 		}
 		this._politicalChunkCache?.clear();
 		this._regionChunkCache?.clear();
+		map.off("referencechange", this._onReferenceChange, this);
 		map.off("movestart", this._onMoveStart, this);
 		map.off("move", this._onMove, this);
 		map.off("moveend", this._onMoveEnd, this);
 		map.off("zoomstart", this._onZoomStart, this);
 		map.off("zoomanim", this._onZoomAnim, this);
 		map.off("zoomend", this._onZoomEnd, this);
-		map.off("tileload", this._onTileLoad, this);
-		this._tilePane?.removeEventListener("load", this._onTileLoad, true);
-		this._tilePane = null;
 	},
 
 	_applyCameraTransform: function (center, zoom) {
@@ -607,8 +612,9 @@ const ControlMapLayer = L.Layer.extend({
 		});
 		for (const surface of this._surfaces) {
 			surface.style.transformOrigin = "0 0";
-			L.DomUtil.setTransform(surface, adjusted, scale);
+			mapRuntime.DomUtil.setTransform(surface, adjusted, scale);
 		}
+		this._gpu?.setCamera();
 		return offset;
 	},
 	_resizeSurfaces: function () {
@@ -639,7 +645,7 @@ const ControlMapLayer = L.Layer.extend({
 		const padding = this._surfacePadding || 0,
 			size = map.getSize();
 		if (!padding || !map.containerPointToLatLng) return viewBounds;
-		return L.latLngBounds(
+		return mapRuntime.latLngBounds(
 			map.containerPointToLatLng([-padding, size.y + padding]),
 			map.containerPointToLatLng([size.x + padding, -padding]),
 		);
@@ -889,6 +895,20 @@ const ControlMapLayer = L.Layer.extend({
 		// gesture/coverage guard as renderer-owned animation-frame callbacks.
 		if ((this._zooming || this._cameraMoving) && !this._cameraRepaintPending)
 			return;
+		if (!this._gpuRequested && !cinematicMode && !this._isCapturing) {
+			this._gpuRequested = true;
+			import("./atlas-gpu.ts")
+				.then(({ AtlasGpuLayer }) => {
+					if (this._disposed) return;
+					this._gpu = new AtlasGpuLayer(map, () => {
+						this.invalidate(RENDER_LAYERS.ALL, true);
+						this.requestRender(RENDER_LAYERS.ALL, true);
+					});
+				})
+				.catch((error) => {
+					console.warn("Atlas GPU renderer unavailable:", error);
+				});
+		}
 		if (this._renderRaf) {
 			cancelAnimationFrame(this._renderRaf);
 			this._renderRaf = 0;
@@ -943,14 +963,10 @@ const ControlMapLayer = L.Layer.extend({
 		const isWar =
 			gameState === "SIMULATING" ||
 			(godModeActive && preGodModeState === "SIMULATING");
-		// Use the active dropdown value rather than the cookie to support non-persisted session-only mode switches
-		const currentImagery = imagerySelect
-			? imagerySelect.value
-			: getCookie("mw_imagery") || "atlas";
-		const isAtlas = currentImagery === "atlas";
-		const isSimplifiedMode = currentImagery === "wargames" || isAtlas;
-		// Custom terrain maps always use the Simplified/WarGames base (ocean/neutral land) for visual clarity
-		const useSimplifiedBase = isSimplifiedMode || isCustomTerrain;
+		const currentImagery = "atlas";
+		const isAtlas = true;
+		const isSimplifiedMode = true;
+		const useSimplifiedBase = true;
 		const mapResolution =
 			document.getElementById("map-res-select")?.value || "110m";
 		if (
@@ -1082,7 +1098,13 @@ const ControlMapLayer = L.Layer.extend({
 				);
 			}
 		}
-		const staticCtx = this._staticSurface.getContext("2d", {
+		const gpuActive =
+			this._gpu?.ready &&
+			!cinematicMode &&
+			!this._isCapturing &&
+			viewMode !== "FLAG";
+		this._gpu?.setActive(gpuActive);
+		const staticCtx = this._backgroundSurface.getContext("2d", {
 			willReadFrequently: false,
 		});
 		let ctx = staticCtx;
@@ -1129,40 +1151,6 @@ const ControlMapLayer = L.Layer.extend({
 					mapSize.x + padding * 2,
 					mapSize.y + padding * 2,
 				);
-			}
-
-			// --- COMPOSITE LEAFLET TILES INTO CANVAS ---
-			// Optimization: Only draw tiles into canvas if we are actively capturing for Hub/Video.
-			// Leaflet already renders these to the screen; re-drawing them on canvas is a huge redundant GPU hit.
-			if (!useSimplifiedBase && (cinematicMode || this._isCapturing)) {
-				const tilePane = map.getPane("tilePane");
-				if (tilePane) {
-					const tiles = tilePane.querySelectorAll("img.leaflet-tile");
-					const mapRect = map.getContainer().getBoundingClientRect();
-					tiles.forEach((tile) => {
-						if (tile.complete && tile.naturalWidth > 0) {
-							const rect = tile.getBoundingClientRect();
-							const x = rect.left - mapRect.left;
-							const y = rect.top - mapRect.top;
-
-							if (
-								x + rect.width > 0 &&
-								y + rect.height > 0 &&
-								x < mapRect.width &&
-								y < mapRect.height
-							) {
-								const opacity = window.getComputedStyle(tile).opacity;
-								ctx.globalAlpha = parseFloat(opacity) || 1.0;
-								try {
-									ctx.drawImage(tile, x, y, rect.width, rect.height);
-								} catch (_e) {
-									// Silent catch for CORS
-								}
-								ctx.globalAlpha = 1.0;
-							}
-						}
-					});
-				}
 			}
 		}
 
@@ -1274,45 +1262,6 @@ const ControlMapLayer = L.Layer.extend({
 		if (renderStatic) {
 			if (isAtlas) {
 				drawAtlasOcean(ctx, map, project, padding, bounds);
-			} else if (useSimplifiedBase) {
-				const size = map.getSize();
-				// Always render the procedural ocean/land gradient; custom satellite imagery is disabled.
-				const centerLng = map.getCenter().lng;
-				const grad = ctx.createLinearGradient(0, 0, 0, size.y);
-
-				// Generate a latitude-aware gradient by sampling the viewport's geographic coordinates
-				const stops = 12;
-				for (let i = 0; i <= stops; i++) {
-					const pct = i / stops;
-					const screenY = size.y * pct;
-					let lat = 0;
-					try {
-						// Convert screen position to latitude for color calculation
-						lat = map.containerPointToLatLng([0, screenY]).lat;
-					} catch (_e) {}
-
-					// Add noise to the equator logic so transitions aren't perfectly uniform
-					// Noise is tied to longitude and screen stop index for a dynamic, non-perfect feel
-					const noise = Math.sin(i * 0.7 + centerLng * 0.04) * 3.5;
-					const absLat = Math.min(90, Math.max(0, Math.abs(lat) + noise));
-					const t = Math.min(1, Math.max(0, absLat / 90));
-
-					// Narrower, more subtle ocean color spectrum
-					// Equator (0): rgb(5, 52, 72)
-					// Poles (1): rgb(2, 18, 34)
-					const r = Math.round(5 * (1 - t) + 2 * t);
-					const g = Math.round(52 * (1 - t) + 18 * t);
-					const b = Math.round(72 * (1 - t) + 34 * t);
-
-					grad.addColorStop(pct, `rgb(${r},${g},${b})`);
-				}
-				ctx.fillStyle = grad;
-				ctx.fillRect(
-					-padding,
-					-padding,
-					size.x + padding * 2,
-					size.y + padding * 2,
-				);
 			}
 
 			// Draw reference image underneath terrain/countries but above ocean/background
@@ -1419,7 +1368,53 @@ const ControlMapLayer = L.Layer.extend({
 		// bounds for UV mapping, preventing the engine from walking entire massive nations like Russia.
 		const regions = fullStaticRefresh ? [] : this._cachedRegions || [];
 
+		const backgroundCtx = ctx;
+		if (renderStatic) {
+			ctx = this._staticSurface.getContext("2d");
+			if (fullStaticRefresh)
+				ctx.clearRect(
+					0,
+					0,
+					this._staticSurface.width,
+					this._staticSurface.height,
+				);
+			ctx.save();
+			ctx.scale(dpr, dpr);
+			if (padding) ctx.translate(padding, padding);
+			if (partialControlRedraw) {
+				ctx.beginPath();
+				for (const tileKey of dirtyControlPaintTiles) {
+					const tileX = tileKey % controlTileColumns;
+					const tileY = Math.floor(tileKey / controlTileColumns);
+					const cellX0 = Math.max(xMin, tileX * CONTROL_DIRTY_TILE_SIZE - 1);
+					const cellX1 = Math.min(
+						xMax + 1,
+						(tileX + 1) * CONTROL_DIRTY_TILE_SIZE + 1,
+					);
+					const cellY0 = Math.max(yMin, tileY * CONTROL_DIRTY_TILE_SIZE - 1);
+					const cellY1 = Math.min(
+						yMax + 1,
+						(tileY + 1) * CONTROL_DIRTY_TILE_SIZE + 1,
+					);
+					const cornerA = project(cellY0 * res - 90, cellX0 * res - 180);
+					const cornerB = project(cellY1 * res - 90, cellX1 * res - 180);
+					const left = Math.min(cornerA.x, cornerB.x);
+					const top = Math.min(cornerA.y, cornerB.y);
+					const width = Math.abs(cornerB.x - cornerA.x);
+					const height = Math.abs(cornerB.y - cornerA.y);
+					ctx.rect(left, top, width, height);
+				}
+				ctx.clip();
+				ctx.clearRect(
+					-padding,
+					-padding,
+					mapSize.x + padding * 2,
+					mapSize.y + padding * 2,
+				);
+			}
+		}
 		drawTerrain.call(this, {
+			backgroundCtx,
 			padding,
 			createSurface: () => document.createElement("canvas"),
 			mapResolution,
@@ -1497,10 +1492,12 @@ const ControlMapLayer = L.Layer.extend({
 			staticLoopXMax,
 		});
 
+		if (renderStatic) backgroundCtx.restore();
 		// Let the browser composite unchanged map layers during normal viewing.
 		// Exports and recordings still receive the complete public canvas.
 		this._compositeLayers = cinematicMode || this._isCapturing === true;
 		for (const surface of [
+			this._backgroundSurface,
 			this._staticSurface,
 			this._labelsSurface,
 			this._overlaysSurface,
@@ -1512,6 +1509,13 @@ const ControlMapLayer = L.Layer.extend({
 		mainCtx.scale(dpr, dpr);
 		if (padding) mainCtx.translate(padding, padding);
 		if (this._compositeLayers) {
+			mainCtx.drawImage(
+				this._backgroundSurface,
+				0,
+				0,
+				this._container.width / dpr,
+				this._container.height / dpr,
+			);
 			mainCtx.drawImage(
 				this._staticSurface,
 				0,
@@ -1616,7 +1620,7 @@ const ControlMapLayer = L.Layer.extend({
 			map,
 			worldWidthDeg,
 			worldHeightDeg,
-			L,
+			mapRuntime,
 			getAiOperationsSnapshot,
 			_aiDebugPlans,
 			_navalPlan,
@@ -1631,6 +1635,7 @@ const ControlMapLayer = L.Layer.extend({
 			sides,
 			rgbaRe,
 		});
+		this._gpu?.setCamera();
 		this._renderedZoom = currentZoom;
 		this._renderedCenter = map.getCenter();
 		this._lastCameraPaintTime = performance.now();
