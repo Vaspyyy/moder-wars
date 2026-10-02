@@ -40,7 +40,8 @@ export function createSimulationClient(
 	let pendingEdits = 0;
 	let presentationRevision = 0;
 	let pendingPresentationWorkMs = 0;
-	const presentationUnitCache = createPresentationUnitCache(runtime.units);
+	// Construction precedes the application's live state initialization.
+	const presentationUnitCache = createPresentationUnitCache();
 	let handoffPromise = null,
 		editGeneration = 0,
 		lastPerf = null,
@@ -228,6 +229,8 @@ export function createSimulationClient(
 		stop({ invalidateEdits: false });
 		const generation = epoch;
 		const initial = captureSimulationState(runtime);
+		// Edits and scenario resets may replace mirrors while reusing unit IDs.
+		resetPresentationUnitCache(presentationUnitCache, runtime.units);
 		active = true;
 		try {
 			worker = workerFactory(
