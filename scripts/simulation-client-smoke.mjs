@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { setTimeout as delay } from "node:timers/promises";
+import { createLiveContext } from "../src/runtime-context.js";
 import { createSimulationClient } from "../src/simulation-client.js";
 import { createEngine } from "../src/simulation-engine.js";
 import { createDeterministicJob } from "../src/simulation-jobs.js";
@@ -10,6 +11,23 @@ import { createSimulationWorld } from "../src/simulation-world.js";
 import { createTerritoryLedger, getCountryLedger, getSideLedger } from "../src/territory-ledger.js";
 import { createTerritoryRuntime } from "../src/territory-runtime.js";
 import { createTinySimulationState } from "./simulation-fixture.mjs";
+
+// main.js constructs the client before initializing its live state bindings.
+{
+	const runtime = createLiveContext({ units: () => units });
+	let client, workersCreated = 0;
+	assert.doesNotThrow(() => {
+		client = createSimulationClient(runtime, {
+			workerFactory: () => { workersCreated++; throw new Error("unexpected worker during construction"); },
+		});
+	}, "client construction must not read uninitialized application state");
+	let units = [];
+	assert.equal(runtime.units, units);
+	assert.equal(client.active, false);
+	assert.equal(client.ownsState, false);
+	assert.equal(workersCreated, 0);
+	client.stop();
+}
 
 // Fake transport tests ownership and UI transactions independently of worker CPU
 // mechanics. The companion worker smoke runs the actual simulation separately.
@@ -187,6 +205,42 @@ function assertFullOwnerIntake(runtime, derived) {
 const originalError = console.error;
 console.error = (...args) => { if (!String(args).includes("simulated port failure") && !String(args).includes("simulated recovered state")) originalError(...args); };
 try {
+	const lifecycle = harness();
+	try {
+		const beforeStart = lifecycle.runtime.units;
+		const initialUnits = beforeStart.map(unit => ({ ...unit, smokeMarker: "initialized-after-construction" }));
+		const initialUnit = initialUnits[0];
+		lifecycle.runtime.units = initialUnits;
+		await lifecycle.client.start();
+		lifecycle.workers.at(-1).publishSnapshot();
+		assert.equal(lifecycle.runtime.units, initialUnits, "first start seeds the current mirror array");
+		assert.equal(lifecycle.runtime.units[0], initialUnit);
+		assert.equal(lifecycle.runtime.units[0].smokeMarker, "initialized-after-construction");
+		assert.equal(beforeStart[0].smokeMarker, "formation-1", "snapshot intake cannot mutate the construction-time units");
+
+		let editedUnits, editedUnit;
+		await lifecycle.client.edit(() => {
+			editedUnits = lifecycle.runtime.units.map(unit => ({ ...unit, smokeMarker: "replacement-after-edit" }));
+			editedUnit = editedUnits[0];
+			lifecycle.runtime.units = editedUnits;
+		});
+		lifecycle.workers.at(-1).publishSnapshot();
+		assert.equal(lifecycle.runtime.units, editedUnits, "edit restart seeds the replacement mirror array");
+		assert.equal(lifecycle.runtime.units[0], editedUnit, "reused IDs refer to the edited objects");
+		assert.equal(lifecycle.runtime.units[0].smokeMarker, "replacement-after-edit");
+
+		lifecycle.client.stop();
+		applySimulationState(lifecycle.runtime, createTinySimulationState({ paused: true }));
+		const resetUnits = lifecycle.runtime.units, resetUnit = resetUnits[0];
+		resetUnit.smokeMarker = "replacement-after-reset";
+		await lifecycle.client.start();
+		lifecycle.workers.at(-1).publishSnapshot();
+		assert.equal(lifecycle.runtime.units, resetUnits, "scenario restart seeds the replacement mirror array");
+		assert.equal(lifecycle.runtime.units[0], resetUnit, "reused IDs cannot resurrect units from the previous scenario");
+		assert.equal(lifecycle.runtime.units[0].smokeMarker, "replacement-after-reset");
+		assert.equal(editedUnit.smokeMarker, "replacement-after-edit");
+	} finally { lifecycle.client.stop(); }
+
 	const h = harness();
 	try {
 		const originalUnits = h.runtime.units, originalCountry = h.runtime.sides[0][0];
@@ -396,5 +450,5 @@ try {
 		assert.equal(localStaticRefreshes, 1);
 		assert.ok(!localClient.active && !localClient.ownsState);
 	} finally { console.warn = originalWarn; localClient.stop(); }
-	console.log("Client transport ownership, snapshots/assets, coalesced controls, queued edit cancellation, shared suspension, recovered handoff, profiling generations and full-owner derived-cache rebuilds passed.");
+	console.log("Client lazy construction, cache lifecycle, transport ownership, snapshots/assets, coalesced controls, queued edit cancellation, shared suspension, recovered handoff, profiling generations and full-owner derived-cache rebuilds passed.");
 } finally { console.error = originalError; }
