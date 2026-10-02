@@ -138,7 +138,16 @@ export function createAiPlanExecutor(context) {
 				}
 
 				// Select and apply plans
-				const selected = context.selectPlans(si, proposals);
+				const commander = context.decideCommander?.(si, proposals);
+				const selected = context.selectPlans(
+					si,
+					commander?.proposals || proposals,
+				);
+				if (commander?.replaceLand) {
+					context._aiOperationsDirty = true;
+					context._warPlan[si] = selected.land1 || null;
+					context._warPlan[si + context.sides.length] = selected.land2 || null;
+				}
 
 				// Apply land plans to _warPlan slots
 				// Only overwrite on forced reassessment; otherwise fill gaps

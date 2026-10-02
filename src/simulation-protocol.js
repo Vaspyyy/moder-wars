@@ -638,6 +638,7 @@ const snapshotKeys = [
 	"_coastalDefensePlan",
 	"_neutralGarrisonPlan",
 	"_aiDebugPlans",
+	"_commanderDecisions",
 	"_aiTaskForcesBySide",
 	"activeBattles",
 	"bombs",

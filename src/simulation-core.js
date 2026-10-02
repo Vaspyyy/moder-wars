@@ -3,6 +3,7 @@ import { createAiPlanner } from "./ai-planning.js";
 import { createAiProposalPipeline } from "./ai-proposals.js";
 import { createAiRuntime } from "./ai-runtime.js";
 import { createArmyFormation } from "./army-formation.js";
+import { createCommanderRuntime } from "./commander-runtime.js";
 import { createConflictPersonnel } from "./conflict-personnel.js";
 import { createConflictResolution } from "./conflict-resolution.js";
 import {
@@ -66,7 +67,7 @@ const COUNTRY_FIELDS = [
 /** An independently owned simulation. Presentation events contain no DOM references. */
 export function createSimulationCore(
 	initial = {},
-	{ onEvent, onControlCellsChanged } = {},
+	{ onEvent, onControlCellsChanged, commander } = {},
 ) {
 	const state = createSimulationState(initial);
 	const dirtyCells = new Set();
@@ -215,6 +216,7 @@ export function createSimulationCore(
 	);
 	const { performSimulationTick } = createSimulationTick(state);
 	state.ensureSideIdentities();
+	Object.assign(state, createCommanderRuntime(state, commander));
 	if (!Object.hasOwn(initial, "hostilityMatrix")) {
 		if (!Object.hasOwn(initial, "hostileSidePairs")) {
 			for (let left = 0; left < state.sides.length; left++) {
@@ -356,7 +358,9 @@ export function createSimulationCore(
 		const type = typeof message === "string" ? message : message.type;
 		const input =
 			typeof message === "string" ? payload : message.payload || message;
-		if (type === "APPLY_TREATY") {
+		if (type === "SET_COMMANDER_POLICY") {
+			state.setCommanderPolicy(input);
+		} else if (type === "APPLY_TREATY") {
 			state.applyTreaty(
 				input.treatyType ||
 					(input.type !== "APPLY_TREATY" && input.type) ||

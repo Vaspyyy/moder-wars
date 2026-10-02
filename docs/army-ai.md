@@ -2,6 +2,8 @@
 
 The active simulation owner runs all strategic decisions and movement. Browser mirrors only display the results. The strategic pipeline remains **PROPOSE → WEIGH → DECIDE → EXECUTE → REASSESS**. The army command layer turns selected plans into persistent front coverage, operational formations and explicit movement orders.
 
+An optional learned land commander can choose focus or defense during proposal reassessment while retaining these command and movement controllers. The scripted path remains the default. See [reinforcement-learning.md](reinforcement-learning.md) for the offline training, self-play, evaluation and model integration workflow.
+
 ## Ownership and scheduling
 
 `src/ai-runtime.js` composes the pure command, navigation and encirclement modules through its owner context. No new core module imports `main.js`, reads the DOM or accesses the browser. The worker runs the same core as the offline fixtures.

@@ -15,3 +15,6 @@ biome.json
 
 # Local CLI CPU/heap profiles and measurement reports
 /performance-results/
+
+# Offline reinforcement learning datasets, checkpoints and reports
+/training-results/
