@@ -10,6 +10,8 @@ import {
 	collectTransferBuffers,
 	createControlDeltaTracker,
 	createPresentationSnapshot,
+	createPresentationUnitCache,
+	resetPresentationUnitCache,
 	SIMULATION_PROTOCOL_VERSION,
 	unpackPresentationUnits,
 } from "./simulation-protocol.js";
@@ -40,88 +42,119 @@ export function createSimulationClient(
 		lastLocalSnapshot = 0;
 	let nextRequest = 0;
 	let pendingEdits = 0;
+	let presentationRevision = 0;
+	let pendingPresentationWorkMs = 0;
+	const presentationUnitCache = createPresentationUnitCache(runtime.units);
 	let handoffPromise = null,
 		editGeneration = 0,
 		lastPerf = null,
 		perfResetGeneration = 0;
 	const events = [];
+	const now = () => globalThis.performance?.now?.() ?? Date.now();
+	function runPresentationIntake(fullOwner, apply) {
+		const startedAt = now();
+		let applied = false;
+		try {
+			apply();
+			applied = true;
+		} finally {
+			if (applied) {
+				presentationRevision++;
+				try {
+					onSnapshot({ fullOwner });
+				} finally {
+					pendingPresentationWorkMs += Math.max(0, now() - startedAt);
+				}
+			} else {
+				pendingPresentationWorkMs += Math.max(0, now() - startedAt);
+			}
+		}
+	}
 	function applyFullOwnerState(state, pendingEvents = []) {
-		// Jobs and ledgers close over their owner's arrays. A full return replaces
-		// those arrays; dirtying the old ledger cannot retarget its references.
-		const fieldGeneration = runtime._frontlineWorkerGeneration || 0;
-		const territoryGeneration = runtime._frontlineTerritoryGeneration || 0;
-		runtime._simulationJobs?.clear("simulation-handoff");
-		applySimulationState(runtime, state);
-		const reset = {
-			_territoryLedger: null,
-			_territoryLedgerCitiesSource: null,
-			_territoryLedgerCitiesLength: -1,
-			_territoryLedgerAppliedCitiesRevision: -1,
-			_territoryLedgerDecisionTick: Number.NEGATIVE_INFINITY,
-			_territoryDecisionPending: false,
-			frontlineDirLat: null,
-			frontlineDirLng: null,
-			frontlineFieldTick: -999,
-			_frontlineWorkerPendingField: true,
-			_workerBusy: false,
-			_frontlineWorkerGeneration:
-				Math.max(fieldGeneration, runtime._frontlineWorkerGeneration || 0) + 1,
-			_frontlineTerritoryGeneration:
-				Math.max(
-					territoryGeneration,
-					runtime._frontlineTerritoryGeneration || 0,
-				) + 1,
-			_coastalLandIndices: [],
-			_coastalTopologyReady: false,
-			adjacencyCache: null,
-			_neutralBorderCacheSignature: "",
-			_neutralBorderPolys: {},
-			_influenceCityGridSource: null,
-			_influenceCityGridSourceLength: -1,
-			_influenceCityGridWorldGeneration: -1,
-			_enemyCityCacheGeneration: -1,
-			_enemyCityCacheSource: null,
-			_enemyCityCandidatesBySide: [],
-		};
-		for (const [key, value] of Object.entries(reset))
-			if (key in runtime) runtime[key] = value;
-		runtime._mopUpOwnedCellCache?.clear();
-		runtime._mopUpDeJureCellCache?.clear();
-		runtime._battleHash?.clear();
-		runtime._tacticalGrid?.bySide.clear();
-		// Keep the owner's current layout/slots, plans, manpower and history.
-		runtime.syncFrontlineWorkerPendingState?.();
-		runtime.flushTerritoryLedger?.();
-		runtime.scheduleCoastalTopologyJob?.();
-		runtime.resetLocalSimulationClock?.();
-		for (const event of pendingEvents) onEvent(event.type, ...event.args);
-		onEvent("onPoliticalMapChanged");
-		onSnapshot();
+		runPresentationIntake(true, () => {
+			// Jobs and ledgers close over their owner's arrays. A full return replaces
+			// those arrays; dirtying the old ledger cannot retarget its references.
+			const fieldGeneration = runtime._frontlineWorkerGeneration || 0;
+			const territoryGeneration = runtime._frontlineTerritoryGeneration || 0;
+			runtime._simulationJobs?.clear("simulation-handoff");
+			applySimulationState(runtime, state);
+			const reset = {
+				_territoryLedger: null,
+				_territoryLedgerCitiesSource: null,
+				_territoryLedgerCitiesLength: -1,
+				_territoryLedgerAppliedCitiesRevision: -1,
+				_territoryLedgerDecisionTick: Number.NEGATIVE_INFINITY,
+				_territoryDecisionPending: false,
+				frontlineDirLat: null,
+				frontlineDirLng: null,
+				frontlineFieldTick: -999,
+				_frontlineWorkerPendingField: true,
+				_workerBusy: false,
+				_frontlineWorkerGeneration:
+					Math.max(fieldGeneration, runtime._frontlineWorkerGeneration || 0) +
+					1,
+				_frontlineTerritoryGeneration:
+					Math.max(
+						territoryGeneration,
+						runtime._frontlineTerritoryGeneration || 0,
+					) + 1,
+				_coastalLandIndices: [],
+				_coastalTopologyReady: false,
+				adjacencyCache: null,
+				_neutralBorderCacheSignature: "",
+				_neutralBorderPolys: {},
+				_influenceCityGridSource: null,
+				_influenceCityGridSourceLength: -1,
+				_influenceCityGridWorldGeneration: -1,
+				_enemyCityCacheGeneration: -1,
+				_enemyCityCacheSource: null,
+				_enemyCityCandidatesBySide: [],
+			};
+			for (const [key, value] of Object.entries(reset))
+				if (key in runtime) runtime[key] = value;
+			resetPresentationUnitCache(presentationUnitCache, runtime.units);
+			runtime._mopUpOwnedCellCache?.clear();
+			runtime._mopUpDeJureCellCache?.clear();
+			runtime._battleHash?.clear();
+			runtime._tacticalGrid?.bySide.clear();
+			// Keep the owner's current layout/slots, plans, manpower and history.
+			runtime.syncFrontlineWorkerPendingState?.();
+			runtime.flushTerritoryLedger?.();
+			runtime.scheduleCoastalTopologyJob?.();
+			runtime.resetLocalSimulationClock?.();
+			for (const event of pendingEvents) onEvent(event.type, ...event.args);
+			onEvent("onPoliticalMapChanged");
+		});
 	}
 	function applySnapshot(snapshot) {
-		applyControlDeltas(runtime, snapshot.tiles);
-		applySimulationState(runtime, snapshot.values, {
-			preserveCountryControls: true,
-		});
-		runtime.units = unpackPresentationUnits(snapshot.units, runtime.units);
-		if (
-			runtime.perf &&
-			(snapshot.metrics.controlGeneration == null ||
-				snapshot.metrics.controlGeneration === perfResetGeneration)
-		) {
-			const { history = [], ...counters } = snapshot.metrics;
-			Object.assign(runtime.perf, counters);
-			runtime.perf._history.push(...history);
-			if (runtime.perf._history.length > runtime.PERF_TICK_HISTORY_LIMIT)
-				runtime.perf._history.splice(
-					0,
-					runtime.perf._history.length - runtime.PERF_TICK_HISTORY_LIMIT,
-				);
-		}
+		runPresentationIntake(false, () => {
+			applyControlDeltas(runtime, snapshot.tiles);
+			applySimulationState(runtime, snapshot.values, {
+				preserveCountryControls: true,
+			});
+			runtime.units = unpackPresentationUnits(
+				snapshot.units,
+				runtime.units,
+				presentationUnitCache,
+			);
+			if (
+				runtime.perf &&
+				(snapshot.metrics.controlGeneration == null ||
+					snapshot.metrics.controlGeneration === perfResetGeneration)
+			) {
+				const { history = [], ...counters } = snapshot.metrics;
+				Object.assign(runtime.perf, counters);
+				runtime.perf._history.push(...history);
+				if (runtime.perf._history.length > runtime.PERF_TICK_HISTORY_LIMIT)
+					runtime.perf._history.splice(
+						0,
+						runtime.perf._history.length - runtime.PERF_TICK_HISTORY_LIMIT,
+					);
+			}
 
-		for (const event of snapshot.events || [])
-			onEvent(event.type, ...event.args);
-		onSnapshot();
+			for (const event of snapshot.events || [])
+				onEvent(event.type, ...event.args);
+		});
 	}
 	function stop({ invalidateEdits = true } = {}) {
 		if (invalidateEdits) editGeneration++;
@@ -429,6 +462,17 @@ export function createSimulationClient(
 		},
 		get ownsState() {
 			return !!(worker || local);
+		},
+		get presentationRevision() {
+			return presentationRevision;
+		},
+		get pendingPresentationWorkMs() {
+			return pendingPresentationWorkMs;
+		},
+		consumePresentationWork() {
+			const elapsed = pendingPresentationWorkMs;
+			pendingPresentationWorkMs = 0;
+			return elapsed;
 		},
 	};
 }

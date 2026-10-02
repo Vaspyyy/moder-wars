@@ -59,14 +59,14 @@ class FakeWorker {
 		}
 	}
 	terminate() { this.terminated = true; }
-	publishSnapshot(metrics = {}) {
+	publishSnapshot(metrics = {}, { values, tick = 17 } = {}) {
 		const units = structuredClone(this.state.units);
 		units[0].lat += 0.125;
 		this.state.units = units;
-		this.state._simTickCount = 17;
+		this.state._simTickCount = tick;
 		this.state.occupationMap[0] = 0.85;
 		this.emit({ type: "SNAPSHOT", epoch: this.epoch, snapshot: {
-			values: { _simTickCount: 17, sides: this.state.sides }, units: packPresentationUnits(units),
+			values: values ?? { _simTickCount: tick, sides: this.state.sides }, units: packPresentationUnits(units),
 			tiles: [{ key: 0, x: 0, y: 0, width: 1, height: 1, occupationMap: this.state.occupationMap.slice(0, 1) }],
 			metrics: { ticks: 17, tickTotal: 2, maxTick: 1, workerTickMs: 0.1, ...metrics }, events: [{ type: "snapshotEvent", args: [17] }],
 		} });
@@ -74,14 +74,18 @@ class FakeWorker {
 }
 function harness(options) {
 	const runtime = createBoundRuntime(), workers = [], events = [];
+	const snapshotContexts = [];
 	let snapshots = 0;
 	const client = createSimulationClient(runtime, {
 		workerFactory: () => {
 			const worker = new FakeWorker(options); workers.push(worker); return worker;
 		},
-		onEvent: (type, ...args) => events.push({ type, args }), onSnapshot: () => { snapshots++; },
+		onEvent: (type, ...args) => events.push({ type, args }), onSnapshot: context => {
+			snapshots++;
+			snapshotContexts.push(context);
+		},
 	});
-	return { runtime, workers, events, client, get snapshots() { return snapshots; } };
+	return { runtime, workers, events, client, snapshotContexts, get snapshots() { return snapshots; } };
 }
 async function bounded(promise, message) {
 	let timer;
@@ -198,11 +202,21 @@ try {
 		assert.equal(h.runtime.perf.ticks, 17);
 		assert.equal(h.runtime.occupationMap[0], Math.fround(0.85));
 		assert.equal(h.runtime.units[0], originalUnits[0], "presentation preserves existing unit identity");
+		assert.equal(h.runtime.units, originalUnits, "presentation reuses the persistent result array");
 		assert.equal(h.runtime.sides[0][0], originalCountry);
 		assert.equal(h.runtime.sides[0][0].flag, flagImage, "country merges retain UI-owned assets");
 		assert.equal(h.snapshots, 1);
+		assert.deepEqual(h.snapshotContexts[0], { fullOwner: false });
+		assert.equal(h.client.presentationRevision, 1);
+		assert.ok(h.client.consumePresentationWork() >= 0);
+		assert.equal(h.client.pendingPresentationWorkMs, 0, "consuming intake work resets the accumulator");
 		assert.ok(h.events.some(event => event.type === "snapshotEvent"));
 		assert.equal(h.workers[0].messages.at(-1).type, "ACK");
+		h.workers[0].publishSnapshot({}, { values: { simFrameCount: 18 } });
+		assert.equal(h.runtime._simTickCount, 17, "omitted values retain their prior mirror contents");
+		assert.equal(h.runtime.simFrameCount, 18);
+		assert.equal(h.client.presentationRevision, 2, "each accepted snapshot advances presentation revision");
+		assert.deepEqual(h.snapshotContexts.at(-1), { fullOwner: false });
 		h.client.syncControls(); h.client.syncControls();
 		assert.equal(h.workers[0].messages.filter(message => message.type === "CONTROL").length, 1, "unchanged controls are coalesced");
 		h.runtime.simSpeed = 4; h.client.syncControls();
@@ -211,6 +225,8 @@ try {
 		assert.equal(h.workers[0].messages.at(-1).type, "COMMAND");
 		h.workers[0].handoffMode = "wrong-first";
 		await h.client.suspend();
+		assert.deepEqual(h.snapshotContexts.at(-1), { fullOwner: true });
+		assert.equal(h.client.presentationRevision, 3, "full owner return advances presentation revision");
 		assert.equal(h.runtime._simTickCount, 17, "wrong handoff request ID cannot apply stale state");
 		assert.equal(h.runtime.units[0].smokeMarker, "formation-1-owner", "full handoff restores strategic fields");
 		assert.equal(h.runtime.sideInfluenceMaps.length, 2);

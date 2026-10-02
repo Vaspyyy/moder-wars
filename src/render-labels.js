@@ -1,3 +1,5 @@
+import { drawSoldierFrontLabels } from "./render-soldier-labels.js";
+
 // This pass receives a frame snapshot; surface caches stay on the map layer.
 export function drawLabels(frame) {
 	const {
@@ -16,8 +18,6 @@ export function drawLabels(frame) {
 		dpr,
 		regions,
 		countryMetadata,
-		MAX_SIDES,
-		sides,
 		map,
 		CONFIG,
 		project,
@@ -61,11 +61,7 @@ export function drawLabels(frame) {
 		// PASS 6: Curved Soldier Labels (HOI4 Style)
 		// Drawn AFTER units so they appear on top
 		if (isWar && !hideCurvedLabels) {
-			for (let sIdx = 0; sIdx < MAX_SIDES; sIdx++) {
-				if (sides[sIdx] && sides[sIdx].length > 0) {
-					this.drawCurvedLabel(ctx, sIdx);
-				}
-			}
+			drawSoldierFrontLabels({ ...frame, ctx });
 			// Only bake the casualty list into the map canvas during Cinematic Mode
 			// so it appears in the WebM recording while the standard HTML UI is hidden.
 			if (cinematicMode) {

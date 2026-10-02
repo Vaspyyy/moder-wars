@@ -6,6 +6,104 @@ const CHUNK_SIZE = 32;
 const MAX_CHUNKS = 2048;
 const UNKNOWN_RGBA = [150, 150, 150, 1];
 const ALLIANCE_RGBA = [180, 180, 180, 1];
+const projectedPolygonCache = new WeakMap();
+
+function getPartialPaintChunkKeys(frame) {
+	if (
+		!frame.partialControlRedraw ||
+		!(frame.dirtyControlPaintTiles instanceof Set)
+	)
+		return null;
+	const columns = Math.ceil(frame.gridWidth / CHUNK_SIZE);
+	const rows = Math.ceil(frame.gridHeight / CHUNK_SIZE);
+	const keys = new Set();
+	for (const tileKey of frame.dirtyControlPaintTiles) {
+		const tileX = tileKey % columns;
+		const tileY = Math.floor(tileKey / columns);
+		// The renderer's clear clip extends one cell beyond each paint tile.
+		// Include only chunks touched by that actual clip fringe.
+		const cellX0 = Math.max(frame.xMin, tileX * CHUNK_SIZE - 1);
+		const cellX1 = Math.min(frame.xMax + 1, (tileX + 1) * CHUNK_SIZE + 1);
+		const cellY0 = Math.max(frame.yMin, tileY * CHUNK_SIZE - 1);
+		const cellY1 = Math.min(frame.yMax + 1, (tileY + 1) * CHUNK_SIZE + 1);
+		if (cellX1 <= cellX0 || cellY1 <= cellY0) continue;
+		const minChunkX = Math.max(0, Math.floor(cellX0 / CHUNK_SIZE));
+		const maxChunkX = Math.min(columns - 1, Math.ceil(cellX1 / CHUNK_SIZE) - 1);
+		const minChunkY = Math.max(0, Math.floor(cellY0 / CHUNK_SIZE));
+		const maxChunkY = Math.min(rows - 1, Math.ceil(cellY1 / CHUNK_SIZE) - 1);
+		for (let chunkY = minChunkY; chunkY <= maxChunkY; chunkY++)
+			for (let chunkX = minChunkX; chunkX <= maxChunkX; chunkX++)
+				keys.add(chunkY * columns + chunkX);
+	}
+	return [...keys].sort((a, b) => a - b);
+}
+
+function getProjectedPolygons(chunk, frame) {
+	const projection = frame.gridProjection || frame.getGridPoint;
+	const projectionKey = frame.gridProjection?.key;
+	const projectionX = frame.gridProjection?.x;
+	const projectionY = frame.gridProjection?.y;
+	const viewportKey = frame.viewportKey;
+	const PathConstructor =
+		typeof globalThis.Path2D === "function" ? globalThis.Path2D : null;
+	const cached = projectedPolygonCache.get(chunk);
+	if (
+		cached?.projection === projection &&
+		cached.projectionKey === projectionKey &&
+		cached.projectionX === projectionX &&
+		cached.projectionY === projectionY &&
+		cached.viewportKey === viewportKey &&
+		cached.PathConstructor === PathConstructor
+	)
+		return cached;
+
+	const pathsByMaterial = PathConstructor ? new Map() : null;
+	const pointsByMaterial = PathConstructor ? null : new Map();
+	const mesh = chunk.polygons;
+	for (let offset = 0; offset < mesh.length; ) {
+		const id = mesh[offset++];
+		const count = mesh[offset++];
+		let path;
+		let points;
+		if (PathConstructor) {
+			path = pathsByMaterial.get(id);
+			if (!path) {
+				path = new PathConstructor();
+				pathsByMaterial.set(id, path);
+			}
+		} else {
+			points = [];
+			let shapes = pointsByMaterial.get(id);
+			if (!shapes) {
+				shapes = [];
+				pointsByMaterial.set(id, shapes);
+			}
+			shapes.push(points);
+		}
+		for (let i = 0; i < count; i++) {
+			const point = frame.getGridPoint(mesh[offset++], mesh[offset++]);
+			if (path) {
+				if (i === 0) path.moveTo(point.x, point.y);
+				else path.lineTo(point.x, point.y);
+			} else {
+				points.push(point.x, point.y);
+			}
+		}
+		if (path) path.closePath();
+	}
+	const result = {
+		projection,
+		projectionKey,
+		projectionX,
+		projectionY,
+		viewportKey,
+		PathConstructor,
+		pathsByMaterial,
+		pointsByMaterial,
+	};
+	projectedPolygonCache.set(chunk, result);
+	return result;
+}
 
 // Compare the few country/material inputs directly. Numeric snapshots avoid
 // allocating a color string per country on every frame and retain exact values.
@@ -664,75 +762,94 @@ export function drawPoliticalChunks(layer, frame) {
 		Math.floor((frame.staticLoopYMin - (frame.isAtlas ? 0.5 : 0)) / CHUNK_SIZE),
 	);
 	const maxY = Math.floor((frame.staticPaintYMax ?? frame.yMax) / CHUNK_SIZE);
-	for (let cy = minY; cy <= maxY; cy++) {
-		for (let cx = minX; cx <= maxX; cx++) {
-			const chunk = cache.get(frame, cx, cy);
-			visibleChunks.push(chunk);
-			const mesh = chunk.polygons;
-			for (let offset = 0; offset < mesh.length; ) {
-				const id = mesh[offset++],
-					count = mesh[offset++],
-					points = [];
-				for (let i = 0; i < count; i++) {
-					const p = frame.getGridPoint(mesh[offset++], mesh[offset++]);
-					points.push(p.x, p.y);
-				}
-				let batch = polygonBatches.get(id);
-				if (!batch) {
-					batch = [];
-					polygonBatches.set(id, batch);
-				}
-				batch.push(points);
+	const paintChunkKeys = getPartialPaintChunkKeys(frame);
+	const visitChunk = (cx, cy) => {
+		const chunk = cache.get(frame, cx, cy);
+		visibleChunks.push(chunk);
+		const projected = getProjectedPolygons(chunk, frame);
+		const chunkPolygons =
+			projected.pathsByMaterial || projected.pointsByMaterial;
+		for (const [id, shapes] of chunkPolygons) {
+			let batch = polygonBatches.get(id);
+			if (!batch) {
+				batch = [];
+				polygonBatches.set(id, batch);
 			}
-			const rectangles = chunk.rectangles;
-			for (let offset = 0; offset < rectangles.length; offset += 5) {
-				const id = rectangles[offset];
-				const x = rectangles[offset + 1];
-				const y = rectangles[offset + 2];
-				const width = rectangles[offset + 3];
-				const height = rectangles[offset + 4];
-				if (
-					x > frame.xMax + (frame.isAtlas ? 1 : 0) ||
-					y > frame.yMax + (frame.isAtlas ? 1 : 0) ||
-					x + width <= frame.xMin ||
-					y + height <= frame.yMin
-				)
-					continue;
-				const a = frame.getGridPoint(x, y);
-				const b = frame.getGridPoint(x + width, y + height);
-				let batch = batches.get(id);
-				if (!batch) {
-					batch = [];
-					batches.set(id, batch);
-				}
-				batch.push(
-					Math.min(a.x, b.x) - (frame.isAtlas ? 0 : 0.25),
-					Math.min(a.y, b.y) - (frame.isAtlas ? 0 : 0.25),
-					Math.abs(b.x - a.x) + (frame.isAtlas ? 0 : 0.5),
-					Math.abs(b.y - a.y) + (frame.isAtlas ? 0 : 0.5),
-				);
-			}
+			if (projected.pathsByMaterial) batch.push(shapes);
+			else batch.push(...shapes);
 		}
+		const rectangles = chunk.rectangles;
+		for (let offset = 0; offset < rectangles.length; offset += 5) {
+			const id = rectangles[offset];
+			const x = rectangles[offset + 1];
+			const y = rectangles[offset + 2];
+			const width = rectangles[offset + 3];
+			const height = rectangles[offset + 4];
+			if (
+				x > frame.xMax + (frame.isAtlas ? 1 : 0) ||
+				y > frame.yMax + (frame.isAtlas ? 1 : 0) ||
+				x + width <= frame.xMin ||
+				y + height <= frame.yMin
+			)
+				continue;
+			const a = frame.getGridPoint(x, y);
+			const b = frame.getGridPoint(x + width, y + height);
+			let batch = batches.get(id);
+			if (!batch) {
+				batch = [];
+				batches.set(id, batch);
+			}
+			batch.push(
+				Math.min(a.x, b.x) - (frame.isAtlas ? 0 : 0.25),
+				Math.min(a.y, b.y) - (frame.isAtlas ? 0 : 0.25),
+				Math.abs(b.x - a.x) + (frame.isAtlas ? 0 : 0.5),
+				Math.abs(b.y - a.y) + (frame.isAtlas ? 0 : 0.5),
+			);
+		}
+	};
+	if (paintChunkKeys) {
+		const columns = Math.ceil(frame.gridWidth / CHUNK_SIZE);
+		for (const key of paintChunkKeys)
+			visitChunk(key % columns, Math.floor(key / columns));
+	} else {
+		for (let cy = minY; cy <= maxY; cy++)
+			for (let cx = minX; cx <= maxX; cx++) visitChunk(cx, cy);
 	}
 	for (const id of polygonBatches.keys())
 		if (!batches.has(id)) batches.set(id, []);
 	for (const [id, rectangles] of batches) {
 		ctx.fillStyle = fillFor(id);
-		ctx.beginPath();
-		for (let offset = 0; offset < rectangles.length; offset += 4)
-			ctx.rect(
-				rectangles[offset],
-				rectangles[offset + 1],
-				rectangles[offset + 2],
-				rectangles[offset + 3],
-			);
-		for (const points of polygonBatches.get(id) || []) {
-			ctx.moveTo(points[0], points[1]);
-			for (let i = 2; i < points.length; i += 2)
-				ctx.lineTo(points[i], points[i + 1]);
-			ctx.closePath();
+		const PathConstructor =
+			typeof globalThis.Path2D === "function" ? globalThis.Path2D : null;
+		if (PathConstructor) {
+			const path = new PathConstructor();
+			for (let offset = 0; offset < rectangles.length; offset += 4)
+				path.rect(
+					rectangles[offset],
+					rectangles[offset + 1],
+					rectangles[offset + 2],
+					rectangles[offset + 3],
+				);
+			for (const polygonPath of polygonBatches.get(id) || [])
+				path.addPath(polygonPath);
+			ctx.fill(path);
+		} else {
+			ctx.beginPath();
+			for (let offset = 0; offset < rectangles.length; offset += 4)
+				ctx.rect(
+					rectangles[offset],
+					rectangles[offset + 1],
+					rectangles[offset + 2],
+					rectangles[offset + 3],
+				);
+			for (const points of polygonBatches.get(id) || []) {
+				ctx.moveTo(points[0], points[1]);
+				for (let i = 2; i < points.length; i += 2)
+					ctx.lineTo(points[i], points[i + 1]);
+				ctx.closePath();
+			}
+			ctx.fill();
 		}
-		ctx.fill();
 	}
 }
 

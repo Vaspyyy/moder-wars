@@ -62,6 +62,9 @@ function fixture() {
 		showWarPlans: false, isCustomTerrain: true, refAboveTerrain: false, referenceImageUrl: "",
 		refOpacity: 0.5, simFrameCount: 10, simSpeed: 1, isPaused: false,
 		regions: [], countryMetadata: [], MAX_SIDES: 2, sides: [[{ id: 1 }], []],
+		units: [{ id: 1, sideIndex: 0, sovereignId: 1, lat: 0, lng: 0.3, health: 100, personnel: 1200 }],
+		frontlines: { "0_1_0_0": [{ lat: -2, lng: 0 }, { lat: 0, lng: 0 }, { lat: 2, lng: 0 }] },
+		soldiersPerUnit: [1000, 1000],
 		showUnitsVisually: false, showBattleIndicators: true, showNonCapitalCities: true,
 		editingCountryId: -1, viewBounds: bounds, explosions: [], bombs: [], bases: [],
 		cities: [{ name: "Capital", lat: 0, lng: 0, isCapital: true, pop: 1000000 }],
@@ -93,7 +96,6 @@ function fixture() {
 		_clearVisibleControlTiles: (...args) => trace.push(["clear-dirty", ...args]),
 		_invalidLayers: 7, _regionsRevision: 1, _lastLabelsRenderFrame: -Infinity,
 		_lastOverlaysRenderFrame: -Infinity, _labelsSurface: surface("labels"), _overlaysSurface: surface("overlays"),
-		drawCurvedLabel: (_ctx, side) => trace.push(["side-label", side]),
 		drawCasualtiesOnCanvas: () => trace.push(["casualties"]),
 	};
 	return { frame, layer, trace };
@@ -144,7 +146,7 @@ try {
 	drawUnits.call(mirroredCities.layer, mirroredCities.frame);
 	assert.ok(mirroredCities.trace.some(([name, command, color]) => name === "dynamic" && command === "fillStyle" && color === "#fff"), "weakly occupied cities keep neutral marker color");
 	drawLabels.call(result.layer, result.frame);
-	assert.ok(result.trace.some(([name]) => name === "side-label"));
+	assert.ok(result.trace.some(([name, command]) => name === "labels" && command === "fillText"), "front soldier labels draw on the cached label surface");
 	assert.ok(result.trace.some(([name]) => name === "casualties"));
 	assert.equal(result.layer._invalidLayers & layers.LABELS, 0);
 	assert.equal(result.layer._lastLabelsRenderFrame, 10);
@@ -182,7 +184,9 @@ try {
 		const overlayStart = source.indexOf("const overlaysCacheKey =", labelStart);
 		const overlayEnd = source.indexOf("mainCtx.drawImage(this._overlaysSurface, 0, 0);", overlayStart) + "mainCtx.drawImage(this._overlaysSurface, 0, 0);".length;
 		assert.ok(unitStart > 0 && labelStart > unitStart && overlayStart > labelStart && overlayEnd > overlayStart);
-		for (const [draw, start, end] of [[drawTerrain, terrainStart, terrainEnd], [drawUnits, unitStart, labelStart], [drawLabels, labelStart, overlayStart], [drawOverlays, overlayStart, overlayEnd]]) {
+		// Soldier labels intentionally changed; their front/country accounting and
+		// canvas output are checked by soldier-labels-smoke.mjs instead.
+		for (const [draw, start, end] of [[drawTerrain, terrainStart, terrainEnd], [drawUnits, unitStart, labelStart], [drawOverlays, overlayStart, overlayEnd]]) {
 			const original = fixture(), split = fixture();
 			if (draw === drawTerrain) { original.frame.renderStatic = true; split.frame.renderStatic = true; }
 			const block = source.slice(start, end).replace(/mainCtx\.restore\(\);\s*this\._invalidLayers &= ~RENDER_LAYERS\.DYNAMIC;\s*$/, "");
@@ -199,7 +203,7 @@ try {
 				assert.equal(key.join(";"), original.layer._overlaysCacheKey);
 			} else assert.equal(split.layer._overlaysCacheKey, original.layer._overlaysCacheKey);
 		}
-		console.log("Pre-split terrain, units, labels, and overlays canvas traces match");
+		console.log("Pre-split terrain, units, and overlays canvas traces match");
 	}
 } finally { globalThis.window = previousWindow; }
 

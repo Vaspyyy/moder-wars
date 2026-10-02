@@ -1,4 +1,9 @@
 import { createConflictPresentation } from "./conflict-presentation.js";
+import {
+	createPresentationScheduler,
+	createUnitSpatialMirror,
+	setPresentationText,
+} from "./presentation-runtime.js";
 import { createLiveContext } from "./runtime-context.js";
 import { createSimulationClient } from "./simulation-client.js";
 import {
@@ -1411,7 +1416,10 @@ function onOperationalAiReset() {
 	if (panel) panel.style.display = "none";
 }
 const conflictPresentation = createConflictPresentation(applicationRuntime);
-let visualFrameCount = 0;
+const presentationScheduler = createPresentationScheduler();
+let unitSpatialMirror = null;
+let _lastCombatantsHudAt = Number.NEGATIVE_INFINITY;
+let _lastCasualtyHudAt = Number.NEGATIVE_INFINITY;
 const localSimulationClock = createSimulationClock(
 	() => {
 		const ended = performSimulationTick();
@@ -1428,32 +1436,16 @@ const simulationClient = createSimulationClient(applicationRuntime, {
 		else if (type === "onPoliticalMapChanged") onPoliticalMapChanged();
 		else conflictPresentation[type]?.(...args);
 	},
-	onSnapshot: () => {
-		unitSpatialHash.clear();
-		for (const hash of unitHashBySide) hash.clear();
-		for (const u of units) {
-			if (!Number.isFinite(u.lat) || !Number.isFinite(u.lng)) continue;
-			const key =
-				Math.floor((u.lng + 180) / UNIT_HASH_CELL_SIZE) * 100 +
-				Math.floor((u.lat + 90) / UNIT_HASH_CELL_SIZE);
-			let list = unitSpatialHash.get(key);
-			if (!list) {
-				list = [];
-				unitSpatialHash.set(key, list);
-			}
-			list.push(u);
-			const hash = unitHashBySide[u.sideIndex];
-			if (hash) {
-				let sideList = hash.get(key);
-				if (!sideList) {
-					sideList = [];
-					hash.set(key, sideList);
-				}
-				sideList.push(u);
-			}
-		}
+	onSnapshot: ({ fullOwner = false } = {}) => {
+		unitSpatialMirror ??= createUnitSpatialMirror(
+			unitSpatialHash,
+			unitHashBySide,
+			UNIT_HASH_CELL_SIZE,
+		);
+		unitSpatialMirror.update(units, fullOwner);
+		influenceLayer?.requestRender(RENDER_LAYERS.DYNAMIC);
 		if (gameDateDisplay && gameTimeDate)
-			gameDateDisplay.textContent = formatGameDate();
+			setPresentationText(gameDateDisplay, formatGameDate());
 	},
 });
 
@@ -1848,10 +1840,7 @@ import {
 	createDeterministicJob,
 	createDeterministicJobQueue,
 } from "./simulation-jobs.js";
-import {
-	decideRenderAdmission,
-	isSimulationPhaseDue,
-} from "./simulation-phase-wheel.js";
+import { isSimulationPhaseDue } from "./simulation-phase-wheel.js";
 import {
 	allocateLargestRemainderQuotas,
 	evaluateCountryCapitulation,
@@ -2263,7 +2252,6 @@ let _territoryLedgerAppliedCitiesRevision = -1;
 let _coastalTopologyReady = false;
 let _coastalLandIndices = [];
 const _frameSimulationCommitFlags = new Set();
-let _renderAdmissionDeferredFrames = 0;
 
 const _pendingProposalSides = [];
 const _pendingProposalSideSet = new Set();
@@ -2468,7 +2456,10 @@ function resetSimulationOptimizationRuntime() {
 
 	_territoryLedger = createRuntimeTerritoryLedger();
 	_frameSimulationCommitFlags.clear();
-	_renderAdmissionDeferredFrames = 0;
+	presentationScheduler.reset();
+	unitSpatialMirror?.reset();
+	_lastCombatantsHudAt = Number.NEGATIVE_INFINITY;
+	_lastCasualtyHudAt = Number.NEGATIVE_INFINITY;
 }
 
 function resetOperationalAiRuntime() {
@@ -5864,32 +5855,26 @@ export function updateLoop() {
 		simulationWorkMs = performance.now() - started;
 		if (framePerfEntry) framePerfEntry.simulationMs = simulationWorkMs;
 	}
-	visualFrameCount++;
-
-	// Preserve high-speed paint cadence, then avoid placing an admitted paint on
-	// the same frame as a large simulation/atomic-commit spike. Presentation may
-	// move; simulation ordering and budgets never depend on wall-clock time.
-	const renderCadence =
-		simSpeed >= 5 ? 5 : simSpeed >= 3 ? 4 : simSpeed >= 2 ? 2 : 1;
-	const cadenceDue = visualFrameCount % renderCadence === 0;
-	const maxDeferredFrames = Math.max(2, renderCadence + 1);
-	const starvationDue = _renderAdmissionDeferredFrames >= maxDeferredFrames;
+	// Worker positions/effects change with snapshots, not display refresh. Keep
+	// dirty settings/load events and camera settlement responsive while avoiding
+	// duplicate paints and stacking a paint on a costly snapshot intake.
+	const snapshotWorkMs = simulationClient.consumePresentationWork();
+	if (framePerfEntry) framePerfEntry.snapshotMs = snapshotWorkMs;
+	const presentationRevision = simulationClient.ownsState
+		? simulationClient.presentationRevision
+		: _simTickCount;
 	const zoomSettleDue =
 		typeof influenceLayer?.hasPendingZoomSettle === "function" &&
 		influenceLayer.hasPendingZoomSettle();
-	const renderAdmission = decideRenderAdmission({
-		visualDirty: zoomSettleDue || cadenceDue || starvationDue,
-		simulationWorkMs,
-		simulationBudgetMs: 12,
-		commitFlags: _frameSimulationCommitFlags,
-		framesSinceRender: _renderAdmissionDeferredFrames,
-		maxDeferredFrames,
+	const shouldPaint = presentationScheduler.admit({
+		now: realNow,
+		revision: presentationRevision,
+		dirty: Boolean(influenceLayer?._invalidLayers),
+		workMs: simulationWorkMs + snapshotWorkMs,
 		force: zoomSettleDue,
 	});
-	const skipRenderThisFrame = !renderAdmission.admit;
 
-	if (skipRenderThisFrame && document.hidden === false) {
-		_renderAdmissionDeferredFrames++;
+	if (!shouldPaint) {
 		if (shouldTrackFrame) {
 			window.__perf._scheduler.skippedRenderFrames++;
 		}
@@ -5900,7 +5885,6 @@ export function updateLoop() {
 		animationFrameId = requestAnimationFrame(updateLoop);
 		return;
 	}
-	_renderAdmissionDeferredFrames = 0;
 	if (shouldTrackFrame) {
 		window.__perf._scheduler.renderedFrames++;
 	}
@@ -5913,32 +5897,38 @@ export function updateLoop() {
 	for (let si = 0; si < sides.length; si++) {
 		const el = _cachedSoldierEls[si];
 		if (el)
-			el.textContent = influenceLayer.formatSoldiers(
-				sideSoldierEsts[si] > 0 && sideSoldierEsts[si] < 1
-					? 1
-					: sideSoldierEsts[si],
+			setPresentationText(
+				el,
+				influenceLayer.formatSoldiers(
+					sideSoldierEsts[si] > 0 && sideSoldierEsts[si] < 1
+						? 1
+						: sideSoldierEsts[si],
+				),
 			);
 		// Update momentum indicator
 		const mel = _cachedMomentumEls[si];
 		if (mel) {
 			const phase = _sideWarPhase[si] || "STALEMATE";
 			const pc = PHASE_CONFIG[phase] || PHASE_CONFIG.STALEMATE;
-			mel.style.setProperty("--momentum-color", pc.color);
-			mel.textContent = `${pc.symbol} ${phase}`;
+			if (mel.style.getPropertyValue("--momentum-color") !== pc.color)
+				mel.style.setProperty("--momentum-color", pc.color);
+			setPresentationText(mel, `${pc.symbol} ${phase}`);
 		}
 	}
 
 	if (_cachedUnitCountSpans.length) {
 		for (let si = 0; si < _cachedUnitCountSpans.length; si++) {
-			_cachedUnitCountSpans[si].textContent = sideUnitCounts[si];
+			setPresentationText(_cachedUnitCountSpans[si], sideUnitCounts[si]);
 		}
 	}
 
 	for (let si = 0; si < sides.length; si++) {
 		const el = _cachedCityEls[si];
 		if (el) {
-			el.textContent =
-				getSideLedger(_territoryLedgerSnapshot, si)?.citiesControlled || 0;
+			setPresentationText(
+				el,
+				getSideLedger(_territoryLedgerSnapshot, si)?.citiesControlled || 0,
+			);
 		}
 	}
 
@@ -5946,23 +5936,26 @@ export function updateLoop() {
 	if (_cachedSideTerritoryPcts.length > 0) {
 		for (let si = 0; si < sides.length; si++) {
 			const segEl = _cachedTerritorySegEls[si];
-			if (segEl) segEl.style.width = `${_cachedSideTerritoryPcts[si]}%`;
+			const width = `${_cachedSideTerritoryPcts[si]}%`;
+			if (segEl && segEl.style.width !== width) segEl.style.width = width;
 			const pctEl = _cachedTerritoryCtrlEls[si];
-			if (pctEl) pctEl.textContent = `${_cachedSideTerritoryPcts[si]}%`;
+			setPresentationText(pctEl, width);
 		}
 	}
 
 	// Throttled UI rendering in Flag mode to maintain responsive interaction and framerate
 
 	// Throttled Combatants UI update
-	if (simFrameCount % 30 === 0) {
+	if (realNow - _lastCombatantsHudAt >= 500) {
+		_lastCombatantsHudAt = realNow;
 		updateCombatantsUI();
 		updateWarOverview();
 	}
 
-	// Update Casualty UI (Every 5 frames for "live" counting effect)
+	// Refresh casualty values at most every 100 ms for a live counting effect.
 	const casualtyContainer = document.getElementById("casualty-lists-container");
-	if (casualtyContainer && simFrameCount % 5 === 0) {
+	if (casualtyContainer && realNow - _lastCasualtyHudAt >= 100) {
+		_lastCasualtyHudAt = realNow;
 		let entriesKey = "";
 		const entriesFlat = [];
 		const activeIds = new Set(_tickAllCombatants.map((c) => c.id));
@@ -6046,14 +6039,14 @@ export function updateLoop() {
 				const el = _casualtyValueEls[e.id];
 				if (el) {
 					const casualties = countryCasualties.get(e.id) || 0;
-					el.textContent = influenceLayer.formatSoldiers(casualties);
+					setPresentationText(el, influenceLayer.formatSoldiers(casualties));
 				}
 			}
 			// Update side manpower footers
 			for (const [si, el] of Object.entries(_casualtySideMpEls || {})) {
 				const sIdx = Number(si);
 				const mpRemaining = Math.max(0, sideSoldiers[sIdx]);
-				el.textContent = `${influenceLayer.formatSoldiers(mpRemaining)}`;
+				setPresentationText(el, influenceLayer.formatSoldiers(mpRemaining));
 			}
 		}
 	}
@@ -6062,6 +6055,7 @@ export function updateLoop() {
 	const renderStart = framePerfEntry ? performance.now() : 0;
 	if (framePerfEntry) framePerfEntry.renderStart = renderStart;
 	influenceLayer.render();
+	presentationScheduler.painted(realNow, presentationRevision, zoomSettleDue);
 	if (framePerfEntry) {
 		framePerfEntry.renderMs = performance.now() - renderStart;
 		framePerfEntry.rendered = true;

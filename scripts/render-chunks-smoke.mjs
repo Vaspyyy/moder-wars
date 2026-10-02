@@ -107,6 +107,30 @@ const regionBuilds = geography.stats.built;
 const panGroups = geography.get({ ...regionState, xMin: 4, xMax: 67 });
 assert.equal(panGroups, groups, "moving within cached chunk coverage preserves label geometry");
 assert.equal(geography.stats.built, regionBuilds, "pan does not repeat flood-fill");
+const offscreenCache = createRegionChunkCache();
+const wideRegions = frame(128, 96);
+wideRegions.CONFIG.GRID_RES = 1;
+wideRegions.xMax = 127;
+wideRegions.yMax = 95;
+offscreenCache.get(wideRegions);
+const narrowRegions = { ...wideRegions, xMax: 63, yMax: 63 };
+const narrowGroups = offscreenCache.get(narrowRegions);
+const narrowBuilds = offscreenCache.stats.built;
+wideRegions.worldControlMap[3] = 2;
+offscreenCache.invalidateTiles([3]);
+assert.equal(
+	offscreenCache.get(narrowRegions),
+	narrowGroups,
+	"an offscreen structural tile does not rebuild the joined visible region view",
+);
+assert.equal(offscreenCache.stats.built, narrowBuilds, "offscreen invalidation keeps visible component chunks cached");
+assert.equal(
+	offscreenCache.get({ ...narrowRegions, intensityMap: new Uint8Array(128 * 96) }),
+	narrowGroups,
+	"intensity-only frame changes do not rebuild joined region geometry",
+);
+offscreenCache.invalidateTiles([]);
+assert.equal(offscreenCache.get(narrowRegions), narrowGroups, "empty structural invalidations keep the joined view");
 const occupied = 20 * regionState.gridWidth + 31;
 regionState.worldControlMap[occupied] = 1;
 geography.invalidateTiles([0]);
@@ -139,6 +163,136 @@ assert.equal(layer._politicalChunkCache.stats.built, initial.built);
 assert.ok(layer._politicalChunkCache.stats.reused >= 4);
 assert.ok(calls.every((rectangle) => rectangle.every(Number.isFinite)));
 
+const sparseFrame = frame(512, 512);
+sparseFrame.xMax = 511;
+sparseFrame.yMax = 511;
+sparseFrame.staticPaintXMax = 511;
+sparseFrame.staticPaintYMax = 511;
+const sparseRectangles = [];
+sparseFrame.ctx = {
+	fillStyle: "",
+	beginPath() {},
+	fill() {},
+	stroke() {},
+	moveTo() {},
+	lineTo() {},
+	rect: (...rectangle) => sparseRectangles.push(rectangle),
+};
+const sparseLayer = {};
+drawPoliticalChunks(sparseLayer, sparseFrame);
+assert.equal(sparseLayer._politicalChunkCache.stats.built, 256);
+const dirtyPaintTiles = new Set();
+for (const [centerX, centerY] of [[2, 2], [8, 8]])
+	for (let y = centerY - 1; y <= centerY + 1; y++)
+		for (let x = centerX - 1; x <= centerX + 1; x++)
+			dirtyPaintTiles.add(y * 16 + x);
+assert.equal(dirtyPaintTiles.size, 18);
+const sparseStart = sparseRectangles.length;
+const sparseReusedStart = sparseLayer._politicalChunkCache.stats.reused;
+drawPoliticalChunks(sparseLayer, {
+	...sparseFrame,
+	partialControlRedraw: true,
+	dirtyControlPaintTiles: dirtyPaintTiles,
+	staticLoopXMin: 31,
+	staticLoopYMin: 31,
+	staticPaintXMax: 321,
+	staticPaintYMax: 321,
+});
+const sparseChunkCount =
+	sparseLayer._politicalChunkCache.stats.reused - sparseReusedStart;
+assert.equal(sparseChunkCount, 50, "sparse dirty islands visit only chunks touched by their padded clips");
+assert.equal(sparseRectangles.length - sparseStart, 50, "paint commands stay local to far-apart dirty tiles");
+assert.ok(sparseChunkCount < 121, "sparse traversal avoids the 11-by-11 bounding-box walk");
+
+let projectedVertexCommands = 0;
+const filledPaths = [];
+class Path2DStub {
+	constructor() {
+		this.commands = [];
+	}
+	moveTo(x, y) {
+		projectedVertexCommands++;
+		this.commands.push(["moveTo", x, y]);
+	}
+	lineTo(x, y) {
+		projectedVertexCommands++;
+		this.commands.push(["lineTo", x, y]);
+	}
+	closePath() {
+		this.commands.push(["closePath"]);
+	}
+	rect(x, y, width, height) {
+		this.commands.push(["rect", x, y, width, height]);
+	}
+	addPath(path) {
+		this.commands.push(...path.commands);
+	}
+}
+const priorPath2D = globalThis.Path2D;
+try {
+	globalThis.Path2D = Path2DStub;
+	const pathFrame = frame(16, 16);
+	pathFrame.xMax = 15;
+	pathFrame.yMax = 15;
+	pathFrame.staticPaintXMax = 15;
+	pathFrame.staticPaintYMax = 15;
+	pathFrame.isAtlas = true;
+	pathFrame.atlasCoast = false;
+	pathFrame.viewportKey = "path-view-a";
+	pathFrame.gridProjection = {
+		key: "path-projection-a",
+		x: new Float32Array([0]),
+		y: new Float32Array([0]),
+	};
+	for (let y = 0; y < 16; y++)
+		for (let x = 0; x < 16; x++)
+			pathFrame.worldControlMap[y * 16 + x] = (x + y) % 2 ? 1 : 2;
+	pathFrame.ctx = {
+		fillStyle: "",
+		beginPath() {},
+		fill(path) {
+			filledPaths.push(path);
+		},
+		stroke() {},
+		moveTo() {},
+		lineTo() {},
+		rect() {},
+	};
+	const pathLayer = {};
+	drawPoliticalChunks(pathLayer, pathFrame);
+	const firstProjectedCommands = projectedVertexCommands;
+	assert.ok(firstProjectedCommands > 0, "atlas polygon points are projected into cached Path2D geometry");
+	assert.ok(filledPaths.every((path) => path instanceof Path2DStub));
+	drawPoliticalChunks(pathLayer, pathFrame);
+	assert.equal(
+		projectedVertexCommands,
+		firstProjectedCommands,
+		"repeated paints reuse chunk Path2D commands for the same projection",
+	);
+	pathFrame.viewportKey = "path-view-b";
+	drawPoliticalChunks(pathLayer, pathFrame);
+	const viewportCommands = projectedVertexCommands;
+	assert.ok(viewportCommands > firstProjectedCommands, "viewport changes invalidate projected chunk paths");
+	pathFrame.gridProjection = {
+		key: "path-projection-b",
+		x: new Float32Array([1]),
+		y: new Float32Array([1]),
+	};
+	drawPoliticalChunks(pathLayer, pathFrame);
+	const projectionCommands = projectedVertexCommands;
+	assert.ok(projectionCommands > viewportCommands, "projection object changes invalidate projected chunk paths");
+	pathFrame.worldControlMap[0] = pathFrame.worldControlMap[0] === 1 ? 2 : 1;
+	pathLayer._politicalChunkCache.invalidateCells([0], 16, 16);
+	drawPoliticalChunks(pathLayer, pathFrame);
+	assert.ok(
+		projectedVertexCommands > projectionCommands,
+		"geometry invalidation rebuilds the affected chunk's projected paths",
+	);
+} finally {
+	if (priorPath2D === undefined) delete globalThis.Path2D;
+	else globalThis.Path2D = priorPath2D;
+}
+
 const bounds = { getWest: () => 170, getEast: () => 190, getSouth: () => -10, getNorth: () => 10 };
 assert.equal(containsRenderPoint(bounds, 0, -179), true);
 assert.equal(containsRenderPoint(bounds, 0, 160), false);
@@ -166,8 +320,11 @@ const container = { appendChild(surface) { children.push(surface); surface.paren
 const canvas = () => ({ style: {}, width: 0, height: 0, setAttribute() {} });
 const map = { getZoom: () => 6, getCenter: () => ({ lat: 0, lng: 0 }), getContainer: () => container, getBounds: () => ({ equals: () => true }), getSize: () => point(100, 60), on() {}, off() {}, getPane: () => null, project: (center) => point(center.lng, center.lat), getZoomScale: (next, previous) => 2 ** (next - previous) };
 const source = readFileSync(new URL("../src/renderer.js", import.meta.url), "utf8").replace(/^import[\s\S]*?from "[^"]+";\n/gm, "").replace(/export \{ ControlMapLayer, RENDER_LAYERS \};/, "");
-const globals = { AtlasGpuLayer: class { setCamera() {} destroy() {} }, document: { createElement: canvas }, window: { devicePixelRatio: 2 }, map, worldControlMap: null, landMask: null, isPaused: true, gameState: "MENU", godModeActive: false, preGodModeState: "MENU", cinematicMode: false, gridWidth: 128, gridHeight: 96, performance, requestAnimationFrame: () => 1, cancelAnimationFrame() {}, mapRuntime: { Layer: { extend(methods) { function Layer() {} Object.assign(Layer.prototype, methods); return Layer; } }, DomUtil: { create: canvas, setTransform(surface, offset, scale) { surface.style.transform = `${offset.x},${offset.y},${scale}`; } } } };
-const Layer = vm.runInNewContext(`${source}\nControlMapLayer;`, globals);
+const globals = { document: { createElement: canvas }, window: { devicePixelRatio: 2 }, map, worldControlMap: null, landMask: null, isPaused: true, gameState: "MENU", godModeActive: false, preGodModeState: "MENU", cinematicMode: false, gridWidth: 128, gridHeight: 96, performance, requestAnimationFrame: () => 1, cancelAnimationFrame() {}, invalidateUnitFlagSprites() {}, mapRuntime: { Layer: { extend(methods) { function Layer() {} Object.assign(Layer.prototype, methods); return Layer; } }, DomUtil: { create: canvas, setTransform(surface, offset, scale) { surface.style.transform = `${offset.x},${offset.y},${scale}`; } } } };
+const { ControlMapLayer: Layer, RENDER_LAYERS } = vm.runInNewContext(
+	`${source}\n({ ControlMapLayer, RENDER_LAYERS });`,
+	globals,
+);
 const view = new Layer();
 view.onAdd(map);
 assert.equal(children.length, 5, "unchanged layers are presented by the DOM compositor");
@@ -200,6 +357,61 @@ view.requestRender(15, true);
 assert.equal(clears, 0, "camera paint requests preserve world chunks");
 view.invalidate(1);
 assert.equal(clears, 1, "bulk and political style updates invalidate world chunks");
+const politicalInvalidations = [];
+const regionInvalidations = [];
+let regionClears = 0;
+const politicalCache = {
+	clear() {
+		clears++;
+	},
+	invalidateCells() {},
+	invalidateTiles(...args) {
+		politicalInvalidations.push(
+			[...args].map((value) =>
+				Array.isArray(value) ? Array.from(value) : value,
+			),
+		);
+	},
+};
+const regionCache = {
+	clear() {
+		regionClears++;
+	},
+	invalidateTiles(keys) {
+		regionInvalidations.push([...keys]);
+	},
+};
+view._politicalChunkCache = politicalCache;
+view._regionChunkCache = regionCache;
+view._dirtyControlTiles.clear();
+view._allControlTilesDirty = false;
+const requestedMasks = [];
+const originalRequestRender = view.requestRender;
+view.requestRender = (mask) => requestedMasks.push(mask);
+const clearsBeforeTileNotifications = clears;
+view.notifyControlTilesChanged([4], 32, {
+	politicalTileKeys: [],
+	regionTileKeys: [],
+});
+assert.equal(view._politicalChunkCache, politicalCache, "occupation-only updates retain political world chunks");
+assert.equal(view._regionChunkCache, regionCache, "occupation-only updates retain region world chunks");
+assert.equal(clears, clearsBeforeTileNotifications);
+assert.equal(regionClears, 0);
+assert.deepEqual(Array.from(view._dirtyControlTiles), [], "occupation-only updates queue no dirty paint tile");
+assert.deepEqual(politicalInvalidations, [[[], 128, 96]], "empty political keys invalidate no world chunk");
+assert.deepEqual(regionInvalidations, [], "empty region keys invalidate no joined component");
+assert.deepEqual(requestedMasks, [RENDER_LAYERS.DYNAMIC], "occupation-only updates still request a dynamic paint");
+politicalInvalidations.length = 0;
+requestedMasks.length = 0;
+view.notifyControlTilesChanged([4], 32, {
+	politicalTileKeys: [5],
+	regionTileKeys: [9],
+});
+assert.deepEqual(politicalInvalidations, [[[5], 128, 96]], "structural political changes invalidate only their supplied tiles");
+assert.deepEqual(regionInvalidations, [[9]], "structural region changes invalidate only their supplied tiles");
+assert.deepEqual(Array.from(view._dirtyControlTiles), [5], "only structural political tiles enter the paint queue");
+assert.deepEqual(requestedMasks, [RENDER_LAYERS.DYNAMIC]);
+view.requestRender = originalRequestRender;
 // Real layer event scheduling and render guards, still entirely in Node.
 let center={lat:0,lng:0}, queued=null, nextRaf=10, paints=0;
 map.getCenter=()=>center;map.getBounds=()=>({equals:()=>false});

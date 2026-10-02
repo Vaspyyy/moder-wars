@@ -30,6 +30,11 @@ interface Marker {
 	lng: number;
 	isAtSea?: boolean;
 }
+type FlagSource = (HTMLImageElement | HTMLCanvasElement | OffscreenCanvas) & {
+	renderVersion?: unknown;
+	_renderVersion?: unknown;
+	version?: unknown;
+};
 /** Countries are persistent GPU geometry. Canvas overlays are independently cached. */
 export class AtlasGpuLayer {
 	readonly canvas: HTMLCanvasElement;
@@ -46,7 +51,10 @@ export class AtlasGpuLayer {
 	private mask?: Sprite;
 	private maskKey = "";
 	private markerPool = new Map<number, Sprite>();
-	private flagTextures = new Map<HTMLImageElement, Texture>();
+	private flagTextures = new Map<
+		FlagSource,
+		{ texture: Texture; stamp: string }
+	>();
 	private visibleMarkers = new Set<number>();
 	ready = false;
 	active = false;
@@ -221,6 +229,38 @@ export class AtlasGpuLayer {
 		this.countries.addChild(graphics);
 		return graphics;
 	}
+	invalidateWorld() {
+		this.scene.clear();
+		for (const fill of this.fills.values())
+			if (fill instanceof FillGradient) fill.destroy();
+		this.fills.clear();
+	}
+	invalidateFlagTextures(source: FlagSource | null = null) {
+		for (const [flag, entry] of this.flagTextures)
+			if (!source || flag === source) entry.stamp = "";
+	}
+	private flagTexture(flag: FlagSource) {
+		if ("complete" in flag && !flag.complete) return null;
+		const width = "naturalWidth" in flag ? flag.naturalWidth : flag.width;
+		const height = "naturalHeight" in flag ? flag.naturalHeight : flag.height;
+		if (!(width > 0 && height > 0)) return null;
+		const version =
+			flag.renderVersion ??
+			flag._renderVersion ??
+			flag.version ??
+			("currentSrc" in flag ? flag.currentSrc || flag.src : "");
+		const stamp = `${width}:${height}:${String(version)}`;
+		let entry = this.flagTextures.get(flag);
+		if (!entry) {
+			entry = { texture: Texture.from(flag), stamp };
+			this.flagTextures.set(flag, entry);
+		} else if (entry.stamp !== stamp) {
+			entry.texture.source.resize(width, height);
+			entry.texture.source.update();
+			entry.stamp = stamp;
+		}
+		return entry.texture;
+	}
 	updateChunks(
 		chunks: PoliticalChunk[],
 		materials: Material[],
@@ -276,7 +316,7 @@ export class AtlasGpuLayer {
 	beginMarkers() {
 		this.visibleMarkers.clear();
 	}
-	marker(unit: Marker, flag: HTMLImageElement | null, color: string) {
+	marker(unit: Marker, flag: FlagSource | null, color: string) {
 		if (!this.active || unit.isAtSea) return false;
 		let sprite = this.markerPool.get(unit.id);
 		if (!sprite) {
@@ -285,12 +325,8 @@ export class AtlasGpuLayer {
 			this.markers.addChild(sprite);
 			this.markerPool.set(unit.id, sprite);
 		}
-		if (flag?.complete && flag.naturalWidth > 0 && !unit.isAtSea) {
-			let texture = this.flagTextures.get(flag);
-			if (!texture) {
-				texture = Texture.from(flag);
-				this.flagTextures.set(flag, texture);
-			}
+		const texture = flag ? this.flagTexture(flag) : null;
+		if (texture) {
 			sprite.texture = texture;
 			sprite.tint = 0xffffff;
 		} else {
@@ -334,7 +370,7 @@ export class AtlasGpuLayer {
 		this.scene.clear();
 		for (const fill of this.fills.values())
 			if (fill instanceof FillGradient) fill.destroy();
-		for (const texture of this.flagTextures.values()) texture.destroy(true);
+		for (const { texture } of this.flagTextures.values()) texture.destroy(true);
 		this.world.destroy({ children: true });
 		this.markers.destroy({ children: true });
 		this.renderer?.destroy();

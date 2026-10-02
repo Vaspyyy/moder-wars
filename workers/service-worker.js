@@ -1,6 +1,6 @@
 // Service Worker — versioned offline shell plus persistent runtime data cache
 
-const CACHE_VERSION = "mw-v0.27.49";
+const CACHE_VERSION = "mw-v0.27.51";
 const APP_SHELL_PREFIX = "mw-app-shell-";
 const RUNTIME_PREFIX = "mw-runtime-";
 const LEGACY_CACHE_PREFIX = "mw-cache-";
@@ -74,11 +74,13 @@ const APP_SHELL_PATHS = [
 	"src/performance-reports.js",
 	"src/performance-runtime.js",
 	"src/preferences.js",
+	"src/presentation-runtime.js",
 	"src/reference-controls.js",
 	"src/reference-overlay.js",
 	"src/render-atlas.js",
 	"src/render-flags.js",
 	"src/render-labels.js",
+	"src/render-soldier-labels.js",
 	"src/render-overlays.js",
 	"src/render-terrain.js",
 	"src/render-units.js",

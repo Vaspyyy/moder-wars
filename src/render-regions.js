@@ -10,11 +10,13 @@ export function createRegionChunkCache() {
 	let land;
 	let revision = 0;
 	let view;
+	let viewTileIds;
 	let built = 0;
 	const clear = () => {
 		chunks.clear();
 		key = undefined;
 		view = undefined;
+		viewTileIds = undefined;
 		world = undefined;
 		land = undefined;
 		revision++;
@@ -120,10 +122,17 @@ export function createRegionChunkCache() {
 	return {
 		clear,
 		invalidateTiles(tileKeys) {
-			for (const id of tileKeys)
+			let affectsView = false;
+			for (const tileKey of tileKeys) {
+				const id = Number(tileKey);
 				for (const step of [1, 2, 4]) chunks.delete(`${step}:${id}`);
-			revision++;
-			view = undefined;
+				if (viewTileIds?.has(id)) affectsView = true;
+			}
+			if (affectsView) {
+				revision++;
+				view = undefined;
+				viewTileIds = undefined;
+			}
 		},
 		get(frame) {
 			const step =
@@ -285,6 +294,7 @@ export function createRegionChunkCache() {
 				regions.push(group);
 			}
 			view = { key: viewKey, regions };
+			viewTileIds = new Set(visible.keys());
 			return regions;
 		},
 		get stats() {

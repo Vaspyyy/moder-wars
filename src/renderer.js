@@ -1,12 +1,10 @@
 import { CONFIG } from "./config.js";
-import {
-	getFormationPersonnel,
-	getFormationStrengthBadge,
-} from "./formation-strength.js";
+import { getFormationStrengthBadge } from "./formation-strength.js";
 import {
 	_aiDebugPlans,
 	_allianceCacheDirty,
 	_coastalDefensePlan,
+	_frontlinePolys,
 	_navalPlan,
 	_navalSupplyPlan,
 	_neutralGarrisonPlan,
@@ -74,7 +72,11 @@ import {
 } from "./main.js";
 import mapRuntime from "./map-runtime.ts";
 import { drawAtlasOcean, requestAtlasCoast } from "./render-atlas.js";
-import { paintClippedFlag, resolveRenderFlag } from "./render-flags.js";
+import {
+	invalidateUnitFlagSprites,
+	paintClippedFlag,
+	resolveRenderFlag,
+} from "./render-flags.js";
 import { drawLabels } from "./render-labels.js";
 import { drawOverlays } from "./render-overlays.js";
 import { createPoliticalStyleTracker } from "./render-political-cache.js";
@@ -665,10 +667,18 @@ const ControlMapLayer = mapRuntime.Layer.extend({
 			if (!preserveWorldCache) {
 				this._politicalChunkCache?.clear();
 				this._regionChunkCache?.clear();
+				invalidateUnitFlagSprites(this);
+				this._gpu?.invalidateWorld();
+				this._gpu?.invalidateFlagTextures();
 			}
 		}
 		if (layerMask & RENDER_LAYERS.LABELS) this._labelsCacheKey = "";
 		if (layerMask & RENDER_LAYERS.OVERLAYS) this._overlaysCacheKey = "";
+	},
+	invalidateUnitFlagSprites: function (source) {
+		invalidateUnitFlagSprites(this, source);
+		this._gpu?.invalidateFlagTextures(source);
+		this.requestRender(RENDER_LAYERS.DYNAMIC);
 	},
 
 	_simulationOwnsRendering: () =>
@@ -784,6 +794,7 @@ const ControlMapLayer = mapRuntime.Layer.extend({
 	notifyControlTilesChanged: function (
 		tileKeys,
 		tileSize = CONTROL_DIRTY_TILE_SIZE,
+		changes = null,
 	) {
 		if (tileSize !== CONTROL_DIRTY_TILE_SIZE) {
 			this._allControlTilesDirty = true;
@@ -793,15 +804,23 @@ const ControlMapLayer = mapRuntime.Layer.extend({
 		this._controlChangeTrackingEnabled = true;
 		const columns = Math.ceil(gridWidth / CONTROL_DIRTY_TILE_SIZE);
 		const count = columns * Math.ceil(gridHeight / CONTROL_DIRTY_TILE_SIZE);
-		const valid = [];
-		for (const value of tileKeys || []) {
-			const key = Number(value);
-			if (!Number.isInteger(key) || key < 0 || key >= count) continue;
-			valid.push(key);
-			this._dirtyControlTiles.add(key);
-		}
-		this._politicalChunkCache?.invalidateTiles(valid, gridWidth, gridHeight);
-		this._regionChunkCache?.invalidateTiles(valid);
+		const validKeys = (keys) => {
+			const result = [];
+			for (const value of keys || []) {
+				const key = Number(value);
+				if (Number.isInteger(key) && key >= 0 && key < count) result.push(key);
+			}
+			return result;
+		};
+		const political = validKeys(changes?.politicalTileKeys ?? tileKeys);
+		const regions = validKeys(changes?.regionTileKeys ?? tileKeys);
+		for (const key of political) this._dirtyControlTiles.add(key);
+		this._politicalChunkCache?.invalidateTiles(
+			political,
+			gridWidth,
+			gridHeight,
+		);
+		if (regions.length) this._regionChunkCache?.invalidateTiles(regions);
 		if (this._dirtyControlTiles.size > CONTROL_DIRTY_TILE_LIMIT) {
 			this._dirtyControlTiles.clear();
 			this._allControlTilesDirty = true;
@@ -1428,6 +1447,8 @@ const ControlMapLayer = mapRuntime.Layer.extend({
 			project,
 			renderStatic,
 			fullStaticRefresh,
+			partialControlRedraw,
+			dirtyControlPaintTiles,
 			viewMode,
 			showCountryLabels,
 			gridProjection,
@@ -1543,6 +1564,9 @@ const ControlMapLayer = mapRuntime.Layer.extend({
 			editingCountryId,
 			sides,
 			ctx,
+			dpr,
+			createSurface: () => document.createElement("canvas"),
+			onFlagLoad: () => this.requestRender(RENDER_LAYERS.DYNAMIC),
 			yMin,
 			yMax,
 			xMin,
@@ -1573,6 +1597,12 @@ const ControlMapLayer = mapRuntime.Layer.extend({
 		this._invalidLayers &= ~RENDER_LAYERS.DYNAMIC;
 
 		drawLabels.call(this, {
+			units,
+			frontlines: _frontlinePolys,
+			soldiersPerUnit,
+			sideColors,
+			landMask,
+			getGridIndex,
 			padding,
 			viewBounds,
 			isAtlas,
@@ -1644,106 +1674,6 @@ const ControlMapLayer = mapRuntime.Layer.extend({
 		if (_r0)
 			window.__perf.render =
 				(window.__perf.render || 0) + performance.now() - _r0;
-	},
-
-	drawCurvedLabel: function (ctx, sideIdx) {
-		const viewBounds = map.getBounds();
-		const vS = viewBounds.getSouth();
-		const vN = viewBounds.getNorth();
-		const vW = viewBounds.getWest();
-		const vE = viewBounds.getEast();
-		const isWrapped = vW > vE;
-
-		const teamUnits = units.filter((u) => {
-			if (u.sideIndex !== sideIdx) return false;
-			if (u.lat < vS || u.lat > vN) return false;
-			if (isWrapped) {
-				if (u.lng < vW && u.lng > vE) return false;
-			} else {
-				if (u.lng < vW || u.lng > vE) return false;
-			}
-			return true;
-		});
-
-		if (teamUnits.length < 1) return;
-
-		let avgLat = 0,
-			avgLng = 0;
-		let clusterManpower = 0;
-		const sp = soldiersPerUnit[sideIdx] || CONFIG.UNIT_TO_SOLDIER_RATIO;
-
-		teamUnits.forEach((u) => {
-			avgLat += u.lat;
-			avgLng += u.lng;
-			clusterManpower += getFormationPersonnel(u, {
-				nominalPersonnel: sp,
-				baseHealth:
-					u.maxHealth ||
-					CONFIG.UNIT_HEALTH * (u.isAlpenjager ? CONFIG.ALPEN_HEALTH_MULT : 1),
-			});
-		});
-		avgLat /= teamUnits.length;
-		avgLng /= teamUnits.length;
-
-		if (Number.isNaN(avgLat) || Number.isNaN(avgLng)) return;
-		let p;
-		try {
-			p = map.latLngToContainerPoint([avgLat, avgLng]);
-		} catch (_e) {
-			return;
-		}
-		const zoom = map.getZoom();
-
-		// Stable label height offset
-		const yOffset = -Math.max(30, zoom * 5);
-
-		// Determine general trend of the unit cluster for rotation
-		let angle = 0;
-		if (teamUnits.length > 5) {
-			// Find two points that represent the "spread"
-			let furthest = teamUnits[0];
-			let maxDist = -1;
-			teamUnits.forEach((u) => {
-				const d = (u.lat - avgLat) ** 2 + (u.lng - avgLng) ** 2;
-				if (d > maxDist) {
-					maxDist = d;
-					furthest = u;
-				}
-			});
-			const pStart = map.latLngToContainerPoint([avgLat, avgLng]);
-			const pEnd = map.latLngToContainerPoint([furthest.lat, furthest.lng]);
-			angle = Math.atan2(pEnd.y - pStart.y, pEnd.x - pStart.x);
-
-			// Normalize angle to be horizontal-ish and upright
-			if (angle > Math.PI / 2) angle -= Math.PI;
-			if (angle < -Math.PI / 2) angle += Math.PI;
-			// Dampen rotation to prevent extreme jitters
-			angle *= 0.3;
-		}
-
-		// Show a minimum of 1 if there are still units in the cluster
-		const text = this.formatSoldiers(
-			clusterManpower > 0 && clusterManpower < 1 ? 1 : clusterManpower,
-		);
-
-		ctx.save();
-		ctx.translate(p.x, p.y + yOffset);
-		ctx.rotate(angle);
-
-		const fontSize = Math.max(12, zoom * 4);
-		ctx.font = `900 ${fontSize}px "Segoe UI", Roboto, Helvetica, Arial, sans-serif`;
-		ctx.textAlign = "center";
-		ctx.textBaseline = "middle";
-
-		// Background stroke for maximum legibility
-		ctx.strokeStyle = "black";
-		ctx.lineWidth = 5;
-		ctx.strokeText(text, 0, 0);
-
-		ctx.fillStyle = sideColors[sideIdx].replace(rgbaRe, "1)");
-		ctx.fillText(text, 0, 0);
-
-		ctx.restore();
 	},
 
 	getBezierPoint: (t, p0, p1, p2, p3) => {

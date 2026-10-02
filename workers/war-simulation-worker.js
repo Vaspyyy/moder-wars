@@ -8,6 +8,7 @@ import {
 	collectTransferBuffers,
 	createControlDeltaTracker,
 	createPresentationSnapshot,
+	createPresentationSnapshotCache,
 	SIMULATION_PROTOCOL_VERSION,
 } from "../src/simulation-protocol.js";
 
@@ -20,6 +21,7 @@ let core,
 	lastSnapshot = 0;
 let topology = false;
 let lastPublishedTick = -1;
+let presentationCache = createPresentationSnapshotCache();
 const events = [];
 function publish(force = false) {
 	if (
@@ -37,6 +39,8 @@ function publish(force = false) {
 		return;
 	const snapshot = createPresentationSnapshot(core.state, tracker, {
 		includeTopology: topology,
+		cache: presentationCache,
+		reuseBaselineForWorker: true,
 	});
 	topology = false;
 	lastPublishedTick = core.state._simTickCount;
@@ -45,7 +49,7 @@ function publish(force = false) {
 	outstanding = true;
 	self.postMessage(
 		{ type: "SNAPSHOT", epoch, snapshot },
-		collectTransferBuffers(snapshot),
+		collectTransferBuffers({ units: snapshot.units, tiles: snapshot.tiles }),
 	);
 }
 function turn() {
@@ -74,6 +78,7 @@ self.onmessage = ({ data }) => {
 			events.length = 0;
 			topology = false;
 			lastPublishedTick = -1;
+			presentationCache = createPresentationSnapshotCache();
 			if (data.version !== SIMULATION_PROTOCOL_VERSION)
 				throw new Error("Simulation protocol mismatch");
 			core = createSimulationCore(data.state, {
