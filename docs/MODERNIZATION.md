@@ -22,6 +22,8 @@ PixiJS is loaded on demand and uses WebGL. The political view retains country po
 
 The ocean and neutral coastline are behind the GPU country layer. Independently cached Canvas layers keep text, flags on countries, selection contours, naval icons, battle indicators, diagnostics, and editor overlays. Flag view, recording/export capture, initialization, and devices without WebGL use the complete Canvas path. This is a deliberate hybrid migration, not a claim that every drawing command now executes in WebGL. Pixi's CSP-safe uniform/shader adapters are included; `unsafe-eval` permission is not required.
 
+During pan and zoom, both GPU and Canvas surfaces move as buffered compositor images. Coverage refills are throttled and gesture settlement paints the complete final view; ordinary gesture frames do not resubmit the GPU scenes or resize unit sprites. Refilled coast masks reuse their canvas and texture. Pointer coordinates use one layout read per sample, and the coordinate HUD writes at most once per animation frame.
+
 The resident simulation worker remains authoritative. Recruitment, diplomacy, editing, and ownership handoffs retain the existing acknowledged protocol. Simulation algorithms, save formats, country identities, and geography assets are not rewritten here. AI targeting and proposal scheduling remain separate measured optimization work described in `PERFORMANCE-AUDIT.md`.
 
 ## Validation boundary

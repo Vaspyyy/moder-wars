@@ -49,6 +49,7 @@ export class AtlasGpuLayer {
 	private frame?: GpuFrame;
 	private materials: Material[] = [];
 	private mask?: Sprite;
+	private maskCanvas?: HTMLCanvasElement;
 	private maskKey = "";
 	private markerPool = new Map<number, Sprite>();
 	private flagTextures = new Map<
@@ -60,6 +61,8 @@ export class AtlasGpuLayer {
 	active = false;
 	private destroyed = false;
 	private scale = 1;
+	private markerWidth = 0;
+	private markerHeight = 0;
 	constructor(
 		private map: MapCamera,
 		private invalidate: () => void,
@@ -160,22 +163,40 @@ export class AtlasGpuLayer {
 	setCamera(present = true) {
 		if (!this.ready || !this.active) return;
 		const size = this.map.getSize(),
-			transform = this.map.getWorldTransform();
+			transform = this.map.getWorldTransform(),
+			padding = this.frame?.padding ?? 0,
+			width = size.x + padding * 2,
+			height = size.y + padding * 2;
 		this.scale = transform.scale;
 		for (const renderer of [this.renderer, this.markerRenderer])
 			if (
 				renderer &&
-				(renderer.width !== Math.round(size.x * renderer.resolution) ||
-					renderer.height !== Math.round(size.y * renderer.resolution))
+				(renderer.screen.width !== width || renderer.screen.height !== height)
 			)
-				renderer.resize(size.x, size.y);
+				renderer.resize(width, height);
+		// Keep the same overscan origin as the Canvas layers. Gesture frames can
+		// then move the complete GPU image on the compositor without scene work.
+		for (const canvas of [this.canvas, this.markerCanvas]) {
+			canvas.style.left = `${-padding}px`;
+			canvas.style.top = `${-padding}px`;
+		}
 		for (const root of [this.world, this.markers]) {
-			root.position.set(transform.x, transform.y);
+			root.position.set(transform.x + padding, transform.y + padding);
 			root.scale.set(transform.scale);
 		}
-		for (const sprite of this.markerPool.values()) {
-			sprite.width = (7 * 1.3 ** (this.map.getZoom() - 3)) / this.scale;
-			sprite.height = (4.5 * 1.3 ** (this.map.getZoom() - 3)) / this.scale;
+		const markerScale = 1.3 ** (this.map.getZoom() - 3) / this.scale,
+			markerWidth = 7 * markerScale,
+			markerHeight = 4.5 * markerScale;
+		if (
+			markerWidth !== this.markerWidth ||
+			markerHeight !== this.markerHeight
+		) {
+			this.markerWidth = markerWidth;
+			this.markerHeight = markerHeight;
+			for (const sprite of this.markerPool.values()) {
+				sprite.width = markerWidth;
+				sprite.height = markerHeight;
+			}
 		}
 		if (present) this.render();
 	}
@@ -282,22 +303,33 @@ export class AtlasGpuLayer {
 		const maskKey = coast ? `${frame.viewportKey}:${frame.mapResolution}` : "";
 		if (maskKey !== this.maskKey) {
 			this.maskKey = maskKey;
-			this.mask?.destroy({ texture: true, textureSource: true });
-			this.mask = undefined;
-			this.countries.mask = null;
 			if (coast) {
 				const size = this.map.getSize(),
 					padding = frame.padding,
-					canvas = document.createElement("canvas");
-				canvas.width = Math.ceil((size.x + padding * 2) * frame.dpr);
-				canvas.height = Math.ceil((size.y + padding * 2) * frame.dpr);
+					canvas = this.maskCanvas ?? document.createElement("canvas"),
+					width = Math.ceil((size.x + padding * 2) * frame.dpr),
+					height = Math.ceil((size.y + padding * 2) * frame.dpr);
+				this.maskCanvas = canvas;
+				if (canvas.width !== width) canvas.width = width;
+				if (canvas.height !== height) canvas.height = height;
 				const ctx = canvas.getContext("2d");
 				if (ctx) {
+					ctx.clearRect(0, 0, width, height);
+					ctx.save();
 					ctx.scale(frame.dpr, frame.dpr);
 					ctx.translate(padding, padding);
 					ctx.fillStyle = "white";
 					ctx.fill(coast);
-					const mask = new Sprite(Texture.from(canvas));
+					ctx.restore();
+					let mask = this.mask;
+					if (!mask) {
+						mask = new Sprite(Texture.from(canvas));
+						this.world.addChild(mask);
+						this.mask = mask;
+					} else {
+						mask.texture.source.resize(width, height);
+						mask.texture.source.update();
+					}
 					const transform = this.map.getWorldTransform();
 					mask.position.set(
 						(-padding - transform.x) / transform.scale,
@@ -305,10 +337,13 @@ export class AtlasGpuLayer {
 					);
 					mask.width = (size.x + padding * 2) / transform.scale;
 					mask.height = (size.y + padding * 2) / transform.scale;
-					this.world.addChild(mask);
-					this.mask = mask;
 					this.countries.mask = mask;
 				}
+			} else {
+				this.mask?.destroy({ texture: true, textureSource: true });
+				this.mask = undefined;
+				this.maskCanvas = undefined;
+				this.countries.mask = null;
 			}
 		}
 		this.setCamera(false);
@@ -335,8 +370,8 @@ export class AtlasGpuLayer {
 		}
 		const p = project([unit.lat, unit.lng]);
 		sprite.position.set(p.x, p.y);
-		sprite.width = (7 * 1.3 ** (this.map.getZoom() - 3)) / this.scale;
-		sprite.height = (4.5 * 1.3 ** (this.map.getZoom() - 3)) / this.scale;
+		sprite.width = this.markerWidth;
+		sprite.height = this.markerHeight;
 		sprite.visible = true;
 		this.visibleMarkers.add(unit.id);
 		return true;

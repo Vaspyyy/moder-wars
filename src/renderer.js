@@ -423,6 +423,7 @@ const ControlMapLayer = mapRuntime.Layer.extend({
 			this._labelsSurface,
 			this._overlaysSurface,
 		];
+		this._cameraSurfaces = this._surfaces;
 		for (const surface of this._surfaces) {
 			surface.style.position = "absolute";
 			surface.style.top = "0";
@@ -475,7 +476,7 @@ const ControlMapLayer = mapRuntime.Layer.extend({
 
 		this._onMoveStart = () => {
 			this._cameraMoving = true;
-			for (const surface of this._surfaces)
+			for (const surface of this._cameraSurfaces)
 				surface.style.willChange = "transform";
 		};
 		this._onMove = () => {
@@ -511,7 +512,7 @@ const ControlMapLayer = mapRuntime.Layer.extend({
 		this._onZoomStart = () => {
 			this._zooming = true;
 			this._smoothZooming = false;
-			for (const surface of this._surfaces) {
+			for (const surface of this._cameraSurfaces) {
 				surface.style.willChange = "transform";
 				// These canvases live outside the map camera's animated map pane, so they
 				// need the same transition explicitly for keyboard/double-click zoom.
@@ -523,7 +524,8 @@ const ControlMapLayer = mapRuntime.Layer.extend({
 		this._onZoomAnim = (e) => {
 			if (e.smoothZoom && !this._smoothZooming) {
 				this._smoothZooming = true;
-				for (const surface of this._surfaces) surface.style.transition = "none";
+				for (const surface of this._cameraSurfaces)
+					surface.style.transition = "none";
 			}
 			const offset = this._applyCameraTransform(e.center, e.zoom);
 			if (!this._smoothZooming) return;
@@ -612,11 +614,10 @@ const ControlMapLayer = mapRuntime.Layer.extend({
 			x: (1 - scale) * padding,
 			y: (1 - scale) * padding,
 		});
-		for (const surface of this._surfaces) {
+		for (const surface of this._cameraSurfaces) {
 			surface.style.transformOrigin = "0 0";
 			mapRuntime.DomUtil.setTransform(surface, adjusted, scale);
 		}
-		this._gpu?.setCamera();
 		return offset;
 	},
 	_resizeSurfaces: function () {
@@ -697,7 +698,7 @@ const ControlMapLayer = mapRuntime.Layer.extend({
 		if (!this._zoomSettlePending && !this._cameraRepaintPending) return;
 		this._zoomSettlePending = false;
 		this._cameraRepaintPending = false;
-		for (const surface of this._surfaces) {
+		for (const surface of this._cameraSurfaces) {
 			surface.style.transition = this._zooming ? "none" : "";
 			surface.style.transform = "";
 			surface.style.transformOrigin = "";
@@ -923,6 +924,11 @@ const ControlMapLayer = mapRuntime.Layer.extend({
 						this.invalidate(RENDER_LAYERS.ALL, true);
 						this.requestRender(RENDER_LAYERS.ALL, true);
 					});
+					this._cameraSurfaces = [
+						...this._surfaces,
+						this._gpu.canvas,
+						this._gpu.markerCanvas,
+					];
 				})
 				.catch((error) => {
 					console.warn("Atlas GPU renderer unavailable:", error);

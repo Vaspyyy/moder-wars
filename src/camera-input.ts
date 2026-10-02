@@ -58,8 +58,11 @@ export function bindCameraInput(map: MapCamera, clock: InputClock = {}) {
 		(event.target as Element)?.closest?.(
 			'.ref-handle, .ref-handle-center, input, textarea, select, button, [contenteditable="true"]',
 		);
-	const payload = (event: MouseEvent) => ({
-		latlng: map.containerPointToLatLng(map.mouseEventToContainerPoint(event)),
+	const payload = (
+		event: MouseEvent,
+		position = map.mouseEventToContainerPoint(event),
+	) => ({
+		latlng: map.containerPointToLatLng(position),
 		originalEvent: event,
 	});
 	function finish() {
@@ -180,7 +183,7 @@ export function bindCameraInput(map: MapCamera, clock: InputClock = {}) {
 		const p = map.mouseEventToContainerPoint(event);
 		pointers.set(event.pointerId, p);
 		container.setPointerCapture(event.pointerId);
-		map.fire("mousedown", payload(event));
+		map.fire("mousedown", payload(event, p));
 		if (pointers.size === 2 && map.dragging.enabled()) {
 			setupPinch();
 			return;
@@ -193,10 +196,11 @@ export function bindCameraInput(map: MapCamera, clock: InputClock = {}) {
 		if (map.dragging.enabled()) begin(false);
 	}
 	function onMove(event: PointerEvent) {
-		map.fire("mousemove", payload(event));
+		// Read layout before handlers write the coordinate HUD or editor UI.
+		const p = map.mouseEventToContainerPoint(event);
+		map.fire("mousemove", payload(event, p));
 		if (!pointers.has(event.pointerId)) return;
-		const previous = pointers.get(event.pointerId) ?? new Point(0, 0),
-			p = map.mouseEventToContainerPoint(event);
+		const previous = pointers.get(event.pointerId) ?? new Point(0, 0);
 		pointers.set(event.pointerId, p);
 		if (!map.dragging.enabled()) return;
 		if (pinching) {

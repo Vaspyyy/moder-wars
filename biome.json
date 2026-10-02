@@ -18,6 +18,7 @@
 			"scripts/register-types.mjs",
 			"scripts/build-output-smoke.mjs",
 			"scripts/editor-startup-smoke.mjs",
+			"scripts/camera-gesture-smoke.mjs",
 			"workers/**/*.js",
 			"styles/**/*.css"
 		]
