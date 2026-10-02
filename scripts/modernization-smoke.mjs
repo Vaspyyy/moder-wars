@@ -14,6 +14,7 @@ const checks = [
 	"unit-render-cache",
 	"political-redraw",
 	"editor-loaders",
+	"editor-startup",
 	"geography-demand",
 	"scenario-codec",
 	"saved-territory",

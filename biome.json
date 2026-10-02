@@ -17,6 +17,7 @@
 			"scripts/atlas-gpu-smoke.mjs",
 			"scripts/register-types.mjs",
 			"scripts/build-output-smoke.mjs",
+			"scripts/editor-startup-smoke.mjs",
 			"workers/**/*.js",
 			"styles/**/*.css"
 		]
