@@ -88,6 +88,10 @@ The title screen uses a dedicated vector backdrop with bundled 50m geography and
 
 Vanilla JavaScript, Leaflet map, Canvas overlays, IndexedDB caching, and a resident simulation worker. The simulation advances on a fixed logical clock independent of rendering; the UI receives packed unit positions and changed 32-cell map tiles. Editing and diplomacy take an acknowledged state handoff. Canvas meshes and country geometry cache world chunks across camera movement.
 
+Presentation paints fresh snapshots at up to 30 Hz independently of monitor refresh, with immediate camera settlement and bounded deferral after expensive snapshot intake. HUD values update only when their displayed text changes. Unit mirrors retain ID lookups and spatial buckets; flag sprites and strength badges are cached by their actual inputs.
+
+Map snapshots send only changed fields within dirty tiles. Occupation-intensity updates refresh city markers without rebuilding political meshes or country regions. Partial political paints traverse the affected tile set, including seam padding, and reuse projected polygon paths. Stable presentation graphs are omitted from later worker snapshots; frequently changing graphs bypass repeated comparisons until a periodic recheck. Full ownership handoffs still return complete state.
+
 Compiled scenarios use MWSC v3 with compact saved-territory runs and deduplicated flag blobs; the v2 decoder and JSON import/export remain supported. Raw reference geography is loaded only when an editing tool needs it. Worker influence grids use lazy Float32 pages; legacy editing receives dense arrays on demand.
 
 ## Offline Verification
@@ -95,6 +99,8 @@ Compiled scenarios use MWSC v3 with compact saved-territory runs and deduplicate
 Run `biome check .` and `node scripts/<name>-smoke.mjs`. The module-graph check requires `node --experimental-vm-modules scripts/module-graph-smoke.mjs`. Worker/core/client checks use actual simulation code and Node worker threads without a browser.
 
 Run `node scripts/soldier-labels-smoke.mjs` for separate fronts, country ownership, surviving personnel, worker snapshots, isolated garrisons, longitude wrapping, curved canvas commands and camera-independent totals. It also reports grouping CPU time for 2,400 formations across 24 fronts; this is a synthetic Node measurement.
+
+The presentation checks are `presentation-runtime-smoke.mjs`, `render-chunks-smoke.mjs`, `render-passes-smoke.mjs`, `unit-render-cache-smoke.mjs`, `simulation-client-smoke.mjs`, and `simulation-worker-smoke.mjs`. They cover fresh-data cadence at different display rates, intake budgets, stable unit identity/removal, sparse terrain paints, flag/badge cache invalidation and ordered transport. `camera-performance-smoke.mjs` reports full and sparse political-paint CPU work; it does not establish browser frame rate.
 
 Measured CPU probes during the performance refactor (synthetic fixtures, not browser FPS):
 

@@ -74,7 +74,11 @@ import {
 	worldWidthDeg,
 } from "./main.js";
 import { drawAtlasOcean, requestAtlasCoast } from "./render-atlas.js";
-import { paintClippedFlag, resolveRenderFlag } from "./render-flags.js";
+import {
+	invalidateUnitFlagSprites,
+	paintClippedFlag,
+	resolveRenderFlag,
+} from "./render-flags.js";
 import { drawLabels } from "./render-labels.js";
 import { drawOverlays } from "./render-overlays.js";
 import { createPoliticalStyleTracker } from "./render-political-cache.js";
@@ -657,10 +661,15 @@ const ControlMapLayer = L.Layer.extend({
 			if (!preserveWorldCache) {
 				this._politicalChunkCache?.clear();
 				this._regionChunkCache?.clear();
+				invalidateUnitFlagSprites(this);
 			}
 		}
 		if (layerMask & RENDER_LAYERS.LABELS) this._labelsCacheKey = "";
 		if (layerMask & RENDER_LAYERS.OVERLAYS) this._overlaysCacheKey = "";
+	},
+	invalidateUnitFlagSprites: function (source) {
+		invalidateUnitFlagSprites(this, source);
+		this.requestRender(RENDER_LAYERS.DYNAMIC);
 	},
 
 	_simulationOwnsRendering: () =>
@@ -776,6 +785,7 @@ const ControlMapLayer = L.Layer.extend({
 	notifyControlTilesChanged: function (
 		tileKeys,
 		tileSize = CONTROL_DIRTY_TILE_SIZE,
+		changes = null,
 	) {
 		if (tileSize !== CONTROL_DIRTY_TILE_SIZE) {
 			this._allControlTilesDirty = true;
@@ -785,15 +795,23 @@ const ControlMapLayer = L.Layer.extend({
 		this._controlChangeTrackingEnabled = true;
 		const columns = Math.ceil(gridWidth / CONTROL_DIRTY_TILE_SIZE);
 		const count = columns * Math.ceil(gridHeight / CONTROL_DIRTY_TILE_SIZE);
-		const valid = [];
-		for (const value of tileKeys || []) {
-			const key = Number(value);
-			if (!Number.isInteger(key) || key < 0 || key >= count) continue;
-			valid.push(key);
-			this._dirtyControlTiles.add(key);
-		}
-		this._politicalChunkCache?.invalidateTiles(valid, gridWidth, gridHeight);
-		this._regionChunkCache?.invalidateTiles(valid);
+		const validKeys = (keys) => {
+			const result = [];
+			for (const value of keys || []) {
+				const key = Number(value);
+				if (Number.isInteger(key) && key >= 0 && key < count) result.push(key);
+			}
+			return result;
+		};
+		const political = validKeys(changes?.politicalTileKeys ?? tileKeys);
+		const regions = validKeys(changes?.regionTileKeys ?? tileKeys);
+		for (const key of political) this._dirtyControlTiles.add(key);
+		this._politicalChunkCache?.invalidateTiles(
+			political,
+			gridWidth,
+			gridHeight,
+		);
+		if (regions.length) this._regionChunkCache?.invalidateTiles(regions);
 		if (this._dirtyControlTiles.size > CONTROL_DIRTY_TILE_LIMIT) {
 			this._dirtyControlTiles.clear();
 			this._allControlTilesDirty = true;
@@ -1431,6 +1449,8 @@ const ControlMapLayer = L.Layer.extend({
 			project,
 			renderStatic,
 			fullStaticRefresh,
+			partialControlRedraw,
+			dirtyControlPaintTiles,
 			viewMode,
 			showCountryLabels,
 			gridProjection,
@@ -1537,6 +1557,9 @@ const ControlMapLayer = L.Layer.extend({
 			editingCountryId,
 			sides,
 			ctx,
+			dpr,
+			createSurface: () => document.createElement("canvas"),
+			onFlagLoad: () => this.requestRender(RENDER_LAYERS.DYNAMIC),
 			yMin,
 			yMax,
 			xMin,

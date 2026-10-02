@@ -12,6 +12,8 @@ import {
 	collectTransferBuffers,
 	createControlDeltaTracker,
 	createPresentationSnapshot,
+	createPresentationSnapshotCache,
+	createPresentationUnitCache,
 	unpackPresentationUnits,
 } from "../../src/simulation-protocol.js";
 import { createProfileFixture, repeatableRandom } from "./fixture.mjs";
@@ -31,6 +33,7 @@ export function runTransport(options) {
 	// Browser mirrors expose live setters; plain state objects would ignore
 	// primitive fields when passed to applySimulationState.
 	const mirrorState = mirror;
+	const unitCache = createPresentationUnitCache(mirrorState.units);
 	const keys = Object.keys(mirrorState);
 	mirror = createLiveContext(
 		Object.fromEntries(keys.map((key) => [key, () => mirrorState[key]])),
@@ -92,7 +95,7 @@ export function runTransport(options) {
 				applySimulationState(mirror, snapshot.values, {
 					preserveCountryControls: true,
 				});
-				mirror.units = unpackPresentationUnits(snapshot.units, mirror.units);
+				mirror.units = unpackPresentationUnits(snapshot.units, mirror.units, unitCache);
 				const applyMs = performance.now() - started;
 				if (message.measured) {
 					applyTimes.push(applyMs);
@@ -117,6 +120,7 @@ if (!isMainThread) {
 	let measured = false;
 	let topology = false;
 	const events = [];
+	const presentationCache = createPresentationSnapshotCache();
 	const tickTimes = [],
 		packTimes = [],
 		postTimes = [],
@@ -146,11 +150,12 @@ if (!isMainThread) {
 			const begin = performance.now();
 			const snapshot = createPresentationSnapshot(core.state, tracker, {
 				includeTopology: includeTopology || topology,
+				cache: presentationCache,
+				reuseBaselineForWorker: true,
 			});
 			topology = false;
 			snapshot.events = events.splice(0);
-			const transfers = collectTransferBuffers(snapshot);
-			const bytes = transfers.reduce(
+			const bytes = collectTransferBuffers(snapshot).reduce(
 				(sum, buffer) => sum + buffer.byteLength,
 				0,
 			);
@@ -158,7 +163,7 @@ if (!isMainThread) {
 			const postBegin = performance.now();
 			parentPort.postMessage(
 				{ snapshot, bytes, measured, sentNs: process.hrtime.bigint() },
-				transfers,
+				collectTransferBuffers({ units: snapshot.units, tiles: snapshot.tiles }),
 			);
 			if (measured) postTimes.push(performance.now() - postBegin);
 			postedAt = performance.now();

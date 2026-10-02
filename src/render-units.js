@@ -3,6 +3,69 @@ import {
 	collectSelectionQuads,
 	containsRenderPoint,
 } from "./render-culling.js";
+import {
+	getUnitFlagSprite,
+	isRenderFlagReady,
+	watchRenderFlagLoad,
+} from "./render-flags.js";
+
+function getCachedUnitBadge(
+	layer,
+	unit,
+	getBadge,
+	nominalPersonnel,
+	baseHealth,
+	referencePersonnel,
+) {
+	if (!layer._unitStrengthBadgeCache)
+		layer._unitStrengthBadgeCache = new WeakMap();
+	const cache = layer._unitStrengthBadgeCache;
+	const previous = cache.get(unit);
+	const mode =
+		unit.personnel !== undefined
+			? 1
+			: unit.strengthMultiplier !== undefined
+				? 2
+				: 3;
+	const accountingValue =
+		mode === 1
+			? unit.personnel
+			: mode === 2
+				? unit.strengthMultiplier
+				: unit.health;
+	const formationNominalPersonnel =
+		mode === 1 ? undefined : unit.nominalPersonnel;
+	const formationBaseHealth = mode === 3 ? unit.baseHealth : undefined;
+	const optionNominalPersonnel = mode === 1 ? undefined : nominalPersonnel;
+	const optionBaseHealth = mode === 3 ? baseHealth : undefined;
+	if (
+		previous &&
+		previous.mode === mode &&
+		Object.is(previous.accountingValue, accountingValue) &&
+		Object.is(previous.formationNominalPersonnel, formationNominalPersonnel) &&
+		Object.is(previous.formationBaseHealth, formationBaseHealth) &&
+		Object.is(previous.nominalPersonnel, optionNominalPersonnel) &&
+		Object.is(previous.baseHealth, optionBaseHealth) &&
+		Object.is(previous.referencePersonnel, referencePersonnel) &&
+		previous.getBadge === getBadge
+	) {
+		return previous.badge;
+	}
+	const options = { nominalPersonnel, baseHealth, referencePersonnel };
+	const badge = getBadge(unit, options);
+	const entry = previous || {};
+	entry.mode = mode;
+	entry.accountingValue = accountingValue;
+	entry.formationNominalPersonnel = formationNominalPersonnel;
+	entry.formationBaseHealth = formationBaseHealth;
+	entry.nominalPersonnel = optionNominalPersonnel;
+	entry.baseHealth = optionBaseHealth;
+	entry.referencePersonnel = referencePersonnel;
+	entry.getBadge = getBadge;
+	entry.badge = badge;
+	if (!previous) cache.set(unit, entry);
+	return badge;
+}
 
 // This pass receives a frame snapshot; surface caches stay on the map layer.
 export function drawUnits(frame) {
@@ -47,6 +110,9 @@ export function drawUnits(frame) {
 		drawFormationStrengthBadge,
 		activeBattles,
 		simFrameCount,
+		dpr = 1,
+		createSurface,
+		onFlagLoad,
 	} = frame;
 	const { ctx } = frame;
 	const getGridPoint = isAtlas
@@ -536,6 +602,70 @@ export function drawUnits(frame) {
 		countryById.clear();
 		for (const side of sides)
 			for (const country of side) countryById.set(country.id, country);
+		const resolvedFlagsBySovereign = new Array(countryMetadata.length + 1);
+		const unresolvedSovereigns = new Map();
+		const spritesBySource = new Map();
+		const requestFlagRender = () => {
+			if (typeof onFlagLoad === "function") onFlagLoad();
+			else if (typeof this.render === "function") this.render();
+		};
+		const resolveUnitFlag = (sovereignId) => {
+			const validId =
+				Number.isInteger(sovereignId) &&
+				sovereignId >= 0 &&
+				sovereignId < resolvedFlagsBySovereign.length;
+			const cached = validId
+				? resolvedFlagsBySovereign[sovereignId]
+				: unresolvedSovereigns.get(sovereignId);
+			if (cached) return cached;
+			const country = countryById.get(sovereignId);
+			let flagMeta = null;
+			if (country?.id) {
+				flagMeta = countryMetadata[country.id - 1] || null;
+			} else if (sovereignId > 0) {
+				flagMeta = countryMetadata[sovereignId - 1] || null;
+			}
+
+			if (allianceViewEnabled && isWar && flagMeta) {
+				const rootId = allianceKeyById[flagMeta.id] || flagMeta.id;
+				const rootMeta = countryMetadata[rootId - 1];
+				if (rootMeta) flagMeta = rootMeta;
+			}
+
+			if (
+				flagMeta &&
+				!(allianceViewEnabled && flagMeta.allianceFlagTempFlag?.complete) &&
+				!flagMeta.tempFlag &&
+				flagMeta.flagUrl &&
+				typeof Image === "function"
+			) {
+				flagMeta.tempFlag = new Image();
+				flagMeta.tempFlag.crossOrigin = "anonymous";
+				watchRenderFlagLoad(flagMeta.tempFlag, this, requestFlagRender);
+				flagMeta.tempFlag.src = flagMeta.flagUrl;
+			}
+
+			const flag =
+				allianceViewEnabled && flagMeta?.allianceFlagTempFlag
+					? flagMeta.allianceFlagTempFlag
+					: flagMeta?.tempFlag || country?.flag || country?.tempFlag;
+			if (flag?.complete === false)
+				watchRenderFlagLoad(flag, this, requestFlagRender);
+			const ready = isRenderFlagReady(flag);
+			let sprite = null;
+			if (ready) {
+				if (spritesBySource.has(flag)) {
+					sprite = spritesBySource.get(flag);
+				} else {
+					sprite = getUnitFlagSprite(this, flag, w, h, dpr, createSurface);
+					spritesBySource.set(flag, sprite);
+				}
+			}
+			const resolved = { country, flagMeta, flag, ready, sprite };
+			if (validId) resolvedFlagsBySovereign[sovereignId] = resolved;
+			else unresolvedSovereigns.set(sovereignId, resolved);
+			return resolved;
+		};
 		visibleUnits.forEach((u) => {
 			if (drawProb < 1.0 && u.id % 1 > drawProb) return;
 			let p;
@@ -577,44 +707,26 @@ export function drawUnits(frame) {
 				ctx.fillStyle = "white";
 				ctx.fill();
 			} else {
-				const country = countryById.get(u.sovereignId);
 				const sw = w;
 				const sh = h;
-
-				// If still not found, try searching the metadata (for dead countries)
-				let flagMeta = null;
-				if (country?.id) {
-					flagMeta = countryMetadata[country.id - 1] || null;
-				} else if (u.sovereignId > 0) {
-					flagMeta = countryMetadata[u.sovereignId - 1] || null;
-				}
-
-				// If alliance view is enabled during war, show the alliance flag instead of per‑nation
-				if (allianceViewEnabled && isWar && flagMeta) {
-					const rootId = allianceKeyById[flagMeta.id] || flagMeta.id;
-					const rootMeta = countryMetadata[rootId - 1];
-					if (rootMeta) flagMeta = rootMeta;
-				}
-
-				if (flagMeta) {
-					// In alliance view, prefer a dedicated alliance flag if one exists
-					if (!(allianceViewEnabled && flagMeta.allianceFlagTempFlag?.complete))
-						if (!flagMeta.tempFlag && flagMeta.flagUrl) {
-							flagMeta.tempFlag = new Image();
-							flagMeta.tempFlag.crossOrigin = "anonymous";
-							flagMeta.tempFlag.src = flagMeta.flagUrl;
-						}
-				}
-
-				const flag =
-					allianceViewEnabled && flagMeta?.allianceFlagTempFlag
-						? flagMeta.allianceFlagTempFlag
-						: flagMeta?.tempFlag || country?.flag || country?.tempFlag;
-				if (flag?.complete && flag.naturalWidth > 0) {
-					ctx.drawImage(flag, p.x - sw / 2, p.y - sh / 2, sw, sh);
-					ctx.strokeStyle = "rgba(0,0,0,0.3)";
-					ctx.lineWidth = Math.max(0.3, 0.3 * zoomScale);
-					ctx.strokeRect(p.x - sw / 2, p.y - sh / 2, sw, sh);
+				const { flag, ready, sprite } = resolveUnitFlag(u.sovereignId);
+				if (ready) {
+					if (sprite) {
+						const ratio = Number.isFinite(dpr) && dpr > 0 ? dpr : 1;
+						// The DPR-scaled destination matches the sprite's bitmap pixels 1:1.
+						ctx.drawImage(
+							sprite.surface,
+							p.x - sw / 2 - sprite.paddingX,
+							p.y - sh / 2 - sprite.paddingY,
+							sprite.surface.width / ratio,
+							sprite.surface.height / ratio,
+						);
+					} else {
+						ctx.drawImage(flag, p.x - sw / 2, p.y - sh / 2, sw, sh);
+						ctx.strokeStyle = "rgba(0,0,0,0.3)";
+						ctx.lineWidth = Math.max(0.3, 0.3 * zoomScale);
+						ctx.strokeRect(p.x - sw / 2, p.y - sh / 2, sw, sh);
+					}
 				} else {
 					ctx.fillStyle = sideColors[u.sideIndex].replace(rgbaRe, "1)");
 					ctx.fillRect(p.x - sw / 2, p.y - sh / 2, sw, sh);
@@ -679,14 +791,16 @@ export function drawUnits(frame) {
 			if (currentZoom >= 3 && hasVariableStrength) {
 				const nominalPersonnel =
 					soldiersPerUnit[u.sideIndex] || CONFIG.UNIT_TO_SOLDIER_RATIO;
-				const badge = getFormationStrengthBadge(u, {
+				const badge = getCachedUnitBadge(
+					this,
+					u,
+					getFormationStrengthBadge,
 					nominalPersonnel,
-					baseHealth:
-						u.maxHealth ||
+					u.maxHealth ||
 						CONFIG.UNIT_HEALTH *
 							(u.isAlpenjager ? CONFIG.ALPEN_HEALTH_MULT : 1),
-					referencePersonnel: CONFIG.UNIT_TO_SOLDIER_RATIO,
-				});
+					CONFIG.UNIT_TO_SOLDIER_RATIO,
+				);
 				if (badge.multiplier > 1.15) {
 					drawFormationStrengthBadge(
 						ctx,

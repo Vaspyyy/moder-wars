@@ -36,7 +36,7 @@ assert.throws(()=>decodeAtlasCoast(new ArrayBuffer(16)),/Unsupported/);
 for(const ring of coast.rings)for(let i=0;i<ring.length;i+=2){assert.ok(Math.abs(ring[i])<=180);assert.ok(Math.abs(ring[i+1])<86);}
 let downloads=0;const originalFetch=globalThis.fetch, originalPath=globalThis.Path2D;
 globalThis.fetch=async()=>{downloads++;return {ok:true,arrayBuffer:async()=>compressed.buffer.slice(compressed.byteOffset,compressed.byteOffset+compressed.byteLength)};};
-class MockPath {constructor(){this.commands=[];}moveTo(...p){this.commands.push(['M',...p]);}lineTo(...p){this.commands.push(['L',...p]);}closePath(){this.commands.push(['Z']);}addPath(path,m){for(const [op,x,y] of path.commands)this.commands.push(op==='Z'?['Z']:[op,m.a*x+m.e,m.d*y+m.f]);}}
+class MockPath {constructor(){this.commands=[];}moveTo(...p){this.commands.push(['M',...p]);}lineTo(...p){this.commands.push(['L',...p]);}closePath(){this.commands.push(['Z']);}rect(...p){this.commands.push(['R',...p]);}addPath(path,m={a:1,d:1,e:0,f:0}){for(const [op,x,y,width,height] of path.commands)this.commands.push(op==='Z'?['Z']:op==='R'?['R',m.a*x+m.e,m.d*y+m.f,m.a*width,m.d*height]:[op,m.a*x+m.e,m.d*y+m.f]);}}
 globalThis.Path2D=MockPath;
 try {
  await Promise.all([new Promise(resolve=>requestAtlasCoast(resolve)),new Promise(resolve=>requestAtlasCoast(resolve))]);
