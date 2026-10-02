@@ -45,6 +45,8 @@ Find it under **Settings → Display → Style**. Existing installs adopt Atlas 
 
 Coastlines follow the selected 110m, 50m or 10m geography resolution. The small 110m asset is included in the offline shell; higher-resolution coastlines download on demand and enter the runtime cache. If geography cannot load, Atlas uses its grid coastline fallback.
 
+During a war, soldier totals appear separately for each home country on each disconnected front. The numbers curve along the front on the troops' side, with a national flag and space between coalition members. Totals use surviving deployed land personnel across the whole front, so panning does not change them. Formations are counted once against their nearest front within six latitude-equivalent degrees; distant reserves and overseas garrisons receive local labels, with water gaps keeping islands separate.
+
 ## Custom Scenarios
 
 Modern Wars can load custom scenario files and community scenarios. This is separate from the built-in era picker: the main era menu currently exposes only 2022 Modern Day, but the editor and community tools can still create, import, remix, and share other setups.
@@ -91,6 +93,8 @@ Compiled scenarios use MWSC v3 with compact saved-territory runs and deduplicate
 ## Offline Verification
 
 Run `biome check .` and `node scripts/<name>-smoke.mjs`. The module-graph check requires `node --experimental-vm-modules scripts/module-graph-smoke.mjs`. Worker/core/client checks use actual simulation code and Node worker threads without a browser.
+
+Run `node scripts/soldier-labels-smoke.mjs` for separate fronts, country ownership, surviving personnel, worker snapshots, isolated garrisons, longitude wrapping, curved canvas commands and camera-independent totals. It also reports grouping CPU time for 2,400 formations across 24 fronts; this is a synthetic Node measurement.
 
 Measured CPU probes during the performance refactor (synthetic fixtures, not browser FPS):
 
