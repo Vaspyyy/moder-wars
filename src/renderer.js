@@ -449,6 +449,7 @@ const ControlMapLayer = L.Layer.extend({
 		this._overlaysCacheKey = "";
 		this._regionsRevision = 0;
 		this._zooming = false;
+		this._smoothZooming = false;
 		this._cameraMoving = false;
 		this._cameraRepaintPending = false;
 		this._surfacePadding = 0;
@@ -504,16 +505,46 @@ const ControlMapLayer = L.Layer.extend({
 
 		this._onZoomStart = () => {
 			this._zooming = true;
-			for (const surface of this._surfaces)
+			this._smoothZooming = false;
+			for (const surface of this._surfaces) {
 				surface.style.willChange = "transform";
+				// These canvases live outside Leaflet's animated map pane, so they
+				// need the same transition explicitly for keyboard/double-click zoom.
+				surface.style.transition =
+					"transform 250ms cubic-bezier(0, 0, 0.25, 1)";
+			}
 		};
 
 		this._onZoomAnim = (e) => {
-			this._applyCameraTransform(e.center, e.zoom);
+			if (e.smoothZoom && !this._smoothZooming) {
+				this._smoothZooming = true;
+				for (const surface of this._surfaces) surface.style.transition = "none";
+			}
+			const offset = this._applyCameraTransform(e.center, e.zoom);
+			if (!this._smoothZooming) return;
+			const scale = map.getZoomScale(e.zoom, this._renderedZoom);
+			const size = map.getSize();
+			const padding = this._surfacePadding;
+			const margin = Math.min(48, padding / 4);
+			const needsCoverage =
+				offset.x - scale * padding > -margin ||
+				offset.y - scale * padding > -margin ||
+				offset.x + scale * (size.x + padding) < size.x + margin ||
+				offset.y + scale * (size.y + padding) < size.y + margin;
+			// Replenish only near an exposed edge or after doubling the texture.
+			// Normal wheel samples reuse the painted frame and warm world meshes.
+			if (
+				(needsCoverage || scale > 2) &&
+				performance.now() - this._lastCameraPaintTime >= CAMERA_REPAINT_INTERVAL
+			) {
+				this._cameraRepaintPending = true;
+				this.requestRender(RENDER_LAYERS.ALL, true);
+			}
 		};
 
 		this._onZoomEnd = () => {
 			this._zooming = false;
+			this._smoothZooming = false;
 			this._lastBounds = map.getBounds();
 			this._zoomSettlePending = true;
 			// Keep the transformed old frame visible until one complete final-zoom
@@ -537,6 +568,8 @@ const ControlMapLayer = L.Layer.extend({
 		this._renderRaf = 0;
 		this._renderRequested = false;
 		this._zoomSettlePending = false;
+		this._zooming = false;
+		this._smoothZooming = false;
 		this._cameraMoving = false;
 		this._cameraRepaintPending = false;
 		for (const surface of this._surfaces || []) {
@@ -639,9 +672,8 @@ const ControlMapLayer = L.Layer.extend({
 
 	hasPendingZoomSettle: function () {
 		return (
-			(this._zoomSettlePending === true ||
-				this._cameraRepaintPending === true) &&
-			!this._zooming
+			this._cameraRepaintPending === true ||
+			(this._zoomSettlePending === true && !this._zooming)
 		);
 	},
 
@@ -650,9 +682,11 @@ const ControlMapLayer = L.Layer.extend({
 		this._zoomSettlePending = false;
 		this._cameraRepaintPending = false;
 		for (const surface of this._surfaces) {
+			surface.style.transition = this._zooming ? "none" : "";
 			surface.style.transform = "";
 			surface.style.transformOrigin = "";
-			surface.style.willChange = this._cameraMoving ? "transform" : "";
+			surface.style.willChange =
+				this._cameraMoving || this._zooming ? "transform" : "";
 		}
 	},
 
@@ -674,7 +708,7 @@ const ControlMapLayer = L.Layer.extend({
 		this._renderRaf = requestAnimationFrame(() => {
 			this._renderRaf = 0;
 			this._renderRequested = false;
-			if (this._zooming) return;
+			if (this._zooming && !this._cameraRepaintPending) return;
 			this.render();
 		});
 	},
@@ -826,9 +860,9 @@ const ControlMapLayer = L.Layer.extend({
 		}
 	},
 	_update: function () {
-		// During zoom animation, CSS transform handles the visual zoom.
-		// Skip expensive canvas re-render — zoomend will re-render at final zoom.
-		if (this._zooming || (this._cameraMoving && !this._cameraRepaintPending))
+		// Transforms handle gesture frames. Paint only for buffered coverage or
+		// when the gesture ends, preserving the complete final view.
+		if ((this._zooming || this._cameraMoving) && !this._cameraRepaintPending)
 			return;
 
 		this._resizeSurfaces();
@@ -851,10 +885,9 @@ const ControlMapLayer = L.Layer.extend({
 	render: function () {
 		const _r0 = window.__perf?._enabled ? performance.now() : 0;
 		if (!worldControlMap || !landMask) return;
-		// The animated CSS transform owns presentation until zoomend. The main
-		// simulation loop calls render() directly, so it needs the same guard as
-		// renderer-owned requestAnimationFrame callbacks.
-		if (this._zooming || (this._cameraMoving && !this._cameraRepaintPending))
+		// The main simulation loop calls render() directly, so it needs the same
+		// gesture/coverage guard as renderer-owned animation-frame callbacks.
+		if ((this._zooming || this._cameraMoving) && !this._cameraRepaintPending)
 			return;
 		if (this._renderRaf) {
 			cancelAnimationFrame(this._renderRaf);

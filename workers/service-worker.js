@@ -1,6 +1,6 @@
 // Service Worker — versioned offline shell plus persistent runtime data cache
 
-const CACHE_VERSION = "mw-v0.27.47";
+const CACHE_VERSION = "mw-v0.27.48";
 const APP_SHELL_PREFIX = "mw-app-shell-";
 const RUNTIME_PREFIX = "mw-runtime-";
 const LEGACY_CACHE_PREFIX = "mw-cache-";
@@ -88,6 +88,7 @@ const APP_SHELL_PATHS = [
 	"src/simulation-jobs.js",
 	"src/simulation-phase-wheel.js",
 	"src/simulation-tick.js",
+	"src/smooth-zoom.js",
 	"src/surrender.js",
 	"src/tactical-grid.js",
 	"src/territory-ledger.js",

@@ -1424,6 +1424,11 @@ body.use-system-font .scroller-card-name {
 	display: none;
 }
 
+/* The wheel controller already eases every frame. CSS easing would add lag. */
+.mw-smooth-zoom .leaflet-zoom-animated {
+	transition: none;
+}
+
 /* Custom Marker Styles */
 
 .treaty-alert {

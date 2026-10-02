@@ -51,7 +51,7 @@ Modern Wars can load custom scenario files and community scenarios. This is sepa
 
 ## Controls
 
-- Click-and-drag to pan, scroll to zoom
+- Click-and-drag to pan. Wheel and trackpad zoom ease continuously toward the cursor; reversing the wheel immediately reverses the camera.
 - Click a country to inspect it and assign it during setup
 - Space pauses/resumes during a war; + / − changes the speed level. The speed selector also supports native radio-button arrow-key navigation.
 
@@ -66,6 +66,10 @@ Older era data, thumbnails, hidden cards, dormant click handlers, and import pre
 Atlas coast assets contain compressed packed coordinates derived from the bundled Natural Earth data, without feature properties. Regenerate an asset with `node scripts/prepare-atlas-coast.mjs 110m` (or `50m` / `10m`). This is an asset maintenance command; serving the game still requires no build.
 
 Camera movement transforms buffered canvas layers during gestures and repaints near the buffer edge or when movement ends. Zoom detail levels retain their country geometry. Captures and recordings use a viewport-sized canvas.
+
+`src/smooth-zoom.js` owns wheel input and advances the pinned Leaflet 1.9.4 camera once per display frame. Canvas and imagery transforms follow that camera; tile-grid updates wait until the gesture ends. Buffered canvases replenish at most once per 120 ms when zooming exposes an edge or doubles their scale, with a sharp final paint after easing. Reduced-motion preferences skip easing. The adapter uses Leaflet's private camera methods, so recheck it before changing the CDN version.
+
+Run `node scripts/smooth-zoom-smoke.mjs` for cursor anchoring, wheel reversal, refresh-rate independence, zoom limits, gesture interruptions, deferred tile updates, and bounded canvas repaint scheduling in paused and live-war states. These are Node checks with map/layer doubles; no browser or game is launched. Optionally set `MW_LEAFLET_SOURCE` to a local Leaflet 1.9.4 `leaflet-src.js` to also exercise its real camera and GridLayer methods in Node.
 
 Run `node scripts/camera-performance-smoke.mjs` to check exact cached half-cell projections against a full-Earth fixture. It reports Node CPU work and projection counts, not browser or GPU frame rate. For comparison, pass `--compare /path/to/previous-renderer.js` to use an earlier renderer's projection block on the same fixture.
 

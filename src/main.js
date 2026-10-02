@@ -7,6 +7,7 @@ import {
 } from "./simulation-clock.js";
 import { PERF_COUNTER_DEFAULTS } from "./simulation-metrics.js";
 import { resizeSimulationGrid } from "./simulation-resize.js";
+import { createSmoothZoom } from "./smooth-zoom.js";
 
 // Shared live binding bridge. Systems receive commands/state without importing main.js.
 const applicationRuntime = createLiveContext(
@@ -3808,13 +3809,12 @@ export const map = L.map("map", {
 	dragging: true,
 	// Use viscosity so panning against the world-size box feels smooth instead of snapping back
 	maxBoundsViscosity: 1.0,
-	// Fractional wheel targets avoid the visible quarter-level stepping that made
-	// trackpads and high-resolution mouse wheels feel jerky.
+	// Wheel motion is owned by the continuous camera controller below.
+	scrollWheelZoom: false,
 	zoomSnap: 0,
 	zoomDelta: 0.25,
-	wheelDebounceTime: 24,
-	wheelPxPerZoomLevel: 90,
 });
+createSmoothZoom(map);
 
 // Create Web Worker for async frontline field and layout rebuilds.
 _simWorker = new Worker(
@@ -4075,6 +4075,8 @@ export function setImageryProvider(
 			"https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
 			{
 				maxZoom: 19,
+				updateWhenZooming: false,
+				updateWhenIdle: true,
 				attribution: "Tiles &copy; Esri",
 				crossOrigin: "anonymous",
 			},
@@ -4086,6 +4088,8 @@ export function setImageryProvider(
 			{
 				opacity: 0.9,
 				maxZoom: 19,
+				updateWhenZooming: false,
+				updateWhenIdle: true,
 				attribution: "&copy; Google",
 				crossOrigin: "anonymous",
 			},
@@ -4097,6 +4101,8 @@ export function setImageryProvider(
 			{
 				opacity: 1.0,
 				maxZoom: 19,
+				updateWhenZooming: false,
+				updateWhenIdle: true,
 				attribution: "&copy; Google",
 				crossOrigin: "anonymous",
 			},
