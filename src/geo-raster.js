@@ -59,7 +59,7 @@ export function rasterizeGeoSourceInWorker(sourceUrl, options, onProgress) {
 	const baseUrl =
 		typeof window !== "undefined"
 			? window.location.href
-			: new URL("../", import.meta.url);
+			: new URL(/* @vite-ignore */ "../", import.meta.url);
 	const url = new URL(sourceUrl, baseUrl).href;
 	return new Promise((resolve, reject) => {
 		const id = ++nextRequestId;

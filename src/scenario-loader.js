@@ -1,6 +1,6 @@
-import L from "leaflet";
 import { CONFIG } from "./config.js";
 import { beginLoadTrace } from "./load-profiler.js";
+import mapRuntime from "./map-runtime.ts";
 import { normalizeSavedCells } from "./saved-cells.js";
 import { loadScenario } from "./scenario-codec.js";
 import { generateScenarioSnapshot } from "./scenario-export.js";
@@ -18,7 +18,7 @@ export function createScenarioLoader(context, loadSession) {
 			cities: context.cities,
 			gridRes: CONFIG.GRID_RES,
 			mapRes: document.getElementById("map-res-select").value,
-			imagery: context.getCookie("mw_imagery") || "atlas",
+			imagery: "atlas",
 			disableCountryGradient: context.disableCountryGradient,
 			customSatelliteUrl: context.customSatelliteUrl,
 			worldWidthDeg: context.worldWidthDeg,
@@ -170,20 +170,7 @@ export function createScenarioLoader(context, loadSession) {
 			// Always clear previous conflict setup / selection so old picks don't bleed into new scenarios
 			context.resetConflictSetupState();
 
-			// Visual environment restoration
-			if (data.imagery) {
-				// If this is a custom terrain map, we always use the preset's imagery
-				if (data.isCustomTerrain) {
-					context.setImageryProvider(data.imagery, false, false);
-				} else {
-					// If it's NOT a custom map, ignore the preset's imagery and stick to current user settings
-					// But handle the case where it might need a fallback if none selected
-					const currentUserImagery = context.imagerySelect
-						? context.imagerySelect.value
-						: context.getCookie("mw_imagery") || "atlas";
-					context.setImageryProvider(currentUserImagery, true, false);
-				}
-			}
+			// Older imagery fields remain readable; all scenarios now use Atlas.
 			if (data.disableCountryGradient !== undefined) {
 				context.setDisableCountryGradient(data.disableCountryGradient);
 				if (context.disableCountryGradientCheckbox) {
@@ -277,11 +264,13 @@ export function createScenarioLoader(context, loadSession) {
 					];
 				}
 				context.setReferenceOverlay(
-					L.imageOverlay(context.referenceImageUrl, bounds, {
-						opacity: context.refOpacity,
-						interactive: false,
-						pane: "refImagePane",
-					}).addTo(context.map),
+					mapRuntime
+						.imageOverlay(context.referenceImageUrl, bounds, {
+							opacity: context.refOpacity,
+							interactive: false,
+							pane: "refImagePane",
+						})
+						.addTo(context.map),
 				);
 				// Rebuild handles in editor
 				context.updateRefHandles();
@@ -634,7 +623,6 @@ export function createScenarioLoader(context, loadSession) {
 			context.recalculateAllBounds();
 			context.loadingOverlay.style.display = "none";
 			context.mapUi.style.display = "flex";
-			context.activateImageryProvider();
 			context.influenceLayer.render();
 			context.updateRestartVisibility();
 

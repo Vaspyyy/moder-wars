@@ -13,7 +13,7 @@ function loadFactory(file, name, dependencies = {}) {
 const blockedContext = new Proxy({}, {get(){throw new Error("Construction must not read runtime bindings");}});
 const session = {generation: 0};
 const makeGeography = loadFactory("geography-loader.js", "createGeographyLoader", {
- L: {latLng:(lat,lng)=>({lat,lng}),latLngBounds:(southwest,northeast)=>({getSouth:()=>southwest.lat,getWest:()=>southwest.lng,getNorth:()=>northeast.lat,getEast:()=>northeast.lng})},
+ mapRuntime: {latLng:(lat,lng)=>({lat,lng}),latLngBounds:(southwest,northeast)=>({getSouth:()=>southwest.lat,getWest:()=>southwest.lng,getNorth:()=>northeast.lat,getEast:()=>northeast.lng})},
 });
 const makeScenario = loadFactory("scenario-loader.js", "createScenarioLoader", {
  generateScenarioSnapshot, document:{getElementById:()=>({value:"110m"})}, alert(message){throw new Error(message);},

@@ -1,4 +1,4 @@
-// Numeric bounds checks avoid allocating Leaflet LatLng objects in entity loops.
+// Numeric bounds checks avoid allocating the map camera LatLng objects in entity loops.
 export function containsRenderPoint(bounds, lat, lng) {
 	if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
 	if (lat < bounds.getSouth() || lat > bounds.getNorth()) return false;

@@ -202,7 +202,7 @@ export function createEditorCommands(runtime) {
 		// Brief timeout to let UI update
 		await new Promise((r) => setTimeout(r, 50));
 
-		const bounds = runtime.L.geoJSON(feature).getBounds();
+		const bounds = runtime.mapRuntime.geoJSON(feature).getBounds();
 		const res = runtime.CONFIG.GRID_RES;
 		const sLat = Math.max(0, Math.floor((bounds.getSouth() + 90) / res));
 		const eLat = Math.min(

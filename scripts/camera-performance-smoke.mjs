@@ -21,7 +21,7 @@ function measure(source, paint=drawPoliticalChunks, assertSparse=true) {
  paint(layer,state);calls=0;const fullSamples=[];
  for(let i=0;i<9;i++){const start=performance.now();paint(layer,state);fullSamples.push(performance.now()-start);}
  const median=(samples)=>samples.sort((a,b)=>a-b)[Math.floor(samples.length/2)];
- const full={medianWarmPaintMs:median(fullSamples),leafletProjectionCallsPerPaint:calls/9,cache:{...layer._politicalChunkCache.stats}};
+ const full={medianWarmPaintMs:median(fullSamples),projectionCallsPerPaint:calls/9,cache:{...layer._politicalChunkCache.stats}};
  const tileColumns=Math.ceil(w/32),tileRows=Math.ceil(h/32),dirtyTiles=new Set();
  assert.ok(tileColumns>10&&tileRows>10,'atlas has room for two sparse far-apart paint islands');
  for(const [centerX,centerY] of [[2,2],[8,8]])
@@ -52,7 +52,7 @@ try{
  globalThis.Path2D=undefined;
  const rendererSource=readFileSync(new URL('src/renderer.js',root),'utf8');
  current=measure(rendererSource);
- assert.equal(current.full.leafletProjectionCallsPerPaint,0,'steady atlas paints must not send half-cell vertices back through Leaflet');
+ assert.equal(current.full.projectionCallsPerPaint,0,'steady atlas paints must not send half-cell vertices back through the camera');
  assert.equal(current.full.cache.built,2850);assert.equal(current.full.cache.reused,2850*9);
  if(process.argv[2]==='--compare')projectionComparison=measure(readFileSync(process.argv[3],'utf8'));
  if(process.argv[2]==='--paint-compare'){

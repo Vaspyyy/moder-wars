@@ -853,12 +853,12 @@ export function createWarStart(runtime) {
 			}
 		}
 
-		const bounds = runtime.L.latLngBounds([]);
+		const bounds = runtime.mapRuntime.latLngBounds([]);
 		runtime.sides.forEach((side) => {
 			side.forEach((c) => {
 				if (c.feature)
 					try {
-						bounds.extend(runtime.L.geoJSON(c.feature).getBounds());
+						bounds.extend(runtime.mapRuntime.geoJSON(c.feature).getBounds());
 					} catch (_e) {
 						console.warn("GeoJSON bounds computation failed", _e);
 					}

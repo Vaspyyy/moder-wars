@@ -23,14 +23,6 @@ export function createMenuControls(runtime) {
 		};
 	}
 
-	function bindImagerySelectChange() {
-		if (runtime.imagerySelect) {
-			runtime.imagerySelect.addEventListener("change", (e) => {
-				runtime.setImageryProvider(e.target.value);
-			});
-		}
-	}
-
 	function bindAddSideBtnClick() {
 		runtime.addSideBtn.onclick = () => {
 			if (runtime.sides.length >= runtime.MAX_SIDES) {
@@ -466,7 +458,6 @@ export function createMenuControls(runtime) {
 				"disable-country-gradient-checkbox": true,
 				"disable-mountains-checkbox": true,
 			});
-			runtime.setImageryProvider("wargames");
 			runtime.presetLowBtn.style.boxShadow = "0 0 15px rgba(192, 57, 43, 0.5)";
 			runtime.presetDefaultBtn.style.boxShadow = "none";
 		});
@@ -481,7 +472,6 @@ export function createMenuControls(runtime) {
 				"disable-country-gradient-checkbox": false,
 				"disable-mountains-checkbox": false,
 			});
-			runtime.setImageryProvider("atlas");
 			runtime.presetDefaultBtn.style.boxShadow =
 				"0 0 15px rgba(46, 134, 222, 0.5)";
 			runtime.presetLowBtn.style.boxShadow = "none";
@@ -772,17 +762,7 @@ export function createMenuControls(runtime) {
 				runtime.mapName = newName;
 				runtime.missilesEnabled = newMissilesEnabled;
 
-				// If size changed, apply bounds and force Simplified mode if not already there
-				if (sizeChanged) {
-					const currentImagery = runtime.imagerySelect
-						? runtime.imagerySelect.value
-						: runtime.getCookie("mw_imagery") || "atlas";
-					const allowSwitch = currentImagery !== "wargames";
-					runtime.applyWorldBounds(newW, newH, allowSwitch);
-				} else {
-					// Still enforce bounding box if it was never set
-					runtime.applyWorldBounds(newW, newH, false);
-				}
+				if (sizeChanged) runtime.applyWorldBounds(newW, newH);
 
 				// Sync missiles toggle with simulation-level bombsDisabled and checkboxes
 				if (runtime.disableBombsCheckbox) {
@@ -875,7 +855,6 @@ export function createMenuControls(runtime) {
 		bindImportCountrySearchInput,
 		bindTutorialSkipBtnClick,
 		bindTutorialPrevBtnClick,
-		bindImagerySelectChange,
 		bindAddSideBtnClick,
 		bindFfaToggleBtnClick,
 		bindRandomWarBtnClick,

@@ -320,16 +320,31 @@ const container = { appendChild(surface) { children.push(surface); surface.paren
 const canvas = () => ({ style: {}, width: 0, height: 0, setAttribute() {} });
 const map = { getZoom: () => 6, getCenter: () => ({ lat: 0, lng: 0 }), getContainer: () => container, getBounds: () => ({ equals: () => true }), getSize: () => point(100, 60), on() {}, off() {}, getPane: () => null, project: (center) => point(center.lng, center.lat), getZoomScale: (next, previous) => 2 ** (next - previous) };
 const source = readFileSync(new URL("../src/renderer.js", import.meta.url), "utf8").replace(/^import[\s\S]*?from "[^"]+";\n/gm, "").replace(/export \{ ControlMapLayer, RENDER_LAYERS \};/, "");
-const globals = { document: { createElement: canvas }, window: { devicePixelRatio: 2 }, map, worldControlMap: null, landMask: null, isPaused: true, gameState: "MENU", godModeActive: false, preGodModeState: "MENU", cinematicMode: false, gridWidth: 128, gridHeight: 96, performance, requestAnimationFrame: () => 1, cancelAnimationFrame() {}, invalidateUnitFlagSprites() {}, L: { Layer: { extend(methods) { function Layer() {} Object.assign(Layer.prototype, methods); return Layer; } }, DomUtil: { create: canvas, setTransform(surface, offset, scale) { surface.style.transform = `${offset.x},${offset.y},${scale}`; } } } };
+const globals = { document: { createElement: canvas }, window: { devicePixelRatio: 2 }, map, worldControlMap: null, landMask: null, isPaused: true, gameState: "MENU", godModeActive: false, preGodModeState: "MENU", cinematicMode: false, gridWidth: 128, gridHeight: 96, performance, requestAnimationFrame: () => 1, cancelAnimationFrame() {}, invalidateUnitFlagSprites() {}, mapRuntime: { Layer: { extend(methods) { function Layer() {} Object.assign(Layer.prototype, methods); return Layer; } }, DomUtil: { create: canvas, setTransform(surface, offset, scale) { surface.style.transform = `${offset.x},${offset.y},${scale}`; } } } };
 const { ControlMapLayer: Layer, RENDER_LAYERS } = vm.runInNewContext(
 	`${source}\n({ ControlMapLayer, RENDER_LAYERS });`,
 	globals,
 );
 const view = new Layer();
 view.onAdd(map);
-assert.equal(children.length, 4, "unchanged layers are presented by the DOM compositor");
+assert.equal(children.length, 5, "unchanged layers are presented by the DOM compositor");
 assert.ok(children.every((surface) => surface.style.width === "484px" && surface.style.height === "444px"));
 assert.equal(view._compositeLayers, false);
+assert.ok(Number(view._container.style.zIndex) > 401, "unit badges stay above the GPU flags");
+assert.ok(Number(view._labelsSurface.style.zIndex) > Number(view._container.style.zIndex));
+// Execute the production capture block and reject malformed Canvas overloads.
+const captureBody = /if \(this\._compositeLayers\) \{\n([\s\S]*?)\n\t\t\}\n\t\tctx = mainCtx;/.exec(source)?.[1];
+assert.ok(captureBody);
+const captureImages = [];
+const composite = vm.runInNewContext(`(function () { ${captureBody} })`, {
+ mainCtx: { drawImage(image, ...coordinates) {
+  assert.equal(coordinates.length, 4);
+  assert.ok(coordinates.every(Number.isFinite), "capture coordinates must be numbers");
+  captureImages.push(image);
+ } }, dpr: 2,
+});
+composite.call(view);
+assert.deepEqual(captureImages, [view._backgroundSurface, view._staticSurface]);
 view._onZoomStart();
 view._onZoomAnim({ center: { lat: 3, lng: 4 }, zoom: 7 });
 assert.equal(new Set(children.map((surface) => surface.style.transform)).size, 1, "zoom transforms all visible surfaces together");

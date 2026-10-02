@@ -376,7 +376,6 @@ export function createEditorToolControls(runtime) {
 			}
 
 			// Switch to Simplified View for better "blank canvas" painting feel (temporarily)
-			runtime.setImageryProvider("wargames", false);
 			if (runtime.disableCountryGradientCheckbox) {
 				runtime.disableCountryGradientCheckbox.checked = true;
 				runtime.disableCountryGradient = true;

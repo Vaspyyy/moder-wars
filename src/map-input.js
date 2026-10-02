@@ -102,8 +102,23 @@ export function createMapInput(runtime) {
 	}
 
 	function bindMapCoordinatesMousemove() {
-		runtime.map.on("mousemove", (e) => {
-			runtime.coordsDisplay.textContent = `${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`;
+		let frame = 0;
+		let position = null;
+		const update = (e) => {
+			position = e.latlng;
+			if (frame) return;
+			frame = requestAnimationFrame(() => {
+				frame = 0;
+				const text = `${position.lat.toFixed(4)}, ${position.lng.toFixed(4)}`;
+				if (runtime.coordsDisplay.textContent !== text)
+					runtime.coordsDisplay.textContent = text;
+			});
+		};
+		runtime.map.on("mousemove", update);
+		runtime.map.on("unload", () => {
+			if (frame) cancelAnimationFrame(frame);
+			frame = 0;
+			runtime.map.off("mousemove", update);
 		});
 	}
 
@@ -113,31 +128,6 @@ export function createMapInput(runtime) {
 			const targetEl = e.originalEvent?.target;
 			if (targetEl?.closest(".ref-handle, .ref-handle-center")) {
 				return;
-			}
-
-			if (runtime.gameState === "EDITOR_PAINTING_TERRAIN") {
-				// Before starting terrain paint, ensure we're in Simplified (wargames) mode unless this is a custom canvas.
-				const currentImagery = runtime.imagerySelect
-					? runtime.imagerySelect.value
-					: runtime.getCookie("mw_imagery") || "atlas";
-
-				// Only prompt/switch if we're NOT already wargames and NOT on a blank/custom terrain map.
-				if (currentImagery !== "wargames" && !runtime.isCustomTerrain) {
-					if (
-						confirm(
-							"Satellite Directive: Terrain modification requires 'Simplified Mode' to correctly align geography. Switch now?",
-						)
-					) {
-						runtime.setImageryProvider("wargames", false);
-						if (runtime.disableCountryGradientCheckbox) {
-							runtime.disableCountryGradientCheckbox.checked = true;
-							runtime.disableCountryGradient = true;
-						}
-					}
-					// After switching (or cancelling), do not treat this same click as a paint event;
-					// the user can click again to start painting, which prevents stray lines.
-					return;
-				}
 			}
 
 			if (

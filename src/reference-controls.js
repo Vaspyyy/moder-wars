@@ -63,11 +63,13 @@ export function createReferenceControls(runtime) {
 							[center.lat + h, center.lng + w],
 						];
 
-						runtime.referenceOverlay = runtime.L.imageOverlay(url, bounds, {
-							opacity: runtime.refOpacity,
-							interactive: false,
-							pane: "refImagePane",
-						}).addTo(runtime.map);
+						runtime.referenceOverlay = runtime.mapRuntime
+							.imageOverlay(url, bounds, {
+								opacity: runtime.refOpacity,
+								interactive: false,
+								pane: "refImagePane",
+							})
+							.addTo(runtime.map);
 						runtime.updateRefHandles();
 						runtime.loadingOverlay.style.display = "none";
 					};
@@ -99,7 +101,7 @@ export function createReferenceControls(runtime) {
 			runtime.refAboveCheckbox.checked = !!runtime.refAboveTerrain;
 			runtime.refAboveCheckbox.addEventListener("change", (e) => {
 				runtime.refAboveTerrain = !!e.target.checked;
-				// No need to change Leaflet pane; we composite into the canvas.
+				// No need to change the map camera pane; we composite into the canvas.
 				if (runtime.influenceLayer) {
 					runtime.influenceLayer._forceRender = true;
 					runtime.influenceLayer.render();

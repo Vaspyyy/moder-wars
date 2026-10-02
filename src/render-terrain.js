@@ -50,17 +50,19 @@ export function drawTerrain(frame) {
 
 		const coast = frame.isAtlas ? getAtlasCoastPaths(this, frame) : null;
 		frame.atlasCoast = Boolean(coast);
+		frame.coast = coast;
 		if (coast) {
 			ctx.save();
-			ctx.fillStyle = "#667265";
-			ctx.fill(coast.land);
+			const background = frame.backgroundCtx || ctx;
+			background.fillStyle = "#667265";
+			background.fill(coast.land);
 			// One shadowed shore path gives a narrow shelf without blurring inland borders.
-			ctx.strokeStyle = "rgba(118,169,182,0.18)";
-			ctx.lineWidth = 3;
-			ctx.shadowColor = "rgba(133,189,199,0.2)";
-			ctx.shadowBlur = 5;
-			ctx.stroke(coast.shore);
-			ctx.shadowBlur = 0;
+			background.strokeStyle = "rgba(118,169,182,0.18)";
+			background.lineWidth = 3;
+			background.shadowColor = "rgba(133,189,199,0.2)";
+			background.shadowBlur = 5;
+			background.stroke(coast.shore);
+			background.shadowBlur = 0;
 			ctx.clip(coast.land);
 		}
 		drawPoliticalChunks(this, frame);

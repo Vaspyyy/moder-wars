@@ -12,7 +12,6 @@ import {
 } from "./simulation-clock.js";
 import { PERF_COUNTER_DEFAULTS } from "./simulation-metrics.js";
 import { resizeSimulationGrid } from "./simulation-resize.js";
-import { createSmoothZoom } from "./smooth-zoom.js";
 
 // Shared live binding bridge. Systems receive commands/state without importing main.js.
 const applicationRuntime = createLiveContext(
@@ -242,8 +241,6 @@ const applicationRuntime = createLiveContext(
 		tutorialPrevBtn: () => tutorialPrevBtn,
 		currentTutorialStep: () => currentTutorialStep,
 		updateTutorialUI: () => updateTutorialUI,
-		imagerySelect: () => imagerySelect,
-		setImageryProvider: () => setImageryProvider,
 		addSideBtn: () => addSideBtn,
 		activeSideIndex: () => activeSideIndex,
 		rebuildManpowerInputs: () => rebuildManpowerInputs,
@@ -506,7 +503,7 @@ const applicationRuntime = createLiveContext(
 		commentsUnsubscribe: () => commentsUnsubscribe,
 		cancelUploadBtn: () => cancelUploadBtn,
 		confirmUploadBtn: () => confirmUploadBtn,
-		L: () => L,
+		mapRuntime: () => mapRuntime,
 		isPointInFeature: () => isPointInFeature,
 		provinceMap: () => provinceMap,
 		getProvinceId: () => getProvinceId,
@@ -1817,7 +1814,6 @@ const {
 	queuePerfFrame,
 } = createPerformanceReports(applicationRuntime);
 
-import L from "leaflet";
 import { CONFIG } from "./config.js";
 import {
 	chooseFormationBudget,
@@ -1826,6 +1822,7 @@ import {
 	getFormationStrengthMultiplier,
 } from "./formation-strength.js";
 import { fetchJSONWithCache } from "./geo.js";
+import mapRuntime from "./map-runtime.ts";
 import {
 	cacheMopUpCell,
 	selectAssignedMopUpCountryId,
@@ -2189,8 +2186,8 @@ export let recordedChunks = [];
 export let customSatelliteUrl = null;
 export let customSatelliteImg = null;
 export let referenceImageUrl = null;
-export let referenceOverlay = null; // L.imageOverlay
-export let refHandles = []; // Array of Leaflet markers
+export let referenceOverlay = null; // Native reference image
+export let refHandles = []; // Native reference handles
 export let refOpacity = 0.5;
 export let refScale = 1.0;
 export let refAboveTerrain = false;
@@ -3790,22 +3787,15 @@ export const gameDateDisplay = document.getElementById("game-date-display");
 /**
  * INITIALIZATION
  */
-export const map = L.map("map", {
-	zoomControl: false,
+export const map = mapRuntime.map("map", {
 	center: [20, 0],
 	zoom: 3,
 	minZoom: 2,
 	maxZoom: 12,
-	worldCopyJump: true,
 	dragging: true,
 	// Use viscosity so panning against the world-size box feels smooth instead of snapping back
-	maxBoundsViscosity: 1.0,
 	// Wheel motion is owned by the continuous camera controller below.
-	scrollWheelZoom: false,
-	zoomSnap: 0,
-	zoomDelta: 0.25,
 });
-createSmoothZoom(map);
 
 // Create Web Worker for async frontline field and layout rebuilds.
 _simWorker = new Worker(
@@ -4043,95 +4033,6 @@ function dispatchFrontlineWork(includeField = false, includeLayout = false) {
 	}
 }
 
-export let baseImageryLayer = null;
-export const imagerySelect = document.getElementById("imagery-select");
-
-let _selectedImageryProvider = "atlas";
-
-export function setImageryProvider(
-	provider,
-	persist = true,
-	activate = gameState !== "MAIN_MENU",
-) {
-	if (!provider || provider === "undefined") provider = "atlas";
-	_selectedImageryProvider = provider;
-
-	if (baseImageryLayer) {
-		map.removeLayer(baseImageryLayer);
-		baseImageryLayer = null;
-	}
-
-	if (activate && provider === "arcgis") {
-		baseImageryLayer = L.tileLayer(
-			"https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-			{
-				maxZoom: 19,
-				updateWhenZooming: false,
-				updateWhenIdle: true,
-				attribution: "Tiles &copy; Esri",
-				crossOrigin: "anonymous",
-			},
-		);
-		baseImageryLayer.addTo(map);
-	} else if (activate && provider === "google") {
-		baseImageryLayer = L.tileLayer(
-			"https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
-			{
-				opacity: 0.9,
-				maxZoom: 19,
-				updateWhenZooming: false,
-				updateWhenIdle: true,
-				attribution: "&copy; Google",
-				crossOrigin: "anonymous",
-			},
-		);
-		baseImageryLayer.addTo(map);
-	} else if (activate && provider === "google_cartoon") {
-		baseImageryLayer = L.tileLayer(
-			"https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}",
-			{
-				opacity: 1.0,
-				maxZoom: 19,
-				updateWhenZooming: false,
-				updateWhenIdle: true,
-				attribution: "&copy; Google",
-				crossOrigin: "anonymous",
-			},
-		);
-		baseImageryLayer.addTo(map);
-	}
-	// 'wargames' / simplified mode has no tile layer, so baseImageryLayer stays null.
-
-	if (persist) {
-		setCookie("mw_imagery", provider);
-	}
-
-	if (imagerySelect) imagerySelect.value = provider;
-
-	const c = map.getContainer();
-	if (c) c.style.background = provider === "atlas" ? "#142332" : "#000";
-
-	if (influenceLayer) {
-		influenceLayer._forceRender = true;
-		if (typeof influenceLayer._update === "function") influenceLayer._update();
-	}
-}
-
-export function activateImageryProvider() {
-	setImageryProvider(_selectedImageryProvider, false, true);
-}
-
-/*
- * Initialize imagery style based on saved preference.
- */
-// Adopt the atlas once for existing installs, then honor subsequent choices.
-setImageryProvider(
-	getCookie("mw_atlas_style_v1") ? getCookie("mw_imagery") || "atlas" : "atlas",
-);
-setCookie("mw_atlas_style_v1", "true");
-
-menu_controls.bindImagerySelectChange();
-
 import {
 	applyPaintAt,
 	ensureRawGeography,
@@ -4199,35 +4100,18 @@ map.getPane("refImagePane").style.zIndex = 350;
 
 /** Invalidate political-map consumers after a precomputed grid is installed. */
 
-export function applyWorldBounds(
-	widthDeg,
-	heightDeg,
-	allowImagerySwitch = true,
-) {
+export function applyWorldBounds(widthDeg, heightDeg) {
 	// Clamp to safe ranges
 	const w = Math.max(10, Math.min(360, widthDeg || 360));
 	const h = Math.max(10, Math.min(180, heightDeg || 180));
 	worldWidthDeg = w;
 	worldHeightDeg = h;
 
-	// If changing size while not in Simplified mode, force switch to Simplified (wargames)
-	if (
-		allowImagerySwitch &&
-		imagerySelect &&
-		imagerySelect.value !== "wargames"
-	) {
-		setImageryProvider("wargames", false);
-		if (disableCountryGradientCheckbox) {
-			disableCountryGradientCheckbox.checked = true;
-			disableCountryGradient = true;
-		}
-	}
-
 	const halfW = w / 2;
 	const halfH = h / 2;
-	const bounds = L.latLngBounds(
-		L.latLng(-halfH, -halfW),
-		L.latLng(halfH, halfW),
+	const bounds = mapRuntime.latLngBounds(
+		mapRuntime.latLng(-halfH, -halfW),
+		mapRuntime.latLng(halfH, halfW),
 	);
 	map.setMaxBounds(bounds);
 

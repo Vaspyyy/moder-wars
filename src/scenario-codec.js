@@ -478,10 +478,11 @@ function expandSparseEntries(scenario, entryCount, options, readEntries) {
  * @param {{workerUrl?: string|URL, jsonFallbackUrl?: string|URL, targetGridRes?: number, targetWidth?: number, targetHeight?: number, onProgress?: Function, signal?: AbortSignal}} options
  */
 export function loadScenario(url, options = {}) {
-	const workerUrl =
-		options.workerUrl ||
-		new URL("../workers/scenario-worker.js", import.meta.url);
-	const worker = new Worker(workerUrl, { type: "module" });
+	const worker = options.workerUrl
+		? new Worker(options.workerUrl, { type: "module" })
+		: new Worker(new URL("../workers/scenario-worker.js", import.meta.url), {
+				type: "module",
+			});
 	const startedAt = performance.now();
 	const baseUrl =
 		typeof window !== "undefined" ? window.location.href : import.meta.url;

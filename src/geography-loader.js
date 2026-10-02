@@ -1,4 +1,3 @@
-import L from "leaflet";
 import { CONFIG } from "./config.js";
 import {
 	_geoCacheGet,
@@ -17,6 +16,7 @@ import {
 	loadPrederivedEarthRaster,
 } from "./geo-raster-assets.js";
 import { beginLoadTrace } from "./load-profiler.js";
+import mapRuntime from "./map-runtime.ts";
 
 /** Read live state only when a loader runs; module construction is cycle-safe. */
 export function createGeographyLoader(context, loadSession) {
@@ -68,9 +68,15 @@ export function createGeographyLoader(context, loadSession) {
 			}
 		}
 		if (minX === Infinity) {
-			return L.latLngBounds(L.latLng(-90, -180), L.latLng(90, 180));
+			return mapRuntime.latLngBounds(
+				mapRuntime.latLng(-90, -180),
+				mapRuntime.latLng(90, 180),
+			);
 		}
-		return L.latLngBounds(L.latLng(minY, minX), L.latLng(maxY, maxX));
+		return mapRuntime.latLngBounds(
+			mapRuntime.latLng(minY, minX),
+			mapRuntime.latLng(maxY, maxX),
+		);
 	}
 
 	async function updateLandMask(features, maskValue = 1, isBlank = false) {
@@ -145,7 +151,10 @@ export function createGeographyLoader(context, loadSession) {
 				try {
 					bounds = getFeatureBounds(feature);
 				} catch (_e) {
-					bounds = L.latLngBounds(L.latLng(-90, -180), L.latLng(90, 180));
+					bounds = mapRuntime.latLngBounds(
+						mapRuntime.latLng(-90, -180),
+						mapRuntime.latLng(90, 180),
+					);
 				}
 
 				const startLat = Math.max(
@@ -779,7 +788,6 @@ export function createGeographyLoader(context, loadSession) {
 			if (!suppressUi) {
 				context.loadingOverlay.style.display = "none";
 				context.mapUi.style.display = "flex";
-				context.activateImageryProvider();
 			}
 			loadTrace?.finish({
 				cells: context.worldControlMap?.length || 0,
