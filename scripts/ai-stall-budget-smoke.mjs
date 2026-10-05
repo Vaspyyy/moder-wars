@@ -188,41 +188,45 @@ try {
 		});
 	}
 
-	// Cities the side takes while its generation is suspended, after they were
-	// chosen as targets, are dropped before the proposals are scored.
+	// Cities the side takes, or that pass to a non-hostile owner, after their
+	// capture proposals were recorded are dropped once generation finishes.
 	const takerSide = state.sides.findIndex((side) => side.length > 0);
-	const savedTick = state._simTickCount;
-	const findLand = state.findLandPathSummary;
-	const taken = new Map();
-	let pathing = false;
-	try {
-		state.findLandPathSummary = (...args) => {
-			pathing = true;
-			return findLand(...args);
-		};
-		const steps = generate(takerSide);
-		let step = steps.next();
-		while (!step.done && !pathing) step = steps.next();
-		assert.ok(pathing, "capture targets chosen");
-		state._simTickCount++;
-		for (const city of state.activeTheaterCities) {
-			const idx = state.getGridIndex(city.lat, city.lng);
-			if (idx === -1 || taken.has(idx)) continue;
-			taken.set(idx, state.dominantSideMap[idx]);
-			state.dominantSideMap[idx] = takerSide;
+	const captureAfterChange = (change) => {
+		const savedTick = state._simTickCount;
+		const restore = [];
+		try {
+			const steps = generate(takerSide);
+			let step = steps.next();
+			// The first zero-work step follows the capture and naval sections.
+			while (!step.done && step.value !== 0) step = steps.next();
+			state._simTickCount++;
+			for (const city of state.activeTheaterCities) restore.push(change(city));
+			while (!step.done) step = steps.next();
+			return step.value.filter((proposal) => proposal.type === "CAPTURE_CITY");
+		} finally {
+			state._simTickCount = savedTick;
+			for (const undo of restore.reverse()) undo();
 		}
-		while (!step.done) step = steps.next();
-		const stale = step.value.filter(
-			(proposal) =>
-				proposal.type === "CAPTURE_CITY" &&
-				taken.has(state.getGridIndex(proposal.target.lat, proposal.target.lng)),
-		);
-		assert.deepEqual(stale, [], "captured targets are dropped");
-	} finally {
-		state.findLandPathSummary = findLand;
-		state._simTickCount = savedTick;
-		for (const [idx, side] of taken) state.dominantSideMap[idx] = side;
-	}
+	};
+	assert.ok(captureAfterChange(() => () => {}).length > 0, "capture targets");
+	const taken = captureAfterChange((city) => {
+		const idx = state.getGridIndex(city.lat, city.lng);
+		const side = state.dominantSideMap[idx];
+		state.dominantSideMap[idx] = takerSide;
+		return () => {
+			state.dominantSideMap[idx] = side;
+		};
+	});
+	assert.deepEqual(taken, [], "captured targets are dropped");
+	const ally = state.sides[takerSide][0].id;
+	const handedOver = captureAfterChange((city) => {
+		const owner = city.ownerId;
+		city.ownerId = ally;
+		return () => {
+			city.ownerId = owner;
+		};
+	});
+	assert.deepEqual(handedOver, [], "targets now held by a friend are dropped");
 
 	// A formation that stepped off the coast this tick still has a stale
 	// isAtSea flag; it must not be offered for land orders.
@@ -240,5 +244,5 @@ try {
 }
 
 console.log(
-	"AI stall budgets: 60 coverage selections match full sorts, budgeted multi-tick proposal runs charge every path search, restart on coalition changes and drop captured targets, and at-sea formations excluded from land orders",
+	"AI stall budgets: 60 coverage selections match full sorts, budgeted multi-tick proposal runs charge every path search, restart on coalition changes and drop targets taken or handed to a friend, and at-sea formations excluded from land orders",
 );

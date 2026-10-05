@@ -169,29 +169,45 @@ export function createAiProposalPipeline(context) {
 		return selected;
 	}
 
-	const OFFENSIVE_PROPOSALS = new Set([
-		"CAPTURE_CITY",
-		"ENCIRCLE",
-		"PUSH_FRONT",
-		"NAVAL_INVASION",
-	]);
-
-	/** An offensive target must still be enemy-held and its owner still hostile. */
+	/**
+	 * Re-apply the selection test of an offensive proposal to the current map,
+	 * using its target's current owner rather than the one recorded at selection.
+	 */
 	function isProposalTargetCurrent(sideIdx, proposal) {
-		if (!OFFENSIVE_PROPOSALS.has(proposal.type)) return true;
-		const idx = context.getGridIndex(proposal.target.lat, proposal.target.lng);
-		// A front push aims at the enemy's centroid, which need not be its land.
-		if (
-			proposal.type !== "PUSH_FRONT" &&
-			context.dominantSideMap[idx] === sideIdx
-		)
-			return false;
-		const targetSide =
-			proposal.targetSideIndex ??
-			context._tickCountryToSideMap.get(context.worldControlMap[idx]);
-		return (
-			targetSide !== undefined && context.areSidesHostile(sideIdx, targetSide)
-		);
+		const { target } = proposal;
+		const hostile = (ownerSide) =>
+			ownerSide !== undefined && context.areSidesHostile(sideIdx, ownerSide);
+		const ownerSideOf = (countryId) =>
+			context._tickCountryToSideMap.get(countryId);
+		switch (proposal.type) {
+			case "PUSH_FRONT":
+				return hostile(proposal.targetSideIndex);
+			case "ENCIRCLE":
+				return hostile(
+					context.dominantSideMap[context.getGridIndex(target.lat, target.lng)],
+				);
+			case "NAVAL_INVASION": {
+				const idx = context.getGridIndex(target.lat, target.lng);
+				return (
+					context.dominantSideMap[idx] !== sideIdx &&
+					hostile(ownerSideOf(context.worldControlMap[idx]))
+				);
+			}
+			case "CAPTURE_CITY": {
+				const idx = context.getGridIndex(target.lat, target.lng);
+				const city = context.activeTheaterCities.find(
+					(candidate) =>
+						candidate.lat === target.lat && candidate.lng === target.lng,
+				);
+				return (
+					!!city &&
+					context.dominantSideMap[idx] !== sideIdx &&
+					hostile(ownerSideOf(city.ownerId))
+				);
+			}
+			default:
+				return true;
+		}
 	}
 
 	/**
