@@ -701,6 +701,7 @@ export function createAiProposalPipeline(context) {
 				const targetIdx = context.getGridIndex(np.target.lat, np.target.lng);
 				const seaTarget = context.findNearestSeaIdx(targetIdx);
 				const seaPath = context.findSeaPathSummary(seaStart, seaTarget);
+				yield 1;
 				if (seaPath.reachable) {
 					proposals.push({
 						type: "NAVAL_SUPPLY",

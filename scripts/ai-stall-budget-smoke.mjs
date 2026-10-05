@@ -145,6 +145,49 @@ try {
 	assert.ok(!state._pendingProposalSideSet.has(emptied.sideIdx));
 	assert.ok(!state._pendingProposalSides.includes(emptied.sideIdx));
 
+	// Every path search is charged to the step that ran it, including the
+	// supply route of a side that is landing an invasion.
+	const supplySide = state.sides.findIndex((side) => side.length > 0);
+	const enemyIds = new Set(
+		state.sides
+			.flat()
+			.filter((country) => !state.sides[supplySide].includes(country))
+			.map((country) => country.id),
+	);
+	const enemyCapital = state.cities.find(
+		(city) => city.isCapital && enemyIds.has(city.sovereignId),
+	);
+	const savedPlan = state._navalPlan[supplySide];
+	const searchNames = ["findSeaPathSummary", "findLandPathSummary"];
+	const savedSearches = searchNames.map((name) => state[name]);
+	let searches = 0,
+		seaSearches = 0;
+	try {
+		state._navalPlan[supplySide] = {
+			phase: "LANDING",
+			target: { lat: enemyCapital.lat, lng: enemyCapital.lng },
+		};
+		searchNames.forEach((name, index) => {
+			state[name] = (...args) => {
+				searches++;
+				if (index === 0) seaSearches++;
+				return savedSearches[index](...args);
+			};
+		});
+		const steps = generate(supplySide);
+		for (let step = steps.next(); !step.done; step = steps.next()) {
+			assert.ok(searches <= step.value, "path search charged to its step");
+			searches = 0;
+		}
+		assert.equal(searches, 0, "no path search after the last step");
+		assert.ok(seaSearches > 0, "supply route searched");
+	} finally {
+		state._navalPlan[supplySide] = savedPlan;
+		searchNames.forEach((name, index) => {
+			state[name] = savedSearches[index];
+		});
+	}
+
 	// A formation that stepped off the coast this tick still has a stale
 	// isAtSea flag; it must not be offered for land orders.
 	const unit = state.units.find((u) => u.health > 0 && u.deployTicks <= 0);
@@ -161,5 +204,5 @@ try {
 }
 
 console.log(
-	"AI stall budgets: 60 coverage selections match full sorts, budgeted multi-tick proposal runs restart on coalition changes, and at-sea formations excluded from land orders",
+	"AI stall budgets: 60 coverage selections match full sorts, budgeted multi-tick proposal runs charge every path search and restart on coalition changes, and at-sea formations excluded from land orders",
 );
