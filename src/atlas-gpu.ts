@@ -139,7 +139,10 @@ export class AtlasGpuLayer {
 			this.invalidate();
 		}
 	}
-	private onLost = () => {
+	private onLost = (event: Event) => {
+		// Opt in to restoration explicitly; Pixi does too, but recovery must not
+		// depend on its private listener order.
+		event.preventDefault();
 		this.ready = false;
 		this.setActive(false);
 		this.invalidate();

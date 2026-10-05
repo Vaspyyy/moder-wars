@@ -241,6 +241,39 @@ try {
 assert.equal(layer.active, false);
 assert.equal(layer.ready, false);
 assert.equal(invalidated, 1);
+// A lost context must opt in to browser restoration and leave the GPU path.
+const priorDocument = globalThis.document;
+const priorWindow = globalThis.window;
+globalThis.document = {
+	createElement: () => ({ style: {}, addEventListener() {} }),
+};
+globalThis.window = { devicePixelRatio: 1 };
+console.warn = () => {};
+let lostLayer;
+try {
+	lostLayer = new AtlasGpuLayer(
+		{
+			getContainer: () => ({ appendChild() {} }),
+			getSize: () => ({ x: 8, y: 8 }),
+		},
+		() => {},
+	);
+	await new Promise((resolve) => setTimeout(resolve, 0));
+} finally {
+	console.warn = warn;
+	globalThis.document = priorDocument;
+	globalThis.window = priorWindow;
+}
+Object.assign(lostLayer, { ready: true, active: true });
+let restorationRequested = false;
+lostLayer.onLost({
+	preventDefault() {
+		restorationRequested = true;
+	},
+});
+assert.equal(restorationRequested, true, "context loss allows restoration");
+assert.equal(lostLayer.ready, false);
+assert.equal(lostLayer.active, false);
 graphics.destroy();
 layer.countries.destroy();
 console.log(
