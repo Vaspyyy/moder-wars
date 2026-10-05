@@ -235,14 +235,16 @@ try {
 			undo();
 		}
 	};
-	const holdCells = (cells) => () => {
-		const before = cells.map((idx) => state.dominantSideMap[idx]);
-		for (const idx of cells) state.dominantSideMap[idx] = takerSide;
-		return () => {
-			for (let i = cells.length - 1; i >= 0; i--)
-				state.dominantSideMap[cells[i]] = before[i];
+	const holdCells =
+		(cells, holder = takerSide) =>
+		() => {
+			const before = cells.map((idx) => state.dominantSideMap[idx]);
+			for (const idx of cells) state.dominantSideMap[idx] = holder;
+			return () => {
+				for (let i = cells.length - 1; i >= 0; i--)
+					state.dominantSideMap[cells[i]] = before[i];
+			};
 		};
-	};
 	const cellOf = (point) => state.getGridIndex(point.lat, point.lng);
 	const unchanged = () => () => {};
 	assert.ok(proposalsAfterChange("CAPTURE_CITY", unchanged).length > 0);
@@ -265,14 +267,13 @@ try {
 	assert.deepEqual(handedOver, [], "targets now held by a friend are dropped");
 	const pushes = proposalsAfterChange("PUSH_FRONT", unchanged);
 	assert.ok(pushes.length > 0, "front pushes proposed");
-	assert.deepEqual(
-		proposalsAfterChange(
-			"PUSH_FRONT",
-			holdCells(pushes.map((p) => cellOf(p.target))),
-		),
-		[],
-		"front pushes aimed at taken ground are dropped",
-	);
+	const aims = pushes.map((push) => cellOf(push.target));
+	for (const holder of [takerSide, -1])
+		assert.deepEqual(
+			proposalsAfterChange("PUSH_FRONT", holdCells(aims, holder)),
+			[],
+			`front pushes whose aim passed to side ${holder} are dropped`,
+		);
 
 	// A formation that stepped off the coast this tick still has a stale
 	// isAtSea flag; it must not be offered for land orders.

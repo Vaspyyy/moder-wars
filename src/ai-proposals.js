@@ -172,20 +172,24 @@ export function createAiProposalPipeline(context) {
 	/**
 	 * Re-apply the selection test of an offensive proposal to the current map,
 	 * using its target's current owner rather than the one recorded at selection.
+	 * A front push's aim is the centroid of the enemy's land and may lie off it,
+	 * so only a change of hands since `aimSide` was read makes it stale.
 	 */
-	function isProposalTargetCurrent(sideIdx, proposal) {
+	function isProposalTargetCurrent(sideIdx, proposal, aimSide) {
 		const { target } = proposal;
 		const hostile = (ownerSide) =>
 			ownerSide !== undefined && context.areSidesHostile(sideIdx, ownerSide);
 		const ownerSideOf = (countryId) =>
 			context._tickCountryToSideMap.get(countryId);
 		switch (proposal.type) {
-			case "PUSH_FRONT":
+			case "PUSH_FRONT": {
+				const heldBy =
+					context.dominantSideMap[context.getGridIndex(target.lat, target.lng)];
 				return (
-					context.dominantSideMap[
-						context.getGridIndex(target.lat, target.lng)
-					] !== sideIdx && hostile(proposal.targetSideIndex)
+					hostile(proposal.targetSideIndex) &&
+					(heldBy === aimSide || hostile(heldBy))
 				);
+			}
 			case "ENCIRCLE":
 				return hostile(
 					context.dominantSideMap[context.getGridIndex(target.lat, target.lng)],
@@ -527,6 +531,7 @@ export function createAiProposalPipeline(context) {
 			}
 		}
 		// Generate a PUSH_FRONT proposal for each land-connected enemy side
+		const pushAimSides = new Map();
 		if (uCount > 0 && landConnectedEnemySides.size > 0) {
 			for (const enemySide of landConnectedEnemySides) {
 				// Compute centroid of this specific enemy side's territory
@@ -542,10 +547,14 @@ export function createAiProposalPipeline(context) {
 					esLng += col * CONFIG.GRID_RES - 180;
 					esCount++;
 				}
+				if (esCount > 0) {
+					esLat /= esCount;
+					esLng /= esCount;
+				}
+				const aimSide =
+					context.dominantSideMap[context.getGridIndex(esLat, esLng)];
 				yield 1;
 				if (esCount === 0) continue;
-				esLat /= esCount;
-				esLng /= esCount;
 
 				const front =
 					frontIntel.find((f) => f.enemySide === enemySide) ||
@@ -591,6 +600,7 @@ export function createAiProposalPipeline(context) {
 					},
 					_waypoints: path.waypoints || [],
 				});
+				pushAimSides.set(proposals.at(-1), aimSide);
 			}
 		}
 
@@ -1259,7 +1269,7 @@ export function createAiProposalPipeline(context) {
 		// would install plans against ground the side already holds.
 		if (context._simTickCount !== startTick)
 			return proposals.filter((proposal) =>
-				isProposalTargetCurrent(sideIdx, proposal),
+				isProposalTargetCurrent(sideIdx, proposal, pushAimSides.get(proposal)),
 			);
 		return proposals;
 	}
