@@ -113,38 +113,6 @@ try {
 			assert.equal(state._proposalReassessTick[run.sideIdx], run.finished);
 	}
 
-	// A suspended job restarts when its coalition or world changes under it,
-	// including diplomacy that moves countries between sides in place.
-	const restartAfter = (change) => {
-		while (!runs.length || runs.at(-1).finished !== null)
-			assert.ok(core.tick());
-		const stale = runs.at(-1);
-		change(stale.sideIdx);
-		assert.ok(core.tick());
-		assert.equal(stale.finished, null, "stale job is abandoned");
-		return stale;
-	};
-	const grown = restartAfter((sideIdx) => {
-		const donor = state.sides.findIndex(
-			(side, index) => index !== sideIdx && side.length > 1,
-		);
-		const from = donor >= 0 ? donor : (sideIdx + 1) % state.sides.length;
-		state.sides[sideIdx].push(state.sides[from].pop());
-	});
-	assert.equal(runs.at(-1).sideIdx, grown.sideIdx);
-	assert.equal(runs.at(-1).started, state._simTickCount);
-	const reset = restartAfter(() => state._simulationWorldGeneration++);
-	assert.equal(runs.at(-1).sideIdx, reset.sideIdx);
-	assert.equal(runs.at(-1).started, state._simTickCount);
-	const emptied = restartAfter((sideIdx) => {
-		const to = state.sides.findIndex(
-			(side, index) => index !== sideIdx && side.length > 0,
-		);
-		state.sides[to].push(...state.sides[sideIdx].splice(0));
-	});
-	assert.ok(!state._pendingProposalSideSet.has(emptied.sideIdx));
-	assert.ok(!state._pendingProposalSides.includes(emptied.sideIdx));
-
 	// Every path search is charged to the step that ran it, including the
 	// supply route of a side that is landing an invasion, and a step that runs
 	// a search makes no pass over the ownership map besides it.
@@ -254,17 +222,50 @@ try {
 		[],
 		"captured targets are dropped",
 	);
-	const ally = state.sides[takerSide][0].id;
-	const handedOver = proposalsAfterChange("CAPTURE_CITY", () => {
+	const handCities = (ownerFor) => () => {
 		const owners = state.activeTheaterCities.map((city) => city.ownerId);
-		for (const city of state.activeTheaterCities) city.ownerId = ally;
+		for (const city of state.activeTheaterCities) city.ownerId = ownerFor(city);
 		return () => {
 			state.activeTheaterCities.forEach((city, i) => {
 				city.ownerId = owners[i];
 			});
 		};
-	});
-	assert.deepEqual(handedOver, [], "targets now held by a friend are dropped");
+	};
+	const ally = state.sides[takerSide][0].id;
+	assert.deepEqual(
+		proposalsAfterChange(
+			"CAPTURE_CITY",
+			handCities(() => ally),
+		),
+		[],
+		"targets now held by a friend are dropped",
+	);
+	// A city handed to another enemy stays a target, aimed at its new owner.
+	const enemies = state.sides.flatMap((side, index) =>
+		index === takerSide ? [] : side.map((country) => country.id),
+	);
+	const newOwners = new Map();
+	const retargeted = proposalsAfterChange(
+		"CAPTURE_CITY",
+		handCities((city) => {
+			const owner = enemies.find((id) => id !== city.ownerId);
+			newOwners.set(`${city.lat},${city.lng}`, owner);
+			return owner;
+		}),
+	);
+	assert.ok(retargeted.length > 0, "captures of a city handed to an enemy");
+	for (const capture of retargeted) {
+		const owner = newOwners.get(`${capture.target.lat},${capture.target.lng}`);
+		assert.deepEqual(
+			[
+				capture.targetCountryId,
+				capture.target.ownerId,
+				capture.targetSideIndex,
+			],
+			[owner, owner, state._tickCountryToSideMap.get(owner)],
+			"capture names the city's new owner",
+		);
+	}
 	const pushes = proposalsAfterChange("PUSH_FRONT", unchanged);
 	assert.ok(pushes.length > 0, "front pushes proposed");
 	const aims = pushes.map((push) => cellOf(push.target));
@@ -274,6 +275,38 @@ try {
 			[],
 			`front pushes whose aim passed to side ${holder} are dropped`,
 		);
+
+	// A suspended job restarts when its coalition or world changes under it,
+	// including diplomacy that moves countries between sides in place.
+	const restartAfter = (change) => {
+		while (!runs.length || runs.at(-1).finished !== null)
+			assert.ok(core.tick());
+		const stale = runs.at(-1);
+		change(stale.sideIdx);
+		assert.ok(core.tick());
+		assert.equal(stale.finished, null, "stale job is abandoned");
+		return stale;
+	};
+	const grown = restartAfter((sideIdx) => {
+		const donor = state.sides.findIndex(
+			(side, index) => index !== sideIdx && side.length > 1,
+		);
+		const from = donor >= 0 ? donor : (sideIdx + 1) % state.sides.length;
+		state.sides[sideIdx].push(state.sides[from].pop());
+	});
+	assert.equal(runs.at(-1).sideIdx, grown.sideIdx);
+	assert.equal(runs.at(-1).started, state._simTickCount);
+	const reset = restartAfter(() => state._simulationWorldGeneration++);
+	assert.equal(runs.at(-1).sideIdx, reset.sideIdx);
+	assert.equal(runs.at(-1).started, state._simTickCount);
+	const emptied = restartAfter((sideIdx) => {
+		const to = state.sides.findIndex(
+			(side, index) => index !== sideIdx && side.length > 0,
+		);
+		state.sides[to].push(...state.sides[sideIdx].splice(0));
+	});
+	assert.ok(!state._pendingProposalSideSet.has(emptied.sideIdx));
+	assert.ok(!state._pendingProposalSides.includes(emptied.sideIdx));
 
 	// A formation that stepped off the coast this tick still has a stale
 	// isAtSea flag; it must not be offered for land orders.
@@ -291,5 +324,5 @@ try {
 }
 
 console.log(
-	"AI stall budgets: 60 coverage selections match full sorts, budgeted multi-tick proposal runs charge every path search and map pass separately, restart on coalition changes and drop targets taken or handed to a friend, and at-sea formations excluded from land orders",
+	"AI stall budgets: 60 coverage selections match full sorts, budgeted multi-tick proposal runs charge every path search and map pass separately, restart on coalition changes and drop or retarget targets that changed hands, and at-sea formations excluded from land orders",
 );

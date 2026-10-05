@@ -171,11 +171,12 @@ export function createAiProposalPipeline(context) {
 
 	/**
 	 * Re-apply the selection test of an offensive proposal to the current map,
-	 * using its target's current owner rather than the one recorded at selection.
-	 * A front push's aim is the centroid of the enemy's land and may lie off it,
-	 * so only a change of hands since `aimSide` was read makes it stale.
+	 * using its target's current owner rather than the one recorded at selection,
+	 * and point a surviving city capture at that owner. A front push's aim is the
+	 * centroid of the enemy's land and may lie off it, so only a change of hands
+	 * since `aimSide` was read makes it stale.
 	 */
-	function isProposalTargetCurrent(sideIdx, proposal, aimSide) {
+	function refreshProposalTarget(sideIdx, proposal, aimSide) {
 		const { target } = proposal;
 		const hostile = (ownerSide) =>
 			ownerSide !== undefined && context.areSidesHostile(sideIdx, ownerSide);
@@ -207,11 +208,14 @@ export function createAiProposalPipeline(context) {
 					(candidate) =>
 						candidate.lat === target.lat && candidate.lng === target.lng,
 				);
-				return (
-					!!city &&
-					context.dominantSideMap[idx] !== sideIdx &&
-					hostile(ownerSideOf(city.ownerId))
-				);
+				const ownerSide = city && ownerSideOf(city.ownerId);
+				if (context.dominantSideMap[idx] === sideIdx || !hostile(ownerSide))
+					return false;
+				// Plans judge hostility by these, so a handover must not leave them stale.
+				proposal.targetCountryId = city.ownerId;
+				target.ownerId = city.ownerId;
+				proposal.targetSideIndex = ownerSide;
+				return true;
 			}
 			default:
 				return true;
@@ -1269,7 +1273,7 @@ export function createAiProposalPipeline(context) {
 		// would install plans against ground the side already holds.
 		if (context._simTickCount !== startTick)
 			return proposals.filter((proposal) =>
-				isProposalTargetCurrent(sideIdx, proposal, pushAimSides.get(proposal)),
+				refreshProposalTarget(sideIdx, proposal, pushAimSides.get(proposal)),
 			);
 		return proposals;
 	}
