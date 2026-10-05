@@ -111,12 +111,20 @@ export function createAiPlanExecutor(context) {
 	let proposalJob = null;
 
 	function isProposalJobCurrent(job) {
-		return (
-			job.pending === context._pendingProposalSides &&
-			job.sides === context.sides &&
-			job.sideCountries === context.sides[job.sideIdx] &&
-			context._pendingProposalSides[0] === job.sideIdx
-		);
+		const members = context.sides[job.sideIdx];
+		if (
+			job.generation !== context._simulationWorldGeneration ||
+			job.pending !== context._pendingProposalSides ||
+			job.sides !== context.sides ||
+			job.sideCountries !== members ||
+			context._pendingProposalSides[0] !== job.sideIdx ||
+			members.length !== job.memberIds.length
+		)
+			return false;
+		// Diplomacy moves countries between sides in place, so compare members.
+		for (let index = 0; index < members.length; index++)
+			if (members[index]?.id !== job.memberIds[index]) return false;
+		return true;
 	}
 
 	/**
@@ -127,7 +135,10 @@ export function createAiPlanExecutor(context) {
 	function advanceProposalJob() {
 		if (proposalJob && !isProposalJobCurrent(proposalJob)) {
 			// The world or side changed under the job: restart from current state.
-			if (proposalJob.pending === context._pendingProposalSides)
+			if (
+				proposalJob.pending === context._pendingProposalSides &&
+				proposalJob.generation === context._simulationWorldGeneration
+			)
 				context._planReassessNeeded[proposalJob.sideIdx] ||=
 					proposalJob.forceReplace;
 			proposalJob = null;
@@ -144,9 +155,11 @@ export function createAiPlanExecutor(context) {
 			perf.proposalRuns++;
 			proposalJob = {
 				sideIdx: si,
+				generation: context._simulationWorldGeneration,
 				pending: context._pendingProposalSides,
 				sides: context.sides,
 				sideCountries: context.sides[si],
+				memberIds: context.sides[si].map((country) => country?.id),
 				forceReplace: !!context._planReassessNeeded[si],
 				steps: context.generateProposalSteps(si),
 			};

@@ -113,6 +113,38 @@ try {
 			assert.equal(state._proposalReassessTick[run.sideIdx], run.finished);
 	}
 
+	// A suspended job restarts when its coalition or world changes under it,
+	// including diplomacy that moves countries between sides in place.
+	const restartAfter = (change) => {
+		while (!runs.length || runs.at(-1).finished !== null)
+			assert.ok(core.tick());
+		const stale = runs.at(-1);
+		change(stale.sideIdx);
+		assert.ok(core.tick());
+		assert.equal(stale.finished, null, "stale job is abandoned");
+		return stale;
+	};
+	const grown = restartAfter((sideIdx) => {
+		const donor = state.sides.findIndex(
+			(side, index) => index !== sideIdx && side.length > 1,
+		);
+		const from = donor >= 0 ? donor : (sideIdx + 1) % state.sides.length;
+		state.sides[sideIdx].push(state.sides[from].pop());
+	});
+	assert.equal(runs.at(-1).sideIdx, grown.sideIdx);
+	assert.equal(runs.at(-1).started, state._simTickCount);
+	const reset = restartAfter(() => state._simulationWorldGeneration++);
+	assert.equal(runs.at(-1).sideIdx, reset.sideIdx);
+	assert.equal(runs.at(-1).started, state._simTickCount);
+	const emptied = restartAfter((sideIdx) => {
+		const to = state.sides.findIndex(
+			(side, index) => index !== sideIdx && side.length > 0,
+		);
+		state.sides[to].push(...state.sides[sideIdx].splice(0));
+	});
+	assert.ok(!state._pendingProposalSideSet.has(emptied.sideIdx));
+	assert.ok(!state._pendingProposalSides.includes(emptied.sideIdx));
+
 	// A formation that stepped off the coast this tick still has a stale
 	// isAtSea flag; it must not be offered for land orders.
 	const unit = state.units.find((u) => u.health > 0 && u.deployTicks <= 0);
@@ -129,5 +161,5 @@ try {
 }
 
 console.log(
-	"AI stall budgets: 60 coverage selections match full sorts, budgeted multi-tick proposal runs, and at-sea formations excluded from land orders",
+	"AI stall budgets: 60 coverage selections match full sorts, budgeted multi-tick proposal runs restart on coalition changes, and at-sea formations excluded from land orders",
 );
