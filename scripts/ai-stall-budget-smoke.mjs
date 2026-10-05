@@ -146,7 +146,8 @@ try {
 	assert.ok(!state._pendingProposalSides.includes(emptied.sideIdx));
 
 	// Every path search is charged to the step that ran it, including the
-	// supply route of a side that is landing an invasion.
+	// supply route of a side that is landing an invasion, and a step that runs
+	// a search makes no pass over the ownership map besides it.
 	const supplySide = state.sides.findIndex((side) => side.length > 0);
 	const enemyIds = new Set(
 		state.sides
@@ -158,10 +159,14 @@ try {
 		(city) => city.isCapital && enemyIds.has(city.sovereignId),
 	);
 	const savedPlan = state._navalPlan[supplySide];
+	const ownership = state.dominantSideMap;
 	const searchNames = ["findSeaPathSummary", "findLandPathSummary"];
 	const savedSearches = searchNames.map((name) => state[name]);
 	let searches = 0,
-		seaSearches = 0;
+		seaSearches = 0,
+		searching = 0,
+		mapReads = 0,
+		searchSteps = 0;
 	try {
 		state._navalPlan[supplySide] = {
 			phase: "LANDING",
@@ -171,62 +176,103 @@ try {
 			state[name] = (...args) => {
 				searches++;
 				if (index === 0) seaSearches++;
-				return savedSearches[index](...args);
+				searching++;
+				try {
+					return savedSearches[index](...args);
+				} finally {
+					searching--;
+				}
 			};
+		});
+		state.dominantSideMap = new Proxy(ownership, {
+			get(target, key) {
+				if (!searching && typeof key === "string") {
+					const code = key.charCodeAt(0);
+					if (code >= 48 && code <= 57) mapReads++;
+				}
+				const value = Reflect.get(target, key);
+				return typeof value === "function" ? value.bind(target) : value;
+			},
 		});
 		const steps = generate(supplySide);
 		for (let step = steps.next(); !step.done; step = steps.next()) {
 			assert.ok(searches <= step.value, "path search charged to its step");
+			if (searches > 0) {
+				searchSteps++;
+				assert.ok(mapReads < 5000, `map pass beside a search (${mapReads})`);
+			}
 			searches = 0;
+			mapReads = 0;
 		}
 		assert.equal(searches, 0, "no path search after the last step");
 		assert.ok(seaSearches > 0, "supply route searched");
+		assert.ok(searchSteps > seaSearches, "land routes searched");
 	} finally {
+		state.dominantSideMap = ownership;
 		state._navalPlan[supplySide] = savedPlan;
 		searchNames.forEach((name, index) => {
 			state[name] = savedSearches[index];
 		});
 	}
 
-	// Cities the side takes, or that pass to a non-hostile owner, after their
-	// capture proposals were recorded are dropped once generation finishes.
+	// Targets the side takes, or that pass to a non-hostile owner, after their
+	// offensive proposals were recorded are dropped once generation finishes.
 	const takerSide = state.sides.findIndex((side) => side.length > 0);
-	const captureAfterChange = (change) => {
+	const proposalsAfterChange = (type, change) => {
 		const savedTick = state._simTickCount;
-		const restore = [];
+		let undo = () => {};
 		try {
 			const steps = generate(takerSide);
 			let step = steps.next();
-			// The first zero-work step follows the capture and naval sections.
+			// The first zero-work step follows the land and naval offensives.
 			while (!step.done && step.value !== 0) step = steps.next();
 			state._simTickCount++;
-			for (const city of state.activeTheaterCities) restore.push(change(city));
+			undo = change();
 			while (!step.done) step = steps.next();
-			return step.value.filter((proposal) => proposal.type === "CAPTURE_CITY");
+			return step.value.filter((proposal) => proposal.type === type);
 		} finally {
 			state._simTickCount = savedTick;
-			for (const undo of restore.reverse()) undo();
+			undo();
 		}
 	};
-	assert.ok(captureAfterChange(() => () => {}).length > 0, "capture targets");
-	const taken = captureAfterChange((city) => {
-		const idx = state.getGridIndex(city.lat, city.lng);
-		const side = state.dominantSideMap[idx];
-		state.dominantSideMap[idx] = takerSide;
+	const holdCells = (cells) => () => {
+		const before = cells.map((idx) => state.dominantSideMap[idx]);
+		for (const idx of cells) state.dominantSideMap[idx] = takerSide;
 		return () => {
-			state.dominantSideMap[idx] = side;
+			for (let i = cells.length - 1; i >= 0; i--)
+				state.dominantSideMap[cells[i]] = before[i];
 		};
-	});
-	assert.deepEqual(taken, [], "captured targets are dropped");
+	};
+	const cellOf = (point) => state.getGridIndex(point.lat, point.lng);
+	const unchanged = () => () => {};
+	assert.ok(proposalsAfterChange("CAPTURE_CITY", unchanged).length > 0);
+	const cityCells = state.activeTheaterCities.map(cellOf);
+	assert.deepEqual(
+		proposalsAfterChange("CAPTURE_CITY", holdCells(cityCells)),
+		[],
+		"captured targets are dropped",
+	);
 	const ally = state.sides[takerSide][0].id;
-	const handedOver = captureAfterChange((city) => {
-		const owner = city.ownerId;
-		city.ownerId = ally;
+	const handedOver = proposalsAfterChange("CAPTURE_CITY", () => {
+		const owners = state.activeTheaterCities.map((city) => city.ownerId);
+		for (const city of state.activeTheaterCities) city.ownerId = ally;
 		return () => {
-			city.ownerId = owner;
+			state.activeTheaterCities.forEach((city, i) => {
+				city.ownerId = owners[i];
+			});
 		};
 	});
 	assert.deepEqual(handedOver, [], "targets now held by a friend are dropped");
+	const pushes = proposalsAfterChange("PUSH_FRONT", unchanged);
+	assert.ok(pushes.length > 0, "front pushes proposed");
+	assert.deepEqual(
+		proposalsAfterChange(
+			"PUSH_FRONT",
+			holdCells(pushes.map((p) => cellOf(p.target))),
+		),
+		[],
+		"front pushes aimed at taken ground are dropped",
+	);
 
 	// A formation that stepped off the coast this tick still has a stale
 	// isAtSea flag; it must not be offered for land orders.
@@ -244,5 +290,5 @@ try {
 }
 
 console.log(
-	"AI stall budgets: 60 coverage selections match full sorts, budgeted multi-tick proposal runs charge every path search, restart on coalition changes and drop targets taken or handed to a friend, and at-sea formations excluded from land orders",
+	"AI stall budgets: 60 coverage selections match full sorts, budgeted multi-tick proposal runs charge every path search and map pass separately, restart on coalition changes and drop targets taken or handed to a friend, and at-sea formations excluded from land orders",
 );

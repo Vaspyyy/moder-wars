@@ -105,8 +105,9 @@ export function createAiPlanExecutor(context) {
 		return result;
 	}
 
-	// Bounded searches (paths, front assessments, world scans) per tick. Work is
-	// counted, never timed, so a seeded war makes the same decisions on any CPU.
+	// Units of proposal work (bounded searches, front assessments, passes over
+	// the map, cities or units) per tick. Work is counted, never timed, so a
+	// seeded war makes the same decisions on any CPU.
 	const PROPOSAL_WORK_PER_TICK = 2;
 	let proposalJob = null;
 

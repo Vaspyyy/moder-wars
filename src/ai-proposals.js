@@ -181,7 +181,11 @@ export function createAiProposalPipeline(context) {
 			context._tickCountryToSideMap.get(countryId);
 		switch (proposal.type) {
 			case "PUSH_FRONT":
-				return hostile(proposal.targetSideIndex);
+				return (
+					context.dominantSideMap[
+						context.getGridIndex(target.lat, target.lng)
+					] !== sideIdx && hostile(proposal.targetSideIndex)
+				);
 			case "ENCIRCLE":
 				return hostile(
 					context.dominantSideMap[context.getGridIndex(target.lat, target.lng)],
@@ -212,8 +216,9 @@ export function createAiProposalPipeline(context) {
 
 	/**
 	 * Generate every proposal for one side as a resumable sequence. Each yield
-	 * reports the bounded searches completed since the previous yield, so callers
-	 * can spread one reassessment across ticks without consulting the clock.
+	 * reports the work completed since the previous yield, one unit per bounded
+	 * search or pass over the map, cities or units, so callers can spread one
+	 * reassessment across ticks without consulting the clock.
 	 */
 	function* generateProposalSteps(sideIdx) {
 		const startTick = context._simTickCount;
@@ -257,6 +262,7 @@ export function createAiProposalPipeline(context) {
 			uLat /= uCount;
 			uLng /= uCount;
 		}
+		yield 1;
 
 		// Proposal arrows only need to know whether sampled enemy land exists.
 		let hasEnemyTerritory = false;
@@ -389,6 +395,7 @@ export function createAiProposalPipeline(context) {
 			})
 			.sort((a, b) => b._sortScore - a._sortScore)
 			.slice(0, 12);
+		yield 1;
 
 		for (const ec of prioritizedEnemyCities) {
 			// Score proximity to frontline
@@ -535,6 +542,7 @@ export function createAiProposalPipeline(context) {
 					esLng += col * CONFIG.GRID_RES - 180;
 					esCount++;
 				}
+				yield 1;
 				if (esCount === 0) continue;
 				esLat /= esCount;
 				esLng /= esCount;
@@ -637,6 +645,7 @@ export function createAiProposalPipeline(context) {
 				}
 			}
 		}
+		yield 1;
 
 		if (
 			friendlyCoastCells.length > 0 &&
@@ -911,7 +920,7 @@ export function createAiProposalPipeline(context) {
 			}
 		}
 
-		yield 0;
+		yield 1;
 		// ── Exclave reinforcement ──
 		// For each country on this side, detect territory not land-connected
 		// to the capital (exclaves) and generate supply runs to reinforce them.
@@ -965,6 +974,7 @@ export function createAiProposalPipeline(context) {
 					}
 				}
 				reachabilityScratch.release(qTail);
+				yield 1;
 				// Sample-scan for unreachable exclaves with enemy adjacency
 				for (const country of sideCountries) {
 					const exclaveCells = [];
@@ -1002,6 +1012,7 @@ export function createAiProposalPipeline(context) {
 							});
 						}
 					}
+					yield 1;
 					if (exclaveCells.length < 5) continue;
 
 					// Centroid of exclave
@@ -1065,7 +1076,6 @@ export function createAiProposalPipeline(context) {
 				}
 			}
 		}
-		yield 1;
 		// ── Friendly-only reachability for waypoint routing ──
 		// Compute which cells are reachable from side capitals through friendly-only
 		// territory (not neutral/enemy). Used to route units around neutral blocks.
@@ -1109,8 +1119,10 @@ export function createAiProposalPipeline(context) {
 			}
 		}
 		reachabilityScratch.release(fqTail);
-		// Add waypoints for land proposals whose targets are blocked by neutral territory
-		for (const p of proposals) {
+		yield 1;
+		// Add waypoints for land proposals whose targets are blocked by neutral
+		// territory. With no friendly-reachable cell there is nothing to route to.
+		for (const p of fqTail > 0 ? proposals : []) {
 			if (
 				p.type !== "CAPTURE_CITY" &&
 				p.type !== "ENCIRCLE" &&
@@ -1165,6 +1177,7 @@ export function createAiProposalPipeline(context) {
 					bestLng = clng;
 				}
 			}
+			yield 1;
 			if (bestDist < Infinity) {
 				p._waypoints = [
 					...(p._waypoints || []),
@@ -1172,7 +1185,6 @@ export function createAiProposalPipeline(context) {
 				];
 			}
 		}
-		yield 1;
 		// ── 9. TRANSPORT proposals ──
 		// Find units stranded far from the frontline and propose fast transport to front.
 		// Simulates railways/logistics — prevents large countries from losing due to
@@ -1199,6 +1211,7 @@ export function createAiProposalPipeline(context) {
 						targetFrontCounts.set(key, (targetFrontCounts.get(key) || 0) + 1);
 					}
 				}
+				yield 1;
 				if (strandedCount >= 5) {
 					strandedLat /= strandedCount;
 					strandedLng /= strandedCount;
