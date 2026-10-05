@@ -188,6 +188,42 @@ try {
 		});
 	}
 
+	// Cities the side takes while its generation is suspended, after they were
+	// chosen as targets, are dropped before the proposals are scored.
+	const takerSide = state.sides.findIndex((side) => side.length > 0);
+	const savedTick = state._simTickCount;
+	const findLand = state.findLandPathSummary;
+	const taken = new Map();
+	let pathing = false;
+	try {
+		state.findLandPathSummary = (...args) => {
+			pathing = true;
+			return findLand(...args);
+		};
+		const steps = generate(takerSide);
+		let step = steps.next();
+		while (!step.done && !pathing) step = steps.next();
+		assert.ok(pathing, "capture targets chosen");
+		state._simTickCount++;
+		for (const city of state.activeTheaterCities) {
+			const idx = state.getGridIndex(city.lat, city.lng);
+			if (idx === -1 || taken.has(idx)) continue;
+			taken.set(idx, state.dominantSideMap[idx]);
+			state.dominantSideMap[idx] = takerSide;
+		}
+		while (!step.done) step = steps.next();
+		const stale = step.value.filter(
+			(proposal) =>
+				proposal.type === "CAPTURE_CITY" &&
+				taken.has(state.getGridIndex(proposal.target.lat, proposal.target.lng)),
+		);
+		assert.deepEqual(stale, [], "captured targets are dropped");
+	} finally {
+		state.findLandPathSummary = findLand;
+		state._simTickCount = savedTick;
+		for (const [idx, side] of taken) state.dominantSideMap[idx] = side;
+	}
+
 	// A formation that stepped off the coast this tick still has a stale
 	// isAtSea flag; it must not be offered for land orders.
 	const unit = state.units.find((u) => u.health > 0 && u.deployTicks <= 0);
@@ -204,5 +240,5 @@ try {
 }
 
 console.log(
-	"AI stall budgets: 60 coverage selections match full sorts, budgeted multi-tick proposal runs charge every path search and restart on coalition changes, and at-sea formations excluded from land orders",
+	"AI stall budgets: 60 coverage selections match full sorts, budgeted multi-tick proposal runs charge every path search, restart on coalition changes and drop captured targets, and at-sea formations excluded from land orders",
 );

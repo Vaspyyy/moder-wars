@@ -169,12 +169,38 @@ export function createAiProposalPipeline(context) {
 		return selected;
 	}
 
+	const OFFENSIVE_PROPOSALS = new Set([
+		"CAPTURE_CITY",
+		"ENCIRCLE",
+		"PUSH_FRONT",
+		"NAVAL_INVASION",
+	]);
+
+	/** An offensive target must still be enemy-held and its owner still hostile. */
+	function isProposalTargetCurrent(sideIdx, proposal) {
+		if (!OFFENSIVE_PROPOSALS.has(proposal.type)) return true;
+		const idx = context.getGridIndex(proposal.target.lat, proposal.target.lng);
+		// A front push aims at the enemy's centroid, which need not be its land.
+		if (
+			proposal.type !== "PUSH_FRONT" &&
+			context.dominantSideMap[idx] === sideIdx
+		)
+			return false;
+		const targetSide =
+			proposal.targetSideIndex ??
+			context._tickCountryToSideMap.get(context.worldControlMap[idx]);
+		return (
+			targetSide !== undefined && context.areSidesHostile(sideIdx, targetSide)
+		);
+	}
+
 	/**
 	 * Generate every proposal for one side as a resumable sequence. Each yield
 	 * reports the bounded searches completed since the previous yield, so callers
 	 * can spread one reassessment across ticks without consulting the clock.
 	 */
 	function* generateProposalSteps(sideIdx) {
+		const startTick = context._simTickCount;
 		const proposals = [];
 		const sideCountries = context.sides[sideIdx] || [];
 		if (sideCountries.length === 0) return proposals;
@@ -1200,6 +1226,12 @@ export function createAiProposalPipeline(context) {
 				}
 			}
 		}
+		// Targets taken, or owners at peace, while the generation was suspended
+		// would install plans against ground the side already holds.
+		if (context._simTickCount !== startTick)
+			return proposals.filter((proposal) =>
+				isProposalTargetCurrent(sideIdx, proposal),
+			);
 		return proposals;
 	}
 	function generateAllProposals(sideIdx) {
