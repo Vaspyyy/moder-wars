@@ -6,7 +6,7 @@ The active simulation owner runs all strategic decisions and movement. Browser m
 
 `src/ai-runtime.js` composes the pure command, navigation and encirclement modules through its owner context. No new core module imports `main.js`, reads the DOM or accesses the browser. The worker runs the same core as the offline fixtures.
 
-Normal operational updates process one due side per tick, with at least 15 ticks between updates to a side. Front geometry and threat attribution refresh every 60 ticks. Explicit world/lifecycle changes can force updates to all sides. Proposal reassessment retains its existing interval and forced cooldown. Route failures request side-specific reassessment at most once per 300 ticks; they do not dirty every side every frame.
+Normal operational updates process one due side per tick, with at least 15 ticks between updates to a side. Front geometry and threat attribution refresh every 60 ticks. Explicit world/lifecycle changes can force updates to all sides. Proposal reassessment retains its existing interval and forced cooldown. One side's proposals are generated at a time, resuming across ticks with at most two bounded searches (a land or sea path, an encirclement test, one front's assessment or one world scan) per tick; the side keeps its queue slot until its proposals are scored and applied. The budget counts work, never time, so seeded wars stay deterministic. Route failures request side-specific reassessment at most once per 300 ticks; they do not dirty every side every frame.
 
 Full acknowledged ownership transfers retain orders, sector IDs, recovery flags, task-force membership, bounded route segments and explanations. Shared route fields are ephemeral and rebuild under their normal budget after a transfer. Diplomacy clears obsolete command assignments before repartitioning the world. Presentation snapshots carry bounded diagnostics through the existing debug-plan channel, without raw geography or navigation fields.
 
@@ -73,6 +73,7 @@ node --experimental-vm-modules scripts/module-graph-smoke.mjs
 node scripts/army-overhaul-smoke.mjs
 node scripts/ai-operations-smoke.mjs
 node scripts/ai-retreat-smoke.mjs
+node scripts/ai-stall-budget-smoke.mjs
 node scripts/simulation-worker-smoke.mjs
 node scripts/observer-overlay-smoke.mjs
 node scripts/render-passes-smoke.mjs

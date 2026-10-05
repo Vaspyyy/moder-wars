@@ -105,13 +105,85 @@ export function createAiPlanExecutor(context) {
 		return result;
 	}
 
+	// Bounded searches (paths, front assessments, world scans) per tick. Work is
+	// counted, never timed, so a seeded war makes the same decisions on any CPU.
+	const PROPOSAL_WORK_PER_TICK = 2;
+	let proposalJob = null;
+
+	function isProposalJobCurrent(job) {
+		return (
+			job.pending === context._pendingProposalSides &&
+			job.sides === context.sides &&
+			job.sideCountries === context.sides[job.sideIdx] &&
+			context._pendingProposalSides[0] === job.sideIdx
+		);
+	}
+
+	/**
+	 * Advance the head side's proposal generation by one tick's work budget.
+	 * The side stays queued until its proposals are complete; the finished
+	 * proposals are returned once, otherwise null.
+	 */
+	function advanceProposalJob() {
+		if (proposalJob && !isProposalJobCurrent(proposalJob)) {
+			// The world or side changed under the job: restart from current state.
+			if (proposalJob.pending === context._pendingProposalSides)
+				context._planReassessNeeded[proposalJob.sideIdx] ||=
+					proposalJob.forceReplace;
+			proposalJob = null;
+		}
+		if (!proposalJob) {
+			while (context._pendingProposalSides.length > 0) {
+				const si = context._pendingProposalSides[0];
+				if (context.sides[si] && context.sides[si].length > 0) break;
+				context._pendingProposalSides.shift();
+				context._pendingProposalSideSet.delete(si);
+			}
+			const si = context._pendingProposalSides[0];
+			if (si === undefined) return null;
+			perf.proposalRuns++;
+			proposalJob = {
+				sideIdx: si,
+				pending: context._pendingProposalSides,
+				sides: context.sides,
+				sideCountries: context.sides[si],
+				forceReplace: !!context._planReassessNeeded[si],
+				steps: context.generateProposalSteps(si),
+			};
+			context._planReassessNeeded[si] = false;
+		}
+		const job = proposalJob;
+		let work = 0;
+		let step;
+		try {
+			do {
+				step = job.steps.next();
+				if (!step.done) work += step.value || 0;
+			} while (!step.done && work < PROPOSAL_WORK_PER_TICK);
+		} catch (error) {
+			proposalJob = null;
+			context._pendingProposalSides.shift();
+			context._pendingProposalSideSet.delete(job.sideIdx);
+			throw error;
+		}
+		if (!step.done) return null;
+		proposalJob = null;
+		context._pendingProposalSides.shift();
+		context._pendingProposalSideSet.delete(job.sideIdx);
+		return {
+			sideIdx: job.sideIdx,
+			forceReplace: job.forceReplace,
+			proposals: step.value,
+		};
+	}
+
 	function evaluateAllPlans() {
 		// ── Reassessment: run the proposal pipeline when triggers fire ──
 		const _tp = clockNow();
-		// Detect all sides that need new plans, but only generate proposals for one
-		// side per simulation tick. Proposal generation contains bounded pathfinding
-		// and coastal analysis; spreading it across ticks prevents several coalitions
-		// from creating the same main-thread spike without changing queue order.
+		// Detect all sides that need new plans, then generate proposals for one side
+		// at a time. Each side's bounded searches are spread across ticks by
+		// advanceProposalJob, so neither several coalitions nor one large side
+		// create a single-tick spike; queue order is unchanged.
 		for (let si = 0; si < context.sides.length; si++) {
 			if (!context.sides[si] || context.sides[si].length === 0) continue;
 			if (context._pendingProposalSideSet.has(si)) continue;
@@ -121,145 +193,134 @@ export function createAiPlanExecutor(context) {
 			}
 		}
 
-		const si = context._pendingProposalSides.shift();
-		if (si !== undefined) {
-			context._pendingProposalSideSet.delete(si);
-			if (context.sides[si] && context.sides[si].length > 0) {
-				perf.proposalRuns++;
-				const forceReplace = !!context._planReassessNeeded[si];
-
-				context._planReassessNeeded[si] = false;
-				const proposals = context.generateAllProposals(si);
-
-				// Score each proposal
-				const scoringBatch = {};
-				for (const p of proposals) {
-					p.priority = context.scoreProposal(p, si, scoringBatch);
-				}
-
-				// Select and apply plans
-				const selected = context.selectPlans(si, proposals);
-
-				// Apply land plans to _warPlan slots
-				// Only overwrite on forced reassessment; otherwise fill gaps
-
-				if (selected.land1 && !context._warPlan[si]) {
-					context._warPlan[si] = selected.land1;
-				}
-				if (selected.land2) {
-					const lSlot2 = si + context.sides.length;
-					if (!context._warPlan[lSlot2]) {
-						context._warPlan[lSlot2] = selected.land2;
-					}
-				}
-
-				// Apply naval / supply plans — naval plans have their own lifecycle
-				// and should not be force-replaced just because a land plan triggered reassessment
-				if (selected.naval) {
-					if (!context._navalPlan[si]) {
-						context._navalPlan[si] = selected.naval;
-					} else if (forceReplace) {
-						// Only replace if current naval plan is truly stalled (>1200 ticks no progress)
-						const nptsp =
-							context.simFrameCount -
-							(context._navalPlan[si].lastProgressTick ||
-								context.simFrameCount);
-						const nptss =
-							context.simFrameCount -
-							(context._navalPlan[si].startedTick || context.simFrameCount);
-						if (nptsp > 1200 && nptss > 1200) {
-							for (const u of context._tickUnitsBySide[si] || []) {
-								if (u.navalAssigned) {
-									u.navalAssigned = false;
-									u.isTransport = false;
-								}
-							}
-							context._navalPlan[si] = selected.naval;
-						}
-					}
-				}
-				if (selected.supply && !context._navalSupplyPlan[si]) {
-					context._navalSupplyPlan[si] = selected.supply;
-				}
-
-				// Apply coastal defense plans
-				if (selected.coastal && selected.coastal.length > 0) {
-					for (let ci = 0; ci < selected.coastal.length; ci++) {
-						const slot = si * 10 + ci;
-						context._coastalDefensePlan[slot] = selected.coastal[ci];
-					}
-				}
-
-				// Apply neutral garrison plans
-				if (selected.garrisons && selected.garrisons.length > 0) {
-					for (let gi = 0; gi < selected.garrisons.length; gi++) {
-						const slot = si * 10 + gi;
-						context._neutralGarrisonPlan[slot] = selected.garrisons[gi];
-					}
-				}
-
-				// Apply transport plan
-				if (selected.transport) {
-					if (!context._transportPlan[si] || forceReplace) {
-						context._transportPlan[si] = selected.transport;
-					}
-				}
-
-				// Track failed proposals (standard reassessment interval handles retry)
-				if (!context._warPlan[si]) {
-					perf.proposalFailed++;
-				}
-
-				const selectedDebugPlans = [
-					selected.land1,
-					selected.land2,
-					selected.naval,
-					selected.defend,
-					selected.transport,
-				].filter(Boolean);
-				const selectedDebugSignatures = new Set(
-					selectedDebugPlans.map(
-						(p) => p.signature || context.getPlanSignature(si, p),
-					),
-				);
-				context._aiDebugPlans[si] = {
-					army: context._aiDebugPlans[si]?.army,
-					tick: context.simFrameCount,
-					strategy: context.getSideStrategyProfile(si).dominant,
-					selected: {
-						land1: selected.land1,
-						land2: selected.land2,
-						naval: selected.naval,
-						defend: selected.defend,
-						transport: selected.transport,
-					},
-					topRejected: proposals
-						.filter(
-							(p) =>
-								!selectedDebugSignatures.has(context.getPlanSignature(si, p)),
-						)
-						.sort((a, b) => (b.priority || 0) - (a.priority || 0))
-						.slice(0, 5)
-						.map((p) => ({
-							type: p.type,
-							target: p.target?.name || "",
-							priority: p.priority || 0,
-							theaterId: p.theaterId,
-							scoreBreakdown: p.scoreBreakdown,
-						})),
-					fronts: (context._frontIntelBySide[si] || [])
-						.slice(0, 4)
-						.map((f) => ({
-							pairKey: f.pairKey,
-							enemySide: f.enemySide,
-							localRatio: f.localRatio,
-							pressureScore: f.pressureScore,
-							friendlies: f.friendlies,
-							enemies: f.enemies,
-						})),
-				};
-				context._proposalReassessTick[si] = context._simTickCount;
+		const finished = advanceProposalJob();
+		if (finished) {
+			const { sideIdx: si, forceReplace, proposals } = finished;
+			// Score each proposal
+			const scoringBatch = {};
+			for (const p of proposals) {
+				p.priority = context.scoreProposal(p, si, scoringBatch);
 			}
+
+			// Select and apply plans
+			const selected = context.selectPlans(si, proposals);
+
+			// Apply land plans to _warPlan slots
+			// Only overwrite on forced reassessment; otherwise fill gaps
+
+			if (selected.land1 && !context._warPlan[si]) {
+				context._warPlan[si] = selected.land1;
+			}
+			if (selected.land2) {
+				const lSlot2 = si + context.sides.length;
+				if (!context._warPlan[lSlot2]) {
+					context._warPlan[lSlot2] = selected.land2;
+				}
+			}
+
+			// Apply naval / supply plans — naval plans have their own lifecycle
+			// and should not be force-replaced just because a land plan triggered reassessment
+			if (selected.naval) {
+				if (!context._navalPlan[si]) {
+					context._navalPlan[si] = selected.naval;
+				} else if (forceReplace) {
+					// Only replace if current naval plan is truly stalled (>1200 ticks no progress)
+					const nptsp =
+						context.simFrameCount -
+						(context._navalPlan[si].lastProgressTick || context.simFrameCount);
+					const nptss =
+						context.simFrameCount -
+						(context._navalPlan[si].startedTick || context.simFrameCount);
+					if (nptsp > 1200 && nptss > 1200) {
+						for (const u of context._tickUnitsBySide[si] || []) {
+							if (u.navalAssigned) {
+								u.navalAssigned = false;
+								u.isTransport = false;
+							}
+						}
+						context._navalPlan[si] = selected.naval;
+					}
+				}
+			}
+			if (selected.supply && !context._navalSupplyPlan[si]) {
+				context._navalSupplyPlan[si] = selected.supply;
+			}
+
+			// Apply coastal defense plans
+			if (selected.coastal && selected.coastal.length > 0) {
+				for (let ci = 0; ci < selected.coastal.length; ci++) {
+					const slot = si * 10 + ci;
+					context._coastalDefensePlan[slot] = selected.coastal[ci];
+				}
+			}
+
+			// Apply neutral garrison plans
+			if (selected.garrisons && selected.garrisons.length > 0) {
+				for (let gi = 0; gi < selected.garrisons.length; gi++) {
+					const slot = si * 10 + gi;
+					context._neutralGarrisonPlan[slot] = selected.garrisons[gi];
+				}
+			}
+
+			// Apply transport plan
+			if (selected.transport) {
+				if (!context._transportPlan[si] || forceReplace) {
+					context._transportPlan[si] = selected.transport;
+				}
+			}
+
+			// Track failed proposals (standard reassessment interval handles retry)
+			if (!context._warPlan[si]) {
+				perf.proposalFailed++;
+			}
+
+			const selectedDebugPlans = [
+				selected.land1,
+				selected.land2,
+				selected.naval,
+				selected.defend,
+				selected.transport,
+			].filter(Boolean);
+			const selectedDebugSignatures = new Set(
+				selectedDebugPlans.map(
+					(p) => p.signature || context.getPlanSignature(si, p),
+				),
+			);
+			context._aiDebugPlans[si] = {
+				army: context._aiDebugPlans[si]?.army,
+				tick: context.simFrameCount,
+				strategy: context.getSideStrategyProfile(si).dominant,
+				selected: {
+					land1: selected.land1,
+					land2: selected.land2,
+					naval: selected.naval,
+					defend: selected.defend,
+					transport: selected.transport,
+				},
+				topRejected: proposals
+					.filter(
+						(p) =>
+							!selectedDebugSignatures.has(context.getPlanSignature(si, p)),
+					)
+					.sort((a, b) => (b.priority || 0) - (a.priority || 0))
+					.slice(0, 5)
+					.map((p) => ({
+						type: p.type,
+						target: p.target?.name || "",
+						priority: p.priority || 0,
+						theaterId: p.theaterId,
+						scoreBreakdown: p.scoreBreakdown,
+					})),
+				fronts: (context._frontIntelBySide[si] || []).slice(0, 4).map((f) => ({
+					pairKey: f.pairKey,
+					enemySide: f.enemySide,
+					localRatio: f.localRatio,
+					pressureScore: f.pressureScore,
+					friendlies: f.friendlies,
+					enemies: f.enemies,
+				})),
+			};
+			context._proposalReassessTick[si] = context._simTickCount;
 		}
 		perf.proposals = (perf.proposals || 0) + clockNow() - _tp;
 
