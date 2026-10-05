@@ -157,9 +157,8 @@ export function createMapInput(runtime) {
 	}
 
 	function bindMapPaintMousemove() {
+		// bindMapCoordinatesMousemove owns the coalesced coordinate HUD.
 		runtime.map.on("mousemove", (e) => {
-			runtime.coordsDisplay.textContent = `${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`;
-
 			// While dragging reference image handles, ignore painting logic entirely.
 			const targetEl = e.originalEvent?.target;
 			if (targetEl?.closest(".ref-handle, .ref-handle-center")) {

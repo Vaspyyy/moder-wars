@@ -202,6 +202,12 @@ export function bindCameraInput(map: MapCamera, clock: InputClock = {}) {
 		if (!pointers.has(event.pointerId)) return;
 		const previous = pointers.get(event.pointerId) ?? new Point(0, 0);
 		pointers.set(event.pointerId, p);
+		// Editor strokes disable dragging but must still count as movement, so
+		// releasing one does not also fire a map click.
+		if (!pinching) {
+			const travel = p.subtract(dragStart);
+			if (Math.hypot(travel.x, travel.y) > 3) moved = true;
+		}
 		if (!map.dragging.enabled()) return;
 		if (pinching) {
 			const [a, b] = [...pointers.values()];
@@ -221,7 +227,6 @@ export function bindCameraInput(map: MapCamera, clock: InputClock = {}) {
 			return;
 		}
 		pending = p.subtract(dragStart);
-		if (Math.hypot(pending.x, pending.y) > 3) moved = true;
 		const dt = Math.max(1, now() - last);
 		velocity = p.subtract(previous).divideBy(dt);
 		last = now();

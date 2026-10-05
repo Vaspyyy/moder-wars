@@ -165,7 +165,9 @@ const previousRequest = globalThis.requestAnimationFrame;
 const previousCancel = globalThis.cancelAnimationFrame;
 globalThis.requestAnimationFrame = requestFrame;
 globalThis.cancelAnimationFrame = cancelFrame;
-createMapInput({ map, coordsDisplay }).bindMapCoordinatesMousemove();
+const mapInput = createMapInput({ map, coordsDisplay, isPainting: false });
+mapInput.bindMapCoordinatesMousemove();
+mapInput.bindMapPaintMousemove();
 const controls = bindCameraInput(map, {
 	now: () => time,
 	requestFrame,
@@ -291,11 +293,17 @@ emit("pointercancel");
 step();
 controls.destroy();
 if (!measure) {
+	const firstWrite = metrics.hudWrites;
 	map.fire("mousemove", { latlng: { lat: 1, lng: 2 } });
 	map.fire("mousemove", { latlng: { lat: 3, lng: 4 } });
 	assert.equal(callbacks.size, 1);
 	step();
 	assert.equal(coordsDisplay.textContent, "3.0000, 4.0000");
+	assert.equal(
+		metrics.hudWrites,
+		firstWrite + 1,
+		"paint and coordinate handlers share one HUD write per frame",
+	);
 	const before = metrics.hudWrites;
 	map.fire("mousemove", { latlng: { lat: 3, lng: 4 } });
 	step();

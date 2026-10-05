@@ -158,6 +158,8 @@ assert.equal(frames.size, 0);
 assert.equal(starts, ends);
 // Editor handlers get first ownership of each stroke, and pointer capture survives leaving the viewport.
 map.on("mousedown", () => map.dragging.disable());
+let clicks = 0;
+map.on("click", () => clicks++);
 const center = map.getCenter();
 element.emit("pointerdown");
 assert.ok(element.captures.has(1));
@@ -166,6 +168,11 @@ step();
 assert.deepEqual(map.getCenter(), center);
 element.emit("pointerup", { clientX: 1200 });
 assert.equal(element.captures.size, 0);
+assert.equal(clicks, 0, "an editor stroke is not a click");
+element.emit("pointerdown");
+element.emit("pointermove", { clientX: 482 });
+element.emit("pointerup", { clientX: 482 });
+assert.equal(clicks, 1, "a stationary editor tap still clicks");
 map.dragging.enable();
 // A reference handle neither pans the map nor changes its zoom.
 const zoom = map.getZoom();
