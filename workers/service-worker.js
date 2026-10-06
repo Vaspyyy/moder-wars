@@ -1,6 +1,6 @@
 // Service Worker — versioned offline shell plus persistent runtime data cache
 
-const CACHE_VERSION = "mw-v0.27.60";
+const CACHE_VERSION = "mw-v0.27.61";
 const APP_SHELL_PREFIX = "mw-app-shell-";
 const RUNTIME_PREFIX = "mw-runtime-";
 const LEGACY_CACHE_PREFIX = "mw-cache-";
@@ -107,6 +107,7 @@ const APP_SHELL_PATHS = [
 	"styles/style.css",
 	"assets/images/title-map.svg",
 	"assets/atlas/coast-110m.bin.gz",
+	"assets/atlas/coast-50m.bin.gz",
 	"workers/geo-parse-worker.js",
 	"workers/geo-raster-worker.js",
 	"workers/scenario-worker.js",

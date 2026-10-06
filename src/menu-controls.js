@@ -466,7 +466,7 @@ export function createMenuControls(runtime) {
 	function bindPresetDefaultBtnClick() {
 		runtime.presetDefaultBtn.addEventListener("click", () => {
 			runtime.settingsController.apply({
-				"map-res-select": "110m",
+				"map-res-select": "50m",
 				"grid-res-select": "0.1",
 				"unit-limit-select": "250",
 				"disable-country-gradient-checkbox": false,
