@@ -26,11 +26,23 @@ export function createAiReachabilityScratch() {
 	};
 }
 
+// One integer per whole-degree cell, matching the former "lat_lng" string key.
+function coastalDegreeKey(lat, lng) {
+	return (Math.floor(lat) + 90) * 400 + Math.floor(lng) + 180;
+}
+
 /** createAiProposalPipeline owns AI behavior and receives current world state through explicit accessors. */
 export function createAiProposalPipeline(context) {
 	const CONFIG = context.CONFIG || DEFAULT_CONFIG;
 	const reachabilityScratch = createAiReachabilityScratch();
 	function buildFrontIntel(sideIdx) {
+		const steps = buildFrontIntelSteps(sideIdx);
+		let step = steps.next();
+		while (!step.done) step = steps.next();
+		return step.value;
+	}
+	/** Front assessment yields after each front's local-force samples. */
+	function* buildFrontIntelSteps(sideIdx) {
 		const fronts = [];
 		const keys = Object.keys(context._frontlinePolys || {});
 		for (const key of keys) {
@@ -127,6 +139,7 @@ export function createAiProposalPipeline(context) {
 				friendlyCitiesThreatened,
 				pressureScore,
 			});
+			yield 1;
 		}
 		fronts.sort((a, b) => b.pressureScore - a.pressureScore);
 		context._frontIntelBySide[sideIdx] = fronts;
@@ -156,7 +169,67 @@ export function createAiProposalPipeline(context) {
 		return selected;
 	}
 
-	function generateAllProposals(sideIdx) {
+	/**
+	 * Re-apply the selection test of an offensive proposal to the current map,
+	 * using its target's current owner rather than the one recorded at selection,
+	 * and point a surviving city capture at that owner. A front push's aim is the
+	 * centroid of the enemy's land and may lie off it, so only a change of hands
+	 * since `aimSide` was read makes it stale.
+	 */
+	function refreshProposalTarget(sideIdx, proposal, aimSide) {
+		const { target } = proposal;
+		const hostile = (ownerSide) =>
+			ownerSide !== undefined && context.areSidesHostile(sideIdx, ownerSide);
+		const ownerSideOf = (countryId) =>
+			context._tickCountryToSideMap.get(countryId);
+		switch (proposal.type) {
+			case "PUSH_FRONT": {
+				const heldBy =
+					context.dominantSideMap[context.getGridIndex(target.lat, target.lng)];
+				return (
+					hostile(proposal.targetSideIndex) &&
+					(heldBy === aimSide || hostile(heldBy))
+				);
+			}
+			case "ENCIRCLE":
+				return hostile(
+					context.dominantSideMap[context.getGridIndex(target.lat, target.lng)],
+				);
+			case "NAVAL_INVASION": {
+				const idx = context.getGridIndex(target.lat, target.lng);
+				return (
+					context.dominantSideMap[idx] !== sideIdx &&
+					hostile(ownerSideOf(context.worldControlMap[idx]))
+				);
+			}
+			case "CAPTURE_CITY": {
+				const idx = context.getGridIndex(target.lat, target.lng);
+				const city = context.activeTheaterCities.find(
+					(candidate) =>
+						candidate.lat === target.lat && candidate.lng === target.lng,
+				);
+				const ownerSide = city && ownerSideOf(city.ownerId);
+				if (context.dominantSideMap[idx] === sideIdx || !hostile(ownerSide))
+					return false;
+				// Plans judge hostility by these, so a handover must not leave them stale.
+				proposal.targetCountryId = city.ownerId;
+				target.ownerId = city.ownerId;
+				proposal.targetSideIndex = ownerSide;
+				return true;
+			}
+			default:
+				return true;
+		}
+	}
+
+	/**
+	 * Generate every proposal for one side as a resumable sequence. Each yield
+	 * reports the work completed since the previous yield, one unit per bounded
+	 * search or pass over the map, cities or units, so callers can spread one
+	 * reassessment across ticks without consulting the clock.
+	 */
+	function* generateProposalSteps(sideIdx) {
+		const startTick = context._simTickCount;
 		const proposals = [];
 		const sideCountries = context.sides[sideIdx] || [];
 		if (sideCountries.length === 0) return proposals;
@@ -167,7 +240,7 @@ export function createAiProposalPipeline(context) {
 		if (unitCount < 3) return proposals;
 
 		const myAllyIds = new Set(sideCountries.map((c) => c.id));
-		const frontIntel = buildFrontIntel(sideIdx);
+		const frontIntel = yield* buildFrontIntelSteps(sideIdx);
 		const landPathCache = new Map();
 		const getLandPath = (startIdx, targetIdx) => {
 			const key = `${startIdx}:${targetIdx}`;
@@ -197,25 +270,18 @@ export function createAiProposalPipeline(context) {
 			uLat /= uCount;
 			uLng /= uCount;
 		}
+		yield 1;
 
-		// Enemy territory centroid
-		let _eLat = 0,
-			_eLng = 0,
-			eCount = 0;
+		// Proposal arrows only need to know whether sampled enemy land exists.
+		let hasEnemyTerritory = false;
 		for (let i = 0; i < context.dominantSideMap.length; i += 20) {
 			if (context.landMask[i] === 0) continue;
 			if (context.areSidesHostile(sideIdx, context.dominantSideMap[i])) {
-				const row = Math.floor(i / context.gridWidth);
-				const col = i % context.gridWidth;
-				_eLat += row * CONFIG.GRID_RES - 90;
-				_eLng += col * CONFIG.GRID_RES - 180;
-				eCount++;
+				hasEnemyTerritory = true;
+				break;
 			}
 		}
-		if (eCount > 0) {
-			_eLat /= eCount;
-			_eLng /= eCount;
-		}
+		yield 1;
 
 		// Friendly coastal staging cells (for naval proposals)
 		let friendlyCoastCells = [];
@@ -233,16 +299,18 @@ export function createAiProposalPipeline(context) {
 			coastalIndex += coastalStride
 		) {
 			const gi = context._coastalLandIndices[coastalIndex];
+			if (context.dominantSideMap[gi] !== sideIdx) continue;
 			const row = Math.floor(gi / context.gridWidth);
 			const col = gi % context.gridWidth;
 			const lat = row * CONFIG.GRID_RES - 90;
 			const lng = col * CONFIG.GRID_RES - 180;
-			const key = `${Math.floor(lat)}_${Math.floor(lng)}`;
-			if (context.dominantSideMap[gi] !== sideIdx) continue;
+			const key = coastalDegreeKey(lat, lng);
 			if (sampledFriendly.has(key)) continue;
 			sampledFriendly.add(key);
 			friendlyCoastCells.push({ lat, lng, idx: gi });
 		}
+
+		yield 1;
 
 		// Enemy coastal tiles (for naval and coastal defense)
 		for (
@@ -265,11 +333,12 @@ export function createAiProposalPipeline(context) {
 			const col = gi % context.gridWidth;
 			const lat = row * CONFIG.GRID_RES - 90;
 			const lng = col * CONFIG.GRID_RES - 180;
-			const key = `${Math.floor(lat)}_${Math.floor(lng)}`;
+			const key = coastalDegreeKey(lat, lng);
 			if (sampledEnemy.has(key)) continue;
 			sampledEnemy.add(key);
 			enemyCoastalTiles.push({ lat, lng, idx: gi });
 		}
+		yield 1;
 		// Strategic proposals need geographic coverage, not every coastal grid cell.
 		// Keep a deterministic world-order sample so quadratic zone and distance
 		// checks stay bounded even for large coalitions with continental coastlines.
@@ -334,6 +403,7 @@ export function createAiProposalPipeline(context) {
 			})
 			.sort((a, b) => b._sortScore - a._sortScore)
 			.slice(0, 12);
+		yield 1;
 
 		for (const ec of prioritizedEnemyCities) {
 			// Score proximity to frontline
@@ -347,6 +417,7 @@ export function createAiProposalPipeline(context) {
 				};
 			const sourceIdx = context.getGridIndex(source.lat, source.lng);
 			const path = getLandPath(sourceIdx, ec.idx);
+			yield 1;
 
 			// Skip if bounded land pathing cannot reach this target.
 			if (!path.reachable) continue;
@@ -370,7 +441,7 @@ export function createAiProposalPipeline(context) {
 				},
 				stagingCells: [],
 				arrowPoints:
-					uCount > 0 && eCount > 0
+					uCount > 0 && hasEnemyTerritory
 						? [
 								{ lat: source.lat, lng: source.lng },
 								{ lat: ec.city.lat, lng: ec.city.lng },
@@ -418,6 +489,7 @@ export function createAiProposalPipeline(context) {
 					continue;
 				encirclementTests++;
 				const operation = findArmyEncirclement(context, sideIdx, cell);
+				yield 1;
 				if (!operation) continue;
 				proposals.push({
 					type: "ENCIRCLE",
@@ -463,6 +535,7 @@ export function createAiProposalPipeline(context) {
 			}
 		}
 		// Generate a PUSH_FRONT proposal for each land-connected enemy side
+		const pushAimSides = new Map();
 		if (uCount > 0 && landConnectedEnemySides.size > 0) {
 			for (const enemySide of landConnectedEnemySides) {
 				// Compute centroid of this specific enemy side's territory
@@ -478,9 +551,14 @@ export function createAiProposalPipeline(context) {
 					esLng += col * CONFIG.GRID_RES - 180;
 					esCount++;
 				}
+				if (esCount > 0) {
+					esLat /= esCount;
+					esLng /= esCount;
+				}
+				const aimSide =
+					context.dominantSideMap[context.getGridIndex(esLat, esLng)];
+				yield 1;
 				if (esCount === 0) continue;
-				esLat /= esCount;
-				esLng /= esCount;
 
 				const front =
 					frontIntel.find((f) => f.enemySide === enemySide) ||
@@ -490,6 +568,7 @@ export function createAiProposalPipeline(context) {
 					context.getGridIndex(source.lat, source.lng),
 					context.getGridIndex(esLat, esLng),
 				);
+				yield 1;
 				if (!path.reachable) continue;
 				const local = context.estimateLocalForces(
 					sideIdx,
@@ -525,6 +604,7 @@ export function createAiProposalPipeline(context) {
 					},
 					_waypoints: path.waypoints || [],
 				});
+				pushAimSides.set(proposals.at(-1), aimSide);
 			}
 		}
 
@@ -579,6 +659,7 @@ export function createAiProposalPipeline(context) {
 				}
 			}
 		}
+		yield 1;
 
 		if (
 			friendlyCoastCells.length > 0 &&
@@ -634,6 +715,7 @@ export function createAiProposalPipeline(context) {
 				const seaStart = context.findNearestSeaIdx(bestStaging.idx);
 				const seaTarget = context.findNearestSeaIdx(et.idx);
 				const seaPath = context.findSeaPathSummary(seaStart, seaTarget);
+				yield 1;
 				if (!seaPath.reachable) continue;
 				minSeaDist = Math.max(
 					minSeaDist,
@@ -684,6 +766,7 @@ export function createAiProposalPipeline(context) {
 				const targetIdx = context.getGridIndex(np.target.lat, np.target.lng);
 				const seaTarget = context.findNearestSeaIdx(targetIdx);
 				const seaPath = context.findSeaPathSummary(seaStart, seaTarget);
+				yield 1;
 				if (seaPath.reachable) {
 					proposals.push({
 						type: "NAVAL_SUPPLY",
@@ -714,6 +797,7 @@ export function createAiProposalPipeline(context) {
 			}
 		}
 
+		yield 0;
 		// ── 7. COASTAL_DEFENSE proposals ──
 		if (friendlyCoastCells.length > 0 && enemyCoastalTiles.length > 0) {
 			// Cluster friendly coast cells into contiguous zones
@@ -850,6 +934,7 @@ export function createAiProposalPipeline(context) {
 			}
 		}
 
+		yield 1;
 		// ── Exclave reinforcement ──
 		// For each country on this side, detect territory not land-connected
 		// to the capital (exclaves) and generate supply runs to reinforce them.
@@ -903,6 +988,7 @@ export function createAiProposalPipeline(context) {
 					}
 				}
 				reachabilityScratch.release(qTail);
+				yield 1;
 				// Sample-scan for unreachable exclaves with enemy adjacency
 				for (const country of sideCountries) {
 					const exclaveCells = [];
@@ -940,6 +1026,7 @@ export function createAiProposalPipeline(context) {
 							});
 						}
 					}
+					yield 1;
 					if (exclaveCells.length < 5) continue;
 
 					// Centroid of exclave
@@ -1046,8 +1133,10 @@ export function createAiProposalPipeline(context) {
 			}
 		}
 		reachabilityScratch.release(fqTail);
-		// Add waypoints for land proposals whose targets are blocked by neutral territory
-		for (const p of proposals) {
+		yield 1;
+		// Add waypoints for land proposals whose targets are blocked by neutral
+		// territory. With no friendly-reachable cell there is nothing to route to.
+		for (const p of fqTail > 0 ? proposals : []) {
 			if (
 				p.type !== "CAPTURE_CITY" &&
 				p.type !== "ENCIRCLE" &&
@@ -1102,6 +1191,7 @@ export function createAiProposalPipeline(context) {
 					bestLng = clng;
 				}
 			}
+			yield 1;
 			if (bestDist < Infinity) {
 				p._waypoints = [
 					...(p._waypoints || []),
@@ -1135,6 +1225,7 @@ export function createAiProposalPipeline(context) {
 						targetFrontCounts.set(key, (targetFrontCounts.get(key) || 0) + 1);
 					}
 				}
+				yield 1;
 				if (strandedCount >= 5) {
 					strandedLat /= strandedCount;
 					strandedLng /= strandedCount;
@@ -1178,12 +1269,25 @@ export function createAiProposalPipeline(context) {
 				}
 			}
 		}
+		// Targets taken, or owners at peace, while the generation was suspended
+		// would install plans against ground the side already holds.
+		if (context._simTickCount !== startTick)
+			return proposals.filter((proposal) =>
+				refreshProposalTarget(sideIdx, proposal, pushAimSides.get(proposal)),
+			);
 		return proposals;
+	}
+	function generateAllProposals(sideIdx) {
+		const steps = generateProposalSteps(sideIdx);
+		let step = steps.next();
+		while (!step.done) step = steps.next();
+		return step.value;
 	}
 	return {
 		buildFrontIntel,
 		findNearestFront,
 		selectEvenlySpaced,
+		generateProposalSteps,
 		generateAllProposals,
 	};
 }

@@ -46,19 +46,22 @@ export function buildDirectionField({
 	let qHead = 0;
 	let qTail = 0;
 
+	// Same-side and unowned neighbors are never hostile; skip the relation
+	// lookup for them, since nearly every land cell is interior.
+	const isHostileNeighbor = (mySide, neighbor) => {
+		const otherSide = dominantSideMap[neighbor];
+		return otherSide !== mySide && otherSide >= 0 && hostile(mySide, otherSide);
+	};
 	for (let i = 0; i < total; i++) {
 		if (landMask[i] !== 2) continue;
 		const mySide = dominantSideMap[i];
 		if (mySide < 0) continue;
 		const x = i % gridWidth;
-		let isFront = x < gridWidth - 1 && hostile(mySide, dominantSideMap[i + 1]);
-		if (!isFront && x > 0) isFront = hostile(mySide, dominantSideMap[i - 1]);
-		if (!isFront && i + gridWidth < total) {
-			isFront = hostile(mySide, dominantSideMap[i + gridWidth]);
-		}
-		if (!isFront && i >= gridWidth) {
-			isFront = hostile(mySide, dominantSideMap[i - gridWidth]);
-		}
+		const isFront =
+			(x < gridWidth - 1 && isHostileNeighbor(mySide, i + 1)) ||
+			(x > 0 && isHostileNeighbor(mySide, i - 1)) ||
+			(i + gridWidth < total && isHostileNeighbor(mySide, i + gridWidth)) ||
+			(i >= gridWidth && isHostileNeighbor(mySide, i - gridWidth));
 		if (isFront) {
 			queue[qTail++] = i;
 			sourceCell[i] = i;
@@ -107,31 +110,35 @@ function collectFrontierSets({
 }) {
 	const total = gridWidth * gridHeight;
 	const frontierSets = new Map();
+	// East, west, south, north; the first hostile neighbor pairs with the cell.
+	const isFrontNeighbor = (side, neighbor) => {
+		if (landMask[neighbor] !== 2) return false;
+		const otherSide = dominantSideMap[neighbor];
+		return otherSide !== side && otherSide >= 0 && hostile(side, otherSide);
+	};
 	for (let i = 0; i < total; i++) {
 		if (landMask[i] !== 2) continue;
 		const side = dominantSideMap[i];
 		if (side < 0) continue;
 		const x = i % gridWidth;
-		const neighbors = [];
-		if (x < gridWidth - 1) neighbors.push(i + 1);
-		if (x > 0) neighbors.push(i - 1);
-		if (i + gridWidth < total) neighbors.push(i + gridWidth);
-		if (i >= gridWidth) neighbors.push(i - gridWidth);
-		for (const neighbor of neighbors) {
-			if (landMask[neighbor] !== 2) continue;
-			const otherSide = dominantSideMap[neighbor];
-			if (!hostile(side, otherSide)) continue;
-			const key =
-				side < otherSide ? `${side}_${otherSide}` : `${otherSide}_${side}`;
-			let cells = frontierSets.get(key);
-			if (!cells) {
-				cells = new Set();
-				frontierSets.set(key, cells);
-			}
-			cells.add(i);
-			cells.add(neighbor);
-			break;
+		let neighbor = -1;
+		if (x < gridWidth - 1 && isFrontNeighbor(side, i + 1)) neighbor = i + 1;
+		else if (x > 0 && isFrontNeighbor(side, i - 1)) neighbor = i - 1;
+		else if (i + gridWidth < total && isFrontNeighbor(side, i + gridWidth))
+			neighbor = i + gridWidth;
+		else if (i >= gridWidth && isFrontNeighbor(side, i - gridWidth))
+			neighbor = i - gridWidth;
+		if (neighbor === -1) continue;
+		const otherSide = dominantSideMap[neighbor];
+		const key =
+			side < otherSide ? `${side}_${otherSide}` : `${otherSide}_${side}`;
+		let cells = frontierSets.get(key);
+		if (!cells) {
+			cells = new Set();
+			frontierSets.set(key, cells);
 		}
+		cells.add(i);
+		cells.add(neighbor);
 	}
 	return frontierSets;
 }
@@ -315,8 +322,12 @@ function assignFrontlineSlots(polylines, units, sideCount) {
 
 	const distanceCache = new Map();
 	const distanceToFront = (unit, key) => {
-		const cacheKey = `${unit.id}|${key}`;
-		const cached = distanceCache.get(cacheKey);
+		let frontCache = distanceCache.get(key);
+		if (!frontCache) {
+			frontCache = new Map();
+			distanceCache.set(key, frontCache);
+		}
+		const cached = frontCache.get(unit);
 		if (cached) return cached;
 		let bestDistSq = Infinity;
 		let bestIndex = 0;
@@ -333,7 +344,7 @@ function assignFrontlineSlots(polylines, units, sideCount) {
 			}
 		}
 		const result = { distSq: bestDistSq, nearestIndex: bestIndex };
-		distanceCache.set(cacheKey, result);
+		frontCache.set(unit, result);
 		return result;
 	};
 
@@ -414,25 +425,24 @@ function assignFrontlineSlots(polylines, units, sideCount) {
 		for (const [key, bucket] of assigned) {
 			const polyline = polylines[key];
 			if (!polyline?.length || bucket.length === 0) continue;
-			bucket.sort((a, b) => {
-				const aIndex =
-					a.previousPairKey === key
-						? a.previousSegmentIdx || 0
-						: distanceToFront(a, key).nearestIndex;
-				const bIndex =
-					b.previousPairKey === key
-						? b.previousSegmentIdx || 0
-						: distanceToFront(b, key).nearestIndex;
-				return aIndex - bIndex;
-			});
+			// Resolve each unit's position along the front once, not per comparison.
+			const ordered = bucket
+				.map((unit) => ({
+					unit,
+					index:
+						unit.previousPairKey === key
+							? unit.previousSegmentIdx || 0
+							: distanceToFront(unit, key).nearestIndex,
+				}))
+				.sort((a, b) => a.index - b.index);
 			const step = polyline.length / bucket.length;
-			for (let i = 0; i < bucket.length; i++) {
+			for (let i = 0; i < ordered.length; i++) {
 				const segmentIdx = Math.min(
 					polyline.length - 1,
 					Math.floor((i + 0.5) * step),
 				);
 				const point = polyline[segmentIdx];
-				Object.assign(assignmentById.get(bucket[i].id), {
+				Object.assign(assignmentById.get(ordered[i].unit.id), {
 					pairKey: key,
 					segmentIdx,
 					targetLat: point.lat,

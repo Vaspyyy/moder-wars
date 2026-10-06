@@ -143,6 +143,47 @@ export function buildArmySectors(
 
 // Coverage is allocated before offensive recruitment. Sticky positions receive a
 // travel discount; wounded formations rotate out rather than hold an attack slot.
+const rankBefore = (a, b) => (a.cost - b.cost || a.id.localeCompare(b.id)) < 0;
+
+// The first `count` unused entries in (cost, id) order, sorted. A bounded
+// max-heap keeps this O(n log count) instead of sorting the whole army for
+// every sector.
+function selectNearest(pool, used, count) {
+	if (count <= 0) return [];
+	const heap = [];
+	const siftDown = (index) => {
+		const item = heap[index];
+		for (;;) {
+			let child = index * 2 + 1;
+			if (child >= heap.length) break;
+			if (child + 1 < heap.length && rankBefore(heap[child], heap[child + 1]))
+				child++;
+			if (!rankBefore(item, heap[child])) break;
+			heap[index] = heap[child];
+			index = child;
+		}
+		heap[index] = item;
+	};
+	for (const entry of pool) {
+		if (used.has(entry.id)) continue;
+		if (heap.length < count) {
+			let index = heap.length;
+			heap.push(entry);
+			while (index > 0) {
+				const parent = (index - 1) >> 1;
+				if (!rankBefore(heap[parent], entry)) break;
+				heap[index] = heap[parent];
+				index = parent;
+			}
+			heap[index] = entry;
+		} else if (rankBefore(entry, heap[0])) {
+			heap[0] = entry;
+			siftDown(0);
+		}
+	}
+	return heap.sort((a, b) => a.cost - b.cost || a.id.localeCompare(b.id));
+}
+
 export function allocateArmyCoverage(sectors, units, posture = "BALANCED") {
 	const available = units.filter(
 		(u) => u.deployed !== false && u.commandEligible !== false && u.health > 0,
@@ -197,18 +238,19 @@ export function allocateArmyCoverage(sectors, units, posture = "BALANCED") {
 					);
 		sector.desiredCount++;
 	}
+	const pool = healthy.map((unit) => ({ unit, id: String(unit.id), cost: 0 }));
+	const armyPower = healthy.reduce((sum, unit) => sum + power(unit), 0);
 	for (const sector of ordered) {
-		const candidates = healthy
-			.filter((u) => !used.has(String(u.id)))
-			.sort((a, b) => {
-				const cost = (u) =>
-					armyDistanceSq(u, sector.hold) *
-						(u.sectorId === sector.id ? 0.45 : 1) +
-					(u.taskForceId ? 0.5 : 0);
-				return cost(a) - cost(b) || String(a.id).localeCompare(String(b.id));
-			});
-		for (const unit of candidates.slice(0, sector.desiredCount)) {
-			used.add(String(unit.id));
+		for (const entry of pool) {
+			const unit = entry.unit;
+			entry.cost =
+				armyDistanceSq(unit, sector.hold) *
+					(unit.sectorId === sector.id ? 0.45 : 1) +
+				(unit.taskForceId ? 0.5 : 0);
+		}
+		const candidates = selectNearest(pool, used, sector.desiredCount);
+		for (const { unit, id } of candidates) {
+			used.add(id);
 			sector.assignedUnitIds.push(unit.id);
 			sector.assignedPower += power(unit);
 			allocations.push({
@@ -219,7 +261,6 @@ export function allocateArmyCoverage(sectors, units, posture = "BALANCED") {
 					sector.enemyPower > 0 ? "SECTOR_UNDER_PRESSURE" : "FRONT_COVERAGE",
 			});
 		}
-		const armyPower = healthy.reduce((sum, unit) => sum + power(unit), 0);
 		sector.requiredPower = Math.max(
 			(armyPower * share * sector.priority) / Math.max(1, totalWeight),
 			sector.enemyPower * 0.75,

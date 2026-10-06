@@ -761,6 +761,7 @@ const applicationRuntime = createLiveContext(
 		_pendingProposalSides: () => _pendingProposalSides,
 		_pendingProposalSideSet: () => _pendingProposalSideSet,
 		generateAllProposals: () => generateAllProposals,
+		generateProposalSteps: () => generateProposalSteps,
 		NAVAL_STALL_TICKS: () => NAVAL_STALL_TICKS,
 		scoreProposal: () => scoreProposal,
 		selectPlans: () => selectPlans,
@@ -5821,7 +5822,8 @@ const {
 } = aiRuntime;
 
 const aiProposalPipeline = createAiProposalPipeline(applicationRuntime);
-export const { generateAllProposals } = aiProposalPipeline;
+export const { generateAllProposals, generateProposalSteps } =
+	aiProposalPipeline;
 
 /**
  * Proposal Engine: generate every possible plan candidate for a side.
