@@ -357,4 +357,19 @@ unitBucket.splice(unitBucket.indexOf(variableUnit), 1);
 paint();
 assert.equal(badgeCalls, badgeCallsBeforeRemoval, "removed units no longer participate in badge lookup");
 
+// The merged GPU path shares main's flag resolution and load notification but
+// leaves presized Canvas sprites to the fallback renderer.
+const markers = [];
+const gpuLayer = { _gpu: { active: true, beginMarkers() {}, endMarkers() {}, marker(unit, source) { markers.push([unit.id, source]); return true; } } };
+const gpuSurfaceCount = unitSurfaces.length;
+const gpuDrawCount = mainDrawCalls.length;
+drawUnits.call(gpuLayer, frame);
+assert.deepEqual(markers, [[ordinaryUnit.id, liveCanvasFlag]]);
+assert.equal(unitSurfaces.length, gpuSurfaceCount, "GPU flags do not also build Canvas sprites");
+assert.equal(mainDrawCalls.length, gpuDrawCount, "GPU markers do not also paint fallback flags");
+gpuLayer._gpu.active = false;
+gpuLayer._gpu.marker = () => false;
+drawUnits.call(gpuLayer, frame);
+assert.equal(unitSurfaces.length, gpuSurfaceCount + 1, "Canvas fallback retains the new sprite cache");
+
 console.log("Unit sprite and badge cache smoke checks passed");

@@ -3,20 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://esm.sh 'sha256-UbZTXngprJmMtanNXRwZ5Pi9M0w7gaPwpxlWfxaufYA='; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.websim.ai https://*.websim.com https://*.arcgisonline.com https://*.google.com wss:; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self';">
-    <title>MW-V0.27.59</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://esm.sh; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.websim.ai https://*.websim.com wss:; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self';">
+    <title>MW-V0.27.60</title>
     <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
-    <script type="importmap">
-      {
-        "imports": {
-          "leaflet": "https://esm.sh/leaflet@1.9.4",
-          "jszip": "https://esm.sh/jszip@3.10.1"
-        }
-      }
-    </script>
-    <link rel="modulepreload" href="src/main.js">
 </head>
 <body>
     <div id="map"></div>
@@ -96,16 +86,7 @@
 </div><button class="mini-btn" id="benchmark-btn">BENCHMARK</button></div>
 <!-- Presets Tab -->
 <!-- Visuals Tab -->
-<div class="settings-tab-pane" id="settings-tab-vis" style="display:none"><div class="setting-group">
-<label>Style</label>
-<select id="imagery-select">
-<option selected="" value="atlas">Atlas (Menu Style)</option>
-<option value="arcgis">ArcGIS World Imagery</option>
-<option value="google">Google Earth (No Video Recording)</option>
-<option value="google_cartoon">Google Maps (Standard View)</option>
-<option value="wargames">Simplified Mode</option>
-</select>
-</div><div class="setting-group"><label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+<div class="settings-tab-pane" id="settings-tab-vis" style="display:none"><div class="setting-group"><label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
 <input id="disable-country-gradient-checkbox" style="width: 18px; height: 18px; " type="checkbox"/>
 <span>Disable Country Gradient</span>
 </label></div><div class="setting-group"><label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
@@ -1372,8 +1353,7 @@
 
 
 
-    <script src="src/bootstrap.js"></script>
-    <script type="module" src="src/main.js"></script>
+    <script type="module" src="src/entry.js"></script>
 
 <div id="benchmark-results" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:9999; align-items:center; justify-content:center;">
     <div style="background:#111; padding:32px 48px; border-radius:4px; border:1px solid rgba(0,255,0,0.3); text-align:center;">

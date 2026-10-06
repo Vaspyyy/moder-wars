@@ -18,7 +18,7 @@ const annexRuntime = {
 	worldControlMap: annexWorld, landMask: new Uint8Array(8).fill(1), provinceMap: new Int32Array(8),
 	countryMetadata: [{ id: 1 }, { id: 2 }],
 	loadingStatus: {}, loadingOverlay: { style: {} },
-	L: { geoJSON: () => ({ getBounds: () => ({ getSouth: () => -90, getNorth: () => -88, getWest: () => -180, getEast: () => -178 }) }) },
+	mapRuntime: { geoJSON: () => ({ getBounds: () => ({ getSouth: () => -90, getNorth: () => -88, getWest: () => -180, getEast: () => -178 }) }) },
 	isPointInFeature: (_lat, lng) => lng < -178, getProvinceId: (_x, _y, id) => id,
 	RENDER_LAYERS: layers,
 	influenceLayer: { invalidate: (mask) => annexCalls.push(["invalidate", mask]), render: () => annexCalls.push(["render"]) },

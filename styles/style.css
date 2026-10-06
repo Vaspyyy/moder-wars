@@ -1414,19 +1414,21 @@ body.use-system-font .scroller-card-name {
 	font-size: 12px;
 }
 
-/* Map Overrides */
-.leaflet-container {
-	/* Pitch black base to ensure the canvas gradient is the primary visual */
-	background: #000;
+/* The native camera owns the map container and all gesture transforms. */
+.mw-map {
+	position: relative;
+	overflow: hidden;
+	touch-action: none;
+	user-select: none;
+	background: #142332;
 }
-
-.leaflet-control-attribution {
-	display: none;
+.mw-map-pane {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
 }
-
-/* The wheel controller already eases every frame. CSS easing would add lag. */
-.mw-smooth-zoom .leaflet-zoom-animated {
-	transition: none;
+.mw-map-surface {
+	pointer-events: none;
 }
 
 /* Custom Marker Styles */

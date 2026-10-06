@@ -557,6 +557,7 @@ export function drawUnits(frame) {
 		}
 	});
 
+	this._gpu?.beginMarkers();
 	// Draw units - Small flags for land, ships for water
 	if (showUnitsVisually) {
 		const currentZoom = map.getZoom();
@@ -653,7 +654,7 @@ export function drawUnits(frame) {
 				watchRenderFlagLoad(flag, this, requestFlagRender);
 			const ready = isRenderFlagReady(flag);
 			let sprite = null;
-			if (ready) {
+			if (ready && !this._gpu?.active) {
 				if (spritesBySource.has(flag)) {
 					sprite = spritesBySource.get(flag);
 				} else {
@@ -689,15 +690,22 @@ export function drawUnits(frame) {
 			const mountainIntensity = u.mountainIntensity || 0;
 
 			if (isAtSea) {
-				// Draw a simple ship icon
-				ctx.fillStyle = sideColors[u.sideIndex].replace(rgbaRe, "1)");
-				ctx.beginPath();
-				ctx.moveTo(p.x - w / 2, p.y + h / 4);
-				ctx.lineTo(p.x + w / 2, p.y + h / 4);
-				ctx.lineTo(p.x + w / 4, p.y + h / 2);
-				ctx.lineTo(p.x - w / 4, p.y + h / 2);
-				ctx.closePath();
-				ctx.fill();
+				const gpuMarker = this._gpu?.marker(
+					u,
+					null,
+					sideColors[u.sideIndex].replace(rgbaRe, "1)"),
+				);
+				if (!gpuMarker) {
+					// Draw a simple ship icon
+					ctx.fillStyle = sideColors[u.sideIndex].replace(rgbaRe, "1)");
+					ctx.beginPath();
+					ctx.moveTo(p.x - w / 2, p.y + h / 4);
+					ctx.lineTo(p.x + w / 2, p.y + h / 4);
+					ctx.lineTo(p.x + w / 4, p.y + h / 2);
+					ctx.lineTo(p.x - w / 4, p.y + h / 2);
+					ctx.closePath();
+					ctx.fill();
+				}
 				// Sail
 				ctx.beginPath();
 				ctx.moveTo(p.x, p.y + h / 4);
@@ -710,7 +718,12 @@ export function drawUnits(frame) {
 				const sw = w;
 				const sh = h;
 				const { flag, ready, sprite } = resolveUnitFlag(u.sovereignId);
-				if (ready) {
+				const gpuMarker = this._gpu?.marker(
+					u,
+					flag || null,
+					sideColors[u.sideIndex].replace(rgbaRe, "1)"),
+				);
+				if (!gpuMarker && ready) {
 					if (sprite) {
 						const ratio = Number.isFinite(dpr) && dpr > 0 ? dpr : 1;
 						// The DPR-scaled destination matches the sprite's bitmap pixels 1:1.
@@ -727,7 +740,7 @@ export function drawUnits(frame) {
 						ctx.lineWidth = Math.max(0.3, 0.3 * zoomScale);
 						ctx.strokeRect(p.x - sw / 2, p.y - sh / 2, sw, sh);
 					}
-				} else {
+				} else if (!gpuMarker) {
 					ctx.fillStyle = sideColors[u.sideIndex].replace(rgbaRe, "1)");
 					ctx.fillRect(p.x - sw / 2, p.y - sh / 2, sw, sh);
 				}
@@ -815,6 +828,7 @@ export function drawUnits(frame) {
 		});
 	}
 
+	this._gpu?.endMarkers();
 	// PASS 5: Battle Clusters (Sword Emojis) - Viewport Culled
 	if (isWar && showBattleIndicators) {
 		const zoomScale = 1.3 ** (map.getZoom() - 3);

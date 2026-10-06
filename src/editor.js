@@ -40,30 +40,66 @@ import {
 import { createScenarioLoader } from "./scenario-loader.js";
 
 const loadSession = { generation: 0 };
-const loaderContext = Object.create(runtime);
-const geographyLoader = createGeographyLoader(loaderContext, loadSession);
-Object.defineProperties(
-	loaderContext,
-	Object.fromEntries(
-		Object.entries(geographyLoader).map(([name, value]) => [name, { value }]),
-	),
-);
-const scenarioLoader = createScenarioLoader(loaderContext, loadSession);
-Object.defineProperties(
-	loaderContext,
-	Object.fromEntries(
-		Object.entries(scenarioLoader).map(([name, value]) => [name, { value }]),
-	),
-);
-const { updateLandMask, loadTerrain, loadCountries, ensureRawGeography } =
-	geographyLoader;
-const {
-	generatePresetData,
-	performPresetLoad,
-	loadScenarioForCountryImportFromBlob,
-	loadScenarioForCountryImportFromUrl,
-	importSingleCountryFromScenario,
-} = scenarioLoader;
+let loaders;
+
+function getLoaders() {
+	if (loaders) return loaders;
+	// main imports this module before its bundled namespace is initialized.
+	// Construct on the first load, after startup; retain live owner bindings.
+	const loaderContext = Object.create(runtime);
+	const geographyLoader = createGeographyLoader(loaderContext, loadSession);
+	Object.defineProperties(
+		loaderContext,
+		Object.fromEntries(
+			Object.entries(geographyLoader).map(([name, value]) => [name, { value }]),
+		),
+	);
+	const scenarioLoader = createScenarioLoader(loaderContext, loadSession);
+	Object.defineProperties(
+		loaderContext,
+		Object.fromEntries(
+			Object.entries(scenarioLoader).map(([name, value]) => [name, { value }]),
+		),
+	);
+	loaders = { ...geographyLoader, ...scenarioLoader };
+	return loaders;
+}
+
+function updateLandMask(...args) {
+	return getLoaders().updateLandMask(...args);
+}
+
+function loadTerrain(...args) {
+	return getLoaders().loadTerrain(...args);
+}
+
+function loadCountries(...args) {
+	return getLoaders().loadCountries(...args);
+}
+
+function ensureRawGeography(...args) {
+	return getLoaders().ensureRawGeography(...args);
+}
+
+function generatePresetData(...args) {
+	return getLoaders().generatePresetData(...args);
+}
+
+function performPresetLoad(...args) {
+	return getLoaders().performPresetLoad(...args);
+}
+
+function loadScenarioForCountryImportFromBlob(...args) {
+	return getLoaders().loadScenarioForCountryImportFromBlob(...args);
+}
+
+function loadScenarioForCountryImportFromUrl(...args) {
+	return getLoaders().loadScenarioForCountryImportFromUrl(...args);
+}
+
+function importSingleCountryFromScenario(...args) {
+	return getLoaders().importSingleCountryFromScenario(...args);
+}
 
 function updateCountryFlag(countryId, url) {
 	if (countryId <= 0 || !url) return;
