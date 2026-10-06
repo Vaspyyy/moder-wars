@@ -222,6 +222,7 @@ const applicationRuntime = createLiveContext(
 		AI_MOBILIZATION: () => AI_MOBILIZATION,
 		spawnSingleUnit: () => spawnSingleUnit,
 		updateGroundFormation: () => updateGroundFormation,
+		createGroundFormationUpdater: () => createGroundFormationUpdater,
 		evaluateCountryCapitulation: () => evaluateCountryCapitulation,
 		capitulateCountry: () => capitulateCountry,
 		getActiveHostilePairs: () => getActiveHostilePairs,
@@ -1526,7 +1527,10 @@ export { performSimulationTick };
 
 // Shared live binding bridge. Systems receive commands/state without importing main.js.
 
-import { updateGroundFormation } from "./ground-unit.js";
+import {
+	createGroundFormationUpdater,
+	updateGroundFormation,
+} from "./ground-unit.js";
 import { createMenuControls } from "./menu-controls.js";
 
 const menu_controls = createMenuControls(applicationRuntime);

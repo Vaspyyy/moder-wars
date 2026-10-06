@@ -52,12 +52,35 @@ function publish(force = false) {
 		collectTransferBuffers({ units: snapshot.units, tiles: snapshot.tiles }),
 	);
 }
+// A message posted to ourselves yields to queued commands without the 4 ms
+// clamp nested timers get, so a backlog runs back to back instead of idling.
+const wake = new MessageChannel();
+let loop = 0;
+wake.port1.onmessage = ({ data }) => {
+	if (data === loop) turn();
+};
+function stopLoop() {
+	clearTimeout(timer);
+	loop++;
+}
+function schedule() {
+	if (core.state.gameState !== "SIMULATING") return;
+	const { paused, pendingTicks, tickMs, accumulatorMs, speed } =
+		clock.snapshot();
+	if (!paused && pendingTicks > 0) {
+		wake.port2.postMessage(loop);
+		return;
+	}
+	// Sleep until the next tick is due, polling at most every 8 ms.
+	const dueMs = paused ? 8 : (tickMs - accumulatorMs) / speed;
+	timer = setTimeout(turn, Math.min(8, Math.max(1, dueMs)));
+}
 function turn() {
 	if (!core) return;
 	try {
 		clock.pump(performance.now());
 		publish(events.length > 0);
-		if (core.state.gameState === "SIMULATING") timer = setTimeout(turn, 8);
+		schedule();
 	} catch (error) {
 		clock.configure({ paused: true });
 		const state = captureSimulationState(core.state, { denseInfluence: true });
@@ -72,7 +95,7 @@ function turn() {
 self.onmessage = ({ data }) => {
 	try {
 		if (data.type === "INIT") {
-			clearTimeout(timer);
+			stopLoop();
 			epoch = data.epoch;
 			outstanding = false;
 			events.length = 0;
@@ -125,7 +148,7 @@ self.onmessage = ({ data }) => {
 			core.command(data.command);
 			publish(true);
 		} else if (data.type === "HANDOFF") {
-			clearTimeout(timer);
+			stopLoop();
 			clock.configure({ paused: true });
 			const state = captureSimulationState(core.state, {
 				denseInfluence: true,

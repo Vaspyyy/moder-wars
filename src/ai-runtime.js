@@ -889,12 +889,17 @@ export function createAiRuntime(context) {
 		const forceAll = context._aiOperationsDirty;
 		context._aiLastOperationsTick = context._simTickCount;
 		context._aiOperationsDirty = false;
-		unitIndex.clear();
-		for (const unit of context.units) unitIndex.set(String(unit.id), unit);
-		const unitsById = unitIndex;
-		for (const id of serializedUnitIndex.keys()) {
-			if (!unitsById.has(id)) serializedUnitIndex.delete(id);
-		}
+		// Most ticks process no side, so index units only when one is due.
+		let unitsById = null;
+		const indexUnits = () => {
+			if (unitsById) return;
+			unitIndex.clear();
+			for (const unit of context.units) unitIndex.set(String(unit.id), unit);
+			unitsById = unitIndex;
+			for (const id of serializedUnitIndex.keys()) {
+				if (!unitsById.has(id)) serializedUnitIndex.delete(id);
+			}
+		};
 		const allAssignedUnitIds = new Set();
 		const liveTaskForceIds = new Set();
 		const orderedUnitIds = new Set();
@@ -921,6 +926,7 @@ export function createAiRuntime(context) {
 			}
 			processedSides.add(sideIndex);
 			processedCount++;
+			indexUnits();
 			discardNonHostileOperationalPlans(sideIndex);
 			let selectedPlans = getOperationalSelectedPlans(sideIndex);
 			const emergencyDefense =
@@ -1116,16 +1122,15 @@ export function createAiRuntime(context) {
 				);
 				report.sectorTick = context._simTickCount;
 			}
+			const recoveringUnitIds = new Set();
+			for (const force of previousForces)
+				if (recovering(force))
+					for (const id of force.assignedUnitIds)
+						recoveringUnitIds.add(String(id));
 			const coverage = allocateArmyCoverage(
 				report.sectors,
 				sideSummary.units.map((unit) =>
-					previousForces.some(
-						(force) =>
-							recovering(force) &&
-							force.assignedUnitIds.some(
-								(id) => String(id) === String(unit.id),
-							),
-					)
+					recoveringUnitIds.has(String(unit.id))
 						? { ...unit, commandEligible: false }
 						: unit,
 				),

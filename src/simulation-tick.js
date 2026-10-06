@@ -1449,8 +1449,8 @@ export function createSimulationTick(runtime) {
 			moveDirLat,
 			moveDirLng,
 		};
-		for (let i = runtime.units.length - 1; i >= 0; i--)
-			runtime.updateGroundFormation(groundFrame, i);
+		const updateFormation = runtime.createGroundFormationUpdater(groundFrame);
+		for (let i = runtime.units.length - 1; i >= 0; i--) updateFormation(i);
 
 		// A side can keep fighting at zero reserve, but it cannot recruit new formations.
 		perf.unitLoop += clockNow() - _t3;

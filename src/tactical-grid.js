@@ -180,11 +180,19 @@ function defaultSide(unit) {
 	return unit?.sideIndex ?? unit?.sideUid ?? unit?.side;
 }
 
+function defaultLat(unit) {
+	return unit?.lat;
+}
+
+function defaultLng(unit) {
+	return unit?.lng;
+}
+
 function normalizeAccessors(options = {}) {
 	return {
 		getSide: options.getSide || defaultSide,
-		getLat: options.getLat || ((unit) => unit?.lat),
-		getLng: options.getLng || ((unit) => unit?.lng),
+		getLat: options.getLat || defaultLat,
+		getLng: options.getLng || defaultLng,
 	};
 }
 
@@ -466,26 +474,31 @@ export function forEachUnorderedNeighborPair(
 	const sortedKeys = [...sideCells.keys()].sort((left, right) => left - right);
 	const getLat = grid.accessors.getLat;
 	const getLng = grid.accessors.getLng;
+	// Inserted units always have finite coordinates, so the default accessors
+	// can be read directly in the pair loop.
+	const directCoordinates = getLat === defaultLat && getLng === defaultLng;
+	const neighborKeys = [];
 
 	for (const sourceKey of sortedKeys) {
 		const sourceCell = sideCells.get(sourceKey);
-		const neighborKeys = new Set();
+		neighborKeys.length = 0;
 		for (let dy = -radiusCells; dy <= radiusCells; dy++) {
 			const y = sourceCell.y + dy;
 			if (y < 0 || y >= grid.rows) continue;
 			for (let dx = -radiusCells; dx <= radiusCells; dx++) {
 				const x =
 					(((sourceCell.x + dx) % grid.columns) + grid.columns) % grid.columns;
-				const neighborKey = tacticalCellKey(x, y, grid.columns);
-				if (neighborKey >= sourceKey && sideCells.has(neighborKey)) {
-					neighborKeys.add(neighborKey);
-				}
+				const neighborKey = y * grid.columns + x;
+				if (neighborKey < sourceKey || !sideCells.has(neighborKey)) continue;
+				// Keep keys sorted and unique; a narrow grid can wrap onto itself.
+				let index = neighborKeys.length;
+				while (index > 0 && neighborKeys[index - 1] > neighborKey) index--;
+				if (index > 0 && neighborKeys[index - 1] === neighborKey) continue;
+				neighborKeys.splice(index, 0, neighborKey);
 			}
 		}
 
-		for (const targetKey of [...neighborKeys].sort(
-			(left, right) => left - right,
-		)) {
+		for (const targetKey of neighborKeys) {
 			const targetCell = sideCells.get(targetKey);
 			if (aggregateCellPair?.(sourceCell, targetCell, radiusSq)) {
 				const count =
@@ -497,30 +510,34 @@ export function forEachUnorderedNeighborPair(
 				result.aggregatedPairs += count;
 				continue;
 			}
-			if (targetKey === sourceKey) {
+			const sourceUnits = sourceCell.units;
+			const targetUnits = targetCell.units;
+			const sameCell = targetKey === sourceKey;
+			for (let leftIndex = 0; leftIndex < sourceUnits.length; leftIndex++) {
+				const left = sourceUnits[leftIndex];
 				for (
-					let leftIndex = 0;
-					leftIndex < sourceCell.units.length;
-					leftIndex++
+					let rightIndex = sameCell ? leftIndex + 1 : 0;
+					rightIndex < targetUnits.length;
+					rightIndex++
 				) {
-					for (
-						let rightIndex = leftIndex + 1;
-						rightIndex < sourceCell.units.length;
-						rightIndex++
-					) {
-						visitCandidatePair(
-							sourceCell.units[leftIndex],
-							sourceCell.units[rightIndex],
-							sourceCell,
-							targetCell,
-						);
-					}
-				}
-			} else {
-				for (const left of sourceCell.units) {
-					for (const right of targetCell.units) {
-						visitCandidatePair(left, right, sourceCell, targetCell);
-					}
+					const right = targetUnits[rightIndex];
+					result.candidatePairs++;
+					let distanceSq;
+					if (directCoordinates) {
+						const dLat = left.lat - right.lat;
+						let dLng = left.lng - right.lng;
+						if (dLng > 180) dLng -= 360;
+						else if (dLng < -180) dLng += 360;
+						distanceSq = dLat * dLat + dLng * dLng;
+					} else distanceSq = wrappedDistanceSq(left, right, getLat, getLng);
+					if (distanceSq > radiusSq) continue;
+					if (
+						acceptPair &&
+						!acceptPair(left, right, distanceSq, sourceCell, targetCell)
+					)
+						continue;
+					result.acceptedPairs++;
+					visitor(left, right, distanceSq, sourceCell, targetCell);
 				}
 			}
 		}
@@ -532,18 +549,4 @@ export function forEachUnorderedNeighborPair(
 		grid.counters.aggregatedPairs += result.aggregatedPairs;
 	}
 	return result;
-
-	function visitCandidatePair(left, right, leftCell, rightCell) {
-		result.candidatePairs++;
-		const distanceSq = wrappedDistanceSq(left, right, getLat, getLng);
-		if (distanceSq > radiusSq) return;
-		if (
-			acceptPair &&
-			!acceptPair(left, right, distanceSq, leftCell, rightCell)
-		) {
-			return;
-		}
-		result.acceptedPairs++;
-		visitor(left, right, distanceSq, leftCell, rightCell);
-	}
 }

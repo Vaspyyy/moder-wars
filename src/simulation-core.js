@@ -11,7 +11,10 @@ import {
 } from "./formation-strength.js";
 import { buildDirectionField, buildLayout } from "./frontline-core.js";
 import { normalizeLongitudeDelta } from "./geographic-math.js";
-import { updateGroundFormation } from "./ground-unit.js";
+import {
+	createGroundFormationUpdater,
+	updateGroundFormation,
+} from "./ground-unit.js";
 import { toSparseInfluenceMap, writeInfluence } from "./influence-grid.js";
 import { createInfluenceRuntime } from "./influence-runtime.js";
 import {
@@ -139,6 +142,7 @@ export function createSimulationCore(
 		forEachNeighborCell,
 		forEachUnorderedNeighborPair,
 		updateGroundFormation,
+		createGroundFormationUpdater,
 		onControlCellsChanged: markChanged,
 		onPoliticalMapChanged: () => {
 			markChanged(null);
@@ -440,5 +444,17 @@ export function createSimulationCore(
 		};
 	}
 
+	// Hundreds of systems are merged into state, which leaves V8 storing it as a
+	// hash table. Every hot-loop read of state then pays a dictionary lookup.
+	// Using it once as a prototype makes V8 rebuild it with fast properties.
+	optimizePropertyAccess(state);
 	return { state, tick, command };
+}
+
+function optimizePropertyAccess(object) {
+	function FastProperties() {}
+	FastProperties.prototype = object;
+	const probe = new FastProperties();
+	// V8 migrates the prototype once the load site has warmed up.
+	for (let i = 0; i < 100; i++) void probe.units;
 }

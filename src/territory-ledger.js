@@ -91,12 +91,15 @@ function positiveInteger(value, fallback = 1) {
 	return Math.max(1, integer(value, fallback));
 }
 
+// Typed-array map reads are already integers; skip the coercion on that path.
 function countryId(value) {
+	if (Number.isInteger(value)) return value > 0 ? value : 0;
 	const id = integer(value, 0);
 	return id > 0 ? id : 0;
 }
 
 function sideIndex(value) {
+	if (Number.isInteger(value)) return value >= 0 ? value : -1;
 	const index = integer(value, -1);
 	return index >= 0 ? index : -1;
 }

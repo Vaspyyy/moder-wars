@@ -8,6 +8,8 @@ export const ARMY_NAVIGATION = Object.freeze({
 	STALL_TICKS: 180,
 });
 
+const FRIENDLY_ORDER_TYPES = new Set(["HOLD", "RESERVE", "WITHDRAW", "SCREEN"]);
+
 export function armyDistanceSq(a, b) {
 	return (a.lat - b.lat) ** 2 + normalizeLongitudeDelta(a.lng - b.lng) ** 2;
 }
@@ -42,20 +44,6 @@ export function createArmyNavigator(context) {
 				controlled != null &&
 				context.areSidesHostile(side, controlled))
 		);
-	}
-	function neighbors(idx) {
-		const width = context.gridWidth;
-		const row = Math.floor(idx / width);
-		const col = idx % width;
-		const result = [];
-		if (col > 0) result.push(idx - 1);
-		else if (width * resolution() >= 359.9)
-			result.push(row * width + width - 1);
-		if (col + 1 < width) result.push(idx + 1);
-		else if (width * resolution() >= 359.9) result.push(row * width);
-		if (row > 0) result.push(idx - width);
-		if (row + 1 < context.gridHeight) result.push(idx + width);
-		return result;
 	}
 	function push(heap, item) {
 		let index = heap.length;
@@ -160,9 +148,31 @@ export function createArmyNavigator(context) {
 					field.exhausted = true;
 					break;
 				}
-				for (const idx of neighbors(current.idx)) {
+				// Entry cost depends only on the expanded cell, so it is shared by
+				// all four neighbors. Visit order: west, east, south row, north row.
+				const width = context.gridWidth;
+				const row = Math.floor(current.idx / width);
+				const col = current.idx % width;
+				const wraps = width * resolution() >= 359.9;
+				let cost = -1;
+				for (let n = 0; n < 4; n++) {
+					let idx;
+					if (n === 0) {
+						if (col > 0) idx = current.idx - 1;
+						else if (wraps) idx = row * width + width - 1;
+						else continue;
+					} else if (n === 1) {
+						if (col + 1 < width) idx = current.idx + 1;
+						else if (wraps) idx = row * width;
+						else continue;
+					} else if (n === 2) {
+						if (row > 0) idx = current.idx - width;
+						else continue;
+					} else if (row + 1 < context.gridHeight) idx = current.idx + width;
+					else continue;
 					if (!passable(idx, field.side, field.friendlyOnly)) continue;
-					const cost = current.cost + entryCost(current.idx, field.side);
+					if (cost < 0)
+						cost = current.cost + entryCost(current.idx, field.side);
 					if (cost >= (field.distance.get(idx) ?? Infinity)) continue;
 					field.distance.set(idx, cost);
 					field.next.set(idx, current.idx);
@@ -238,16 +248,11 @@ export function createArmyNavigator(context) {
 		const start = context.getGridIndex(unit.lat, unit.lng);
 		// A retreat may start on hostile ground; block neutral access, while allowing
 		// the formation to escape to its already validated friendly destination.
-		const friendlyOnly =
-			(order.friendlyOnly ||
-				["HOLD", "RESERVE", "WITHDRAW", "SCREEN"].includes(order.type)) &&
-			owner(start) === unit.sideIndex;
+		const friendlyOrder =
+			order.friendlyOnly || FRIENDLY_ORDER_TYPES.has(order.type);
+		const friendlyOnly = friendlyOrder && owner(start) === unit.sideIndex;
 		const goal = context.getGridIndex(order.target.lat, order.target.lng);
-		if (
-			(order.friendlyOnly ||
-				["HOLD", "RESERVE", "WITHDRAW", "SCREEN"].includes(order.type)) &&
-			owner(goal) !== unit.sideIndex
-		)
+		if (friendlyOrder && owner(goal) !== unit.sideIndex)
 			return { status: "INVALID_DESTINATION" };
 		if (!passable(goal, unit.sideIndex, friendlyOnly))
 			return { status: "INVALID_DESTINATION" };
@@ -278,7 +283,9 @@ export function createArmyNavigator(context) {
 			if (tracking.visits.length > 12) tracking.visits.shift();
 			tracking.lastCell = start;
 		}
-		const loop = tracking.visits.filter((cell) => cell === start).length >= 3;
+		let startVisits = 0;
+		for (const cell of tracking.visits) if (cell === start) startVisits++;
+		const loop = startVisits >= 3;
 		if (
 			(loop || tick - tracking.progressTick >= ARMY_NAVIGATION.STALL_TICKS) &&
 			tick - (unit.lastCombatTick || -999) > 30
@@ -294,12 +301,10 @@ export function createArmyNavigator(context) {
 		const direct =
 			distance <= (resolution() * 12) ** 2 &&
 			clearLine(unit, order.target, unit.sideIndex, friendlyOnly);
+		const pathIndex = direct ? -1 : (tracking.path?.indexOf(start) ?? -1);
 		if (direct) waypoint = order.target;
-		else if (
-			tracking.path?.includes(start) &&
-			tracking.path.indexOf(start) + 1 < tracking.path.length
-		) {
-			const next = tracking.path[tracking.path.indexOf(start) + 1];
+		else if (pathIndex >= 0 && pathIndex + 1 < tracking.path.length) {
+			const next = tracking.path[pathIndex + 1];
 			if (passable(next, unit.sideIndex, friendlyOnly)) {
 				waypoint = point(next);
 				if (!clearLine(unit, waypoint, unit.sideIndex, friendlyOnly))
