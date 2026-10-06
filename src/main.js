@@ -5121,7 +5121,8 @@ function handleCountryClickOwned(
 				.filter(Boolean)
 				.find((c) => c.id === sovereignId);
 			if (sideCountry) {
-				signSelectivePeace(peaceSelection1, sideCountry);
+				// The first nation clicked is the one withdrawing from the war.
+				_signSelectivePeace(sideCountry, peaceSelection1);
 			}
 		}
 		return;
@@ -6165,30 +6166,43 @@ export function openLeaderboard() {
 	leaderboardOverlay.style.display = "flex";
 }
 
+// The simulation stops proposing peace while it believes a notice is on screen,
+// so every change to the notice is pushed to it right away.
+function setTreatyAlertVisible(visible) {
+	treatyAlert.style.display = visible ? "block" : "none";
+	simulationClient.syncControls();
+}
+
 export function showTreatyOffer(proposerSideIdx, willAccept) {
 	lastTreatyTime = Date.now();
 	const name = getSideDisplayName(proposerSideIdx);
 	treatyMsg.innerText = `${name} requests peace`;
-	treatyAlert.style.display = "block";
 	document.getElementById("treaty-status").innerText =
 		"Considering proposal...";
+	setTreatyAlertVisible(true);
 	const token = _warLifecycleToken;
+	// Entering the separate-peace picker pauses the war; the offer lapses then.
+	const offerLapsed = () => {
+		if (gameState === "SIMULATING") return false;
+		if (gameState.startsWith("PEACE_SELECT_")) setTreatyAlertVisible(false);
+		return true;
+	};
 	scheduleWarLifecycleCallback(
 		() => {
-			if (gameState !== "SIMULATING") return;
+			if (offerLapsed()) return;
 			document.getElementById("treaty-status").innerText = willAccept
 				? "Treaty Accepted"
 				: "Proposal Rejected";
 			scheduleWarLifecycleCallback(
 				() => {
-					if (gameState !== "SIMULATING") return;
-					if (willAccept) {
-						if (sides.length > 2) _signSelectiveSideExit(proposerSideIdx);
-						else applyTreaty("PEACE_TREATY");
-					} else {
-						treatyAlert.style.display = "none";
-						lastTreatyTime = Date.now();
+					if (offerLapsed()) return;
+					lastTreatyTime = Date.now();
+					if (willAccept && sides.length <= 2) {
+						applyTreaty("PEACE_TREATY");
+						return;
 					}
+					setTreatyAlertVisible(false);
+					if (willAccept) _signSelectiveSideExit(proposerSideIdx);
 				},
 				1500,
 				token,

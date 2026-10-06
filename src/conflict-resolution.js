@@ -440,8 +440,11 @@ export function createConflictResolution(runtime) {
 		});
 
 		const treatyTransfers = [];
+		// Only the war zone is smoothed, so neutral borders never shift at peace.
+		const warZone = new Uint8Array(runtime.worldControlMap.length);
 		for (let i = 0; i < runtime.worldControlMap.length; i++) {
 			if (runtime.landMask[i] === 2) {
+				warZone[i] = 1;
 				const originalOwner = runtime.worldControlMap[i];
 				const occupierId = runtime.primaryOccupierMap[i];
 				const ds = runtime.dominantSideMap[i];
@@ -497,9 +500,6 @@ export function createConflictResolution(runtime) {
 			}
 		}
 
-		// Re-sync province map to final treaty borders to remove ghost province lines
-		runtime.generateProvinces();
-
 		// High-Performance Organic Border Smoothing: Uses frequency array to avoid GC pressure
 		const smoothingPasses = 3;
 		const maxId = runtime.countryMetadata.reduce(
@@ -525,7 +525,7 @@ export function createConflictResolution(runtime) {
 				const rowIdx = y * runtime.gridWidth;
 				for (let x = 1; x < runtime.gridWidth - 1; x++) {
 					const idx = rowIdx + x;
-					if (runtime.landMask[idx] === 0) continue;
+					if (warZone[idx] === 0 || runtime.landMask[idx] === 0) continue;
 
 					let activeCount = 0;
 					let maxFreq = 0;
@@ -556,6 +556,8 @@ export function createConflictResolution(runtime) {
 			}
 			runtime.worldControlMap.set(tempMap);
 		}
+		// Re-sync province map to final treaty borders to remove ghost province lines
+		runtime.generateProvinces();
 		runtime.adjacencyCache = null;
 
 		runtime.onConflictMapChanged?.();

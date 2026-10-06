@@ -19,6 +19,7 @@ const checks = [
 	"geography-demand",
 	"scenario-codec",
 	"saved-territory",
+	"peace-deal",
 	"simulation-client",
 	"simulation-core",
 	"simulation-engine",

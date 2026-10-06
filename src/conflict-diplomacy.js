@@ -150,19 +150,21 @@ export function createConflictDiplomacy(runtime) {
 		}
 	}
 
-	function _signSelectivePeace(exiter, target) {
-		let exiterSideIdx = -1;
-		let targetSideIdx = -1;
+	// `withdrawing` leaves the war; land it lost to the opposing side goes to the
+	// occupier (or `opponent`), and land it holds of others returns to peace.
+	function _signSelectivePeace(opponent, withdrawing) {
+		let opponentSideIdx = -1;
+		let withdrawingSideIdx = -1;
 
 		runtime.sides.forEach((s, i) => {
-			if (s.some((c) => c.id === exiter.id)) exiterSideIdx = i;
-			if (s.some((c) => c.id === target.id)) targetSideIdx = i;
+			if (s.some((c) => c.id === opponent.id)) opponentSideIdx = i;
+			if (s.some((c) => c.id === withdrawing.id)) withdrawingSideIdx = i;
 		});
 
 		if (
-			exiterSideIdx === -1 ||
-			targetSideIdx === -1 ||
-			exiterSideIdx === targetSideIdx
+			opponentSideIdx === -1 ||
+			withdrawingSideIdx === -1 ||
+			opponentSideIdx === withdrawingSideIdx
 		) {
 			alert("Diplomatic error: Negotiating nations must be on opposing sides.");
 			runtime.gameState = "SIMULATING";
@@ -170,9 +172,10 @@ export function createConflictDiplomacy(runtime) {
 			requestAnimationFrame(runtime.updateLoop);
 			return;
 		}
-		runtime.releaseCountryPersonnelFromSide(target.id, targetSideIdx);
+		runtime.releaseCountryPersonnelFromSide(withdrawing.id, withdrawingSideIdx);
 
-		// The 'target' (second nation clicked) is the one exiting the specific conflict engagement
+		// Countries whose borders this peace redraws; smoothing touches nobody else.
+		const involvedIds = new Set([opponent.id, withdrawing.id]);
 		for (let i = 0; i < runtime.worldControlMap.length; i++) {
 			if (runtime.landMask[i] !== 2) continue;
 
@@ -180,21 +183,25 @@ export function createConflictDiplomacy(runtime) {
 			const occupierId = runtime.primaryOccupierMap[i];
 			const ds = runtime.dominantSideMap[i];
 
-			if (ownerId === target.id) {
-				if (ds !== -1 && ds !== targetSideIdx) {
+			if (ownerId === withdrawing.id) {
+				if (ds !== -1 && ds !== withdrawingSideIdx) {
 					// Annexation: Give land to the specific occupier
-					runtime.worldControlMap[i] = occupierId > 0 ? occupierId : exiter.id;
-					runtime.landMask[i] = 1;
-					runtime.clearCellInfluence(i);
-					runtime.primaryOccupierMap[i] = 0;
+					const recipientId = occupierId > 0 ? occupierId : opponent.id;
+					runtime.worldControlMap[i] = recipientId;
+					involvedIds.add(recipientId);
 				}
+				// Its own unoccupied land leaves the war zone with it.
+				runtime.landMask[i] = 1;
+				runtime.clearCellInfluence(i);
+				runtime.primaryOccupierMap[i] = 0;
 			}
-			// B) If the target (leaving nation) is occupying someone else's land, it gets annexed by the target
-			else if (occupierId === target.id) {
-				if (ds === targetSideIdx) {
-					runtime.worldControlMap[i] = target.id;
+			// Land the withdrawing nation holds of others is annexed by it
+			else if (occupierId === withdrawing.id) {
+				if (ds === withdrawingSideIdx) {
+					runtime.worldControlMap[i] = withdrawing.id;
 					runtime.landMask[i] = 1;
 					runtime.clearCellInfluence(i);
+					involvedIds.add(ownerId);
 				} else {
 					runtime.clearCellInfluence(i);
 				}
@@ -202,13 +209,13 @@ export function createConflictDiplomacy(runtime) {
 			}
 		}
 
-		// 2. Remove the target country from its alliance list
-		const targetSide = runtime.sides[targetSideIdx];
-		const idx = targetSide.findIndex((c) => c.id === target.id);
-		if (idx > -1) targetSide.splice(idx, 1);
+		// 2. Remove the withdrawing country from its alliance list
+		const withdrawingSide = runtime.sides[withdrawingSideIdx];
+		const idx = withdrawingSide.findIndex((c) => c.id === withdrawing.id);
+		if (idx > -1) withdrawingSide.splice(idx, 1);
 
-		// 3. Purge units belonging to the target nation
-		runtime.removeCountryFormations(target.id);
+		// 3. Purge units belonging to the withdrawing nation
+		runtime.removeCountryFormations(withdrawing.id);
 
 		// 4. Final Sweep: Stabilize land owned by nations no longer in the war
 		const combatantIds = new Set(runtime.sides.flat().map((c) => c.id));
@@ -227,7 +234,7 @@ export function createConflictDiplomacy(runtime) {
 			}
 		}
 
-		// 5. Separate Peace Smoothing Pass - Optimized to avoid GC thrashing
+		// 5. Separate Peace Smoothing Pass between the countries it redrew
 		const smoothingPasses = 2;
 		for (let p = 0; p < smoothingPasses; p++) {
 			const tempMap = new Uint16Array(runtime.worldControlMap);
@@ -239,6 +246,7 @@ export function createConflictDiplomacy(runtime) {
 				for (let x = 1; x < runtime.gridWidth - 1; x++) {
 					const i = rowIdx + x;
 					if (runtime.landMask[i] !== 1) continue;
+					if (!involvedIds.has(runtime.worldControlMap[i])) continue;
 
 					uniqueIds.fill(0);
 					idCounts.fill(0);
@@ -274,7 +282,7 @@ export function createConflictDiplomacy(runtime) {
 							bestId = uniqueIds[k];
 						}
 					}
-					if (maxC >= 5) tempMap[i] = bestId;
+					if (maxC >= 5 && involvedIds.has(bestId)) tempMap[i] = bestId;
 				}
 			}
 			runtime.worldControlMap.set(tempMap);
@@ -297,7 +305,7 @@ export function createConflictDiplomacy(runtime) {
 		} else {
 			runtime.playPeaceSound();
 			runtime.gameState = "SIMULATING";
-			runtime.statusText.innerText = `${target.name} signed separate peace. Conflict continues.`;
+			runtime.statusText.innerText = `${withdrawing.name} signed separate peace. Conflict continues.`;
 			cancelAnimationFrame(runtime.animationFrameId);
 			requestAnimationFrame(runtime.updateLoop);
 		}

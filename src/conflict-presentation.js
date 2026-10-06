@@ -6,9 +6,13 @@ export function createConflictPresentation(runtime) {
 		document.getElementById("treaty-status").innerText =
 			`${country.name} territory has been seized.`;
 		runtime.treatyAlert.style.display = "block";
+		runtime.simulationClient?.syncControls();
 		runtime.scheduleWarLifecycleCallback(() => {
-			if (runtime.gameState === "SIMULATING")
-				runtime.treatyAlert.style.display = "none";
+			const state = runtime.gameState;
+			if (state !== "SIMULATING" && !state?.startsWith("PEACE_SELECT_")) return;
+			runtime.treatyAlert.style.display = "none";
+			// The simulation holds peace proposals while a notice is visible.
+			runtime.simulationClient?.syncControls();
 		}, 4000);
 	}
 	function presentTreatyStart() {
