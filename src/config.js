@@ -1,6 +1,6 @@
 export const CONFIG = {
 	GEOJSON_BASE: "assets/geodata/",
-	GRID_RES: 0.15,
+	GRID_RES: 0.1,
 	INFLUENCE_RATE: 0.18,
 	INFLUENCE_RADIUS: 0.4,
 	UNIT_SPAWN_COUNT: 180, // Base count (5x finer granularity)

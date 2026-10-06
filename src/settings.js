@@ -1,8 +1,8 @@
 import { getCookie, setCookie } from "./preferences.js";
 
 const SETTINGS = [
-	["map-res-select", "mw_map_res", "110m"],
-	["grid-res-select", "mw_grid_res", "0.15"],
+	["map-res-select", "mw_map_res", "50m"],
+	["grid-res-select", "mw_grid_res", "0.1"],
 	["unit-limit-select", "mw_unit_limit", "250"],
 	["disable-mountains-checkbox", "mw_disable_mountains", false],
 	["disable-units-visually-checkbox", "mw_disable_units_visually", false],

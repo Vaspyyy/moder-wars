@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://esm.sh; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.websim.ai https://*.websim.com wss:; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self';">
-    <title>MW-V0.27.60</title>
+    <title>MW-V0.27.61</title>
     <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
 </head>
@@ -62,8 +62,8 @@
 <div class="settings-tab-pane" id="settings-tab-eng" style="display:none"><div class="setting-group">
 <label data-i18n="MAP_RES">Map Resolution</label>
 <select id="map-res-select">
-<option data-i18n="RES_LOW" selected="" value="110m">Low (Performance)</option>
-<option data-i18n="RES_STD" value="50m">Standard (Medium)</option>
+<option data-i18n="RES_LOW" value="110m">Low (Performance)</option>
+<option data-i18n="RES_STD" selected="" value="50m">Standard (Medium)</option>
 <option data-i18n="RES_HIGH" value="10m">High (Very Heavy)</option>
 </select>
 <small data-i18n="RES_SUB">Higher resolution improves borders but slows loading.</small>
@@ -71,8 +71,8 @@
 <label data-i18n="GRID_DENSITY">Grid Density</label>
 <select id="grid-res-select">
 <option data-i18n="GRID_FAST" value="0.25">Low (Fast)</option>
-<option data-i18n="GRID_STD" selected="" value="0.15">Standard</option>
-<option data-i18n="GRID_SMOOTH" value="0.1">High (Smooth)</option>
+<option data-i18n="GRID_STD" value="0.15">Standard</option>
+<option data-i18n="GRID_SMOOTH" selected="" value="0.1">High (Smooth)</option>
 <option data-i18n="GRID_INSANE" value="0.05">Insane (Ultra)</option>
 </select>
 <small data-i18n="GRID_SUB">Density affects the smoothness of frontlines.</small>
