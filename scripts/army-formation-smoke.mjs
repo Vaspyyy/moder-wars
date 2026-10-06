@@ -4,9 +4,13 @@ import { CONFIG } from "../src/config.js";
 import { createEditorCommands } from "../src/editor-commands.js";
 import { normalizeLongitudeDelta } from "../src/geographic-math.js";
 
+// Formations pre-declare later fields as undefined for one shared V8 shape.
+const definedFields = unit => Object.fromEntries(Object.entries(unit).filter(([, value]) => value !== undefined));
+assert.ok(Object.hasOwn(createArmyFormation({ lat: 0, lng: 0 }), "_armyOrder"), "formations declare later fields up front");
+
 for (const mountain of [false, true]) for (const mountainHealth of [false, true]) {
  const formation = createArmyFormation({ id: 3, lat: 1, lng: 2, sideIndex: 0, sovereignId: 1, isAlpenjager: mountain, mountainHealth });
- assert.deepEqual(formation, { id: 3, kind: "army", lat: 1, lng: 2, sideIndex: 0, sovereignId: 1, beneficiaryId: 1, isAlpenjager: mountain, health: CONFIG.UNIT_HEALTH * (mountain && mountainHealth ? CONFIG.ALPEN_HEALTH_MULT : 1), lastAttack: 0, deployTicks: 30 });
+ assert.deepEqual(definedFields(formation), { id: 3, kind: "army", lat: 1, lng: 2, sideIndex: 0, sovereignId: 1, beneficiaryId: 1, isAlpenjager: mountain, health: CONFIG.UNIT_HEALTH * (mountain && mountainHealth ? CONFIG.ALPEN_HEALTH_MULT : 1), lastAttack: 0, deployTicks: 30 });
 }
 const cached = createArmyFormation({ id: 4, lat: 0, lng: 0, sideIndex: 0, sovereignId: 1, _cachedTarget: null, _cachedScanKx: -999, _cachedScanKy: -999, _lastFullScanTick: 0 });
 assert.equal(cached._cachedTarget, null); assert.equal(cached._cachedScanKx, -999);
@@ -29,7 +33,7 @@ try {
    influenceLayer: { render() {} }, recruitNeutralMidWar() { assert.fail("unexpected recruitment"); },
   };
   createEditorCommands(runtime)._placeDivisionAt({ lat: 1, lng: 2 }, 1);
-  assert.deepEqual(runtime.units, [{ id: mountain ? 0.6789 : 0.2, kind: "army", lat: 1, lng: 2, sideIndex: 0, sovereignId: 1, beneficiaryId: 1, isAlpenjager: mountain, health: CONFIG.UNIT_HEALTH * (mountain ? CONFIG.ALPEN_HEALTH_MULT : 1), lastAttack: 0, deployTicks: 10, personnel: 1000, personnelCapacity: 1000 }]);
+  assert.deepEqual(runtime.units.map(definedFields), [{ id: mountain ? 0.6789 : 0.2, kind: "army", lat: 1, lng: 2, sideIndex: 0, sovereignId: 1, beneficiaryId: 1, isAlpenjager: mountain, health: CONFIG.UNIT_HEALTH * (mountain ? CONFIG.ALPEN_HEALTH_MULT : 1), lastAttack: 0, deployTicks: 10, personnel: 1000, personnelCapacity: 1000 }]);
   assert.equal(randomCalls, mountain ? 2 : 1, "preserve mountain choice and formation ID randomness");
   assert.equal(runtime.sideRecruitableManpower[0], Math.max(0, available - 1000));
   assert.equal(runtime.sideSoldiers[0], Math.max(1000, available));
