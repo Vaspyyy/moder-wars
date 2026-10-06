@@ -87,6 +87,13 @@ export function createAiRuntime(context) {
 		return power;
 	}
 
+	// isAtSea is refreshed during unit movement, after the AI has run; a unit
+	// that just left the coast must not receive land orders on this tick.
+	function isOnLand(unit) {
+		const idx = context.getGridIndex(unit.lat, unit.lng);
+		return idx >= 0 && context.landMask[idx] !== 0;
+	}
+
 	function writeOperationalUnit(unit, serialized) {
 		const country = context.sides[unit.sideIndex]?.find(
 			(candidate) => candidate.id === unit.sovereignId,
@@ -105,7 +112,7 @@ export function createAiRuntime(context) {
 				unit.maxHealth ||
 				CONFIG.UNIT_HEALTH * (unit.isAlpenjager ? CONFIG.ALPEN_HEALTH_MULT : 1),
 			combatPower: operationalUnitPower(unit, country),
-			deployed: unit.deployTicks <= 0 && !unit.isAtSea,
+			deployed: unit.deployTicks <= 0 && !unit.isAtSea && isOnLand(unit),
 			commandEligible:
 				!unit.navalAssigned &&
 				!unit.supplyAssigned &&
