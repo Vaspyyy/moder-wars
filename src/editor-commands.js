@@ -1,4 +1,5 @@
 import { createArmyFormation } from "./army-formation.js";
+import { showAlert } from "./dialogs.js";
 
 // Dependencies are supplied by the application; this module does not import it.
 export function createEditorCommands(runtime) {
@@ -264,7 +265,7 @@ export function createEditorCommands(runtime) {
 
 		if (landIndices.length === 0) {
 			runtime.loadingOverlay.style.display = "none";
-			alert(
+			showAlert(
 				"SATELLITE ERROR: No landmass identified to populate with civilizations.",
 			);
 			return;

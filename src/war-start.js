@@ -1,9 +1,10 @@
+import { showAlert } from "./dialogs.js";
 // Explicit live context keeps replacements of arrays/state visible across awaits and callbacks.
 export function createWarStart(runtime) {
 	async function startWar() {
 		const activeSides = runtime.sides.filter((s) => s.length > 0);
 		if (activeSides.length < 2) {
-			alert("Please assign countries to at least two sides.");
+			showAlert("Please assign countries to at least two sides.");
 			return;
 		}
 
@@ -19,7 +20,7 @@ export function createWarStart(runtime) {
 		} catch (err) {
 			console.error("[MW] startWar FAILED:", err);
 			runtime.loadingOverlay.style.display = "none";
-			alert(`War failed to start: ${err.message}`);
+			showAlert(`War failed to start: ${err.message}`);
 		}
 	}
 

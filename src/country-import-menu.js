@@ -1,3 +1,4 @@
+import { showAlert } from "./dialogs.js";
 // Dependencies are supplied by the application; this module does not import it.
 export function createCountryImportMenu(runtime) {
 	function loadCountryFromPC() {
@@ -151,7 +152,7 @@ export function createCountryImportMenu(runtime) {
 				runtime.influenceLayer.render();
 			} catch (err) {
 				console.error("Country import error:", err);
-				alert(`Failed to import country: ${err.message}`);
+				showAlert(`Failed to import country: ${err.message}`);
 				runtime.loadingOverlay.style.display = "none";
 			}
 		};
@@ -224,7 +225,7 @@ export function createCountryImportMenu(runtime) {
 	function openImportCountryModal() {
 		if (!runtime.importCountryModal) return;
 		if (!(runtime.gameMode === "EDITOR" || runtime.godModeActive)) {
-			alert(
+			showAlert(
 				"You can only import from scenario while in the editor or God Mode.",
 			);
 			return;

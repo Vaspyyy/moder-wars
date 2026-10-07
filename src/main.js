@@ -1,4 +1,5 @@
 import { createConflictPresentation } from "./conflict-presentation.js";
+import { showConfirm } from "./dialogs.js";
 import {
 	createPresentationScheduler,
 	createUnitSpatialMirror,
@@ -6410,19 +6411,23 @@ menu_controls.bindPauseBtnClick();
 // Keybinds
 simulation_controls.bindDocumentKeydown();
 
-export function unclaimSelectedCountry() {
+export async function unclaimSelectedCountry() {
 	if (editingCountryId <= 0) return;
+	const countryId = editingCountryId;
 
-	const meta = countryMetadata[editingCountryId - 1];
+	const meta = countryMetadata[countryId - 1];
 	const name = meta ? meta.name : "Nation";
 
 	// Visual confirmation is good for destructive actions
 	if (
-		!confirm(
-			`Satellite Directive: Are you sure you want to unclaim all territory for ${name}?`,
-		)
+		!(await showConfirm(
+			`Are you sure you want to unclaim all territory for ${name}?`,
+			{ title: "Unclaim territory", okLabel: "Unclaim", danger: true },
+		))
 	)
 		return;
+	// The inspector may have moved on to another nation while the dialog was open.
+	if (editingCountryId !== countryId) return;
 
 	for (let i = 0; i < worldControlMap.length; i++) {
 		if (worldControlMap[i] === editingCountryId) {

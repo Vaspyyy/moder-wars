@@ -6,9 +6,6 @@ import { createConflictResolution } from "../src/conflict-resolution.js";
 // 2 is its opponent (side 1), 4 is 1's ally, 3 and 5 are neutral bystanders.
 globalThis.requestAnimationFrame ??= () => 0;
 globalThis.cancelAnimationFrame ??= () => {};
-globalThis.alert ??= (message) => {
-	throw new Error(message);
-};
 
 const W = 12;
 const H = 8;

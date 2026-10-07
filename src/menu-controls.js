@@ -1,3 +1,4 @@
+import { showAlert, showConfirm } from "./dialogs.js";
 // Controls receive live state and commands; they do not import the application.
 export function createMenuControls(runtime) {
 	function bindImportCountrySearchInput() {
@@ -26,7 +27,7 @@ export function createMenuControls(runtime) {
 	function bindAddSideBtnClick() {
 		runtime.addSideBtn.onclick = () => {
 			if (runtime.sides.length >= runtime.MAX_SIDES) {
-				alert(`Maximum ${runtime.MAX_SIDES} sides supported.`);
+				showAlert(`Maximum ${runtime.MAX_SIDES} sides supported.`);
 				return;
 			}
 			runtime.sides.push([]);
@@ -373,13 +374,21 @@ export function createMenuControls(runtime) {
 				runtime.gameState === "PEACE_SELECT_2"
 			) {
 				// Double click/cancel to just do a global peace
-				if (confirm("Sign global white peace for all remaining combatants?")) {
-					runtime.applyTreaty("PEACE_TREATY");
-				} else {
-					runtime.gameState = "SIMULATING";
-					runtime.statusText.innerText = "Conflict Continued";
-					requestAnimationFrame(runtime.updateLoop);
-				}
+				showConfirm("Sign global white peace for all remaining combatants?", {
+					title: "Diplomacy",
+					okLabel: "Sign peace",
+					cancelLabel: "Keep fighting",
+				}).then((accepted) => {
+					// Escape may already have resumed the war, or the war may have ended.
+					if (!runtime.gameState.startsWith("PEACE_SELECT_")) return;
+					if (accepted) {
+						runtime.applyTreaty("PEACE_TREATY");
+					} else {
+						runtime.gameState = "SIMULATING";
+						runtime.statusText.innerText = "Conflict Continued";
+						requestAnimationFrame(runtime.updateLoop);
+					}
+				});
 			}
 		});
 	}
@@ -413,10 +422,10 @@ export function createMenuControls(runtime) {
 					runtime.stopBackgroundMusic();
 					runtime.initAudio();
 					runtime.loadingOverlay.style.display = "none";
-					alert("Custom soundtrack applied and saved!");
+					showAlert("Custom soundtrack applied and saved!");
 				} catch (err) {
 					console.error(err);
-					alert("Failed to upload soundtrack.");
+					showAlert("Failed to upload soundtrack.");
 					runtime.loadingOverlay.style.display = "none";
 				}
 			});
@@ -432,7 +441,7 @@ export function createMenuControls(runtime) {
 
 				runtime.stopBackgroundMusic();
 				runtime.initAudio();
-				alert("Soundtrack reset to original.");
+				showAlert("Soundtrack reset to original.");
 			});
 		}
 	}
@@ -546,7 +555,7 @@ export function createMenuControls(runtime) {
 				runtime.settingsOverlay.style.display = "none";
 				runtime.startBenchmark().catch((error) => {
 					console.error("[MW PERF] Benchmark failed:", error);
-					alert(`Benchmark failed: ${error.message}`);
+					showAlert(`Benchmark failed: ${error.message}`);
 				});
 			});
 		}

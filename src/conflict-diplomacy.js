@@ -1,3 +1,4 @@
+import { showAlert } from "./dialogs.js";
 // Explicit live context keeps replacements of arrays/state visible across awaits and callbacks.
 export function createConflictDiplomacy(runtime) {
 	function unilateralExitConflict(country, sideIdx) {
@@ -166,7 +167,9 @@ export function createConflictDiplomacy(runtime) {
 			withdrawingSideIdx === -1 ||
 			opponentSideIdx === withdrawingSideIdx
 		) {
-			alert("Diplomatic error: Negotiating nations must be on opposing sides.");
+			showAlert(
+				"Diplomatic error: Negotiating nations must be on opposing sides.",
+			);
 			runtime.gameState = "SIMULATING";
 			runtime.statusText.innerText = "Conflict Continued";
 			requestAnimationFrame(runtime.updateLoop);

@@ -1,3 +1,4 @@
+import { showAlert, showConfirm } from "./dialogs.js";
 // Dependencies are supplied by the application; this module does not import it.
 export function createCommunityComments(runtime) {
 	function renderCommentsList(comments) {
@@ -98,19 +99,25 @@ export function createCommunityComments(runtime) {
 		runtime.itemCommentsList
 			.querySelectorAll(".item-delete-btn")
 			.forEach((btn) => {
-				btn.addEventListener("click", () => {
+				btn.addEventListener("click", async () => {
 					const commentEl = btn.closest(".item-comment");
 					if (!commentEl) return;
 					const id = commentEl.getAttribute("data-comment-id");
 					const comment = comments.find((c) => c.id === id);
 					if (!comment || comment.username !== runtime.currentUsername) return;
-					if (!confirm("Delete this comment?")) return;
+					if (
+						!(await showConfirm("Delete this comment?", {
+							okLabel: "Delete",
+							danger: true,
+						}))
+					)
+						return;
 					(async () => {
 						try {
 							await runtime.room.collection("hub_comment_v1").delete(id);
 						} catch (e) {
 							console.error("Failed to delete comment", e);
-							alert("Failed to delete comment.");
+							showAlert("Failed to delete comment.");
 						}
 					})();
 				});

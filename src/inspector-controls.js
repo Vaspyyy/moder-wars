@@ -1,3 +1,4 @@
+import { showAlert, showConfirm } from "./dialogs.js";
 // Controls receive live state and commands; they do not import the application.
 export function createInspectorControls(runtime) {
 	async function loadReferenceGeometry() {
@@ -7,7 +8,7 @@ export function createInspectorControls(runtime) {
 			return await runtime.ensureRawGeography();
 		} catch (error) {
 			console.warn("Modern reference geography unavailable:", error);
-			alert(
+			showAlert(
 				"Modern reference geography could not be loaded. Please try again.",
 			);
 			return null;
@@ -119,7 +120,7 @@ export function createInspectorControls(runtime) {
 			}
 
 			if (!code) {
-				alert(
+				showAlert(
 					"Could not find a modern flag for '" +
 						name +
 						"'. Try the full English name.",
@@ -215,7 +216,7 @@ export function createInspectorControls(runtime) {
 			});
 
 			if (!feature) {
-				alert(
+				showAlert(
 					"Country not found in modern reference data. Try names like 'Poland', 'Ukraine', or 'United States of America'.",
 				);
 				return;
@@ -230,7 +231,7 @@ export function createInspectorControls(runtime) {
 		if (runtime.addAllyBtn) {
 			runtime.addAllyBtn.addEventListener("click", () => {
 				if (runtime.editingCountryId <= 0) {
-					alert("Select a nation first in the inspector to add allies.");
+					showAlert("Select a nation first in the inspector to add allies.");
 					return;
 				}
 				runtime.selectingAllyForId = runtime.editingCountryId;
@@ -280,13 +281,13 @@ export function createInspectorControls(runtime) {
 					const rootId = runtime.getAllianceRootId(runtime.editingCountryId);
 					if (!rootId) {
 						runtime.loadingOverlay.style.display = "none";
-						alert("Could not resolve alliance group for this nation.");
+						showAlert("Could not resolve alliance group for this nation.");
 						return;
 					}
 					const rootMeta = runtime.countryMetadata[rootId - 1];
 					if (!rootMeta) {
 						runtime.loadingOverlay.style.display = "none";
-						alert("Alliance root metadata missing.");
+						showAlert("Alliance root metadata missing.");
 						return;
 					}
 					rootMeta.allianceFlagUrl = url;
@@ -302,7 +303,7 @@ export function createInspectorControls(runtime) {
 				} catch (err) {
 					console.error("Alliance flag upload failed", err);
 					runtime.loadingOverlay.style.display = "none";
-					alert("Failed to upload alliance flag.");
+					showAlert("Failed to upload alliance flag.");
 				}
 			});
 		}
@@ -454,16 +455,21 @@ export function createInspectorControls(runtime) {
 	}
 
 	function bindCityDeleteBtnClick() {
-		runtime.cityDeleteBtn.addEventListener("click", () => {
+		runtime.cityDeleteBtn.addEventListener("click", async () => {
 			if (runtime.editingCityId <= 0) return;
 			const city = runtime.cities.find((c) => c.id === runtime.editingCityId);
 			if (!city) return;
-			if (!confirm(`Delete city "${city.name}"?`)) return;
-			runtime.cities = runtime.cities.filter(
-				(c) => c.id !== runtime.editingCityId,
-			);
+			if (
+				!(await showConfirm(`Delete city "${city.name}"?`, {
+					title: "Delete city",
+					okLabel: "Delete",
+					danger: true,
+				}))
+			)
+				return;
+			runtime.cities = runtime.cities.filter((c) => c.id !== city.id);
 			runtime.activeTheaterCities = runtime.activeTheaterCities.filter(
-				(c) => c.id !== runtime.editingCityId,
+				(c) => c.id !== city.id,
 			);
 			runtime.invalidateTerritoryLedgerCities();
 			runtime.editingCityId = -1;
@@ -494,19 +500,22 @@ export function createInspectorControls(runtime) {
 
 	function bindEditorCityClearBtnClick() {
 		if (runtime.editorCityClearBtn) {
-			runtime.editorCityClearBtn.addEventListener("click", () => {
+			runtime.editorCityClearBtn.addEventListener("click", async () => {
 				if (!(runtime.gameMode === "EDITOR" || runtime.godModeActive)) return;
 
 				// Robust multi-stage verification for critical deletion
-				const verify1 = confirm(
-					"SATELLITE WARNING: You are about to clear ALL cities from this scenario. This action is permanent. Proceed?",
+				const verify1 = await showConfirm(
+					"You are about to clear ALL cities from this scenario. This action is permanent. Proceed?",
+					{ title: "Clear all cities", okLabel: "Proceed", danger: true },
 				);
 				if (!verify1) return;
 
-				const verify2 = confirm(
-					"FINAL CONFIRMATION: Are you absolutely sure you want to remove all urban centers?",
+				const verify2 = await showConfirm(
+					"Are you absolutely sure you want to remove all urban centers?",
+					{ title: "Final confirmation", okLabel: "Remove all", danger: true },
 				);
 				if (!verify2) return;
+				if (!(runtime.gameMode === "EDITOR" || runtime.godModeActive)) return;
 
 				runtime.cities = [];
 				runtime.activeTheaterCities = [];

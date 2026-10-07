@@ -1,3 +1,4 @@
+import { showAlert } from "./dialogs.js";
 // Controls receive live state and commands; they do not import the application.
 export function createEditorToolControls(runtime) {
 	function bindEditorCreateBtnClick() {
@@ -177,7 +178,7 @@ export function createEditorToolControls(runtime) {
 	function bindEditorTestBtnClick() {
 		runtime.editorTestBtn.addEventListener("click", () => {
 			if (runtime.countryMetadata.length < 2) {
-				alert("You need at least 2 nations to test a conflict.");
+				showAlert("You need at least 2 nations to test a conflict.");
 				return;
 			}
 			runtime.gameMode = "EDITOR_TEST";

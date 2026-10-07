@@ -1,25 +1,42 @@
+import { showAlert, showConfirm } from "./dialogs.js";
 // Controls receive live state and commands; they do not import the application.
 export function createCommunityControls(runtime) {
 	function bindDeleteScenarioHandler() {
 		window.deleteScenario = async (id) => {
-			if (!confirm("Are you sure you want to delete this scenario?")) return;
+			if (
+				!(await showConfirm("Are you sure you want to delete this scenario?", {
+					title: "Delete scenario",
+					okLabel: "Delete",
+					danger: true,
+				}))
+			)
+				return;
 			try {
 				await runtime.room.collection("scenario_v1").delete(id);
 			} catch (e) {
 				console.error(e);
-				alert("Failed to delete scenario. You can only delete your own posts.");
+				showAlert(
+					"Failed to delete scenario. You can only delete your own posts.",
+				);
 			}
 		};
 	}
 
 	function bindDeleteFlagHandler() {
 		window.deleteFlag = async (id) => {
-			if (!confirm("Remove this flag from the library?")) return;
+			if (
+				!(await showConfirm("Remove this flag from the library?", {
+					title: "Delete flag",
+					okLabel: "Remove",
+					danger: true,
+				}))
+			)
+				return;
 			try {
 				await runtime.room.collection("flag_library_v1").delete(id);
 			} catch (e) {
 				console.error(e);
-				alert("Delete failed.");
+				showAlert("Delete failed.");
 			}
 		};
 	}
@@ -32,11 +49,11 @@ export function createCommunityControls(runtime) {
 
 			if (!flagData || runtime.editingCountryId <= 0) {
 				if (runtime.editingCountryId <= 0) {
-					alert(
+					showAlert(
 						"SATELLITE INTERFACE: You must select a nation on the map first to designate a target for the new national identity.",
 					);
 				} else {
-					alert(
+					showAlert(
 						"SATELLITE ERROR: Could not retrieve flag data from the hub archives.",
 					);
 				}
@@ -56,16 +73,17 @@ export function createCommunityControls(runtime) {
 	function bindDeleteCountryHandler() {
 		window.deleteCountry = async (id) => {
 			if (
-				!confirm(
+				!(await showConfirm(
 					"Are you sure you want to delete this country from the library?",
-				)
+					{ title: "Delete country", okLabel: "Delete", danger: true },
+				))
 			)
 				return;
 			try {
 				await runtime.room.collection("country_library_v1").delete(id);
 			} catch (e) {
 				console.error(e);
-				alert("Failed to delete.");
+				showAlert("Failed to delete.");
 			}
 		};
 	}
@@ -103,14 +121,14 @@ export function createCommunityControls(runtime) {
 						cells = await resp.json();
 					} catch (e) {
 						console.error("Failed to fetch country cells", e);
-						alert("Error importing country geography.");
+						showAlert("Error importing country geography.");
 						runtime.loadingOverlay.style.display = "none";
 						return;
 					}
 				}
 
 				if (!cells) {
-					alert("This country has no geography data.");
+					showAlert("This country has no geography data.");
 					runtime.loadingOverlay.style.display = "none";
 					return;
 				}
@@ -148,10 +166,10 @@ export function createCommunityControls(runtime) {
 				runtime.recalculateAllBounds();
 				runtime.loadingOverlay.style.display = "none";
 				runtime.influenceLayer.render();
-				alert(`${countryData.name} imported successfully!`);
+				showAlert(`${countryData.name} imported successfully!`);
 			} catch (e) {
 				console.error(e);
-				alert("Import failed.");
+				showAlert("Import failed.");
 				runtime.loadingOverlay.style.display = "none";
 			}
 		};
@@ -191,7 +209,7 @@ export function createCommunityControls(runtime) {
 				}
 			} catch (e) {
 				console.error(e);
-				alert("Failed to download scenario.");
+				showAlert("Failed to download scenario.");
 				runtime.loadingOverlay.style.display = "none";
 			}
 		};
@@ -233,7 +251,7 @@ export function createCommunityControls(runtime) {
 				}
 			} catch (e) {
 				console.error(e);
-				alert("Failed to download scenario for remix.");
+				showAlert("Failed to download scenario for remix.");
 				runtime.loadingOverlay.style.display = "none";
 			}
 		};
@@ -307,7 +325,7 @@ export function createCommunityControls(runtime) {
 				runtime.itemCommentSubmit.textContent = "Post";
 			} catch (e) {
 				console.error("Failed to post comment", e);
-				alert("Failed to post comment. Try again.");
+				showAlert("Failed to post comment. Try again.");
 			}
 		});
 	}
@@ -399,10 +417,10 @@ export function createCommunityControls(runtime) {
 				});
 
 				runtime.loadingOverlay.style.display = "none";
-				alert("Scenario uploaded successfully to the hub!");
+				showAlert("Scenario uploaded successfully to the hub!");
 			} catch (e) {
 				console.error(e);
-				alert("Failed to upload scenario.");
+				showAlert("Failed to upload scenario.");
 				runtime.loadingOverlay.style.display = "none";
 			}
 		});

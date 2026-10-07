@@ -1,4 +1,5 @@
 import { CONFIG } from "./config.js";
+import { showAlert } from "./dialogs.js";
 import { beginLoadTrace } from "./load-profiler.js";
 import mapRuntime from "./map-runtime.ts";
 import { normalizeSavedCells } from "./saved-cells.js";
@@ -46,7 +47,7 @@ export function createScenarioLoader(context, loadSession) {
 
 		const MAX_PRESET_SIZE = 200 * 1024 * 1024;
 		if (fileOrBlob.size && fileOrBlob.size > MAX_PRESET_SIZE) {
-			alert("Scenario file is too large (max 200MB).");
+			showAlert("Scenario file is too large (max 200MB).");
 			context.loadingOverlay.style.display = "none";
 			return;
 		}
@@ -640,7 +641,9 @@ export function createScenarioLoader(context, loadSession) {
 			console.error("Satellite Load Error:", err);
 			context.loadingOverlay.style.display = "none";
 			if (isCompiledSource) throw err;
-			alert(`Error loading preset: ${err.message || "File may be corrupted"}`);
+			showAlert(
+				`Error loading preset: ${err.message || "File may be corrupted"}`,
+			);
 		}
 	}
 
@@ -663,7 +666,7 @@ export function createScenarioLoader(context, loadSession) {
 			}
 		} catch (e) {
 			console.error("Import scenario load failed:", e);
-			alert(
+			showAlert(
 				"Could not read that scenario file. Make sure it is a preset exported from this engine.",
 			);
 			context.setImportScenarioBuffer(null);
@@ -690,7 +693,7 @@ export function createScenarioLoader(context, loadSession) {
 			await loadScenarioForCountryImportFromBlob(blob);
 		} catch (e) {
 			console.error("Import built‑in scenario load failed:", e);
-			alert("Failed to load built‑in scenario for import.");
+			showAlert("Failed to load built‑in scenario for import.");
 		}
 	}
 
@@ -700,7 +703,7 @@ export function createScenarioLoader(context, loadSession) {
 		const metaList = source.metadata || [];
 		const sourceMeta = metaList.find((m) => m && m.id === sourceCountryId);
 		if (!sourceMeta) {
-			alert("Country not found in source scenario.");
+			showAlert("Country not found in source scenario.");
 			return;
 		}
 
@@ -804,7 +807,7 @@ export function createScenarioLoader(context, loadSession) {
 		}
 
 		if (!paintedAny) {
-			alert(
+			showAlert(
 				"No territory for that country was found in the source scenario at this resolution.",
 			);
 			return;

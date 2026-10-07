@@ -1,12 +1,14 @@
+import { showAlert, showConfirm, showPrompt } from "./dialogs.js";
 // Controls receive live state and commands; they do not import the application.
 export function createEditorFileControls(runtime) {
 	function bindEditorUpdateBtnClick() {
 		runtime.editorUpdateBtn.addEventListener("click", async () => {
 			if (!runtime.activeScenarioId) return;
 			if (
-				!confirm(
+				!(await showConfirm(
 					"Update existing scenario? This will overwrite the map file and thumbnail on the Hub.",
-				)
+					{ title: "Update scenario", okLabel: "Overwrite", danger: true },
+				))
 			)
 				return;
 
@@ -56,10 +58,10 @@ export function createEditorFileControls(runtime) {
 					});
 
 				runtime.loadingOverlay.style.display = "none";
-				alert("Scenario updated successfully!");
+				showAlert("Scenario updated successfully!");
 			} catch (e) {
 				console.error(e);
-				alert("Update failed. You can only update scenarios you created.");
+				showAlert("Update failed. You can only update scenarios you created.");
 				runtime.loadingOverlay.style.display = "none";
 			}
 		});
@@ -82,7 +84,7 @@ export function createEditorFileControls(runtime) {
 			if (runtime.editingCountryId <= 0) return;
 			const meta = runtime.countryMetadata[runtime.editingCountryId - 1];
 			if (!meta?.flagUrl) {
-				alert(
+				showAlert(
 					"This nation does not have a flag to share. Upload or fetch one first.",
 				);
 				return;
@@ -121,10 +123,10 @@ export function createEditorFileControls(runtime) {
 					flagUrl: meta.flagUrl,
 				});
 				runtime.loadingOverlay.style.display = "none";
-				alert("Flag successfully shared!");
+				showAlert("Flag successfully shared!");
 			} catch (e) {
 				console.error(e);
-				alert("Failed to share flag.");
+				showAlert("Failed to share flag.");
 				runtime.loadingOverlay.style.display = "none";
 			}
 		};
@@ -183,7 +185,7 @@ export function createEditorFileControls(runtime) {
 				}
 
 				if (cells.length === 0) {
-					alert("Country has no territory to share!");
+					showAlert("Country has no territory to share!");
 					runtime.loadingOverlay.style.display = "none";
 					return;
 				}
@@ -209,20 +211,21 @@ export function createEditorFileControls(runtime) {
 				});
 
 				runtime.loadingOverlay.style.display = "none";
-				alert("Country added to Global Library!");
+				showAlert("Country added to Global Library!");
 			} catch (e) {
 				console.error(e);
-				alert("Failed to share country.");
+				showAlert("Failed to share country.");
 				runtime.loadingOverlay.style.display = "none";
 			}
 		};
 	}
 
 	function bindEditorSaveBtnClick() {
-		runtime.editorSaveBtn.addEventListener("click", () => {
-			const presetName = prompt(
+		runtime.editorSaveBtn.addEventListener("click", async () => {
+			const presetName = await showPrompt(
 				"Enter a name for this preset:",
 				"My Custom Scenario",
+				{ title: "Save preset", okLabel: "Save" },
 			);
 			if (!presetName) return;
 
@@ -258,7 +261,7 @@ export function createEditorFileControls(runtime) {
 		if (runtime.editorSaveMultiBtn)
 			runtime.editorSaveMultiBtn.addEventListener("click", async () => {
 				if (runtime.selectedCountryIds.size === 0) {
-					alert(
+					showAlert(
 						"Ctrl+click countries on the map to select them, then use this button to export a ZIP.",
 					);
 					return;
@@ -287,7 +290,7 @@ export function createEditorFileControls(runtime) {
 						" to selected_countries.zip";
 				} catch (error) {
 					console.error("ZIP export failed:", error);
-					alert("Failed to generate ZIP. Check console for details.");
+					showAlert("Failed to generate ZIP. Check console for details.");
 				}
 			});
 	}
@@ -296,7 +299,7 @@ export function createEditorFileControls(runtime) {
 		if (runtime.editorSaveAllZipBtn)
 			runtime.editorSaveAllZipBtn.addEventListener("click", async () => {
 				if (!runtime.countryMetadata || !runtime.worldControlMap) {
-					alert("No map is loaded yet.");
+					showAlert("No map is loaded yet.");
 					return;
 				}
 				const cellMap = runtime.collectCountryCells(
@@ -308,7 +311,7 @@ export function createEditorFileControls(runtime) {
 					(meta) => meta?.id && cellMap.get(meta.id)?.length,
 				);
 				if (!countries.length) {
-					alert("No countries with territory to export.");
+					showAlert("No countries with territory to export.");
 					return;
 				}
 				try {
@@ -322,7 +325,7 @@ export function createEditorFileControls(runtime) {
 					runtime.statusText.innerText = `Exported ${countries.length} countries to all_countries.zip`;
 				} catch (error) {
 					console.error("ZIP export (all countries) failed:", error);
-					alert(
+					showAlert(
 						"Failed to generate ZIP for all countries. Check console for details.",
 					);
 				}
@@ -388,7 +391,7 @@ export function createEditorFileControls(runtime) {
 					runtime.statusText.innerText = "GLOBAL MAP EXPORTED";
 				} catch (e) {
 					console.error("Export failed:", e);
-					alert("SATELLITE ERROR: Could not generate export file.");
+					showAlert("SATELLITE ERROR: Could not generate export file.");
 				}
 			});
 	}
@@ -462,12 +465,12 @@ export function createEditorFileControls(runtime) {
 		if (runtime.importCountryConfirmBtn) {
 			runtime.importCountryConfirmBtn.addEventListener("click", () => {
 				if (!runtime.importScenarioBuffer) {
-					alert("Choose a source scenario first.");
+					showAlert("Choose a source scenario first.");
 					return;
 				}
 				const cid = runtime.selectedImportCountryId || 0;
 				if (!cid) {
-					alert("Choose a country to import.");
+					showAlert("Choose a country to import.");
 					return;
 				}
 				runtime.importSingleCountryFromScenario(
@@ -499,7 +502,7 @@ export function createEditorFileControls(runtime) {
 							(f) => !f.dir && f.name.toLowerCase().endsWith(".json"),
 						);
 						if (files.length === 0) {
-							alert("ZIP file does not contain any .json country files.");
+							showAlert("ZIP file does not contain any .json country files.");
 							runtime.loadingOverlay.style.display = "none";
 							return;
 						}
@@ -599,7 +602,7 @@ export function createEditorFileControls(runtime) {
 						runtime.statusText.innerText = "Imported countries from ZIP.";
 					} catch (err) {
 						console.error("ZIP import failed:", err);
-						alert("Failed to import ZIP of countries.");
+						showAlert("Failed to import ZIP of countries.");
 						runtime.loadingOverlay.style.display = "none";
 					}
 				};
@@ -611,7 +614,7 @@ export function createEditorFileControls(runtime) {
 	function bindEditorShareBtnClick() {
 		runtime.editorShareBtn.addEventListener("click", () => {
 			if (runtime.countryMetadata.length < 2) {
-				alert("Your map must have at least 2 nations to be playable.");
+				showAlert("Your map must have at least 2 nations to be playable.");
 				return;
 			}
 			runtime.uploadNameInput.value = "";

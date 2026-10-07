@@ -1,3 +1,4 @@
+import { showAlert } from "./dialogs.js";
 import { COMPILED_SCENARIO_URLS } from "./scenario-codec.js";
 
 export const BUILTIN_SCENARIOS = {
@@ -66,7 +67,7 @@ export function createScenarioHandler(
 			console.error(error);
 			if (key === "modern") await modernFallback();
 			else {
-				alert(
+				showAlert(
 					`Failed to load ${key === "ww1" ? "1914" : scenario.name} scenario.`,
 				);
 				loadingOverlay.style.display = "none";

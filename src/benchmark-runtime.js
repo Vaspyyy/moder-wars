@@ -1,3 +1,4 @@
+import { showAlert } from "./dialogs.js";
 // Dependencies are supplied by the application; this module does not import it.
 export function createBenchmarkRuntime(runtime) {
 	function restoreBenchmarkSettings() {
@@ -209,7 +210,7 @@ export function createBenchmarkRuntime(runtime) {
 				);
 			} catch (e) {
 				console.error(e);
-				alert("Failed to load 2022 Modern Day scenario.");
+				showAlert("Failed to load 2022 Modern Day scenario.");
 				restoreBenchmarkSettings();
 				throw e;
 			}
@@ -223,7 +224,7 @@ export function createBenchmarkRuntime(runtime) {
 			(m) => m && typeof m.name === "string" && m.name.includes("China"),
 		);
 		if (!metaRussia || !metaChina) {
-			alert("Russia or China not found in country data.");
+			showAlert("Russia or China not found in country data.");
 			restoreBenchmarkSettings();
 			throw new Error("Russia or China not found in country data.");
 		}
