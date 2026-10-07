@@ -6,6 +6,7 @@ export const ARMY_NAVIGATION = Object.freeze({
 	MAX_FIELD_NODES: 70000,
 	FIELD_IDLE_TICKS: 60,
 	STALL_TICKS: 180,
+	RIVER_CROSSING_COST: 3,
 });
 
 const FRIENDLY_ORDER_TYPES = new Set(["HOLD", "RESERVE", "WITHDRAW", "SCREEN"]);
@@ -84,7 +85,12 @@ export function createArmyNavigator(context) {
 			1 +
 			Math.min(6, threat * 0.35) +
 			Math.min(3, (cell?.count || 0) * 0.08) +
-			Math.max(0, context.terrainMask?.[idx] || 0) * 2
+			Math.max(0, context.terrainMask?.[idx] || 0) * 2 +
+			// Forcing a river held by someone else is slow and costly, so routes
+			// prefer flanks and existing bridgeheads.
+			(context.riverMask?.[idx] === 1 && context.dominantSideMap[idx] !== side
+				? ARMY_NAVIGATION.RIVER_CROSSING_COST
+				: 0)
 		);
 	}
 	function reset() {
@@ -188,6 +194,7 @@ export function createArmyNavigator(context) {
 		friendlyOnly = false,
 		radius = 6,
 		occupied = null,
+		prefer = null,
 	) {
 		if (!target) return null;
 		const center = context.getGridIndex(target.lat, target.lng);
@@ -203,22 +210,25 @@ export function createArmyNavigator(context) {
 			offsets.sort((a, b) => a.score - b.score || a.dr - b.dr || a.dc - b.dc);
 			offsetCache.set(radius, offsets);
 		}
-		for (const { dr, dc } of offsets) {
-			const r = row + dr,
-				rawCol = col + dc;
-			if (
-				r < 0 ||
-				r >= context.gridHeight ||
-				(context.gridWidth * resolution() < 359.9 &&
-					(rawCol < 0 || rawCol >= context.gridWidth))
-			)
-				continue;
-			const c = (rawCol + context.gridWidth) % context.gridWidth,
-				idx = r * context.gridWidth + c;
-			if (!passable(idx, side, friendlyOnly) || occupied?.has(idx)) continue;
-			occupied?.add(idx);
-			return point(idx);
-		}
+		// With `prefer`, the nearest preferred cell wins; otherwise the nearest.
+		for (const pass of prefer ? [prefer, null] : [null])
+			for (const { dr, dc } of offsets) {
+				const r = row + dr,
+					rawCol = col + dc;
+				if (
+					r < 0 ||
+					r >= context.gridHeight ||
+					(context.gridWidth * resolution() < 359.9 &&
+						(rawCol < 0 || rawCol >= context.gridWidth))
+				)
+					continue;
+				const c = (rawCol + context.gridWidth) % context.gridWidth,
+					idx = r * context.gridWidth + c;
+				if (!passable(idx, side, friendlyOnly) || occupied?.has(idx)) continue;
+				if (pass && !pass(idx)) continue;
+				occupied?.add(idx);
+				return point(idx);
+			}
 		return null;
 	}
 	function clearLine(start, end, side, friendlyOnly = false) {

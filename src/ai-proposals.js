@@ -1,6 +1,16 @@
-import { findArmyEncirclement } from "./army-encirclement.js";
+import {
+	findArmyDoubleEnvelopment,
+	findArmyEncirclement,
+} from "./army-encirclement.js";
 import { CONFIG as DEFAULT_CONFIG } from "./config.js";
+import { enemyLineShare } from "./defensive-lines.js";
 import { normalizeLongitudeDelta } from "./geographic-math.js";
+
+// Pincers are the preferred way to win a front, so a side looks for them often
+// and needs only modest local superiority to try one.
+const MAX_ENCIRCLEMENT_TESTS = 12;
+const ENCIRCLEMENT_MIN_RATIO = 1.25;
+const MAX_ENVELOPMENT_FRONTS = 4;
 
 /** Reuse one reachability workspace and clear only cells touched by its last BFS. */
 export function createAiReachabilityScratch() {
@@ -450,7 +460,10 @@ export function createAiProposalPipeline(context) {
 				estimatedForceNeeded: Math.ceil(unitCount * 0.15),
 				theaterId: ec._nearestFront?.pairKey,
 				frontIntel: ec._nearestFront,
-				riskAssessment: context.operationalLocalRisk(local),
+				riskAssessment: {
+					...context.operationalLocalRisk(local),
+					enemyLineShare: enemyLineShare(context, sideIdx, source),
+				},
 				geographicData: {
 					frontlineDistSq: dSq,
 					reachesTarget: path.reachable,
@@ -477,7 +490,11 @@ export function createAiProposalPipeline(context) {
 			if (a !== sideIdx && b !== sideIdx) continue;
 			const poly = context._frontlinePolys[key] || [];
 			const stride = Math.max(1, Math.floor(poly.length / 8));
-			for (let i = 0; i < poly.length && encirclementTests < 8; i += stride) {
+			for (
+				let i = 0;
+				i < poly.length && encirclementTests < MAX_ENCIRCLEMENT_TESTS;
+				i += stride
+			) {
 				const cell = poly[i];
 				const local = context.estimateLocalForces(
 					sideIdx,
@@ -485,7 +502,10 @@ export function createAiProposalPipeline(context) {
 					cell.lng,
 					4,
 				);
-				if (local.enemies < 2 || local.friendlyHealth < local.enemyHealth * 1.5)
+				if (
+					local.enemies < 2 ||
+					local.friendlyHealth < local.enemyHealth * ENCIRCLEMENT_MIN_RATIO
+				)
 					continue;
 				encirclementTests++;
 				const operation = findArmyEncirclement(context, sideIdx, cell);
@@ -508,9 +528,58 @@ export function createAiProposalPipeline(context) {
 						enemyCounterWeight:
 							local.enemyHealth /
 							Math.max(0.25, local.friendlyHealth + local.enemyHealth),
+						enemyLineShare: enemyLineShare(context, sideIdx, cell),
 					},
 				});
 			}
+		}
+
+		// Two-pronged envelopments of an enemy front line, where no salient exists.
+		let envelopmentTests = 0;
+		for (const key of frontlineKeys) {
+			if (envelopmentTests >= MAX_ENVELOPMENT_FRONTS) break;
+			const [a, b] = key.split("_").map(Number);
+			if (a !== sideIdx && b !== sideIdx) continue;
+			const enemySide = a === sideIdx ? b : a;
+			if (!context.areSidesHostile(sideIdx, enemySide)) continue;
+			if (proposals.some((p) => p.type === "ENCIRCLE" && p.theaterId === key))
+				continue;
+			envelopmentTests++;
+			const operation = findArmyDoubleEnvelopment(
+				context,
+				sideIdx,
+				context._frontlinePolys[key],
+			);
+			yield 1;
+			if (!operation) continue;
+			const local = context.estimateLocalForces(
+				sideIdx,
+				operation.pinTarget.lat,
+				operation.pinTarget.lng,
+				4,
+			);
+			if (local.friendlyHealth < local.enemyHealth * ENCIRCLEMENT_MIN_RATIO)
+				continue;
+			proposals.push({
+				type: "ENCIRCLE",
+				targetSideIndex: enemySide,
+				target: { ...operation.target, name: "Envelop enemy line" },
+				stagingPoint: operation.shoulders[0],
+				stagingCells: operation.shoulders,
+				arrowPoints: [operation.shoulders[0], operation.target],
+				encirclement: operation,
+				estimatedForceNeeded: Math.max(4, Math.ceil(local.enemyHealth * 2)),
+				theaterId: key,
+				frontIntel: frontIntel.find((f) => f.pairKey === key),
+				riskAssessment: {
+					enemyForcesNear: local.enemyHealth,
+					ourForcesNear: local.friendlyHealth,
+					enemyCounterWeight:
+						local.enemyHealth /
+						Math.max(0.25, local.friendlyHealth + local.enemyHealth),
+					enemyLineShare: enemyLineShare(context, sideIdx, operation.pinTarget),
+				},
+			});
 		}
 
 		// ── 3. PUSH_FRONT proposals (one per land-connected enemy side) ──
@@ -594,7 +663,10 @@ export function createAiProposalPipeline(context) {
 					estimatedForceNeeded: Math.ceil(unitCount * 0.5),
 					theaterId: front?.pairKey,
 					frontIntel: front,
-					riskAssessment: context.operationalLocalRisk(local),
+					riskAssessment: {
+						...context.operationalLocalRisk(local),
+						enemyLineShare: enemyLineShare(context, sideIdx, source),
+					},
 					geographicData: {
 						frontlineDistSq: 0,
 						reachesTarget: path.reachable,

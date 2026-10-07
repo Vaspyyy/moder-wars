@@ -56,6 +56,7 @@ export function createArmyFormation(
 		mountainIntensity: undefined,
 		lineDefense: 1,
 		encircledTicks: undefined,
+		pocketTicks: 0,
 		_cachedTarget: undefined,
 		_cachedScanKx: undefined,
 		_cachedScanKy: undefined,

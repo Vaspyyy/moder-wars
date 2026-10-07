@@ -1,3 +1,5 @@
+import { CAPITAL_SHOCK_TICKS } from "./defensive-lines.js";
+import { pocketCellLookup } from "./encirclement-pockets.js";
 import { executeGroundTarget } from "./ground-movement.js";
 import { getSimulationMetrics } from "./simulation-metrics.js";
 
@@ -6,8 +8,11 @@ import { getSimulationMetrics } from "./simulation-metrics.js";
 const RIVER_LINE_DAMAGE_TAKEN = 0.6;
 const MOUNTAIN_LINE_DEFENSE = 0.35;
 const RIVER_CROSSING_SPEED = 0.6;
-// Ticks (6 s at 1x) over which the capital-fall morale shock fades out.
-const CAPITAL_SHOCK_TICKS = 360;
+// A formation in a sealed pocket loses this much health per tick, rising the
+// longer it stays trapped, and surrenders after the given number of ticks.
+const POCKET_ATTRITION = 0.25;
+const POCKET_ATTRITION_RAMP_TICKS = 120;
+const POCKET_SURRENDER_TICKS = 300;
 
 /** Supply decisions only distinguish 0, 1–2, 3–7, and at least 8 friendly cells. */
 export function countNearbyFriendlySupplyCells(frame, gridIndex, sideIndex) {
@@ -60,6 +65,7 @@ export function createGroundFormationUpdater(frame) {
 		mountainsEnabled,
 		terrainMask,
 		riverMask,
+		encirclementPockets,
 		getControlValue,
 		isEnemyTerritory,
 		simFrameCount,
@@ -113,6 +119,7 @@ export function createGroundFormationUpdater(frame) {
 		deJureMap,
 		_theaterCitiesBySovereign,
 	} = frame;
+	const pocketCells = pocketCellLookup(encirclementPockets);
 	return function updateFormation(i) {
 		const u = units[i];
 		const _u1 = _detailedPerfEnabled ? performance.now() : 0; // per-unit sub-timer start
@@ -337,6 +344,23 @@ export function createGroundFormationUpdater(frame) {
 			damageDealtMult *= encircleDuration;
 			damageTakenMult *= 4.0;
 		}
+
+		// Sealed pockets collapse quickly: mounting attrition, then surrender.
+		const pocket =
+			!isAtSea && !isMega && !isSuper
+				? pocketCells?.get(gridIdxNow)
+				: undefined;
+		if (pocket?.sideIndex === u.sideIndex) {
+			u.pocketTicks++;
+			if (u.pocketTicks >= POCKET_SURRENDER_TICKS) {
+				recordDamage(u, u.health);
+				return;
+			}
+			recordDamage(
+				u,
+				POCKET_ATTRITION * (1 + u.pocketTicks / POCKET_ATTRITION_RAMP_TICKS),
+			);
+		} else u.pocketTicks = 0;
 
 		// Attrition logic: logistics strain increases the further you push into large nations
 		const inEnemyTerritory =

@@ -1405,6 +1405,7 @@ export function createSimulationTick(runtime) {
 			mountainsEnabled: runtime.mountainsEnabled,
 			terrainMask: runtime.terrainMask,
 			riverMask: runtime.riverMask,
+			encirclementPockets: runtime.encirclementPockets,
 			getControlValue: runtime.getControlValue,
 			isEnemyTerritory: runtime.isEnemyTerritory,
 			simFrameCount: runtime.simFrameCount,
@@ -1465,7 +1466,8 @@ export function createSimulationTick(runtime) {
 
 		// A side can keep fighting at zero reserve, but it cannot recruit new formations.
 		perf.unitLoop += clockNow() - _t3;
-		// Sealed pockets are a presentation hint; twice a second at 1x is enough.
+		// Sealed pockets drive attrition, breakout and relief; twice a second at 1x
+		// is enough.
 		if (runtime._simTickCount % POCKET_SCAN_INTERVAL === 0)
 			runtime.encirclementPockets = findEncirclementPockets(runtime);
 		const _t4 = clockNow();

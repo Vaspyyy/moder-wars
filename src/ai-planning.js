@@ -439,7 +439,12 @@ export function createAiPlanner(context) {
 			if (globalForceRatio < 1.0) score += 15;
 		}
 		if (proposal.type === "ENCIRCLE") {
-			score += 25;
+			// Pockets end fights quickly; grinding a front down does not.
+			score +=
+				45 +
+				Math.min(15, Math.sqrt(proposal.encirclement?.pocketSize || 0)) +
+				// Going around a dug-in line beats going through it.
+				15 * (risk.enemyLineShare || 0);
 		}
 		if (proposal.type === "PUSH_FRONT") {
 			score += 15;
@@ -546,6 +551,11 @@ export function createAiPlanner(context) {
 		if (memory?.lastOutcome === "failed") score *= 0.7;
 		if (memory?.lastOutcome === "success") score *= 1.1;
 		if (memory?.failures > memory?.successes + 1) score *= 0.55;
+
+		// Frontal attacks into enemies dug in on a river or mountain line are
+		// poor value; pincers and other sectors score relatively higher.
+		if (proposal.type === "PUSH_FRONT" || proposal.type === "CAPTURE_CITY")
+			score *= 1 - 0.4 * (risk.enemyLineShare || 0);
 
 		// ── Special modifiers ──
 		if (proposal.type === "CAPTURE_CITY" && !geo.reachesTarget) {

@@ -1,6 +1,6 @@
 {
 	"name": "modern-wars",
-	"version": "0.27.66",
+	"version": "0.28.0",
 	"private": true,
 	"type": "module",
 	"scripts": {

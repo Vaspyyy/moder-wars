@@ -38,7 +38,8 @@ The current **Choose Era** menu exposes one playable era:
 - The live toolbar has a five-bar speed selector: click 1×, 2×, 3×, 5× or 10× directly. Filled bars show the selected level; pausing retains your chosen speed. Restart, sandbox, sound, help, fullscreen, and navigation actions live under **Menu**.
 - **God Mode** and editor tools can stage custom wars, alter borders, and test scenarios.
 - Major rivers and mountain ranges act as defensive lines: formations holding them on friendly ground take less damage, and crossing a river into enemy land is slow. A country whose capital falls suffers a short morale shock on top of the lasting penalty.
-- Sealed encirclement pockets are shaded with a pulsing red hatch while **Show Battle Visuals** is on. **Settings → Visuals → Fade Captured Land** tints newly captured cells with their previous side's colour as they change hands.
+- Outnumbered fronts fall back to the nearest river or mountain line behind them, and so does every front for a few seconds after a capital falls. Attackers route around enemy-held rivers and prefer pincers over frontal attacks into dug-in lines.
+- Sealed encirclement pockets are shaded with a pulsing red hatch while **Show Battle Visuals** is on. Formations in a sealed pocket take mounting attrition and surrender after about five seconds at 1x; they try to break out toward friendly land while nearby formations attack the ring from outside. **Settings → Visuals → Fade Captured Land** tints newly captured cells with their previous side's colour as they change hands.
 
 ## Map Appearance
 
@@ -125,7 +126,7 @@ The live overview keeps only current values. Intelligence/contact memory, econom
 
 `src/editor.js` wires editor tools; `geography-loader.js` and `scenario-loader.js` handle geography and scenario loading. `src/renderer.js` owns the Canvas layer and caches, with separate terrain, unit, label, overlay, and flag passes. Translation data, language application, audio, settings, and exports also have their own modules.
 
-The army AI reserves persistent front sectors and theater reserves before recruiting offensive task forces. Formations receive distinct positions and one authoritative movement order. Shared, budgeted navigation avoids water and neutral territory, while actual enemy contact still resolves combat. Operations assemble, breach, exploit, secure, withdraw and regroup; encirclement proposals require a geographic pocket and two shoulders. Depleted formations rotate out and can replenish from existing reserve personnel.
+The army AI reserves persistent front sectors and theater reserves before recruiting offensive task forces. Formations receive distinct positions and one authoritative movement order. Shared, budgeted navigation avoids water and neutral territory, while actual enemy contact still resolves combat. Operations assemble, breach, exploit, secure, withdraw and regroup; encirclement proposals either close a narrow enemy salient or envelop a stretch of enemy front with two converging arms, and score well above frontal pushes. Depleted formations rotate out and can replenish from existing reserve personnel.
 
 Enable **Settings → Display → Show Army Decisions** to inspect sector coverage, formation destinations, reserves and withdrawal reasons for the observed side. The optional overlay uses bounded samples. See [Army AI architecture and verification](docs/army-ai.md) for ownership, scheduling, limits and offline evaluation commands. The separate player Commander mode remains retired.
 

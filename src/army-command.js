@@ -1,4 +1,5 @@
 import { armyDistanceSq } from "./army-navigation.js";
+import { findDefensiveLine, isSideInCapitalShock } from "./defensive-lines.js";
 import { normalizeLongitudeDelta } from "./geographic-math.js";
 
 export const ARMY_COMMAND = Object.freeze({
@@ -8,6 +9,15 @@ export const ARMY_COMMAND = Object.freeze({
 	RESERVE_SHARE: 0.12,
 	ROTATE_AT: 0.4,
 	RECOVER_AT: 0.75,
+	// A sector holds a river or mountain line this close to its front anyway.
+	LINE_HOLD_DEG: 0.6,
+	// An outnumbered (or capital-shocked) sector falls back this far to a line.
+	LINE_FALLBACK_DEG: 3,
+	// Enemy power above this multiple of friendly power starts a fallback; a
+	// sector already behind its line stays there until the ratio drops below
+	// the second value.
+	FALLBACK_RATIO: 1.3,
+	FALLBACK_KEEP_RATIO: 0.9,
 });
 const power = (unit) =>
 	Math.max(0, unit.combatPower ?? unit.health / (unit.maxHealth || 100));
@@ -137,7 +147,31 @@ export function buildArmySectors(
 		if (nearest)
 			nearest[friendly ? "friendlyPower" : "enemyPower"] += unitPower(unit);
 	}
-	for (const sector of result) sector.priority += sector.enemyPower * 1.4;
+	const shocked = isSideInCapitalShock(context, sideIndex);
+	const wasFallingBack = new Set(
+		previous.filter((s) => s.fallback).map((s) => s.id),
+	);
+	for (const sector of result) {
+		sector.priority += sector.enemyPower * 1.4;
+		// Trade ground for a river bank or mountain range rather than grind in
+		// the open: outnumbered sectors fall back to the nearest line behind them.
+		const ratio = wasFallingBack.has(sector.id)
+			? ARMY_COMMAND.FALLBACK_KEEP_RATIO
+			: ARMY_COMMAND.FALLBACK_RATIO;
+		const pressed =
+			sector.enemyPower > 0 &&
+			(shocked || sector.enemyPower > sector.friendlyPower * ratio);
+		const line = findDefensiveLine(
+			context,
+			sideIndex,
+			sector.anchor,
+			pressed ? ARMY_COMMAND.LINE_FALLBACK_DEG : ARMY_COMMAND.LINE_HOLD_DEG,
+		);
+		sector.lineHold = !!line;
+		sector.fallback =
+			!!line && pressed && line.distance > ARMY_COMMAND.LINE_HOLD_DEG;
+		if (line) sector.hold = { lat: line.lat, lng: line.lng };
+	}
 	return result;
 }
 
@@ -257,8 +291,13 @@ export function allocateArmyCoverage(sectors, units, posture = "BALANCED") {
 				unit,
 				sector,
 				type: "HOLD",
-				reason:
-					sector.enemyPower > 0 ? "SECTOR_UNDER_PRESSURE" : "FRONT_COVERAGE",
+				reason: sector.fallback
+					? "FALL_BACK_TO_LINE"
+					: sector.lineHold
+						? "HOLD_DEFENSIVE_LINE"
+						: sector.enemyPower > 0
+							? "SECTOR_UNDER_PRESSURE"
+							: "FRONT_COVERAGE",
 			});
 		}
 		sector.requiredPower = Math.max(

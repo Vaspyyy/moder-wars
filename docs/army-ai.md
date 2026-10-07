@@ -51,9 +51,22 @@ An unsafe flank pauses an attack. Sustained unsafe flanks, lost power, supply co
 
 ## Geographic pincers
 
-`src/army-encirclement.js` tests bounded local enemy components for a narrow neck between two friendly shoulders. A closure is proposed only if filling its cells would remove the component's escape from the local window. Local superiority is also required. This replaces the old point-target encirclement heuristic.
+Pincers are the preferred way to win a front; frontal grinding is the fallback. `src/army-encirclement.js` proposes two kinds:
 
-Spearheads split between the shoulders and converge on the closure. Line/support formations pin the pocket and protect the approach. Progress follows the weaker arm. Completion requires actual friendly ownership of the closure and no external enemy connection from the retained pocket cells. Losing a shoulder invalidates the operation. Searches are deliberately local and bounded; large, irregular or multi-exit pockets may not produce a proposal.
+- **Salients.** `findArmyEncirclement` lists every short horizontal or vertical enemy run (at most about 2 degrees) with friendly land at both ends inside a local window, shortest and nearest first. A run is a closure only if taking it removes an enemy component's escape from the window.
+- **Double envelopments.** `findArmyDoubleEnvelopment` takes pairs of front points 3 or 4.5 degrees apart, places a meeting point behind the enemy line at 45% of the span, and rasterizes a 4-connected path from each friendly shoulder to it. The cut-off enemy cells must stay inside the window and hold at least one enemy formation; the pair trapping the most formations wins. Up to four fronts per side are tested per proposal run, each one budgeted unit of work.
+
+Both require local superiority of 1.25 times. Encirclement proposals score 45 points plus up to 15 for pocket size and up to 15 for how dug in the defenders near the pocket are. Frontal pushes and city captures lose up to 40% of their score in proportion to the share of nearby enemy strength holding a river or mountain line.
+
+Pincer task forces give 45% of their power to spearheads, launch at 70% of the normal readiness, ignore flank warnings, and time out of assembly after 900 ticks. Both arms drive straight for the meeting point; line and support formations pin the pocket. Losing a shoulder invalidates the operation. A salient closure completes when every closure cell is friendly and the pocket has no external enemy connection; an envelopment completes when the enemy cells left in the pocket and closure can no longer flood out of the window.
+
+## Defensive lines
+
+Rivers (`src/river-lines.js`) and mountain cells with terrain intensity of at least 0.25 are defensive lines (`src/defensive-lines.js`). Every sector holds a friendly line within 0.6 degrees of its front. A sector whose attributed enemy power exceeds 1.3 times its friendly power, or any engaged sector during the six seconds after its side loses a capital, falls back to the nearest friendly line within 3 degrees. It keeps that position until the ratio drops below 0.9. Holding formations take slots on line cells first. Navigation adds a cost of 3 for entering a river cell someone else holds.
+
+## Sealed pockets
+
+`src/encirclement-pockets.js` scans every 30 ticks for war-zone land a side holds that touches only hostile land and holds one of its formations; sea, neutral and home land count as exits. Each pocket records the nearest friendly land outside it (`escape`) and its own cell closest to that land (`edge`). Formations in a pocket lose 0.25 health per tick, rising by the same amount every 120 ticks, and surrender after 300 ticks. Trapped formations get an `ASSAULT` order toward the escape point (`POCKET_BREAKOUT`). Up to six healthy formations within 6 degrees that are not in an operation attack toward the edge (`POCKET_RELIEF`).
 
 ## Rotation and manpower
 

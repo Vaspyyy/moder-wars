@@ -19,6 +19,8 @@ export const AI_TASK_FORCE_DEFAULTS = Object.freeze({
 	CONSOLIDATION_TICKS: 300,
 	WITHDRAWAL_ARRIVAL_RADIUS_SQ: 1,
 	SPEARHEAD_POWER_SHARE: 0.2,
+	// A pincer is two spearheads; most of its strength drives the arms.
+	PINCER_SPEARHEAD_POWER_SHARE: 0.45,
 	SUPPORT_POWER_SHARE: 0.1,
 });
 
@@ -344,7 +346,10 @@ export function assignTaskForceRoles(taskForce, units, options = {}) {
 	claimUntil(
 		spearheadCandidates,
 		"SPEARHEAD",
-		totalPower * AI_TASK_FORCE_DEFAULTS.SPEARHEAD_POWER_SHARE,
+		totalPower *
+			(taskForce.planType === "ENCIRCLE"
+				? AI_TASK_FORCE_DEFAULTS.PINCER_SPEARHEAD_POWER_SHARE
+				: AI_TASK_FORCE_DEFAULTS.SPEARHEAD_POWER_SHARE),
 		true,
 	);
 	const unitRoles = {};
@@ -668,6 +673,11 @@ export function advanceAiTaskForce(taskForce, context = {}) {
 	const defensivePlan = ["DEFEND"].includes(
 		String(next.planType || "").toUpperCase(),
 	);
+	// Pincers are flank operations by design and only pay off if they move
+	// fast, so they launch at lower readiness and ignore flank warnings.
+	const pincer = String(next.planType || "").toUpperCase() === "ENCIRCLE";
+	const launchReadiness = thresholds.launchReadiness * (pincer ? 0.7 : 1);
+	const flankUnsafe = !pincer && context.flankUnsafe;
 	const stalledTicks = Math.max(0, tick - next.lastProgressTick);
 	if (next.phase === "ASSEMBLING") {
 		if (context.cancelled || context.objectiveInvalid) {
@@ -679,20 +689,20 @@ export function advanceAiTaskForce(taskForce, context = {}) {
 				completionReason: "OBJECTIVE_INVALID",
 			});
 		}
-		if (tick - next.phaseStartedTick >= 1800) {
+		if (tick - next.phaseStartedTick >= (pincer ? 900 : 1800)) {
 			return transition(next, "WITHDRAWING", tick, {
 				withdrawalAnchor: next.stagingAnchor,
 				completionReason:
-					next.readiness < thresholds.launchReadiness
+					next.readiness < launchReadiness
 						? "ASSEMBLY_TIMEOUT"
-						: context.flankUnsafe
+						: flankUnsafe
 							? "FLANK_UNCOVERED"
 							: "NO_LOCAL_SUPERIORITY",
 			});
 		}
 		if (
-			next.readiness >= thresholds.launchReadiness &&
-			(defensivePlan || (!context.flankUnsafe && !unfavorable))
+			next.readiness >= launchReadiness &&
+			(defensivePlan || (!flankUnsafe && !unfavorable))
 		) {
 			return transition(next, "ATTACKING", tick, {
 				launchPower: Math.max(0.0001, next.currentPower),
@@ -709,7 +719,7 @@ export function advanceAiTaskForce(taskForce, context = {}) {
 		const powerRatio = next.currentPower / Math.max(0.0001, next.launchPower);
 		if (
 			context.objectiveInvalid ||
-			(!defensivePlan && context.flankUnsafe && stalledTicks >= 180) ||
+			(!defensivePlan && flankUnsafe && stalledTicks >= 180) ||
 			(!defensivePlan && stalledTicks >= 1200) ||
 			powerRatio < AI_TASK_FORCE_DEFAULTS.CULMINATION_POWER_RATIO ||
 			(!defensivePlan &&
@@ -721,7 +731,7 @@ export function advanceAiTaskForce(taskForce, context = {}) {
 			return transition(next, "CULMINATED", tick, {
 				completionReason: context.objectiveInvalid
 					? "OBJECTIVE_INVALID"
-					: context.flankUnsafe
+					: flankUnsafe
 						? "FLANK_UNCOVERED"
 						: stalledTicks >= 1200
 							? "NO_PROGRESS"

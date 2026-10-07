@@ -17,6 +17,8 @@ import {
 import { armyPocketClosed } from "./army-encirclement.js";
 import { armyDistanceSq, createArmyNavigator } from "./army-navigation.js";
 import { CONFIG as DEFAULT_CONFIG } from "./config.js";
+import { isDefensiveLineCell } from "./defensive-lines.js";
+import { pocketCellLookup } from "./encirclement-pockets.js";
 
 /** createAiRuntime owns AI behavior and receives current world state through explicit accessors. */
 export function createAiRuntime(context) {
@@ -27,6 +29,91 @@ export function createAiRuntime(context) {
 	const navigator = createArmyNavigator(context);
 	const armyReports = new Map();
 	let armySideCursor = 0;
+	const onDefensiveLine = (idx) => isDefensiveLineCell(context, idx);
+	// Relief draws at most this many formations per pocket, from this far away.
+	const POCKET_RELIEF_UNITS = 6;
+	const POCKET_RELIEF_RANGE_SQ = 6 * 6;
+	// Trapped formations attack toward friendly land; nearby formations not in an
+	// operation attack the ring from outside. Both override sector coverage.
+	function issuePocketOrders(
+		sideIndex,
+		sideUid,
+		sideSummary,
+		unitsById,
+		report,
+		orderedUnitIds,
+	) {
+		const pockets = (context.encirclementPockets || []).filter(
+			(pocket) => pocket.sideIndex === sideIndex && pocket.escape,
+		);
+		if (!pockets.length) return;
+		const lookup = pocketCellLookup(context.encirclementPockets);
+		const trappedBy = new Map(pockets.map((pocket) => [pocket, 0]));
+		const outside = [];
+		for (const serialized of sideSummary.units) {
+			const unit = unitsById.get(String(serialized.id));
+			if (!unit || unit.health <= 0 || unit.isAtSea || !serialized.deployed)
+				continue;
+			const pocket = lookup.get(context.getGridIndex(unit.lat, unit.lng));
+			if (pocket && trappedBy.has(pocket)) {
+				trappedBy.set(pocket, trappedBy.get(pocket) + 1);
+				issueArmyOrder(
+					unit,
+					{
+						type: "ASSAULT",
+						target: pocket.escape,
+						owner: `pocket:${sideUid}`,
+						role: "SPEARHEAD",
+						speed: 1.2,
+						reason: "POCKET_BREAKOUT",
+					},
+					context._simTickCount,
+					report.events,
+				);
+				orderedUnitIds.add(String(unit.id));
+			} else if (
+				serialized.commandEligible &&
+				!unit._taskForceUid &&
+				!unit._armyRecovering &&
+				unit.health >= (unit.maxHealth || 100) * 0.5
+			)
+				outside.push(unit);
+		}
+		const relieving = new Set();
+		for (const [pocket, trapped] of trappedBy) {
+			if (!trapped) continue;
+			const relief = outside
+				.filter(
+					(unit) =>
+						!relieving.has(unit) &&
+						armyDistanceSq(unit, pocket.escape) < POCKET_RELIEF_RANGE_SQ,
+				)
+				.sort(
+					(a, b) =>
+						armyDistanceSq(a, pocket.escape) -
+							armyDistanceSq(b, pocket.escape) ||
+						String(a.id).localeCompare(String(b.id)),
+				)
+				.slice(0, Math.min(POCKET_RELIEF_UNITS, Math.max(2, trapped)));
+			for (const unit of relief) {
+				relieving.add(unit);
+				issueArmyOrder(
+					unit,
+					{
+						type: "ASSAULT",
+						target: pocket.edge,
+						owner: `pocket:${sideUid}`,
+						role: "SPEARHEAD",
+						speed: 1.1,
+						reason: "POCKET_RELIEF",
+					},
+					context._simTickCount,
+					report.events,
+				);
+				orderedUnitIds.add(String(unit.id));
+			}
+		}
+	}
 	function getArmyMovement(unit, order) {
 		const movement = navigator.direction(unit, order, context._simTickCount);
 		if (
@@ -777,11 +864,13 @@ export function createAiRuntime(context) {
 						type = "SCREEN";
 						reason = "PIN_AND_PROTECT_SHOULDERS";
 					} else if (role === "SPEARHEAD") {
+						// Both arms drive straight for the meeting point; waiting on the
+						// slower arm lets the pocket's defenders slip away.
 						const shoulder = operation.shoulders[roleIndex % 2];
 						target = interpolateOperationalPoint(
 							shoulder,
 							operation.target,
-							Math.min(1, taskForce.progress + 0.25),
+							1,
 							lateral,
 						);
 						type = "ASSAULT";
@@ -1158,6 +1247,9 @@ export function createAiRuntime(context) {
 						true,
 						10,
 						occupiedCoverage,
+						sector.lineHold && allocation.type === "HOLD"
+							? onDefensiveLine
+							: null,
 					) || sector.hold;
 				unit._armySectorId = sector.id;
 				unit._armyRecovering = false;
@@ -1575,6 +1667,14 @@ export function createAiRuntime(context) {
 				);
 				orderedUnitIds.add(String(unit.id));
 			}
+			issuePocketOrders(
+				sideIndex,
+				sideUid,
+				sideSummary,
+				unitsById,
+				report,
+				orderedUnitIds,
+			);
 			report.lastUpdate = context._simTickCount;
 			report.stats = {
 				sectors: report.sectors.length,
