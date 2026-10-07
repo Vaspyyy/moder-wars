@@ -76,6 +76,7 @@ export function createBenchmarkRuntime(runtime) {
 		runtime.countryCasualties.clear();
 		runtime.casualtyByAttacker.clear();
 		runtime.capitalLostCountries = new Set();
+		runtime._capitalFallTick = new Map();
 		runtime.frameAccumulator = 0;
 		runtime.simFrameCount = 0;
 	}

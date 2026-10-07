@@ -5,7 +5,7 @@ import {
 } from "./simulation-metrics.js";
 import { createSimulationState } from "./simulation-state.js";
 
-export const SIMULATION_PROTOCOL_VERSION = 1;
+export const SIMULATION_PROTOCOL_VERSION = 2;
 export const CONTROL_TILE_SIZE = 32;
 export const CONTROL_MAP_FIELDS = [
 	"worldControlMap",
@@ -556,6 +556,21 @@ export function applyControlDeltas(runtime, tiles) {
 				regionTileKeys.add(tile.key);
 			}
 		}
+	// Optional presentation hook: report cells whose controlling side changed.
+	const recordFade = runtime.recordControlFade;
+	if (recordFade && runtime.dominantSideMap)
+		for (const tile of tiles) {
+			const values = tile.dominantSideMap;
+			if (!values) continue;
+			for (let row = 0; row < tile.height; row++) {
+				const mapOffset = (tile.y + row) * runtime.gridWidth + tile.x;
+				for (let column = 0; column < tile.width; column++) {
+					const before = runtime.dominantSideMap[mapOffset + column];
+					if (before !== values[row * tile.width + column])
+						recordFade(mapOffset + column, before);
+				}
+			}
+		}
 	for (const tile of tiles)
 		for (const field of CONTROL_MAP_FIELDS) {
 			const values = tile[field],
@@ -610,6 +625,7 @@ export function collectTransferBuffers(
 }
 const snapshotKeys = [
 	"gameState",
+	"encirclementPockets",
 	"_simTickCount",
 	"simFrameCount",
 	"soldiersPerUnit",
@@ -645,7 +661,7 @@ const snapshotKeys = [
 	"gameTimeDate",
 	"gameTimeEnabled",
 	"gameTimeAccumulatorMs",
-	"lastTreatyTime",
+	"lastTreatyTick",
 	"capitalLostCountries",
 	"sides",
 ];

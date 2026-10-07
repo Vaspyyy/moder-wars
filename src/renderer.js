@@ -1,3 +1,4 @@
+import { drawControlFades } from "./border-fade.js";
 import { CONFIG } from "./config.js";
 import { getFormationStrengthBadge } from "./formation-strength.js";
 import {
@@ -16,6 +17,7 @@ import {
 	bases,
 	biomeMask,
 	bombs,
+	borderFadeEnabled,
 	cinematicMode,
 	cities,
 	clearAllianceCacheDirty,
@@ -24,6 +26,7 @@ import {
 	disableCountryGradient,
 	dominantSideMap,
 	editingCountryId,
+	encirclementPockets,
 	explosions,
 	gameMode,
 	gameState,
@@ -79,6 +82,7 @@ import {
 } from "./render-flags.js";
 import { drawLabels } from "./render-labels.js";
 import { drawOverlays } from "./render-overlays.js";
+import { drawEncirclementPockets } from "./render-pockets.js";
 import { createPoliticalStyleTracker } from "./render-political-cache.js";
 import { drawTerrain } from "./render-terrain.js";
 import { drawUnits } from "./render-units.js";
@@ -1552,6 +1556,32 @@ const ControlMapLayer = mapRuntime.Layer.extend({
 			);
 		}
 		ctx = mainCtx;
+
+		if (isWar && borderFadeEnabled)
+			drawControlFades({
+				ctx,
+				gridWidth,
+				res,
+				xMin,
+				xMax,
+				yMin,
+				yMax,
+				project,
+				sideColors,
+			});
+		if (isWar && showBattleIndicators)
+			drawEncirclementPockets({
+				ctx,
+				pockets: encirclementPockets,
+				gridWidth,
+				res,
+				xMin,
+				xMax,
+				yMin,
+				yMax,
+				project,
+				createSurface: () => document.createElement("canvas"),
+			});
 
 		// Pass 4: Selection Highlight
 		drawUnits.call(this, {

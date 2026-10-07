@@ -1,6 +1,14 @@
 import { executeGroundTarget } from "./ground-movement.js";
 import { getSimulationMetrics } from "./simulation-metrics.js";
 
+// Defensive-line tuning: damage a line holder takes, the mountain share of that
+// effect at full intensity, and movement speed while crossing a river.
+const RIVER_LINE_DAMAGE_TAKEN = 0.6;
+const MOUNTAIN_LINE_DEFENSE = 0.35;
+const RIVER_CROSSING_SPEED = 0.6;
+// Ticks (6 s at 1x) over which the capital-fall morale shock fades out.
+const CAPITAL_SHOCK_TICKS = 360;
+
 /** Supply decisions only distinguish 0, 1–2, 3–7, and at least 8 friendly cells. */
 export function countNearbyFriendlySupplyCells(frame, gridIndex, sideIndex) {
 	const { CONFIG, gridWidth, gridHeight, landMask, dominantSideMap } = frame;
@@ -44,12 +52,14 @@ export function createGroundFormationUpdater(frame) {
 		_metadataById,
 		getEffectiveBuffState,
 		countryCapitalLost,
+		_capitalFallTick,
 		_sideWarPhase,
 		_unitGridIdx,
 		countryToSideMap,
 		landMask,
 		mountainsEnabled,
 		terrainMask,
+		riverMask,
 		getControlValue,
 		isEnemyTerritory,
 		simFrameCount,
@@ -175,6 +185,17 @@ export function createGroundFormationUpdater(frame) {
 			damageDealtMult *= 0.8; // 20% reduction (was 35%)
 			damageTakenMult *= 1.15; // 15% more vulnerable (was 25%)
 			speedBuffMult *= 0.9; // 10% slower (was 20%)
+			// Morale shock: right after the capital falls, the defence buckles,
+			// then recovers to the lasting penalty above.
+			const shock =
+				1 -
+				(_simTickCount - (_capitalFallTick?.get(u.sovereignId) ?? -Infinity)) /
+					CAPITAL_SHOCK_TICKS;
+			if (shock > 0) {
+				damageDealtMult *= 1 - 0.4 * shock;
+				damageTakenMult *= 1 + 0.4 * shock;
+				speedBuffMult *= 1 - 0.15 * shock;
+			}
 		}
 
 		// Momentum cascade effects
@@ -320,6 +341,22 @@ export function createGroundFormationUpdater(frame) {
 		// Attrition logic: logistics strain increases the further you push into large nations
 		const inEnemyTerritory =
 			!isAtSea && isEnemyTerritory(gridIdxNow, u.sideIndex);
+
+		// Defensive lines: holding a river bank or mountain range on friendly ground
+		// blunts incoming damage, and crossing a river into enemy land is slow.
+		let lineDefense = 1;
+		if (!isAtSea) {
+			const onRiverLine = riverMask?.[gridIdxNow] === 1;
+			if (!inEnemyTerritory) {
+				if (onRiverLine) lineDefense = RIVER_LINE_DAMAGE_TAKEN;
+				if (isMountain)
+					lineDefense = Math.min(
+						lineDefense,
+						1 - MOUNTAIN_LINE_DEFENSE * mountainIntensity,
+					);
+			} else if (onRiverLine) speedBuffMult *= RIVER_CROSSING_SPEED;
+		}
+		u.lineDefense = lineDefense;
 
 		// Attrition is disabled during Victory Boost (momentum) to prevent breakthroughs from stalling instantly
 		if (

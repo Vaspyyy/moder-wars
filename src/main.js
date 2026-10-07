@@ -91,6 +91,7 @@ const applicationRuntime = createLiveContext(
 		simFrameCount: () => simFrameCount,
 		mountainsEnabled: () => mountainsEnabled,
 		terrainMask: () => terrainMask,
+		riverMask: () => riverMask,
 		getLiveFormationStrength: () => getLiveFormationStrength,
 		worldControlMap: () => worldControlMap,
 		occupationMap: () => occupationMap,
@@ -190,8 +191,14 @@ const applicationRuntime = createLiveContext(
 		geoDistSq: () => geoDistSq,
 		_transportPlan: () => _transportPlan,
 		_frontlinePolys: () => _frontlinePolys,
-		lastTreatyTime: () => lastTreatyTime,
+		lastTreatyTick: () => lastTreatyTick,
 		_lastCapitulationTick: () => _lastCapitulationTick,
+		_capitalFallTick: () => _capitalFallTick,
+		encirclementPockets: () => encirclementPockets,
+		recordControlFade: () =>
+			borderFadeEnabled && gameState === "SIMULATING"
+				? recordControlFade
+				: undefined,
 		treatyAlert: () => treatyAlert,
 		bombsDisabled: () => bombsDisabled,
 		gameTimeDate: () => gameTimeDate,
@@ -889,6 +896,9 @@ const applicationRuntime = createLiveContext(
 		terrainMask: (value) => {
 			terrainMask = value;
 		},
+		riverMask: (value) => {
+			riverMask = value;
+		},
 		_influenceCityGridSource: (value) => {
 			_influenceCityGridSource = value;
 		},
@@ -1209,6 +1219,12 @@ const applicationRuntime = createLiveContext(
 		_lastCapitulationTick: (value) => {
 			_lastCapitulationTick = value;
 		},
+		_capitalFallTick: (value) => {
+			_capitalFallTick = value;
+		},
+		encirclementPockets: (value) => {
+			encirclementPockets = value;
+		},
 		_sideMomentumHistory: (value) => {
 			_sideMomentumHistory = value;
 		},
@@ -1269,8 +1285,8 @@ const applicationRuntime = createLiveContext(
 		initialWorldControlMapSnapshot: (value) => {
 			initialWorldControlMapSnapshot = value;
 		},
-		lastTreatyTime: (value) => {
-			lastTreatyTime = value;
+		lastTreatyTick: (value) => {
+			lastTreatyTick = value;
 		},
 		mediaRecorder: (value) => {
 			mediaRecorder = value;
@@ -1540,6 +1556,8 @@ import { createDeveloperControls } from "./developer-controls.js";
 
 const developer_controls = createDeveloperControls(applicationRuntime);
 
+import { clearControlFades, recordControlFade } from "./border-fade.js";
+import { createFrontHover } from "./front-hover.js";
 import { createMapInput } from "./map-input.js";
 
 const map_input = createMapInput(applicationRuntime);
@@ -2120,6 +2138,8 @@ export let showNonCapitalCities = true;
 // Cache for screen-space label curves so they don't move with the camera
 export const countryLabelAnchors = new Map(); // key: `${countryId}:${regionIndex}` -> { name, points, fontSize }
 export let showBattleIndicators = true;
+// Settings > Visuals: captured land fades from its previous side's colour.
+export let borderFadeEnabled = false;
 export let showWarPlans = true;
 export let showArmyDiagnostics = false;
 // Side leaders used to coordinate strong plans.
@@ -2487,7 +2507,7 @@ export let _casualtyValueEls = {};
 export let _casualtySideMpEls = {};
 export let isPaused = false;
 export let frameAccumulator = 0;
-export let lastTreatyTime = 0;
+export let lastTreatyTick = 0;
 export const sideCasualties = new Float64Array(MAX_SIDES);
 export const countryCasualties = new Map();
 export const casualtyByAttacker = new Map(); // Map<victimCountryId, Map<attackerSovereignId, loss>>
@@ -2620,6 +2640,10 @@ export let _sidePosture = []; // per-side auto posture (OFFENSIVE/BALANCED/DEFEN
 export let _sideMomentumHistory = []; // per-side: array of {tick, controlled} entries
 export let _sideWarPhase = []; // per-side: "ADVANCING" | "STALEMATE" | "RETREATING" | "COLLAPSING"
 let _lastCapitulationTick = Number.NEGATIVE_INFINITY;
+// Country id -> simulation tick its capital last fell, for the morale shock.
+let _capitalFallTick = new Map();
+// Sealed pockets mirrored from the simulation for the map overlay.
+export let encirclementPockets = [];
 export let _warPlan = []; // per-side war plan: { type, phase, target, ... }
 export const _navalPlan = []; // per-side naval invasion plan (1 per side max)
 export const _navalSupplyPlan = []; // per-side naval supply run plan (1 per side max)
@@ -2745,6 +2769,8 @@ export let gridWidth = 0,
 	landMask,
 	biomeMask,
 	terrainMask;
+// Land cells on a major river bank, rebuilt at each war start (null off-Earth).
+let riverMask = null;
 export function setBombsDisabled(val) {
 	bombsDisabled = val;
 }
@@ -6175,7 +6201,7 @@ function setTreatyAlertVisible(visible) {
 }
 
 export function showTreatyOffer(proposerSideIdx, willAccept) {
-	lastTreatyTime = Date.now();
+	lastTreatyTick = _simTickCount;
 	const name = getSideDisplayName(proposerSideIdx);
 	treatyMsg.innerText = `${name} requests peace`;
 	document.getElementById("treaty-status").innerText =
@@ -6197,7 +6223,7 @@ export function showTreatyOffer(proposerSideIdx, willAccept) {
 			scheduleWarLifecycleCallback(
 				() => {
 					if (offerLapsed()) return;
-					lastTreatyTime = Date.now();
+					lastTreatyTick = _simTickCount;
 					if (willAccept && sides.length <= 2) {
 						applyTreaty("PEACE_TREATY");
 						return;
@@ -6268,6 +6294,7 @@ export function findCityAtLatLng(latlng) {
 map_input.bindMapClick();
 
 map_input.bindMapCoordinatesMousemove();
+createFrontHover(applicationRuntime).bindFrontHover();
 
 menu_controls.bindViewModeBtnClick();
 
@@ -6292,6 +6319,17 @@ const armyDiagnosticsCheckbox = document.getElementById(
 	"show-army-diagnostics-checkbox",
 );
 showArmyDiagnostics = getCookie("mw_show_army_decisions") === "true";
+const borderFadeCheckbox = document.getElementById("border-fade-checkbox");
+borderFadeEnabled = getCookie("mw_border_fade") === "true";
+if (borderFadeCheckbox) {
+	borderFadeCheckbox.checked = borderFadeEnabled;
+	borderFadeCheckbox.addEventListener("change", (event) => {
+		borderFadeEnabled = event.target.checked;
+		if (!borderFadeEnabled) clearControlFades();
+		setCookie("mw_border_fade", borderFadeEnabled ? "true" : "false");
+		influenceLayer?.render();
+	});
+}
 if (armyDiagnosticsCheckbox) {
 	armyDiagnosticsCheckbox.checked = showArmyDiagnostics;
 	armyDiagnosticsCheckbox.addEventListener("change", (event) => {

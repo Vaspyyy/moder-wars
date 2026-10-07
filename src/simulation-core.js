@@ -168,7 +168,7 @@ export function createSimulationCore(
 		presentTreatyFinished: () => emit("presentTreatyFinished"),
 		showTreatyOffer: (sideIndex, willAccept) => {
 			state.treatyNoticeVisible = true;
-			state.lastTreatyTime = Date.now();
+			state.lastTreatyTick = state._simTickCount;
 			emit("showTreatyOffer", sideIndex, willAccept);
 		},
 		playExplosionSound: () => emit("playExplosionSound"),
@@ -389,10 +389,10 @@ export function createSimulationCore(
 			for (const name of CONTROL_FLAGS)
 				if (settings[name] != null) state[name] = Boolean(settings[name]);
 			if (
-				settings.lastTreatyTime != null &&
-				Number.isFinite(settings.lastTreatyTime)
+				settings.lastTreatyTick != null &&
+				Number.isFinite(settings.lastTreatyTick)
 			)
-				state.lastTreatyTime = settings.lastTreatyTime;
+				state.lastTreatyTick = settings.lastTreatyTick;
 			for (const [name, value] of Object.entries(config)) {
 				if (Object.hasOwn(state.CONFIG, name)) state.CONFIG[name] = value;
 			}

@@ -415,6 +415,7 @@ export function createConflictSetup(runtime) {
 		runtime.activeBattles = [];
 		runtime._battleHash.clear();
 		runtime.capitalLostCountries = new Set();
+		runtime._capitalFallTick = new Map();
 		runtime.resetOperationalAiRuntime();
 		document.body.classList.remove("conflict-active");
 		document.getElementById("war-desk").style.display = "none";

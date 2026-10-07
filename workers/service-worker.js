@@ -1,6 +1,6 @@
 // Service Worker — versioned offline shell plus persistent runtime data cache
 
-const CACHE_VERSION = "mw-v0.27.65";
+const CACHE_VERSION = "mw-v0.27.66";
 const APP_SHELL_PREFIX = "mw-app-shell-";
 const RUNTIME_PREFIX = "mw-runtime-";
 const LEGACY_CACHE_PREFIX = "mw-cache-";
@@ -23,6 +23,7 @@ const APP_SHELL_PATHS = [
 	"src/audio.js",
 	"src/benchmark-runtime.js",
 	"src/bootstrap.js",
+	"src/border-fade.js",
 	"src/community-chat.js",
 	"src/community-comments.js",
 	"src/community-controls.js",
@@ -44,6 +45,7 @@ const APP_SHELL_PATHS = [
 	"src/editor-file-controls.js",
 	"src/editor-tool-controls.js",
 	"src/editor.js",
+	"src/encirclement-pockets.js",
 	"src/engine.js",
 	"src/firebase.js",
 	"src/formation-strength.js",
@@ -83,8 +85,10 @@ const APP_SHELL_PATHS = [
 	"src/render-labels.js",
 	"src/render-soldier-labels.js",
 	"src/render-overlays.js",
+	"src/render-pockets.js",
 	"src/render-terrain.js",
 	"src/render-units.js",
+	"src/river-lines.js",
 	"src/renderer.js",
 	"src/runtime-context.js",
 	"src/sandbox-controls.js",
@@ -116,6 +120,7 @@ const APP_SHELL_PATHS = [
 
 	"src/conflict-presentation.js",
 	"src/frontline-core.js",
+	"src/front-hover.js",
 	"src/influence-grid.js",
 	"src/render-culling.js",
 	"src/render-political-cache.js",

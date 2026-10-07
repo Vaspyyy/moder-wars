@@ -356,12 +356,14 @@ export function createSimulationWorld(runtime) {
 		return power;
 	}
 
-	function formationDamage(damage, attacker) {
+	function formationDamage(damage, attacker, defender) {
 		return (
 			damage *
 			(attacker.kind === "army"
 				? Math.max(0, getLiveFormationStrength(attacker))
-				: 1)
+				: 1) *
+			// Defenders holding a river or mountain line take less damage.
+			(defender?.lineDefense ?? 1)
 		);
 	}
 

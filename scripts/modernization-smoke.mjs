@@ -20,6 +20,7 @@ const checks = [
 	"scenario-codec",
 	"saved-territory",
 	"peace-deal",
+	"war-features",
 	"simulation-client",
 	"simulation-core",
 	"simulation-engine",

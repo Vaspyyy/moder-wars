@@ -4192,3 +4192,53 @@ input:focus-visible {
 	outline: 2px solid #fff;
 	outline-offset: 2px;
 }
+
+/* Front hover tooltip (src/front-hover.js) */
+.front-hover {
+	position: fixed;
+	z-index: 1500;
+	min-width: 190px;
+	padding: 8px 10px;
+	pointer-events: none;
+	font: 12px var(--hud-font-body);
+	display: none;
+}
+
+.front-hover-row {
+	display: flex;
+	align-items: center;
+	gap: var(--hud-gap-sm);
+	line-height: 1.6;
+}
+
+.front-hover-swatch {
+	width: 10px;
+	height: 10px;
+	border-radius: var(--hud-radius-xs);
+	flex: none;
+}
+
+.front-hover-name {
+	flex: 1;
+	color: var(--hud-color-text-soft);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 160px;
+}
+
+.front-hover-row strong {
+	font-family: var(--hud-font-mono);
+	font-variant-numeric: tabular-nums;
+}
+
+.front-hover-trend {
+	margin-top: 4px;
+	padding-top: 4px;
+	border-top: 1px solid var(--hud-color-border);
+	color: var(--hud-color-muted);
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.6px;
+	font-size: 11px;
+}

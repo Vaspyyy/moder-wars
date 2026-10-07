@@ -1,4 +1,5 @@
 import { showAlert } from "./dialogs.js";
+import { loadRiverLines, rasterizeRiverMask } from "./river-lines.js";
 // Explicit live context keeps replacements of arrays/state visible across awaits and callbacks.
 export function createWarStart(runtime) {
 	async function startWar() {
@@ -26,6 +27,14 @@ export function createWarStart(runtime) {
 
 	async function _startWarInner() {
 		runtime.invalidateWarLifecycleTimers();
+		runtime.riverMask = runtime.isCustomTerrain
+			? null
+			: rasterizeRiverMask(await loadRiverLines(), {
+					gridWidth: runtime.gridWidth,
+					gridHeight: runtime.gridHeight,
+					gridRes: runtime.CONFIG.GRID_RES,
+					landMask: runtime.landMask,
+				});
 		if (runtime.gameMode === "CONQUEST")
 			runtime.applyBroadSetupPosture(
 				document.getElementById("setup-posture-select")?.value || "ADAPTIVE",
@@ -64,6 +73,7 @@ export function createWarStart(runtime) {
 		runtime._warOverviewLastUpdate = -Infinity;
 		runtime.resetSimulationOptimizationRuntime();
 		runtime.capitalLostCountries = new Set();
+		runtime._capitalFallTick = new Map();
 		runtime.resetSideHostilities();
 
 		// Initialize time system for this war
@@ -160,7 +170,7 @@ export function createWarStart(runtime) {
 			document.getElementById("game-status").style.display = "flex";
 			document.getElementById("stats-panel").style.display = "block";
 		}
-		runtime.lastTreatyTime = Date.now();
+		runtime.lastTreatyTick = 0;
 		runtime.sideCasualties.fill(0);
 		runtime.countryCasualties.clear();
 		runtime.casualtyByAttacker.clear();

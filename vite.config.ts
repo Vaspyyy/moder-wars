@@ -40,7 +40,9 @@ export default defineConfig({
 				const files = paths(out).filter(
 					(path) =>
 						/\.(?:js|css)$/.test(path) ||
-						/^assets\/(?:coast-110m\.bin-|title-map-|2022-)/.test(path),
+						/^assets\/(?:coast-110m\.bin-|rivers-50m\.bin-|title-map-|2022-)/.test(
+							path,
+						),
 				);
 				const shell = [
 					"index.html",

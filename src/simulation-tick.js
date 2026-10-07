@@ -1,6 +1,11 @@
+import { findEncirclementPockets } from "./encirclement-pockets.js";
 import { multiplyInfluence } from "./influence-grid.js";
 import { getSimulationMetrics } from "./simulation-metrics.js";
 import { aggregateTaskForceCellPair } from "./tactical-grid.js";
+
+// 6 seconds at the 60 ticks per second of 1x speed.
+const TREATY_COOLDOWN_TICKS = 360;
+const POCKET_SCAN_INTERVAL = 30;
 // Dependencies are supplied by the application; this module does not import it.
 export function createSimulationTick(runtime) {
 	function performSimulationTick() {
@@ -760,6 +765,10 @@ export function createSimulationTick(runtime) {
 			)
 				countryCapitalLost.set(city.sovereignId, true);
 		}
+		// A capital that just fell starts a morale shock for its country.
+		for (const countryId of countryCapitalLost.keys())
+			if (!runtime.capitalLostCountries.has(countryId))
+				runtime._capitalFallTick.set(countryId, runtime._simTickCount);
 		// Expose capital-loss state globally so recruitment/spawn logic can react to supply failure
 		runtime.capitalLostCountries = new Set(countryCapitalLost.keys());
 
@@ -1388,12 +1397,14 @@ export function createSimulationTick(runtime) {
 			_metadataById,
 			getEffectiveBuffState: runtime.getEffectiveBuffState,
 			countryCapitalLost,
+			_capitalFallTick: runtime._capitalFallTick,
 			_sideWarPhase: runtime._sideWarPhase,
 			_unitGridIdx,
 			countryToSideMap,
 			landMask: runtime.landMask,
 			mountainsEnabled: runtime.mountainsEnabled,
 			terrainMask: runtime.terrainMask,
+			riverMask: runtime.riverMask,
 			getControlValue: runtime.getControlValue,
 			isEnemyTerritory: runtime.isEnemyTerritory,
 			simFrameCount: runtime.simFrameCount,
@@ -1454,9 +1465,13 @@ export function createSimulationTick(runtime) {
 
 		// A side can keep fighting at zero reserve, but it cannot recruit new formations.
 		perf.unitLoop += clockNow() - _t3;
+		// Sealed pockets are a presentation hint; twice a second at 1x is enough.
+		if (runtime._simTickCount % POCKET_SCAN_INTERVAL === 0)
+			runtime.encirclementPockets = findEncirclementPockets(runtime);
 		const _t4 = clockNow();
 		// 4. Individual Capitulation & Treaty Logic
-		const timeSinceTreaty = Date.now() - runtime.lastTreatyTime;
+		// Peace offers pace on simulation ticks, so every speed sees the same rate.
+		const ticksSinceTreaty = runtime._simTickCount - runtime.lastTreatyTick;
 
 		// Capitulation is evaluated only when a complete dirty-tile census commits, so
 		// every country observes one coherent territory snapshot.
@@ -1564,7 +1579,10 @@ export function createSimulationTick(runtime) {
 				runtime.sides.length > 1 ? 1 : 0,
 			);
 			return true;
-		} else if (timeSinceTreaty > 6000 && !runtime.isTreatyNoticeVisible()) {
+		} else if (
+			ticksSinceTreaty > TREATY_COOLDOWN_TICKS &&
+			!runtime.isTreatyNoticeVisible()
+		) {
 			if (!runtime.peaceTreatiesDisabled) {
 				const getSidePressure = (sIdx) => {
 					let total = 0;

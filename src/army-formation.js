@@ -54,6 +54,7 @@ export function createArmyFormation(
 		dirLng: undefined,
 		isAtSea: undefined,
 		mountainIntensity: undefined,
+		lineDefense: 1,
 		encircledTicks: undefined,
 		_cachedTarget: undefined,
 		_cachedScanKx: undefined,

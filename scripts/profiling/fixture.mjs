@@ -6,6 +6,7 @@ import {
 	createSparseInfluenceMap,
 	writeInfluence,
 } from "../../src/influence-grid.js";
+import { decodeRiverLines, rasterizeRiverMask } from "../../src/river-lines.js";
 import { decodeScenarioBinary } from "../../src/scenario-codec.js";
 import { cloneSimulationData } from "../../src/simulation-protocol.js";
 import { createSimulationState } from "../../src/simulation-state.js";
@@ -21,6 +22,10 @@ export const CASES = {
 		unitsPerSide: 400,
 	},
 };
+export const RIVERS_URL = new URL(
+	"../../assets/geodata/derived/rivers-50m.bin.gz",
+	import.meta.url,
+);
 export const MAP_URL = new URL(
 	"../../assets/maps/compiled/world-map-2022-v3.mwsc.gz",
 	import.meta.url,
@@ -90,6 +95,15 @@ export function createProfileFixture(options) {
 		biomeMask: decoded.biome,
 		landMask: decoded.land,
 		terrainMask: new Float32Array(length),
+		riverMask: rasterizeRiverMask(
+			decodeRiverLines(gunzipSync(readFileSync(RIVERS_URL)).buffer),
+			{
+				gridWidth,
+				gridHeight,
+				gridRes: options.gridRes,
+				landMask: decoded.land,
+			},
+		),
 		primaryOccupierMap: new Uint16Array(length),
 		dominantSideMap: new Int8Array(length).fill(-1),
 		occupationMap: new Float32Array(length),

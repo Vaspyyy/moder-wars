@@ -37,6 +37,8 @@ The current **Choose Era** menu exposes one playable era:
 - Country cards keep identity and manpower visible, with buffs, allies, role, and doctrine under **Configure**.
 - The live toolbar has a five-bar speed selector: click 1×, 2×, 3×, 5× or 10× directly. Filled bars show the selected level; pausing retains your chosen speed. Restart, sandbox, sound, help, fullscreen, and navigation actions live under **Menu**.
 - **God Mode** and editor tools can stage custom wars, alter borders, and test scenarios.
+- Major rivers and mountain ranges act as defensive lines: formations holding them on friendly ground take less damage, and crossing a river into enemy land is slow. A country whose capital falls suffers a short morale shock on top of the lasting penalty.
+- Sealed encirclement pockets are shaded with a pulsing red hatch while **Show Battle Visuals** is on. **Settings → Visuals → Fade Captured Land** tints newly captured cells with their previous side's colour as they change hands.
 
 ## Map Appearance
 
@@ -56,6 +58,7 @@ Modern Wars can load custom scenario files and community scenarios. This is sepa
 
 - Click-and-drag to pan. Wheel and trackpad zoom ease continuously toward the cursor; reversing the wheel immediately reverses the camera.
 - Click a country to inspect it and assign it during setup
+- During a war, hover near a front to see both sides' troops on that stretch and which side is advancing
 - Space pauses/resumes during a war; + / − changes the speed level. The speed selector also supports native radio-button arrow-key navigation.
 
 Speeds are target multipliers: large wars may reach the CPU's simulation limit before 5× or 10×. Lowering speed immediately clears accumulated catch-up time. Live clocks keep at most 60 pending ticks, so a slow period cannot leave minutes of time queued. Each completed tick still performs the full simulation; the calendar advances only for completed ticks.
