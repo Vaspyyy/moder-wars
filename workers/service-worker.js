@@ -82,6 +82,7 @@ const APP_SHELL_PATHS = [
 	"src/reference-controls.js",
 	"src/reference-overlay.js",
 	"src/render-atlas.js",
+	"src/render-budget.ts",
 	"src/render-flags.js",
 	"src/render-labels.js",
 	"src/render-soldier-labels.js",

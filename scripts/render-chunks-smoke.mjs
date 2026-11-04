@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
+import "./register-types.mjs";
+const { getRenderBudget } = await import("../src/render-budget.ts");
 import { createRegionChunkCache } from "../src/render-regions.js";
 import { collectSelectionQuads, containsRenderPoint } from "../src/render-culling.js";
 import { createPoliticalChunkCache, drawPoliticalChunks, drawPoliticalBorders } from "../src/render-political-cache.js";
@@ -321,6 +323,7 @@ const canvas = () => ({ style: {}, width: 0, height: 0, setAttribute() {} });
 const map = { getZoom: () => 6, getCenter: () => ({ lat: 0, lng: 0 }), getContainer: () => container, getBounds: () => ({ equals: () => true }), getSize: () => point(100, 60), on() {}, off() {}, getPane: () => null, project: (center) => point(center.lng, center.lat), getZoomScale: (next, previous) => 2 ** (next - previous) };
 const source = readFileSync(new URL("../src/renderer.js", import.meta.url), "utf8").replace(/^import[\s\S]*?from "[^"]+";\n/gm, "").replace(/export \{ ControlMapLayer, RENDER_LAYERS \};/, "");
 const globals = { document: { createElement: canvas }, window: { devicePixelRatio: 2 }, map, worldControlMap: null, landMask: null, isPaused: true, gameState: "MENU", godModeActive: false, preGodModeState: "MENU", cinematicMode: false, gridWidth: 128, gridHeight: 96, performance, requestAnimationFrame: () => 1, cancelAnimationFrame() {}, invalidateUnitFlagSprites() {}, mapRuntime: { Layer: { extend(methods) { function Layer() {} Object.assign(Layer.prototype, methods); return Layer; } }, DomUtil: { create: canvas, setTransform(surface, offset, scale) { surface.style.transform = `${offset.x},${offset.y},${scale}`; } } } };
+globals.getRenderBudget = getRenderBudget;
 const { ControlMapLayer: Layer, RENDER_LAYERS } = vm.runInNewContext(
 	`${source}\n({ ControlMapLayer, RENDER_LAYERS });`,
 	globals,
@@ -328,7 +331,7 @@ const { ControlMapLayer: Layer, RENDER_LAYERS } = vm.runInNewContext(
 const view = new Layer();
 view.onAdd(map);
 assert.equal(children.length, 5, "unchanged layers are presented by the DOM compositor");
-assert.ok(children.every((surface) => surface.style.width === "484px" && surface.style.height === "444px"));
+assert.ok(children.every((surface) => surface.style.width === "292px" && surface.style.height === "252px"));
 assert.equal(view._compositeLayers, false);
 assert.ok(Number(view._container.style.zIndex) > 401, "unit badges stay above the GPU flags");
 assert.ok(Number(view._labelsSurface.style.zIndex) > Number(view._container.style.zIndex));
@@ -437,12 +440,35 @@ assert.equal(queued,null,"long-drag replenishment cannot run at pointer-event fr
 view._onMoveEnd();queued();queued=null;
 // Captures keep the public viewport canvas size, with no overscan margin.
 view._isCapturing=true;view._resizeSurfaces();assert.equal(view._surfacePadding,0);assert.equal(view._container.width,200);assert.equal(view._container.height,120);
-view._isCapturing=false;view._resizeSurfaces();assert.equal(view._surfacePadding,192);assert.equal(view._container.width,968);
+view._isCapturing=false;view._resizeSurfaces();assert.equal(view._surfacePadding,96);assert.equal(view._container.width,584);
 // Camera settle remains force-admitted by the active simulation, without a
 // second renderer-owned rAF bypassing its render admission policy.
 globals.gameState="SIMULATING";globals.isPaused=false;view._renderRaf=0;
 view._onMoveStart();view._onMoveEnd();assert.equal(queued,null);assert.equal(view.hasPendingZoomSettle(),true);
 view._commitZoomSettle();view.render=actualRender;globals.worldControlMap=null;globals.landMask=null;
+// Record each intermediate backing-store allocation, not only final dimensions.
+globals.window.devicePixelRatio = 3;
+map.getSize = () => point(390, 844);
+view._resizeSurfaces();
+let peakPixels = 0;
+for (const surface of view._surfaces) {
+ let width = surface.width, height = surface.height;
+ Object.defineProperty(surface, "width", {get: () => width, set: value => { width = value; peakPixels = Math.max(peakPixels, width * height); }});
+ Object.defineProperty(surface, "height", {get: () => height, set: value => { height = value; peakPixels = Math.max(peakPixels, width * height); }});
+}
+for (const [width, height] of [[844,390], [390,844], [3840,2160]]) {
+ map.getSize = () => point(width, height);
+ view._resizeSurfaces();
+}
+assert.ok(peakPixels <= 2_000_000, "rotation must not allocate new width times old height above the surface budget");
 view.onRemove(map);
 assert.equal(children.length, 0);
+assert.ok(view._surfaces.every(surface => surface.width === 0 && surface.height === 0), "detached canvas backing stores are released immediately");
+queued = null;
+globals.gameState = "MENU"; globals.isPaused = true;
+globals.worldControlMap = new Uint16Array(1); globals.landMask = new Uint8Array(1);
+view.requestRender(RENDER_LAYERS.ALL);
+assert.equal(queued, null, "late flag-load callbacks cannot schedule a disposed layer");
+assert.doesNotThrow(() => { view.render(); view._update(); view._resizeSurfaces(); });
+assert.ok(view._surfaces.every(surface => surface.width === 0 && surface.height === 0), "late callbacks cannot recreate detached backing stores");
 console.log("World chunk cache, political materials, culling, selection, stacked surfaces, and zoom smoke checks passed");

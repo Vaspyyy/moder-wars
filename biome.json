@@ -19,6 +19,7 @@
 			"scripts/build-output-smoke.mjs",
 			"scripts/editor-startup-smoke.mjs",
 			"scripts/camera-gesture-smoke.mjs",
+			"scripts/render-budget-smoke.mjs",
 			"workers/**/*.js",
 			"styles/**/*.css"
 		]

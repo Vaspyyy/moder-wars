@@ -6,6 +6,7 @@ const checks = [
 	"atlas-scene",
 	"atlas-gpu",
 	"atlas",
+	"render-budget",
 	"camera-performance",
 	"camera-gesture",
 	"presentation-runtime",
