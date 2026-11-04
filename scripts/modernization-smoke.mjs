@@ -1,6 +1,8 @@
 import { spawnSync } from "node:child_process";
 
 const checks = [
+	"admin-regions",
+	"occupation-regions",
 	"native-camera",
 	"native-reference",
 	"atlas-scene",
@@ -16,8 +18,13 @@ const checks = [
 	"political-redraw",
 	"editor-loaders",
 	"editor-startup",
+	"conflict-reset",
 	"geography-demand",
 	"scenario-codec",
+	"scenario-territory",
+	"ukraine-scenario",
+	"modern-2026",
+	"scenario-menu",
 	"saved-territory",
 	"peace-deal",
 	"war-features",

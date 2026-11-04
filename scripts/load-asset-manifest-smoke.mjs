@@ -35,7 +35,7 @@ for (const resolutions of Object.values(PREDERIVED_EARTH_ASSETS)) {
 	}
 }
 
-assert.equal(scenarioCount, 3);
+assert.equal(scenarioCount, 4);
 assert.equal(rasterCount, 12);
 console.log(
 	`load asset manifest smoke: ${scenarioCount} scenarios and ${rasterCount} rasters verified`,

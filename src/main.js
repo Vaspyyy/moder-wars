@@ -6732,6 +6732,7 @@ menu_controls.bindEnterScenarioBtnClick();
 
 // Wire Scroller Cards
 menu_controls.bindScrollerChoiceModernClick();
+menu_controls.bindScrollerChoiceUkraine2023Click();
 menu_controls.bindScrollerChoice1936Click();
 menu_controls.bindScrollerChoice1914Click();
 
