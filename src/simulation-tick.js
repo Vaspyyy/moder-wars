@@ -213,7 +213,7 @@ export function createSimulationTick(runtime) {
 				// Sample 3x3 neighborhood
 				const y = Math.floor(idx / runtime.gridWidth);
 				const x = idx % runtime.gridWidth;
-				const counts = Object.create(null);
+				const counts = new Map();
 				for (let dy = -1; dy <= 1; dy++) {
 					for (let dx = -1; dx <= 1; dx++) {
 						const nx = x + dx;
@@ -228,8 +228,14 @@ export function createSimulationTick(runtime) {
 								runtime.primaryOccupierMap[ny * runtime.gridWidth + nx];
 							const nSide = countryToSideMap.get(nId);
 							// Only count allies
-							if (nId > 0 && nSide !== undefined && nSide === mySide) {
-								counts[nId] = (counts[nId] || 0) + 1;
+							if (
+								Number.isInteger(nId) &&
+								nId > 0 &&
+								nId <= 0xffff &&
+								nSide !== undefined &&
+								nSide === mySide
+							) {
+								counts.set(nId, (counts.get(nId) || 0) + 1);
 							}
 						}
 					}
@@ -237,11 +243,11 @@ export function createSimulationTick(runtime) {
 
 				let dominantAlly = myId;
 				let maxC = 0;
-				for (const id of Object.keys(counts)) {
-					const c = counts[id];
-					if (c > maxC) {
+				for (const [id, c] of counts) {
+					// Object-key enumeration previously favored the lowest country ID on ties.
+					if (c > maxC || (c === maxC && id < dominantAlly)) {
 						maxC = c;
-						dominantAlly = Number(id);
+						dominantAlly = id;
 					}
 				}
 
@@ -1773,8 +1779,9 @@ export function createSimulationTick(runtime) {
 		const soldierEsts = new Array(numSides).fill(0);
 		for (let i = 0; i < runtime.units.length; i++) {
 			const u = runtime.units[i];
-			const si = u.sideIndex;
-			if (si >= 0 && si < numSides) {
+			const rawSide = u.sideIndex;
+			if (Number.isInteger(rawSide) && rawSide >= 0 && rawSide < numSides) {
+				const si = Number(rawSide);
 				unitCounts[si]++;
 				soldierEsts[si] += runtime.getLiveFormationPersonnel(u);
 			}

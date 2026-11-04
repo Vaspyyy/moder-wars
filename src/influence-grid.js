@@ -16,21 +16,27 @@ export function createSparseInfluenceMap(length) {
 
 /** Dense typed-array inputs keep the browser/editor path compatible. */
 export function readInfluence(map, index) {
+	if (typeof index !== "number" || index !== index >>> 0 || index >= map.length)
+		return undefined;
 	const pages = map.pages;
 	if (!pages) return map[index];
-	if (index !== index >>> 0 || index >= map.length) return undefined;
 	const page = pages[index >>> INFLUENCE_PAGE_SHIFT];
 	return page ? page[index & PAGE_MASK] : 0;
 }
 
 /** Return the stored Float32 value, not the unrounded arithmetic result. */
 export function writeInfluence(map, index, value) {
+	// Apply the same numeric bounds to dense and sparse maps before any access.
+	if (typeof index !== "number" || index !== index >>> 0 || index >= map.length)
+		return undefined;
+	index >>>= 0;
 	const pages = map.pages;
 	if (!pages) {
+		// Dense storage is a numeric buffer, never an arbitrary imported record.
+		if (!(map instanceof Float32Array)) return undefined;
 		map[index] = value;
 		return map[index];
 	}
-	if (index !== index >>> 0 || index >= map.length) return undefined;
 	const pageIndex = index >>> INFLUENCE_PAGE_SHIFT;
 	let page = pages[pageIndex];
 	if (!page) {

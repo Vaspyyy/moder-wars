@@ -45,38 +45,71 @@ export function decodeAtlasCoast(buffer) {
 	return { rings, edges };
 }
 const coasts = new Map(),
-	coastRequests = new Map();
+	coastRequests = new Map(),
+	coastRetryAfter = new Map(),
+	coastReadyCallbacks = new Map();
+const COAST_RETRY_DELAY_MS = 30000;
 const resolutionFor = (value) =>
 	["110m", "50m", "10m"].includes(value) ? value : "110m";
+function notifyCoastReady(onReady, resolution) {
+	if (typeof onReady !== "function") return;
+	if (coasts.has(resolution)) {
+		let notified = coastReadyCallbacks.get(resolution);
+		if (!notified) {
+			notified = new WeakSet();
+			coastReadyCallbacks.set(resolution, notified);
+		}
+		if (notified.has(onReady)) return;
+		notified.add(onReady);
+	}
+	queueMicrotask(onReady);
+}
 export function requestAtlasCoast(onReady, requestedResolution = "110m") {
 	const resolution = resolutionFor(requestedResolution);
-	if (coasts.has(resolution)) return;
-	let request = coastRequests.get(resolution);
-	if (!request) {
-		request = fetch(
+	if (coasts.has(resolution)) {
+		notifyCoastReady(onReady, resolution);
+		return;
+	}
+	if (Date.now() < (coastRetryAfter.get(resolution) || 0)) return;
+	let callbacks = coastRequests.get(resolution);
+	if (!callbacks) {
+		callbacks = new Set();
+		coastRequests.set(resolution, callbacks);
+		fetch(
 			new URL(`../assets/atlas/coast-${resolution}.bin.gz`, import.meta.url),
 		)
 			.then((response) => {
 				if (!response.ok) throw new Error("Atlas coast unavailable");
 				return response.arrayBuffer();
 			})
-			.then((buffer) =>
-				new Response(
+			.then((buffer) => {
+				// Content-Encoding may already have decompressed the HTTP response.
+				const bytes = new Uint8Array(buffer);
+				if (bytes[0] !== 0x1f || bytes[1] !== 0x8b) return buffer;
+				return new Response(
 					new Blob([buffer])
 						.stream()
 						.pipeThrough(new DecompressionStream("gzip")),
-				).arrayBuffer(),
-			)
+				).arrayBuffer();
+			})
 			.then((buffer) => {
 				coasts.set(resolution, decodeAtlasCoast(buffer));
+				coastRetryAfter.delete(resolution);
 			})
 			.catch((error) => {
-				coasts.set(resolution, null);
+				// Rendering requests this asset repeatedly; retry without a fetch loop.
+				coastRetryAfter.set(resolution, Date.now() + COAST_RETRY_DELAY_MS);
 				console.warn("Atlas uses grid coastline fallback:", error);
+			})
+			.finally(() => {
+				coastRequests.delete(resolution);
+				for (const callback of callbacks)
+					notifyCoastReady(callback, resolution);
+				callbacks.clear();
 			});
-		coastRequests.set(resolution, request);
 	}
-	request.then(onReady);
+	// A stable renderer callback is retained once, even across many pending frames.
+	callbacks.add(onReady);
 }
 
 // Cache projected geography by viewport, independently of changing ownership.

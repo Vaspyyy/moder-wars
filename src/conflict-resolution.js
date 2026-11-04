@@ -387,8 +387,15 @@ export function createConflictResolution(runtime) {
 		const sideTerritory = new Array(runtime.sides.length).fill(0);
 		for (let i = 0; i < runtime.dominantSideMap.length; i++) {
 			if (runtime.landMask[i] === 2) {
-				const ds = runtime.dominantSideMap[i];
-				if (ds >= 0 && ds < runtime.sides.length) sideTerritory[ds]++;
+				const rawSide = runtime.dominantSideMap[i];
+				if (
+					Number.isInteger(rawSide) &&
+					rawSide >= 0 &&
+					rawSide < sideTerritory.length
+				) {
+					const side = Number(rawSide);
+					sideTerritory[side]++;
+				}
 			}
 		}
 
@@ -535,8 +542,13 @@ export function createConflictResolution(runtime) {
 					for (let dy = -1; dy <= 1; dy++) {
 						const rOff = dy * runtime.gridWidth;
 						for (let dx = -1; dx <= 1; dx++) {
-							const owner = runtime.worldControlMap[idx + rOff + dx];
-							if (owner > 0) {
+							const rawOwner = runtime.worldControlMap[idx + rOff + dx];
+							if (
+								Number.isInteger(rawOwner) &&
+								rawOwner > 0 &&
+								rawOwner < freq.length
+							) {
+								const owner = Number(rawOwner);
 								if (freq[owner] === 0) activeIds[activeCount++] = owner;
 								freq[owner]++;
 								if (freq[owner] > maxFreq) {

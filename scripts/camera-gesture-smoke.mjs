@@ -7,6 +7,7 @@ const { MapCamera } = await import("../src/map-camera.ts");
 const { bindCameraInput } = await import("../src/camera-input.ts");
 const { mapRuntime } = await import("../src/map-runtime.ts");
 const { AtlasGpuLayer } = await import("../src/atlas-gpu.ts");
+const { getRenderBudget } = await import("../src/render-budget.ts");
 const { Container, Sprite, Texture, TextureSource } = await import("pixi.js");
 
 let time = 0,
@@ -65,6 +66,7 @@ const source = readFileSync(
 // Evaluate renderer definitions against an inert owner. The full game render
 // is replaced with a paint counter; real camera/gesture/GPU transform code runs.
 const methods = vm.runInNewContext(`${source}\nControlMapLayer;`, {
+	getRenderBudget,
 	map,
 	mapRuntime: {
 		...mapRuntime,
@@ -121,7 +123,7 @@ Object.assign(gpu, {
 	markerCanvas: surface(),
 	renderer: renderer(),
 	markerRenderer: renderer(),
-	frame: { padding: 192 },
+	frame: { padding: 192, dpr: 1 },
 });
 const texture = new Texture({
 	source: new TextureSource({ width: 80, height: 40 }),

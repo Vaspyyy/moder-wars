@@ -75,6 +75,7 @@ import {
 } from "./main.js";
 import mapRuntime from "./map-runtime.ts";
 import { drawAtlasOcean, requestAtlasCoast } from "./render-atlas.js";
+import { getRenderBudget } from "./render-budget.ts";
 import {
 	invalidateUnitFlagSprites,
 	paintClippedFlag,
@@ -368,7 +369,6 @@ const RENDER_LAYERS = Object.freeze({
 });
 
 const CONTROL_DIRTY_TILE_SIZE = 32;
-const CAMERA_PADDING = 192;
 const CAMERA_REPAINT_INTERVAL = 120;
 
 // Partial redraw clips include a one-cell halo. Sampling blocks that touch it
@@ -589,7 +589,11 @@ const ControlMapLayer = mapRuntime.Layer.extend({
 		this._cameraRepaintPending = false;
 		for (const surface of this._surfaces || []) {
 			surface.parentNode?.removeChild(surface);
+			// Release backing stores even if a detached layer is still referenced.
+			surface.width = 0;
+			surface.height = 0;
 		}
+		invalidateUnitFlagSprites(this);
 		this._politicalChunkCache?.clear();
 		this._regionChunkCache?.clear();
 		map.off("referencechange", this._onReferenceChange, this);
@@ -625,21 +629,33 @@ const ControlMapLayer = mapRuntime.Layer.extend({
 		return offset;
 	},
 	_resizeSurfaces: function () {
-		const size = map.getSize(),
-			dpr = window.devicePixelRatio || 1;
-		const padding = cinematicMode || this._isCapturing ? 0 : CAMERA_PADDING;
-		const width = Math.round((size.x + padding * 2) * dpr),
-			height = Math.round((size.y + padding * 2) * dpr);
+		if (this._disposed) return;
+		const size = map.getSize();
+		const { dpr, padding, width, height } = getRenderBudget(
+			size.x,
+			size.y,
+			window.devicePixelRatio || 1,
+			!cinematicMode && !this._isCapturing,
+		);
 		if (
 			this._container.width === width &&
 			this._container.height === height &&
-			this._surfacePadding === padding
+			this._surfacePadding === padding &&
+			this._renderDpr === dpr &&
+			this._surfaceCssWidth === size.x &&
+			this._surfaceCssHeight === size.y
 		)
 			return;
 		this._surfacePadding = padding;
+		this._renderDpr = dpr;
+		this._surfaceCssWidth = size.x;
+		this._surfaceCssHeight = size.y;
 		for (const surface of this._surfaces) {
-			surface.width = width;
+			// Rotation must not allocate new width × old height before the final
+			// bounded surface. Clear once before installing both new dimensions.
+			surface.width = 0;
 			surface.height = height;
+			surface.width = width;
 			surface.style.width = `${size.x + padding * 2}px`;
 			surface.style.height = `${size.y + padding * 2}px`;
 			surface.style.left = `${-padding}px`;
@@ -719,6 +735,7 @@ const ControlMapLayer = mapRuntime.Layer.extend({
 		layerMask = RENDER_LAYERS.DYNAMIC,
 		preserveWorldCache = false,
 	) {
+		if (this._disposed) return;
 		this.invalidate(layerMask, preserveWorldCache);
 		// The simulation loop performs spike-aware render admission. Renderer-owned
 		// callbacks during an active war can otherwise bypass that admission or paint
@@ -890,6 +907,7 @@ const ControlMapLayer = mapRuntime.Layer.extend({
 		}
 	},
 	_update: function () {
+		if (this._disposed) return;
 		// Transforms handle gesture frames. Paint only for buffered coverage or
 		// when the gesture ends, preserving the complete final view.
 		if ((this._zooming || this._cameraMoving) && !this._cameraRepaintPending)
@@ -913,6 +931,7 @@ const ControlMapLayer = mapRuntime.Layer.extend({
 		}
 	},
 	render: function () {
+		if (this._disposed) return;
 		const _r0 = window.__perf?._enabled ? performance.now() : 0;
 		if (!worldControlMap || !landMask) return;
 		// The main simulation loop calls render() directly, so it needs the same
@@ -985,7 +1004,7 @@ const ControlMapLayer = mapRuntime.Layer.extend({
 		const mainCtx = this._container.getContext("2d", {
 			willReadFrequently: false,
 		});
-		const dpr = window.devicePixelRatio || 1;
+		const dpr = this._renderDpr;
 		const mapSize = map.getSize();
 		const padding = this._surfacePadding || 0;
 
@@ -998,16 +1017,13 @@ const ControlMapLayer = mapRuntime.Layer.extend({
 		const useSimplifiedBase = true;
 		const mapResolution =
 			document.getElementById("map-res-select")?.value || "110m";
-		if (
-			isAtlas &&
-			!isCustomTerrain &&
-			this._atlasCoastRequested !== mapResolution
-		) {
-			this._atlasCoastRequested = mapResolution;
-			requestAtlasCoast(() => {
+		if (isAtlas && !isCustomTerrain) {
+			this._onAtlasCoastReady ??= () => {
+				if (this._disposed) return;
 				this.invalidate(RENDER_LAYERS.STATIC);
 				this.render();
-			}, mapResolution);
+			};
+			requestAtlasCoast(this._onAtlasCoastReady, mapResolution);
 		}
 		const isEditing =
 			gameMode === "EDITOR" || gameMode === "EDITOR_TEST" || godModeActive;

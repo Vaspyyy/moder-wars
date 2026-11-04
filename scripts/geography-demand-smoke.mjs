@@ -1,16 +1,17 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { resolveWorkerAssetUrl } from '../src/worker-asset-url.js';
 import { rasterizeGeoFeatures } from '../src/geo-raster-core.js';
 import { rasterizeGeoSourceInWorker, terminateGeoRasterWorker } from '../src/geo-raster.js';
 import { createInspectorControls } from '../src/inspector-controls.js';
 
 const features=[{type:'Feature',properties:{NAME:'Reference',ISO_A2:'RF'},geometry:{type:'Polygon',coordinates:[[[-2,-2],[2,-2],[2,2],[-2,2],[-2,-2]]]}}];
 const messages=[];let downloads=0;
-const workerSource=fs.readFileSync(new URL('../workers/geo-raster-worker.js',import.meta.url),'utf8').replace(/^import[^;]+;/,'');
-const self={postMessage(message,transfers){messages.push({message,transfers});}};
-vm.runInNewContext(workerSource,{self,rasterizeGeoFeatures,fetch:async url=>{downloads++;assert.equal(url,'https://example.test/reference.json');return {ok:true,json:async()=>({features})};}});
-await self.onmessage({data:{id:4,sourceUrl:'https://example.test/reference.json',options:{gridResolution:1,gridWidth:360,gridHeight:180,yieldEvery:0}}});
+const workerSource=fs.readFileSync(new URL('../workers/geo-raster-worker.js',import.meta.url),'utf8').replace(/^import[^;]+;/gm,'');
+const self={location:{href:'https://example.test/workers/geo-raster-worker.js'},postMessage(message,transfers){messages.push({message,transfers});}};
+vm.runInNewContext(workerSource,{self,rasterizeGeoFeatures,resolveWorkerAssetUrl,fetch:async url=>{downloads++;assert.equal(url,'https://example.test/assets/geodata/reference.json');return {ok:true,json:async()=>({features})};}});
+await self.onmessage({data:{id:4,sourceUrl:'https://example.test/assets/geodata/reference.json',options:{gridResolution:1,gridWidth:360,gridHeight:180,yieldEvery:0}}});
 const result=messages.find(item=>item.message.type==='result');assert.equal(downloads,1);assert.equal(result.message.featureCount,1);assert.ok(!('features' in result.message),'full polygon objects never leave the raster worker');assert.equal(result.transfers.length,3);assert.equal(result.message.arrays.ownerMap[90*360+180],1);
 
 let posted;const oldWorker=globalThis.Worker;const oldWindow=globalThis.window;

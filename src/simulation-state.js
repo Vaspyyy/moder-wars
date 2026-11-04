@@ -4,6 +4,21 @@ import { createTacticalGrid } from "./tactical-grid.js";
 
 /** One simulation owns these buffers, plans and caches. No UI references cross this boundary. */
 export function createSimulationState(initial = {}) {
+	if (!initial || typeof initial !== "object" || Array.isArray(initial)) {
+		throw new TypeError("Simulation state must be an object.");
+	}
+	// Worker snapshots must not mutate the runtime prototype or fake array lengths.
+	for (const key of ["__proto__", "constructor", "prototype"]) {
+		if (Object.hasOwn(initial, key)) {
+			throw new TypeError("Simulation state contains an unsafe property.");
+		}
+	}
+	if (
+		initial.sides !== undefined &&
+		(!Array.isArray(initial.sides) || !initial.sides.every(Array.isArray))
+	) {
+		throw new TypeError("Simulation sides must be arrays of countries.");
+	}
 	const state = { CONFIG: { ...CONFIG }, MAX_SIDES: 8 };
 	state._frontlineLayoutApplyPendingMs = 0;
 	state._frontlineSlotApplyPendingMs = 0;

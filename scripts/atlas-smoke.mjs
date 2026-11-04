@@ -86,6 +86,61 @@ try {
  let oceanFills=0;drawAtlasOcean({createLinearGradient:()=>({addColorStop(){}}),fillRect(){oceanFills++;},save(){},restore(){},beginPath(){},moveTo(){},lineTo(){},stroke(){}},{getSize:()=>({x:500,y:300}),getZoom:()=>3,getBounds:()=>({getWest:()=>-180,getEast:()=>180,getSouth:()=>-80,getNorth:()=>80})},(lat,lng)=>({x:lng,y:lat}));assert.equal(oceanFills,1);
  assert.equal(before[31*n+31],2);
 } finally {globalThis.fetch=originalFetch;globalThis.Path2D=originalPath;}
+
+// Browser fetch can return decompressed bytes even when the URL ends in .gz.
+// Isolated module instances keep successful caches from masking download failures.
+{
+ const decodedAtlas = await import('../src/render-atlas.js?decoded-http');
+ const retryAtlas = await import('../src/render-atlas.js?retry-http');
+ const originalNow = Date.now, originalWarn = console.warn;
+ const frame = {viewportKey:'download-check',project:(lat,lng)=>({x:lng,y:lat})};
+ let now = 1000, attempts = 0, fail = true, warnings = 0;
+ try {
+  globalThis.Path2D = MockPath;
+  let finishDownload, readyCalls = 0, decodedDownloads = 0;
+  globalThis.fetch = () => { decodedDownloads++; return new Promise(resolve=>{finishDownload=resolve;}); };
+  const onReady = () => { readyCalls++; };
+  for(let i=0;i<100;i++)decodedAtlas.requestAtlasCoast(onReady);
+  const ready = new Promise(resolve=>decodedAtlas.requestAtlasCoast(resolve));
+  finishDownload(new Response(buffer, {headers:{'Content-Encoding':'gzip'}}));
+  await ready;
+  assert.equal(decodedDownloads,1,'pending render calls share a download');
+  assert.equal(readyCalls,1,'the same callback is notified once across pending frames');
+  assert.ok(decodedAtlas.getAtlasCoastPaths({},frame),'already decoded HTTP bytes load a coast');
+  for(let i=0;i<100;i++)decodedAtlas.requestAtlasCoast(onReady);
+  await Promise.resolve();
+  assert.equal(readyCalls,1,'warm render calls do not schedule repeated redraws');
+  await new Promise(resolve=>decodedAtlas.requestAtlasCoast(resolve));
+  assert.equal(decodedDownloads,1,'a new layer is notified from the warm cache');
+
+  Date.now = () => now;
+  console.warn = () => { warnings++; };
+  globalThis.fetch = async () => {
+   attempts++;
+   if (fail) throw new TypeError('Network unavailable');
+   return new Response(compressed);
+  };
+  await new Promise(resolve=>retryAtlas.requestAtlasCoast(resolve));
+  assert.equal(attempts,1);
+  assert.equal(warnings,1);
+  assert.equal(retryAtlas.getAtlasCoastPaths({},frame),null,'failed downloads use the grid fallback');
+  for(let i=0;i<100;i++)retryAtlas.requestAtlasCoast(()=>assert.fail('cooldown must not schedule a redraw'));
+  assert.equal(attempts,1,'repeated render calls do not cause a retry loop');
+  now += 30001;
+  fail = false;
+  await Promise.all([new Promise(resolve=>retryAtlas.requestAtlasCoast(resolve)),new Promise(resolve=>retryAtlas.requestAtlasCoast(resolve))]);
+  assert.equal(attempts,2,'the retry is shared and resumes after the cooldown');
+  assert.ok(retryAtlas.getAtlasCoastPaths({},frame),'a recovered connection restores the geographic coast');
+  await new Promise(resolve=>retryAtlas.requestAtlasCoast(resolve));
+  assert.equal(attempts,2,'successful retries remain cached');
+ } finally {
+  globalThis.fetch = originalFetch;
+  globalThis.Path2D = originalPath;
+  Date.now = originalNow;
+  console.warn = originalWarn;
+ }
+}
+
 // A full Earth overview exceeds the legacy 2,048-chunk limit. It must
 // remain warm across another overview and a zoom, rather than thrash the LRU.
 const raster=readFileSync(new URL('../assets/geodata/derived/ne_110m_admin_0_countries_0.15.mwr',import.meta.url));
