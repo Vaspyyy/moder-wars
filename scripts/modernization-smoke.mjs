@@ -31,6 +31,8 @@ const checks = [
 	"formation-strength",
 	"worker-asset-security",
 	"simulation-key-safety",
+	"simulation-index-boundaries",
+	"ai-index-safety",
 	"simulation-client",
 	"simulation-core",
 	"simulation-engine",

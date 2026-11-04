@@ -22,6 +22,8 @@
 			"scripts/render-budget-smoke.mjs",
 			"scripts/worker-asset-security-smoke.mjs",
 			"scripts/simulation-key-safety-smoke.mjs",
+			"scripts/simulation-index-boundaries-smoke.mjs",
+			"scripts/ai-index-safety-smoke.mjs",
 			"workers/**/*.js",
 			"styles/**/*.css"
 		]

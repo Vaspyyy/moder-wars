@@ -370,7 +370,15 @@ export function createAiRuntime(context) {
 	}
 
 	function discardNonHostileOperationalPlans(sideIndex) {
-		for (const slot of [sideIndex, sideIndex + context.sides.length]) {
+		if (
+			!Number.isInteger(sideIndex) ||
+			sideIndex < 0 ||
+			sideIndex >= context.sides.length
+		)
+			return;
+		sideIndex = Number(sideIndex);
+		const sideCount = Number(context.sides.length);
+		for (const slot of [sideIndex, sideIndex + sideCount]) {
 			const plan = context._warPlan[slot];
 			if (
 				isOperationalLandPlan(plan) &&
@@ -666,7 +674,15 @@ export function createAiRuntime(context) {
 	}
 
 	function clearOperationalPlanForTaskForce(sideIndex, taskForce) {
-		const slots = [sideIndex, sideIndex + context.sides.length];
+		if (
+			!Number.isInteger(sideIndex) ||
+			sideIndex < 0 ||
+			sideIndex >= context.sides.length
+		)
+			return;
+		sideIndex = Number(sideIndex);
+		const sideCount = Number(context.sides.length);
+		const slots = [sideIndex, sideIndex + sideCount];
 		for (const slot of slots) {
 			if (context._warPlan[slot]?.signature === taskForce.planSignature) {
 				context._warPlan[slot] = null;
@@ -1038,8 +1054,9 @@ export function createAiRuntime(context) {
 		const processedSides = new Set();
 		let processedCount = 0;
 
-		for (let step = 0; step < context.sides.length; step++) {
-			const sideIndex = (armySideCursor + step) % context.sides.length;
+		const sideCount = Number(context.sides.length);
+		for (let step = 0; step < sideCount; step++) {
+			const sideIndex = (armySideCursor + step) % sideCount;
 			const sideUid = context.sideUids[sideIndex];
 			if (!sideUid || !context.sides[sideIndex]?.length) continue;
 			if (
@@ -1111,8 +1128,8 @@ export function createAiRuntime(context) {
 				};
 				const slot = !context._warPlan[sideIndex]
 					? sideIndex
-					: !context._warPlan[sideIndex + context.sides.length]
-						? sideIndex + context.sides.length
+					: !context._warPlan[sideIndex + sideCount]
+						? sideIndex + sideCount
 						: sideIndex;
 				context._warPlan[slot] = beachheadPlan;
 				selectedPlans.push(beachheadPlan);

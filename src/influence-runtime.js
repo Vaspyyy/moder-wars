@@ -82,6 +82,9 @@ export function createInfluenceRuntime(runtime) {
 	function ensureInfluenceFrontierQueue() {
 		const gridSize = runtime.gridWidth * runtime.gridHeight;
 		if (
+			runtime._influenceFrontierQueued instanceof Uint8Array &&
+			Array.isArray(runtime._influenceFrontierQueue) &&
+			Array.isArray(runtime._influenceFrontierPriorityQueue) &&
 			runtime._influenceFrontierQueued.length === gridSize &&
 			runtime._influenceFrontierWorldGeneration ===
 				runtime._simulationWorldGeneration
@@ -98,9 +101,15 @@ export function createInfluenceRuntime(runtime) {
 	}
 
 	function enqueueInfluenceFrontierIndex(index, priority = false) {
-		if (index < 0 || index >= runtime._influenceFrontierQueued.length)
+		if (
+			!Number.isInteger(index) ||
+			index < 0 ||
+			index >= runtime._influenceFrontierQueued.length
+		)
 			return false;
-		const queuedState = runtime._influenceFrontierQueued[index];
+		// Retain a numeric cell key after rejecting coercible strings/objects.
+		const cellIndex = Number(index);
+		const queuedState = runtime._influenceFrontierQueued[cellIndex];
 		if (priority) {
 			if (queuedState === 2) return false;
 			if (
@@ -112,8 +121,8 @@ export function createInfluenceRuntime(runtime) {
 			}
 			// Controller changes jump ahead of smoothing work. If this upgrades an
 			// existing regular entry, that stale FIFO entry is ignored when reached.
-			runtime._influenceFrontierQueued[index] = 2;
-			runtime._influenceFrontierPriorityQueue.push(index);
+			runtime._influenceFrontierQueued[cellIndex] = 2;
+			runtime._influenceFrontierPriorityQueue.push(cellIndex);
 			return true;
 		}
 		if (queuedState !== 0) return false;
@@ -124,14 +133,19 @@ export function createInfluenceRuntime(runtime) {
 		) {
 			return false;
 		}
-		runtime._influenceFrontierQueued[index] = 1;
-		runtime._influenceFrontierQueue.push(index);
+		runtime._influenceFrontierQueued[cellIndex] = 1;
+		runtime._influenceFrontierQueue.push(cellIndex);
 		return true;
 	}
 
 	function queueInfluenceFrontierCell(index, priority = false) {
 		ensureInfluenceFrontierQueue();
-		if (index < 0 || index >= runtime._influenceFrontierQueued.length) return;
+		if (
+			!Number.isInteger(index) ||
+			index < 0 ||
+			index >= runtime._influenceFrontierQueued.length
+		)
+			return;
 		const x = index % runtime.gridWidth;
 		enqueueInfluenceFrontierIndex(index, priority);
 		if (x > 0) enqueueInfluenceFrontierIndex(index - 1, priority);
@@ -193,6 +207,13 @@ export function createInfluenceRuntime(runtime) {
 			} else {
 				break;
 			}
+			if (
+				!Number.isInteger(index) ||
+				index < 0 ||
+				index >= runtime._influenceFrontierQueued.length
+			)
+				continue;
+			index = Number(index);
 			if (runtime._influenceFrontierQueued[index] !== expectedState) continue;
 			runtime._influenceFrontierQueued[index] = 0;
 			processed++;

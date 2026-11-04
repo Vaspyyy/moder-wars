@@ -50,7 +50,8 @@ const matrix = context.createHostilityMatrix(3, new Set(["a|b"]), ["a", "b", "c"
 assert.equal(matrix[1], 1); assert.equal(matrix[8], 1); assert.equal(matrix[2], 0); assert.equal(matrix[0], 0);
 
 // Reference the two former scan policies independently: the combined snapshot must
-// preserve their different deployment/dead-unit filters and compute each power once.
+// preserve their deployment/dead-unit filters and compute each valid power once.
+// Invalid side indexes formerly created undefined/NaN properties; they are now rejected.
 runtime.sides = [[{ id: 1 }], [{ id: 2 }]];
 runtime.units = [];
 for (const health of [0, 1, 100]) for (const deployTicks of [undefined, -1, 0, 30])
@@ -60,7 +61,7 @@ const expectedLive = new Float64Array(8);
 for (const unit of runtime.units.filter(u => u.health > 0 && u.deployTicks <= 0 && u.sideIndex >= 0 && u.sideIndex < 8))
  expectedLive[unit.sideIndex] += operationalUnitPower(unit);
 const expectedStrength = [0, 0], expectedCounts = [0, 0];
-for (const unit of runtime.units.filter(u => !(u.deployTicks > 0) && !(u.sideIndex < 0 || u.sideIndex >= 2))) {
+for (const unit of runtime.units.filter(u => Number.isInteger(u.sideIndex) && !(u.deployTicks > 0) && u.sideIndex >= 0 && u.sideIndex < 2)) {
  expectedStrength[unit.sideIndex] += operationalUnitPower(unit);
  expectedCounts[unit.sideIndex]++;
 }
@@ -71,6 +72,10 @@ assert.deepEqual(Array.from(runtime._liveSideCombatPower), Array.from(expectedLi
 const entries = array => Object.keys(array).map(key => [key, array[key]]);
 assert.deepEqual(entries(snapshot.sideStrength), entries(expectedStrength));
 assert.deepEqual(entries(snapshot.sideUnitCounts), entries(expectedCounts));
-const eligible = runtime.units.filter(u => (u.health > 0 && u.deployTicks <= 0 && u.sideIndex >= 0 && u.sideIndex < 8) || (!(u.deployTicks > 0) && !(u.sideIndex < 0 || u.sideIndex >= 2))).length;
+for (const invalid of ["undefined", "NaN", "__proto__"]) {
+ assert.equal(Object.hasOwn(snapshot.sideStrength, invalid), false);
+ assert.equal(Object.hasOwn(snapshot.sideUnitCounts, invalid), false);
+}
+const eligible = runtime.units.filter(u => (u.health > 0 && u.deployTicks <= 0 && u.sideIndex >= 0 && u.sideIndex < 8) || (Number.isInteger(u.sideIndex) && !(u.deployTicks > 0) && u.sideIndex >= 0 && u.sideIndex < 2)).length;
 assert.equal(powerCalls, eligible, "calculate each eligible formation's power only once");
 console.log("Ground combat, direct AI context, hostility, and 96 strength filter combinations passed");
