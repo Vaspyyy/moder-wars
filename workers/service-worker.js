@@ -39,6 +39,8 @@ const APP_SHELL_PATHS = [
 	"src/country-actions.js",
 	"src/country-diplomacy.js",
 	"src/country-export.js",
+	"src/country-force-data.js",
+	"src/country-force-profiles.js",
 	"src/country-import-menu.js",
 	"src/developer-controls.js",
 	"src/defensive-lines.js",

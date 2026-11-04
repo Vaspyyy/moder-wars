@@ -36,6 +36,7 @@ const checks = [
 	"ai-stall-budget",
 	"ground-simulation",
 	"formation-strength",
+	"real-force-personnel",
 	"worker-asset-security",
 	"simulation-key-safety",
 	"simulation-index-boundaries",

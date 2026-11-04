@@ -2367,22 +2367,6 @@ function compactVariableStrengthFormationsForSide(
 		formations.length,
 		chooseFormationBudget(totalPersonnel),
 	);
-	if (budget >= formations.length) {
-		const descriptors = distributeFormationPersonnel(
-			totalPersonnel,
-			formations.length,
-			{ nominalPersonnel: CONFIG.UNIT_TO_SOLDIER_RATIO },
-		);
-		for (let index = 0; index < formations.length; index++) {
-			setUnitFormationPersonnel(
-				formations[index],
-				descriptors[index].personnel,
-			);
-		}
-		soldiersPerUnit[sideIdx] = CONFIG.UNIT_TO_SOLDIER_RATIO;
-		return formations.length;
-	}
-
 	const countryGroups = new Map();
 	for (const formation of formations) {
 		let group = countryGroups.get(formation.sovereignId);
@@ -2395,13 +2379,43 @@ function compactVariableStrengthFormationsForSide(
 	const groups = [...countryGroups.entries()].sort(
 		([leftId], [rightId]) => Number(leftId) - Number(rightId),
 	);
+	// Weight by each country's current personnel so countries keep their own
+	// strength (e.g. real force data); equal formations reduce to the count.
+	const groupWeights = groups.map(([countryId, group]) => ({
+		countryId,
+		weight:
+			group.reduce((sum, unit) => sum + getLiveFormationPersonnel(unit), 0) ||
+			group.length,
+	}));
+	const personnelQuotas = allocateLargestRemainderQuotas(
+		groupWeights,
+		totalPersonnel,
+	);
+	const personnelByCountry = new Map(
+		personnelQuotas.map((entry) => [entry.countryId, entry.quota]),
+	);
+	if (budget >= formations.length) {
+		for (const [rawCountryId, group] of groups) {
+			const descriptors = distributeFormationPersonnel(
+				Math.max(
+					group.length,
+					personnelByCountry.get(Number(rawCountryId)) ?? group.length,
+				),
+				group.length,
+				{ nominalPersonnel: CONFIG.UNIT_TO_SOLDIER_RATIO },
+			);
+			for (let index = 0; index < group.length; index++) {
+				setUnitFormationPersonnel(group[index], descriptors[index].personnel);
+			}
+		}
+		soldiersPerUnit[sideIdx] = CONFIG.UNIT_TO_SOLDIER_RATIO;
+		return formations.length;
+	}
+
 	const minimumMarkers = Math.min(budget, groups.length);
 	const markerRemainder = Math.max(0, budget - minimumMarkers);
 	const markerQuotas = allocateLargestRemainderQuotas(
-		groups.map(([countryId, group]) => ({
-			countryId,
-			weight: group.length,
-		})),
+		groupWeights,
 		markerRemainder,
 	);
 	const markerQuotaByCountry = new Map(
@@ -2414,16 +2428,6 @@ function compactVariableStrengthFormationsForSide(
 			(markerQuotaByCountry.get(countryId) || 0) + 1,
 		);
 	}
-	const personnelQuotas = allocateLargestRemainderQuotas(
-		groups.map(([countryId, group]) => ({
-			countryId,
-			weight: group.length,
-		})),
-		totalPersonnel,
-	);
-	const personnelByCountry = new Map(
-		personnelQuotas.map((entry) => [entry.countryId, entry.quota]),
-	);
 	const retained = new Set();
 	for (const [rawCountryId, group] of groups) {
 		const countryId = Number(rawCountryId);

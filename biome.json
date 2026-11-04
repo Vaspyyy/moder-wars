@@ -24,6 +24,7 @@
 			"scripts/simulation-key-safety-smoke.mjs",
 			"scripts/simulation-index-boundaries-smoke.mjs",
 			"scripts/ai-index-safety-smoke.mjs",
+			"scripts/real-force-personnel-smoke.mjs",
 			"workers/**/*.js",
 			"styles/**/*.css"
 		]
