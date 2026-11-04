@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import "./register-types.mjs";
 const { getRenderBudget } = await import("../src/render-budget.ts");
+import { clearAdminRegionDrawing } from "../src/render-admin-regions.js";
 import { createRegionChunkCache } from "../src/render-regions.js";
 import { collectSelectionQuads, containsRenderPoint } from "../src/render-culling.js";
 import { createPoliticalChunkCache, drawPoliticalChunks, drawPoliticalBorders } from "../src/render-political-cache.js";
@@ -322,7 +323,7 @@ const container = { appendChild(surface) { children.push(surface); surface.paren
 const canvas = () => ({ style: {}, width: 0, height: 0, setAttribute() {} });
 const map = { getZoom: () => 6, getCenter: () => ({ lat: 0, lng: 0 }), getContainer: () => container, getBounds: () => ({ equals: () => true }), getSize: () => point(100, 60), on() {}, off() {}, getPane: () => null, project: (center) => point(center.lng, center.lat), getZoomScale: (next, previous) => 2 ** (next - previous) };
 const source = readFileSync(new URL("../src/renderer.js", import.meta.url), "utf8").replace(/^import[\s\S]*?from "[^"]+";\n/gm, "").replace(/export \{ ControlMapLayer, RENDER_LAYERS \};/, "");
-const globals = { document: { createElement: canvas }, window: { devicePixelRatio: 2 }, map, worldControlMap: null, landMask: null, isPaused: true, gameState: "MENU", godModeActive: false, preGodModeState: "MENU", cinematicMode: false, gridWidth: 128, gridHeight: 96, performance, requestAnimationFrame: () => 1, cancelAnimationFrame() {}, invalidateUnitFlagSprites() {}, mapRuntime: { Layer: { extend(methods) { function Layer() {} Object.assign(Layer.prototype, methods); return Layer; } }, DomUtil: { create: canvas, setTransform(surface, offset, scale) { surface.style.transform = `${offset.x},${offset.y},${scale}`; } } } };
+const globals = { clearAdminRegionDrawing, document: { createElement: canvas }, window: { devicePixelRatio: 2 }, map, worldControlMap: null, landMask: null, isPaused: true, gameState: "MENU", godModeActive: false, preGodModeState: "MENU", cinematicMode: false, gridWidth: 128, gridHeight: 96, performance, requestAnimationFrame: () => 1, cancelAnimationFrame() {}, invalidateUnitFlagSprites() {}, mapRuntime: { Layer: { extend(methods) { function Layer() {} Object.assign(Layer.prototype, methods); return Layer; } }, DomUtil: { create: canvas, setTransform(surface, offset, scale) { surface.style.transform = `${offset.x},${offset.y},${scale}`; } } } };
 globals.getRenderBudget = getRenderBudget;
 const { ControlMapLayer: Layer, RENDER_LAYERS } = vm.runInNewContext(
 	`${source}\n({ ControlMapLayer, RENDER_LAYERS });`,

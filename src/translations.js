@@ -3,6 +3,26 @@ export const TRANSLATIONS = {
 		MODERN_WARS: "Modern Wars",
 		LANGUAGE: "Language",
 
+		// Scenario selection, regions and occupation (ported from Bald1nh0/moder-wars).
+		GAME_LOAD_SCENARIO_FAILED: "Failed to load {name} scenario.",
+		UI_SCENARIO_SELECTED: "Selected",
+		UI_MODERN_2026: "2026 MODERN DAY",
+		UI_MODERN_2026_DESC:
+			"Political world map from the October 2026 Overture release, with regions. Game-balanced forces; no live frontlines.",
+		UI_MODERN_2026_CREDITS:
+			"Geography: OpenStreetMap contributors · Overture Maps",
+		UI_MODERN_2026_SOURCE: "Modern 2026 geographic data:",
+		UI_UKRAINE_2023: "UKRAINE · 2023 · EURASIA",
+		UI_UKRAINE_2023_DESC:
+			"Eurasian theater. Approximate control on 2023-01-01; fictional armies. Choose Ukraine and Russia to begin.",
+		UI_UKRAINE_2023_CREDITS: "Independent visual reconstruction",
+		UI_UKRAINE_2023_SOURCE: "Ukraine 2023 visual reference:",
+		UI_SHOW_ADMIN_REGIONS: "Show regions / oblasts",
+		UI_ADMIN_REGIONS_HELP:
+			"Modern administrative borders and names appear when zoomed in on Earth maps. Separate from military control.",
+		MAP_OCCUPIED_TERRITORY: "Occupied territory",
+		MAP_OCCUPATION_CONTROL: "{sovereign} · Control: {controller}",
+
 		MAP_RES: "Map Resolution",
 		RES_LOW: "Low (Performance)",
 		RES_STD: "Standard (Medium)",
@@ -132,6 +152,25 @@ export const TRANSLATIONS = {
 	ru: {
 		MODERN_WARS: "Современные Войны",
 		LANGUAGE: "Язык",
+
+		GAME_LOAD_SCENARIO_FAILED: "Не удалось загрузить сценарий {name}.",
+		UI_SCENARIO_SELECTED: "Выбрано",
+		UI_MODERN_2026: "2026 СОВРЕМЕННОСТЬ",
+		UI_MODERN_2026_DESC:
+			"Политическая карта мира из выпуска Overture за октябрь 2026, с регионами. Игровые армии; без текущих фронтов.",
+		UI_MODERN_2026_CREDITS:
+			"География: участники OpenStreetMap · Overture Maps",
+		UI_MODERN_2026_SOURCE: "Географические данные «Современности 2026»:",
+		UI_UKRAINE_2023: "УКРАИНА · 2023 · ЕВРАЗИЯ",
+		UI_UKRAINE_2023_DESC:
+			"Евразийский театр. Приблизительный контроль на 01.01.2023; вымышленные армии. Выберите Украину и Россию.",
+		UI_UKRAINE_2023_CREDITS: "Независимое воспроизведение по карте",
+		UI_UKRAINE_2023_SOURCE: "Визуальный источник для Украины 2023:",
+		UI_SHOW_ADMIN_REGIONS: "Показывать регионы / области",
+		UI_ADMIN_REGIONS_HELP:
+			"Современные административные границы и названия видны при приближении карт Земли. Они не обозначают военный контроль.",
+		MAP_OCCUPIED_TERRITORY: "Оккупированная территория",
+		MAP_OCCUPATION_CONTROL: "{sovereign} · Контроль: {controller}",
 
 		MAP_RES: "Разрешение карты",
 		RES_LOW: "Низкое (Скорость)",
@@ -831,6 +870,24 @@ export const TRANSLATIONS = {
 	uk: {
 		MODERN_WARS: "Сучасні Війни",
 		LANGUAGE: "Мова",
+
+		GAME_LOAD_SCENARIO_FAILED: "Не вдалося завантажити сценарій {name}.",
+		UI_SCENARIO_SELECTED: "Вибрано",
+		UI_MODERN_2026: "2026 СУЧАСНІСТЬ",
+		UI_MODERN_2026_DESC:
+			"Політична мапа світу з випуску Overture за жовтень 2026, з областями. Ігрові армії; без поточних фронтів.",
+		UI_MODERN_2026_CREDITS: "Географія: учасники OpenStreetMap · Overture Maps",
+		UI_MODERN_2026_SOURCE: "Географічні дані «Сучасності 2026»:",
+		UI_UKRAINE_2023: "УКРАЇНА · 2023 · ЄВРАЗІЯ",
+		UI_UKRAINE_2023_DESC:
+			"Приблизний контроль на 01.01.2023. Вигадані армії; для початку виберіть Україну та Росію.",
+		UI_UKRAINE_2023_CREDITS: "Незалежне відтворення за мапою",
+		UI_UKRAINE_2023_SOURCE: "Візуальне джерело для України 2023:",
+		UI_SHOW_ADMIN_REGIONS: "Показувати регіони / області",
+		UI_ADMIN_REGIONS_HELP:
+			"Сучасні адміністративні межі й назви видно при наближенні мап Землі. Вони не позначають військовий контроль.",
+		MAP_OCCUPIED_TERRITORY: "Окупована територія",
+		MAP_OCCUPATION_CONTROL: "{sovereign} · Контроль: {controller}",
 
 		CONQUEST: "ЗАВОЮВАННЯ",
 		EDITOR: "РЕДАКТОР",

@@ -211,3 +211,47 @@ console.log(
 		matrixCpuMs: elapsed,
 	}),
 );
+
+// A regional theater must constrain both panning and zooming, including resize.
+const theaterElement = new Element();
+const theaterCamera = new MapCamera(theaterElement, {
+	minZoom: 1,
+	maxZoom: 12,
+});
+const theaterBounds = [
+	[-12, -25],
+	[85, 180],
+];
+theaterCamera.setMaxBounds(theaterBounds, true);
+const insideTheater = () => {
+	const viewport = theaterCamera.getBounds();
+	assert.ok(viewport.getWest() >= -25 - 1e-8);
+	assert.ok(viewport.getEast() <= 180 + 1e-8);
+	assert.ok(viewport.getSouth() >= -12 - 1e-8);
+	assert.ok(viewport.getNorth() <= 85 + 1e-8);
+};
+theaterCamera.setView([40, -120], -10);
+insideTheater();
+theaterCamera.fitWorld();
+insideTheater();
+theaterElement.clientWidth = 2560;
+theaterElement.clientHeight = 1080;
+theaterCamera.resize();
+insideTheater();
+theaterElement.clientWidth = 390;
+theaterElement.clientHeight = 844;
+theaterCamera.resize();
+theaterCamera.fitWorld();
+insideTheater();
+theaterCamera.setMaxBounds([
+	[-85, -180],
+	[85, 180],
+]);
+theaterCamera.setView([35, -110], 4);
+assert.ok(
+	theaterCamera.getCenter().lng < -100,
+	"switching to the world releases theater constraints",
+);
+console.log(
+	"Regional camera: pan, zoom-out, fit-world, resize and world reset passed",
+);

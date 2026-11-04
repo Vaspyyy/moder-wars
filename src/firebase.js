@@ -230,9 +230,14 @@ function selectScenario(cardId, action) {
 	// 1. Update UI Selection
 	document.querySelectorAll(".scroller-card").forEach((card) => {
 		card.classList.remove("selected");
+		if (card.tagName === "BUTTON") card.setAttribute("aria-pressed", "false");
 	});
 	const selectedCard = document.getElementById(cardId);
-	if (selectedCard) selectedCard.classList.add("selected");
+	if (selectedCard) {
+		selectedCard.classList.add("selected");
+		if (selectedCard.tagName === "BUTTON")
+			selectedCard.setAttribute("aria-pressed", "true");
+	}
 
 	// 2. Change Menu Background
 	const bgUrl = SCENARIO_MENU_BGS[cardId] || "assets/images/title-map.svg";

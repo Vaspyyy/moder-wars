@@ -2134,6 +2134,7 @@ export const gameTimeDayDurationMs = 500;
 export let viewMode = "POLITICAL"; // 'POLITICAL' or 'FLAG'
 export let allianceViewEnabled = false; // when true, alliances override colors/flags in political/flag views
 export let showCountryLabels = true;
+export let showAdminRegions = true;
 export let showNonCapitalCities = true;
 // Cache for screen-space label curves so they don't move with the camera
 export const countryLabelAnchors = new Map(); // key: `${countryId}:${regionIndex}` -> { name, points, fontSize }
@@ -2517,6 +2518,9 @@ export let currentUsername = null;
 export let flagCodes = null;
 
 export let currentScenarioContext = null; // { id, name, ownerUsername }
+export function setCurrentScenarioContext(value) {
+	currentScenarioContext = value;
+}
 
 export let hubReturnState = null;
 export let hubWasInEditor = false;
@@ -4141,11 +4145,12 @@ export function applyWorldBounds(widthDeg, heightDeg) {
 
 	const halfW = w / 2;
 	const halfH = h / 2;
+	const theater = currentScenarioContext?.theater?.bounds;
 	const bounds = mapRuntime.latLngBounds(
-		mapRuntime.latLng(-halfH, -halfW),
-		mapRuntime.latLng(halfH, halfW),
+		mapRuntime.latLng(theater?.[1] ?? -halfH, theater?.[0] ?? -halfW),
+		mapRuntime.latLng(theater?.[3] ?? halfH, theater?.[2] ?? halfW),
 	);
-	map.setMaxBounds(bounds);
+	map.setMaxBounds(bounds, Boolean(theater));
 
 	// If current center is outside new bounds, fit map into the new box
 	if (!bounds.contains(map.getCenter())) {
@@ -4164,6 +4169,14 @@ export function applyWorldBounds(widthDeg, heightDeg) {
 }
 
 export function isInsideWorldBoxLatLng(lat, lng) {
+	const theater = currentScenarioContext?.theater?.bounds;
+	if (theater)
+		return (
+			lat >= theater[1] &&
+			lat <= theater[3] &&
+			lng >= theater[0] &&
+			lng <= theater[2]
+		);
 	if (!worldWidthDeg || !worldHeightDeg) return true;
 	const halfW = worldWidthDeg / 2;
 	const halfH = worldHeightDeg / 2;
@@ -6315,6 +6328,19 @@ const showCitiesCheckbox = document.getElementById("show-cities-checkbox");
 const showBattlesCheckbox = document.getElementById("show-battles-checkbox");
 const showAllianceCheckbox = document.getElementById("show-alliance-checkbox");
 
+const showAdminRegionsCheckbox = document.getElementById(
+	"show-admin-regions-checkbox",
+);
+showAdminRegions = getCookie("mw_show_admin_regions") !== "false";
+if (showAdminRegionsCheckbox) {
+	showAdminRegionsCheckbox.checked = showAdminRegions;
+	showAdminRegionsCheckbox.addEventListener("change", (event) => {
+		showAdminRegions = event.target.checked;
+		setCookie("mw_show_admin_regions", String(showAdminRegions));
+		influenceLayer?.requestRender(RENDER_LAYERS.DYNAMIC);
+	});
+}
+
 const armyDiagnosticsCheckbox = document.getElementById(
 	"show-army-diagnostics-checkbox",
 );
@@ -6706,6 +6732,7 @@ menu_controls.bindEnterScenarioBtnClick();
 
 // Wire Scroller Cards
 menu_controls.bindScrollerChoiceModernClick();
+menu_controls.bindScrollerChoiceUkraine2023Click();
 menu_controls.bindScrollerChoice1936Click();
 menu_controls.bindScrollerChoice1914Click();
 

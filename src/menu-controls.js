@@ -665,6 +665,19 @@ export function createMenuControls(runtime) {
 			);
 	}
 
+	function bindScrollerChoiceUkraine2023Click() {
+		const cardId = "scroller-choice-ukraine2023";
+		document.getElementById(cardId).onclick = () =>
+			runtime.selectScenario(
+				cardId,
+				runtime.createScenarioHandler("ukraine2023", {
+					...runtime.scenarioMenuDependencies,
+					focusScenario: (bounds) =>
+						runtime.map.fitBounds(bounds, { animate: false }),
+				}),
+			);
+	}
+
 	function bindScrollerChoice1936Click() {
 		document.getElementById("scroller-choice-1936").onclick = () =>
 			runtime.selectScenario("scroller-choice-1936", () =>
@@ -909,6 +922,7 @@ export function createMenuControls(runtime) {
 		bindBackToNavBtnClick,
 		bindEnterScenarioBtnClick,
 		bindScrollerChoiceModernClick,
+		bindScrollerChoiceUkraine2023Click,
 		bindScrollerChoice1936Click,
 		bindScrollerChoice1914Click,
 		bindChoiceModernDayClick,
