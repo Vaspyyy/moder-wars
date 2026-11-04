@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import vm from "node:vm";
 
-const root = new URL("../dist/", import.meta.url),
-	read = (path) => readFileSync(new URL(path, root), "utf8");
+const root = process.env.MW_BUILD_DIR
+	? pathToFileURL(`${resolve(process.env.MW_BUILD_DIR)}/`)
+	: new URL("../dist/", import.meta.url);
+const read = (path) => readFileSync(new URL(path, root), "utf8");
 const shell = JSON.parse(read("offline-manifest.json"));
 for (const path of shell)
 	assert.ok(existsSync(new URL(path, root)), `offline asset ${path}`);

@@ -4,6 +4,7 @@ import {
 	drawPoliticalChunks,
 } from "./render-political-cache.js";
 import { createRegionChunkCache } from "./render-regions.js";
+import { getScenarioTheaterClip } from "./scenario-theater.js";
 
 // This pass receives a frame snapshot; surface caches stay on the map layer.
 export function drawTerrain(frame) {
@@ -48,12 +49,21 @@ export function drawTerrain(frame) {
 			}
 		}
 
+		const theaterClip = getScenarioTheaterClip(this, frame);
+		if (theaterClip) {
+			ctx.save();
+			ctx.clip(theaterClip);
+		}
 		const coast = frame.isAtlas ? getAtlasCoastPaths(this, frame) : null;
 		frame.atlasCoast = Boolean(coast);
 		frame.coast = coast;
 		if (coast) {
 			ctx.save();
 			const background = frame.backgroundCtx || ctx;
+			if (theaterClip) {
+				background.save();
+				background.clip(theaterClip);
+			}
 			background.fillStyle = "#667265";
 			background.fill(coast.land);
 			// One shadowed shore path gives a narrow shelf without blurring inland borders.
@@ -63,6 +73,7 @@ export function drawTerrain(frame) {
 			background.shadowBlur = 5;
 			background.stroke(coast.shore);
 			background.shadowBlur = 0;
+			if (theaterClip) background.restore();
 			ctx.clip(coast.land);
 		}
 		drawPoliticalChunks(this, frame);
@@ -285,6 +296,7 @@ export function drawTerrain(frame) {
 			ctx.lineWidth = Math.min(1.6, 0.7 + frame.currentZoom * 0.1);
 			ctx.stroke(coast.shore);
 		}
+		if (theaterClip) ctx.restore();
 		ctx.restore();
 		if (fullStaticRefresh) {
 			this._cachedRegions = regions;

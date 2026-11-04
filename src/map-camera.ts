@@ -25,6 +25,7 @@ export interface CameraOptions {
 	maxZoom?: number;
 	dragging?: boolean;
 	maxBounds?: BoundsLike;
+	constrainViewToBounds?: boolean;
 }
 export class Events {
 	private listeners = new Map<string, Listener[]>();
@@ -94,7 +95,8 @@ export class MapCamera extends Events {
 			this.observer = new ResizeObserver(() => this.resize());
 			this.observer.observe(container);
 		}
-		if (options.maxBounds) this.setMaxBounds(options.maxBounds);
+		if (options.maxBounds)
+			this.setMaxBounds(options.maxBounds, options.constrainViewToBounds);
 	}
 	getContainer() {
 		return this.container;
@@ -109,7 +111,21 @@ export class MapCamera extends Events {
 		return point(this.size);
 	}
 	getMinZoom() {
-		return this.options.minZoom ?? 2;
+		let minimum = this.options.minZoom ?? 2;
+		if (this.bounds && this.options.constrainViewToBounds) {
+			const nw = project(this.bounds.getNorthWest(), 0);
+			const se = project(this.bounds.getSouthEast(), 0);
+			minimum = Math.max(
+				minimum,
+				Math.log2(
+					Math.max(
+						this.size.x / Math.max(1e-10, se.x - nw.x),
+						this.size.y / Math.max(1e-10, se.y - nw.y),
+					),
+				),
+			);
+		}
+		return Math.min(this.getMaxZoom(), minimum);
 	}
 	getMaxZoom() {
 		return this.options.maxZoom ?? 12;
@@ -221,14 +237,17 @@ export class MapCamera extends Events {
 		return this.setView(unproject(a.add(b).divideBy(2)), Math.log2(scale));
 	}
 	fitWorld() {
+		if (this.bounds && this.options.constrainViewToBounds)
+			return this.fitBounds(this.bounds);
 		return this.fitBounds([
 			[-85.0511287798066, -180],
 			[85.0511287798066, 180],
 		]);
 	}
-	setMaxBounds(value: BoundsLike | null) {
+	setMaxBounds(value: BoundsLike | null, constrainView = false) {
 		this.bounds = value ? latLngBounds(value) : null;
 		this.options.maxBounds = value ?? undefined;
+		this.options.constrainViewToBounds = constrainView;
 		this.setView(this.center);
 		return this;
 	}
@@ -239,6 +258,7 @@ export class MapCamera extends Events {
 		);
 		if (next.x === this.size.x && next.y === this.size.y) return;
 		this.size = next;
+		this.zoom = Math.max(this.zoom, this.getMinZoom());
 		this.center = this.limit(this.center, this.zoom);
 		this.fire("resize");
 		this.fire("moveend");
