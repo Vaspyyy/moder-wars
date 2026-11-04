@@ -30,6 +30,45 @@ const stateKeys = Object.keys(createSimulationState()).filter(
 	(key) => !omittedState.has(key),
 );
 stateKeys.push("isPaused", "initialCombatants", "initialOwnerMap", "perf");
+// Reject keys that could become prototype setters or shadow built-in methods
+// when untrusted scenario or worker data is merged into live state.
+function isReservedKey(key, isArray = false) {
+	return (
+		key === "__proto__" ||
+		key === "constructor" ||
+		key === "prototype" ||
+		Object.hasOwn(Object.prototype, key) ||
+		(isArray && Object.hasOwn(Array.prototype, key))
+	);
+}
+
+const TYPED_ARRAY_TYPES = [
+	Int8Array,
+	Uint8Array,
+	Uint8ClampedArray,
+	Int16Array,
+	Uint16Array,
+	Int32Array,
+	Uint32Array,
+	Float32Array,
+	Float64Array,
+	BigInt64Array,
+	BigUint64Array,
+];
+
+// Never invoke a constructor supplied through a cloned object or view property.
+function typedArrayType(value) {
+	for (const Type of TYPED_ARRAY_TYPES) if (value instanceof Type) return Type;
+	throw new TypeError("Unsupported simulation view type.");
+}
+
+function cloneTypedView(value, buffer) {
+	if (value instanceof DataView)
+		return new DataView(buffer, value.byteOffset, value.byteLength);
+	const Type = typedArrayType(value);
+	return new Type(buffer, value.byteOffset, value.length);
+}
+
 const assetKeys = new Set([
 	"displayName",
 	"feature",
@@ -55,10 +94,7 @@ export function cloneSimulationData(value, seen = new Map()) {
 	}
 	if (ArrayBuffer.isView(value)) {
 		const buffer = cloneSimulationData(value.buffer, seen);
-		const result =
-			value instanceof DataView
-				? new DataView(buffer, value.byteOffset, value.byteLength)
-				: new value.constructor(buffer, value.byteOffset, value.length);
+		const result = cloneTypedView(value, buffer);
 		seen.set(value, result);
 		return result;
 	}
@@ -89,7 +125,10 @@ export function cloneSimulationData(value, seen = new Map()) {
 	}
 	const result = Array.isArray(value) ? new Array(value.length) : {};
 	seen.set(value, result);
+	const isArray = Array.isArray(value);
 	for (const key of Object.keys(value)) {
+		// Imported state must not introduce prototype setters or constructor chains.
+		if (isReservedKey(key, isArray)) continue;
 		if (assetKeys.has(key)) continue;
 		const item = cloneSimulationData(value[key], seen);
 		if (item !== undefined) result[key] = item;
@@ -124,12 +163,23 @@ export function captureSimulationState(
 	return result;
 }
 
+function assignStateFields(target, source) {
+	for (const [key, value] of Object.entries(source)) {
+		if (isReservedKey(key)) continue;
+		target[key] = value;
+	}
+}
+
+const stateKeySet = new Set(stateKeys);
+
 export function applySimulationState(
 	runtime,
 	incoming,
 	{ preserveCountryControls = false } = {},
 ) {
 	for (const [key, value] of Object.entries(incoming)) {
+		// Only known simulation fields may cross into the live runtime.
+		if (isReservedKey(key) || !stateKeySet.has(key)) continue;
 		if (
 			key === "gameState" &&
 			value === "SIMULATING" &&
@@ -137,7 +187,7 @@ export function applySimulationState(
 		)
 			continue;
 		if (key === "CONFIG") {
-			Object.assign(runtime.CONFIG, value);
+			assignStateFields(runtime.CONFIG, value);
 			continue;
 		}
 		if (key === "perf") continue;
@@ -163,7 +213,8 @@ export function applySimulationState(
 						"color",
 					])
 						if (Object.hasOwn(old, field)) controls[field] = old[field];
-				Object.assign(old, country, controls);
+				assignStateFields(old, country);
+				assignStateFields(old, controls);
 				// Localized labels belong to the UI, including when an older owner
 				// returns a payload captured before the player changed language.
 				if (old.name === previousName && typeof displayName === "string")
@@ -469,7 +520,7 @@ export function createControlDeltaTracker(state) {
 						}
 					}
 					if (!changed) continue;
-					const values = new map.constructor(width * height);
+					const values = new (typedArrayType(map))(width * height);
 					const sourceWords = sourceWordMaps[field];
 					const cachedWords = previousWordMaps[field];
 					const sourceBytes = sourceByteMaps[field];

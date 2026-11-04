@@ -111,6 +111,7 @@ const APP_SHELL_PATHS = [
 	"src/translations.js",
 	"src/war-overview.js",
 	"src/war-start.js",
+	"src/worker-asset-url.js",
 	"styles/style.css",
 	"assets/images/title-map.svg",
 	"assets/atlas/coast-110m.bin.gz",

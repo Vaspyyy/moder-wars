@@ -20,6 +20,8 @@
 			"scripts/editor-startup-smoke.mjs",
 			"scripts/camera-gesture-smoke.mjs",
 			"scripts/render-budget-smoke.mjs",
+			"scripts/worker-asset-security-smoke.mjs",
+			"scripts/simulation-key-safety-smoke.mjs",
 			"workers/**/*.js",
 			"styles/**/*.css"
 		]
