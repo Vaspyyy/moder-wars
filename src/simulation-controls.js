@@ -83,7 +83,14 @@ export function createSimulationControls(runtime) {
 			if (runtime.animationFrameId !== null)
 				cancelAnimationFrame(runtime.animationFrameId);
 			runtime.animationFrameId = null;
-			if (!document.hidden && runtime.gameState === "SIMULATING")
+			// Resume every presentation mode accepted by updateLoop, including
+			// sandbox editing of an active or completed conflict.
+			const shouldPaint =
+				runtime.gameState === "SIMULATING" ||
+				(runtime.godModeActive &&
+					(runtime.preGodModeState === "SIMULATING" ||
+						runtime.preGodModeState === "WAR_OVER"));
+			if (!document.hidden && shouldPaint)
 				runtime.animationFrameId = requestAnimationFrame(runtime.updateLoop);
 		});
 	}

@@ -31,6 +31,7 @@ const stateKeys = Object.keys(createSimulationState()).filter(
 );
 stateKeys.push("isPaused", "initialCombatants", "initialOwnerMap", "perf");
 const assetKeys = new Set([
+	"displayName",
 	"feature",
 	"flag",
 	"tempFlag",
@@ -149,6 +150,8 @@ export function applySimulationState(
 			const merge = (country) => {
 				if (!country) return country;
 				const old = oldCountries.get(country.id) || {};
+				const previousName = old.name;
+				const displayName = old.displayName;
 				const controls = {};
 				if (preserveCountryControls)
 					for (const field of [
@@ -160,7 +163,13 @@ export function applySimulationState(
 						"color",
 					])
 						if (Object.hasOwn(old, field)) controls[field] = old[field];
-				return Object.assign(old, country, controls);
+				Object.assign(old, country, controls);
+				// Localized labels belong to the UI, including when an older owner
+				// returns a payload captured before the player changed language.
+				if (old.name === previousName && typeof displayName === "string")
+					old.displayName = displayName;
+				else delete old.displayName;
+				return old;
 			};
 			const merged =
 				key === "sides"
