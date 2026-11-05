@@ -99,6 +99,9 @@
 <input checked="" id="show-labels-checkbox" style="width: 18px; height: 18px; " type="checkbox"/>
 <span>Show Country Labels</span>
 </label></div><div class="setting-group"><label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+<input checked="" id="show-admin-regions-checkbox" style="width: 18px; height: 18px;" type="checkbox" aria-describedby="admin-regions-help"/>
+<span data-i18n="UI_SHOW_ADMIN_REGIONS">Show regions / oblasts</span>
+</label><small id="admin-regions-help" data-i18n="UI_ADMIN_REGIONS_HELP">Modern administrative borders and names appear when zoomed in on Earth maps. Separate from military control.</small></div><div class="setting-group"><label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
 <input checked="" id="show-cities-checkbox" style="width: 18px; height: 18px; " type="checkbox"/>
 <span>Show Cities</span>
 </label></div><div class="setting-group"><label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
@@ -201,10 +204,17 @@
 <div class="scenario-scroller-v2">
 <div class="scroller-section">
 <div class="scroller-grid">
-<button class="scroller-card primary" id="scroller-choice-modern" type="button">
-<div class="scroller-card-name">2022 MODERN DAY</div>
-<div class="scroller-card-desc">Current global geopolitics and real-world alliances.</div>
-<div class="scroller-card-credits">Map: UnionOfBritain</div>
+<button class="scroller-card" id="scroller-choice-modern" type="button" aria-pressed="false">
+<span class="scroller-card-selection"><span aria-hidden="true">✓</span><span data-i18n="UI_SCENARIO_SELECTED">Selected</span></span>
+<div class="scroller-card-name" data-i18n="UI_MODERN_2026">2026 MODERN DAY</div>
+<div class="scroller-card-desc" data-i18n="UI_MODERN_2026_DESC">Political world map from the October 2026 Overture release, with regions. Game-balanced forces; no live frontlines.</div>
+<div class="scroller-card-credits" data-i18n="UI_MODERN_2026_CREDITS">Geography: OpenStreetMap contributors · Overture Maps</div>
+</button>
+<button class="scroller-card" id="scroller-choice-ukraine2023" type="button" aria-pressed="false">
+<span class="scroller-card-selection"><span aria-hidden="true">✓</span><span data-i18n="UI_SCENARIO_SELECTED">Selected</span></span>
+<div class="scroller-card-name" data-i18n="UI_UKRAINE_2023">UKRAINE · 2023 · EURASIA</div>
+<div class="scroller-card-desc" data-i18n="UI_UKRAINE_2023_DESC">Eurasian theater. Approximate control on 2023-01-01; fictional armies. Choose Ukraine and Russia to begin.</div>
+<div class="scroller-card-credits" data-i18n="UI_UKRAINE_2023_CREDITS">Independent visual reconstruction</div>
 </button>
 <div class="scroller-card" id="scroller-choice-1936" style="display:none">
 <div class="scroller-card-name">1936 INTERWAR</div>
@@ -219,6 +229,8 @@
 </div>
 </div>
 </div>
+<p class="scroller-card-desc"><span data-i18n="UI_MODERN_2026_SOURCE">Modern 2026 geographic data:</span> <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a> · <a href="https://docs.overturemaps.org/guides/divisions/" target="_blank" rel="noopener noreferrer">Overture Maps</a></p>
+<p class="scroller-card-desc"><span data-i18n="UI_UKRAINE_2023_SOURCE">Ukraine 2023 visual reference:</span> <a href="https://deepstatemap.live/" target="_blank" rel="noopener noreferrer">DeepStateMap.live</a></p>
 <p class="title-screen-scenario-hint">Select a scenario, then start.</p>
 <button class="start-btn" id="enter-scenario-btn" style="display:none; margin-top: 20px; animation: fadeIn 0.3s ease-out;">Start scenario</button>
 </div>
@@ -841,10 +853,10 @@
                                         </span>
                                     </div>
                                     <div class="era-card-body">
-                                        <div class="era-name" data-i18n="MODERN_DAY">2022</div>
-                                        <div class="era-desc" data-i18n="MODERN_DAY_SUB">Present geopolitics and alliances</div>
+                                        <div class="era-name" data-i18n="UI_MODERN_2026">2026 MODERN DAY</div>
+                                        <div class="era-desc" data-i18n="UI_MODERN_2026_DESC">Political geography with regions; no live frontlines.</div>
                                         <div class="era-meta">Real borders • 21st century</div>
-                                        <div class="era-meta">Map: UnionOfBritain</div>
+                                        <div class="era-meta" data-i18n="UI_MODERN_2026_CREDITS">Geography: OpenStreetMap contributors · Overture Maps</div>
                                     </div>
                                 </button>
 

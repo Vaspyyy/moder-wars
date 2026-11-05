@@ -1,7 +1,53 @@
+import {
+	getCountryForceProfile,
+	normalizeScenarioDate,
+} from "./country-force-profiles.js";
 import { showAlert } from "./dialogs.js";
+import { distributeFormationPersonnel } from "./formation-strength.js";
 import { loadRiverLines, rasterizeRiverMask } from "./river-lines.js";
 // Explicit live context keeps replacements of arrays/state visible across awaits and callbacks.
 export function createWarStart(runtime) {
+	// Formations of countries with real force data never drop below this, so
+	// tiny militaries spread over the minimum marker count stay playable.
+	const MIN_REAL_FORMATION_PERSONNEL = 250;
+
+	function getForceDataDate() {
+		const date = runtime.gameTimeEnabled
+			? normalizeScenarioDate(runtime.gameTimeDate)
+			: null;
+		return date || "2024-12-31";
+	}
+
+	/**
+	 * Scale a country's starting formations to its real active personnel
+	 * (World Bank / IISS, latest observation at or before the scenario date).
+	 * Returns the personnel applied, or 0 when the country has no data and
+	 * keeps the default per-formation strength.
+	 */
+	function applyRealForcePersonnel(countryId, formations, date) {
+		if (!formations || formations.length === 0) return 0;
+		const meta = runtime.countryMetadata[countryId - 1];
+		if (!meta) return 0;
+		const observed = getCountryForceProfile(meta, date).personnel?.value;
+		if (!(observed > 0)) return 0;
+		const target = Math.max(
+			formations.length * MIN_REAL_FORMATION_PERSONNEL,
+			Math.round(observed),
+		);
+		const descriptors = distributeFormationPersonnel(
+			target,
+			formations.length,
+			{ nominalPersonnel: runtime.CONFIG.UNIT_TO_SOLDIER_RATIO },
+		);
+		for (let i = 0; i < formations.length; i++) {
+			runtime.setUnitFormationPersonnel(
+				formations[i],
+				descriptors[i].personnel,
+			);
+		}
+		return target;
+	}
+
 	async function startWar() {
 		const activeSides = runtime.sides.filter((s) => s.length > 0);
 		if (activeSides.length < 2) {
@@ -654,6 +700,30 @@ export function createWarStart(runtime) {
 				}
 			});
 		});
+		// Real armies: deployed strength follows each country's active personnel;
+		// the population-based pool below becomes its recruitable reserve.
+		const sideRealForcePersonnel = new Float64Array(runtime.MAX_SIDES);
+		const forceDataDate = getForceDataDate();
+		const startFormationsByCountry = new Map();
+		for (const unit of runtime.units) {
+			if (unit.kind !== "army") continue;
+			let list = startFormationsByCountry.get(unit.sovereignId);
+			if (!list) {
+				list = [];
+				startFormationsByCountry.set(unit.sovereignId, list);
+			}
+			list.push(unit);
+		}
+		runtime.sides.forEach((side, sideIdx) => {
+			for (const c of side) {
+				if (!c) continue;
+				sideRealForcePersonnel[sideIdx] += applyRealForcePersonnel(
+					c.id,
+					startFormationsByCountry.get(c.id),
+					forceDataDate,
+				);
+			}
+		});
 		for (let sideIdx = 0; sideIdx < runtime.sides.length; sideIdx++) {
 			runtime.compactVariableStrengthFormationsForSide(sideIdx);
 		}
@@ -846,7 +916,10 @@ export function createWarStart(runtime) {
 			}
 			const hasActiveForce = sideArmyFormationCounts[sIdx] > 0;
 			const autoPool = hasActiveForce
-				? Math.max(initialArmyPool, populationPool)
+				? Math.max(
+						initialArmyPool,
+						populationPool + sideRealForcePersonnel[sIdx],
+					)
 				: initialArmyPool;
 			runtime.initialSideSoldiers[sIdx] = Math.max(
 				initialArmyPool,
@@ -1016,7 +1089,7 @@ export function createWarStart(runtime) {
 		// Fall back to territory-based if no population data
 		const territoryPool = Math.round(cellCount * 200);
 		const cityPool = Math.round(newCities.length * 10000);
-		const joiningPool =
+		let joiningPool =
 			populationPool > 0
 				? populationPool
 				: Math.max(0, territoryPool + cityPool);
@@ -1100,6 +1173,7 @@ export function createWarStart(runtime) {
 				)
 			: 0;
 
+		const activatedFormations = [];
 		for (let j = 0; j < count; j++) {
 			let fData;
 			let fromFront = false;
@@ -1152,6 +1226,17 @@ export function createWarStart(runtime) {
 				),
 			);
 			runtime.units.push(activatedUnit);
+			activatedFormations.push(activatedUnit);
+		}
+		const joiningRealPersonnel = applyRealForcePersonnel(
+			countryId,
+			activatedFormations,
+			getForceDataDate(),
+		);
+		if (joiningRealPersonnel > 0) {
+			joiningPool += joiningRealPersonnel;
+			runtime.initialSideSoldiers[sideIdx] += joiningRealPersonnel;
+			runtime.sideSoldiers[sideIdx] += joiningRealPersonnel;
 		}
 		const joiningLivePersonnel = runtime.getCountryLivePersonnel(countryId);
 		const unfundedPersonnel = Math.max(0, joiningLivePersonnel - joiningPool);
@@ -1166,5 +1251,11 @@ export function createWarStart(runtime) {
 		runtime.recalculateAllBounds();
 		runtime.reconcileOperationalAiLifecycle("country-activated");
 	}
-	return { startWar, _startWarInner, activateCountryMidWar };
+	return {
+		startWar,
+		_startWarInner,
+		activateCountryMidWar,
+		applyRealForcePersonnel,
+		getForceDataDate,
+	};
 }

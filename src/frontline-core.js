@@ -31,17 +31,36 @@ export function buildDirectionField({
 	scratch = {},
 }) {
 	const started = performance.now();
+	if (
+		!Number.isSafeInteger(gridWidth) ||
+		!Number.isSafeInteger(gridHeight) ||
+		gridWidth < 0 ||
+		gridHeight < 0 ||
+		gridWidth * gridHeight > 0x7fffffff
+	) {
+		throw new RangeError("Frontline dimensions must fit signed cell indexes.");
+	}
+	// Keep grid arithmetic numeric; imported strings must never become property keys.
+	gridWidth = Number(gridWidth);
+	gridHeight = Number(gridHeight);
 	const total = gridWidth * gridHeight;
-	if (scratch.lat?.length !== total) scratch.lat = new Float32Array(total);
+	if (!(scratch.lat instanceof Float32Array) || scratch.lat.length !== total)
+		scratch.lat = new Float32Array(total);
 	const frontlineDirLat = scratch.lat;
-	if (scratch.lng?.length !== total) scratch.lng = new Float32Array(total);
+	if (!(scratch.lng instanceof Float32Array) || scratch.lng.length !== total)
+		scratch.lng = new Float32Array(total);
 	const frontlineDirLng = scratch.lng;
 	frontlineDirLat.fill(0);
 	frontlineDirLng.fill(0);
-	if (scratch.source?.length !== total) scratch.source = new Int32Array(total);
+	if (
+		!(scratch.source instanceof Int32Array) ||
+		scratch.source.length !== total
+	)
+		scratch.source = new Int32Array(total);
 	const sourceCell = scratch.source;
 	sourceCell.fill(-1);
-	if (scratch.queue?.length !== total) scratch.queue = new Int32Array(total);
+	if (!(scratch.queue instanceof Int32Array) || scratch.queue.length !== total)
+		scratch.queue = new Int32Array(total);
 	const queue = scratch.queue;
 	let qHead = 0;
 	let qTail = 0;
@@ -70,7 +89,7 @@ export function buildDirectionField({
 
 	const offsets = [1, -1, gridWidth, -gridWidth];
 	while (qHead < qTail) {
-		const cur = queue[qHead++];
+		const cur = Number(queue[qHead++]);
 		const src = sourceCell[cur];
 		const cy = Math.floor(cur / gridWidth);
 		const cx = cur % gridWidth;

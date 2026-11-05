@@ -13,7 +13,14 @@ export function createAiPlanner(context) {
 			BLITZ: 0,
 		};
 		for (const country of sideCountries) {
-			const strategy = (country.strategy || "BALANCED").toUpperCase();
+			const requestedStrategy =
+				typeof country.strategy === "string"
+					? country.strategy.toUpperCase()
+					: "BALANCED";
+			// Imported strategies may only select the existing gameplay roles.
+			const strategy = Object.hasOwn(weights, requestedStrategy)
+				? requestedStrategy
+				: "BALANCED";
 			const stats = context.latestCountryStats.get(country.id);
 			const weight = Math.max(1, stats?.units || country.initialCells || 1);
 			weights[strategy] = (weights[strategy] || 0) + weight;
@@ -121,7 +128,14 @@ export function createAiPlanner(context) {
 	}
 
 	function acquirePlanBfsBuffers(total) {
-		if (context._planBfsSeen.length !== total) {
+		if (
+			!(context._planBfsSeen instanceof Uint32Array) ||
+			!(context._planBfsParent instanceof Int32Array) ||
+			!(context._planBfsQueue instanceof Int32Array) ||
+			context._planBfsSeen.length !== total ||
+			context._planBfsParent.length !== total ||
+			context._planBfsQueue.length !== total
+		) {
 			context._planBfsSeen = new Uint32Array(total);
 			context._planBfsParent = new Int32Array(total);
 			context._planBfsQueue = new Int32Array(total);
@@ -140,16 +154,39 @@ export function createAiPlanner(context) {
 		};
 	}
 
+	function validatedPlanGridWidth(startIdx, targetIdx) {
+		const total = context.landMask.length;
+		if (
+			!Number.isSafeInteger(total) ||
+			total > 0x7fffffff ||
+			!Number.isInteger(startIdx) ||
+			!Number.isInteger(targetIdx) ||
+			startIdx < 0 ||
+			targetIdx < 0 ||
+			startIdx >= total ||
+			targetIdx >= total ||
+			!Number.isSafeInteger(context.gridWidth) ||
+			context.gridWidth <= 0 ||
+			!Number.isSafeInteger(context.gridHeight) ||
+			context.gridHeight <= 0 ||
+			context.gridWidth * context.gridHeight !== total
+		)
+			return 0;
+		// Capture the validated dimension before building numeric neighbor offsets.
+		return Number(context.gridWidth);
+	}
+
 	function findLandPathSummary(
 		startIdx,
 		targetIdx,
 		sideIdx,
 		maxVisited = 70000,
 	) {
-		if (startIdx === -1 || targetIdx === -1) return { reachable: false };
+		const gridWidth = validatedPlanGridWidth(startIdx, targetIdx);
+		if (gridWidth === 0) return { reachable: false };
 		if (!canTraverseLandForPlan(startIdx, sideIdx, targetIdx)) {
-			const startRow = Math.floor(startIdx / context.gridWidth);
-			const startCol = startIdx % context.gridWidth;
+			const startRow = Math.floor(startIdx / gridWidth);
+			const startCol = startIdx % gridWidth;
 			let replacement = -1;
 			let replacementDist = Infinity;
 			for (let dr = -3; dr <= 3; dr++) {
@@ -160,10 +197,10 @@ export function createAiPlanner(context) {
 						row < 0 ||
 						row >= context.gridHeight ||
 						col < 0 ||
-						col >= context.gridWidth
+						col >= gridWidth
 					)
 						continue;
-					const idx = row * context.gridWidth + col;
+					const idx = row * gridWidth + col;
 					if (!canTraverseLandForPlan(idx, sideIdx, targetIdx)) continue;
 					const dSq = dr * dr + dc * dc;
 					if (dSq < replacementDist) {
@@ -183,17 +220,17 @@ export function createAiPlanner(context) {
 		queue[tail++] = startIdx;
 		seen[startIdx] = generation;
 		parent[startIdx] = -1;
-		const offsets = [1, -1, context.gridWidth, -context.gridWidth];
+		const offsets = [1, -1, gridWidth, -gridWidth];
 		while (head < tail && visited < maxVisited) {
-			const cur = queue[head++];
+			const cur = Number(queue[head++]);
 			visited++;
 			if (cur === targetIdx) {
 				const waypoints = [];
 				let walk = cur;
 				let steps = 0;
 				while (walk !== -1 && walk !== startIdx && steps < total) {
-					const r = Math.floor(walk / context.gridWidth),
-						c = walk % context.gridWidth;
+					const r = Math.floor(walk / gridWidth),
+						c = walk % gridWidth;
 					waypoints.push({
 						lat: (r + 0.5) * CONFIG.GRID_RES - 90,
 						lng: (c + 0.5) * CONFIG.GRID_RES - 180,
@@ -221,16 +258,19 @@ export function createAiPlanner(context) {
 					waypoints: turns,
 				};
 			}
-			const col = cur % context.gridWidth;
+			const col = cur % gridWidth;
 			for (const off of offsets) {
-				if (
-					(off === 1 && col === context.gridWidth - 1) ||
-					(off === -1 && col === 0)
-				) {
+				if ((off === 1 && col === gridWidth - 1) || (off === -1 && col === 0)) {
 					continue;
 				}
 				const ni = cur + off;
-				if (ni < 0 || ni >= total || seen[ni] === generation) continue;
+				if (
+					!Number.isInteger(ni) ||
+					ni < 0 ||
+					ni >= total ||
+					seen[ni] === generation
+				)
+					continue;
 				if (!canTraverseLandForPlan(ni, sideIdx, targetIdx)) continue;
 				seen[ni] = generation;
 				parent[ni] = cur;
@@ -275,7 +315,8 @@ export function createAiPlanner(context) {
 	}
 
 	function findSeaPathSummary(startIdx, targetIdx, maxVisited = 120000) {
-		if (startIdx === -1 || targetIdx === -1) return { reachable: false };
+		const gridWidth = validatedPlanGridWidth(startIdx, targetIdx);
+		if (gridWidth === 0) return { reachable: false };
 		if (context.landMask[startIdx] !== 0 || context.landMask[targetIdx] !== 0) {
 			return { reachable: false };
 		}
@@ -287,25 +328,26 @@ export function createAiPlanner(context) {
 		let distanceCells = 0;
 		queue[tail++] = startIdx;
 		seen[startIdx] = generation;
-		const offsets = [1, -1, context.gridWidth, -context.gridWidth];
+		const offsets = [1, -1, gridWidth, -gridWidth];
 		while (head < tail && visited < maxVisited) {
 			const levelEnd = tail;
 			while (head < levelEnd) {
-				const cur = queue[head++];
+				const cur = Number(queue[head++]);
 				visited++;
 				if (cur === targetIdx) {
 					return { reachable: true, visited, distanceCells };
 				}
-				const col = cur % context.gridWidth;
+				const col = cur % gridWidth;
 				for (const off of offsets) {
 					if (
-						(off === 1 && col === context.gridWidth - 1) ||
+						(off === 1 && col === gridWidth - 1) ||
 						(off === -1 && col === 0)
 					) {
 						continue;
 					}
 					const ni = cur + off;
 					if (
+						!Number.isInteger(ni) ||
 						ni < 0 ||
 						ni >= total ||
 						seen[ni] === generation ||

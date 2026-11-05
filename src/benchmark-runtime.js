@@ -194,7 +194,7 @@ export function createBenchmarkRuntime(runtime) {
 		} else {
 			runtime._benchmarkUnitsPerSide = null;
 		}
-		// Load the 2022 Modern Day scenario if countryMetadata isn't populated yet
+		// Keep the benchmark's 2022 baseline independent of the current play-menu scenario.
 		if (!runtime.countryMetadata || runtime.countryMetadata.length === 0) {
 			runtime.loadingStatus.innerText = "Loading Modern World Theater...";
 			runtime.loadingOverlay.style.display = "flex";
@@ -202,7 +202,7 @@ export function createBenchmarkRuntime(runtime) {
 			try {
 				const url = "assets/maps/world map 2022.json";
 				await runtime.performPresetLoad(
-					runtime.COMPILED_SCENARIO_URLS.modern,
+					"assets/maps/compiled/world-map-2022-v3.mwsc.gz?rev=a40b8db35255df20",
 					"CONQUEST",
 					{
 						jsonFallbackUrl: url,

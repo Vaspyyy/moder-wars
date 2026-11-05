@@ -3,6 +3,7 @@ import {
 	decodeScenarioJson,
 	sha256Hex,
 } from "../src/scenario-codec.js";
+import { resolveWorkerAssetUrl } from "../src/worker-asset-url.js";
 
 const now = () => performance.now();
 
@@ -14,7 +15,11 @@ function progress(phase, details = {}) {
 }
 
 async function fetchBytes(url, source) {
-	const response = await fetch(url);
+	const assetUrl = resolveWorkerAssetUrl(url, self.location.href, true);
+	const response = await fetch(assetUrl, {
+		credentials: "omit",
+		redirect: "error",
+	});
 	if (!response.ok)
 		throw new Error(
 			`Scenario request failed: ${response.status} ${response.statusText}`,

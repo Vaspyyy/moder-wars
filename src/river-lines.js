@@ -81,8 +81,16 @@ export function loadRiverLines() {
 	)
 		.then((response) => {
 			if (!response.ok) throw new Error("River lines unavailable");
+			return response.arrayBuffer();
+		})
+		.then((buffer) => {
+			// Content-Encoding may already have decompressed the HTTP response.
+			const bytes = new Uint8Array(buffer);
+			if (bytes[0] !== 0x1f || bytes[1] !== 0x8b) return buffer;
 			return new Response(
-				response.body.pipeThrough(new DecompressionStream("gzip")),
+				new Blob([buffer])
+					.stream()
+					.pipeThrough(new DecompressionStream("gzip")),
 			).arrayBuffer();
 		})
 		.then(decodeRiverLines)

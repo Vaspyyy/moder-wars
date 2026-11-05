@@ -18,6 +18,51 @@ import { decodeRiverLines, rasterizeRiverMask } from "../src/river-lines.js";
 import { createSimulationCore } from "../src/simulation-core.js";
 import { createTinySimulationState } from "./simulation-fixture.mjs";
 
+// River downloads accept compressed files and browser-decoded HTTP responses.
+{
+	const compressed = readFileSync(
+		new URL("../assets/geodata/derived/rivers-50m.bin.gz", import.meta.url),
+	);
+	const decoded = gunzipSync(compressed);
+	const originalFetch = globalThis.fetch;
+	const originalWarn = console.warn;
+	try {
+		let expected;
+		for (const [encoding, bytes] of [
+			["compressed", compressed],
+			["decoded", decoded],
+		]) {
+			const { loadRiverLines } = await import(
+				`../src/river-lines.js?download-${encoding}`
+			);
+			let downloads = 0;
+			globalThis.fetch = async () => {
+				downloads++;
+				return new Response(bytes, { headers: { "Content-Encoding": "gzip" } });
+			};
+			const [first, second] = await Promise.all([
+				loadRiverLines(),
+				loadRiverLines(),
+			]);
+			assert.ok(first?.length > 300, `${encoding} river data decodes`);
+			assert.equal(first, second, "concurrent river downloads are shared");
+			assert.equal(await loadRiverLines(), first, "decoded rivers stay cached");
+			assert.equal(downloads, 1);
+			if (expected) assert.deepEqual(first, expected);
+			else expected = first;
+		}
+		const { loadRiverLines } = await import("../src/river-lines.js?download-retry");
+		console.warn = () => {};
+		globalThis.fetch = async () => new Response(null, { status: 503 });
+		assert.equal(await loadRiverLines(), null, "unavailable rivers do not stop a war");
+		globalThis.fetch = async () => new Response(decoded);
+		assert.deepEqual(await loadRiverLines(), expected, "a later war retries failed downloads");
+	} finally {
+		globalThis.fetch = originalFetch;
+		console.warn = originalWarn;
+	}
+}
+
 // Rivers: the packed asset decodes and rasterizes onto the real Earth grid.
 {
 	const lines = decodeRiverLines(

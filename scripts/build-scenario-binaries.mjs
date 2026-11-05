@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
+import { writeUkraine2023Scenario } from "./build-ukraine-scenario.mjs";
+import { writeModern2026Scenario } from "./build-modern-2026-scenario.mjs";
 import { encodeScenario } from "../src/scenario-codec.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -43,3 +45,6 @@ for (const [inputName, outputName] of scenarios) {
 		}),
 	);
 }
+
+writeUkraine2023Scenario();
+writeModern2026Scenario();

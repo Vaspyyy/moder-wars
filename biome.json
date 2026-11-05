@@ -19,6 +19,12 @@
 			"scripts/build-output-smoke.mjs",
 			"scripts/editor-startup-smoke.mjs",
 			"scripts/camera-gesture-smoke.mjs",
+			"scripts/render-budget-smoke.mjs",
+			"scripts/worker-asset-security-smoke.mjs",
+			"scripts/simulation-key-safety-smoke.mjs",
+			"scripts/simulation-index-boundaries-smoke.mjs",
+			"scripts/ai-index-safety-smoke.mjs",
+			"scripts/real-force-personnel-smoke.mjs",
 			"workers/**/*.js",
 			"styles/**/*.css"
 		]

@@ -5,6 +5,10 @@ export function generateScenarioSnapshot(
 	name,
 	{
 		worldControlMap,
+		deJureMap,
+		historicalSource,
+		theater,
+		useScenarioLand,
 		landMask,
 		biomeMask,
 		isCustomTerrain,
@@ -31,12 +35,32 @@ export function generateScenarioSnapshot(
 		refAboveTerrain,
 	},
 ) {
+	if (deJureMap && deJureMap.length !== worldControlMap.length) {
+		throw new RangeError(
+			"Scenario sovereignty and control grid dimensions do not match",
+		);
+	}
 	const mapData = [];
+	const sovereignCells = new Map();
+	const knownOwners = new Set(
+		countryMetadata.filter(Boolean).map((meta) => meta.id),
+	);
 	// Save all cells that are land (mask != 0), even if they don't have a country owner (id == 0)
 	for (let i = 0; i < worldControlMap.length; i++) {
 		if (landMask[i] !== 0) {
 			// Store as [index, ownerId, biomeId]
 			mapData.push([i, worldControlMap[i], biomeMask[i] || 0]);
+			const sovereignId = deJureMap?.[i];
+			if (
+				worldControlMap[i] > 0 &&
+				sovereignId > 0 &&
+				sovereignId !== worldControlMap[i] &&
+				knownOwners.has(sovereignId)
+			) {
+				if (!sovereignCells.has(sovereignId))
+					sovereignCells.set(sovereignId, []);
+				sovereignCells.get(sovereignId).push(i);
+			}
 		}
 	}
 
@@ -87,8 +111,29 @@ export function generateScenarioSnapshot(
 
 	return {
 		name: name,
+		...(useScenarioLand ? { useScenarioLand: true } : {}),
+		...(theater
+			? {
+					theater: {
+						...structuredClone(theater),
+						countryIds: Array.from(cleanMetadata, (meta) => meta.id),
+					},
+				}
+			: {}),
 		metadata: cleanMetadata,
 		mapData: mapData,
+		...(deJureMap ? { sovereigntyBase: "control" } : {}),
+		...(historicalSource
+			? { historicalSource: structuredClone(historicalSource) }
+			: {}),
+		...(sovereignCells.size > 0
+			? {
+					sovereigntyOverrides: Array.from(
+						sovereignCells,
+						([ownerId, cells]) => ({ ownerId, cells }),
+					),
+				}
+			: {}),
 		mountainData: mountainData.length > 0 ? mountainData : null,
 		mapRes: mapRes,
 		gridRes: gridRes,

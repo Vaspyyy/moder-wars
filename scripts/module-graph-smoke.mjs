@@ -16,7 +16,7 @@ const externals = new Map(["jszip"].map((name) => [name,
 	new vm.SyntheticModule(["default"], function () { this.setExport("default", {}); }, { context, identifier: name }),
 ]));
 for (const name of ["pixi.js", "pixi.js/unsafe-eval"]) {
- const names = name === "pixi.js" ? ["Container", "FillGradient", "Graphics", "Sprite", "Texture", "WebGLRenderer"] : [];
+ const names = name === "pixi.js" ? ["Container", "FillGradient", "Graphics", "Matrix", "Sprite", "Texture", "WebGLRenderer"] : [];
  externals.set(name, new vm.SyntheticModule(names, function () { for (const key of names) this.setExport(key, {}); }, {context,identifier:name}));
 }
 for (const directory of ["src", "workers"]) {

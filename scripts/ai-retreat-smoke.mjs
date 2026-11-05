@@ -22,6 +22,7 @@ function fixture(count = 100, phase = "REGROUPING") {
 		deployTicks: 0,
 	}));
 	const state = {
+		CONFIG: { GRID_RES: 0.25 },
 		sides: [[{ id: 1 }]],
 		sideUids: [sideUid],
 		countryMetadata: [{ id: 1 }],
@@ -101,8 +102,8 @@ assert.equal(
 	false,
 );
 
-// 58/100 members can be inside the center radius while all100 have reached their
-// assigned spread positions. Arrival must use the positions actually ordered.
+// Fewer than 65/100 members can be inside the center radius while all have
+// reached their spread positions. Arrival must use the positions actually ordered.
 const spread = fixture(100, "WITHDRAWING");
 spread.ai.assignOperationalTaskForceOrders(
 	0,
@@ -149,6 +150,111 @@ assert.deepEqual(
 	wide.units.map((unit) => unit._taskForceOrder.target),
 	destinations,
 );
+
+// Multi-row formations retain final cell destinations across reassessments and
+// phase transitions. Reapplying formation depth made these targets drift inland.
+const multirow = fixture(100, "WITHDRAWING");
+const world = multirow.state;
+world.gridWidth = 1440;
+world.gridHeight = 720;
+world.getGridIndex = (lat, lng) => {
+	const row = Math.floor((lat + 90) / world.CONFIG.GRID_RES);
+	const col = Math.floor((lng + 180) / world.CONFIG.GRID_RES);
+	return row >= 0 && row < world.gridHeight && col >= 0 && col < world.gridWidth
+		? row * world.gridWidth + col
+		: -1;
+};
+world.landMask = new Uint8Array(world.gridWidth * world.gridHeight).fill(1);
+world.dominantSideMap = new Int8Array(world.landMask.length);
+world.worldControlMap = new Uint16Array(world.landMask.length).fill(1);
+world.countryToSideMap.set(2, 1);
+world.areSidesHostile = (a, b) => a !== b;
+const multirowById = new Map(
+	multirow.units.map((unit) => [String(unit.id), unit]),
+);
+const assignMultirow = () =>
+	multirow.ai.assignOperationalTaskForceOrders(
+		0,
+		multirow.force,
+		null,
+		multirowById,
+	);
+const recoveryTargets = () =>
+	multirow.units.map((unit) => ({ ...unit._taskForceOrder.target }));
+const targetCell = (target) => world.getGridIndex(target.lat, target.lng);
+assignMultirow();
+const stableTargets = recoveryTargets();
+assert.equal(new Set(stableTargets.map(targetCell)).size, 100);
+for (let pass = 0; pass < 10; pass++) {
+	world._simTickCount += 15;
+	if (pass === 5) multirow.force.phase = "REGROUPING";
+	assignMultirow();
+	assert.deepEqual(
+		recoveryTargets(),
+		stableTargets,
+		"recovery targets stay fixed",
+	);
+}
+
+// Losing a destination reallocates only that unit, without stealing another
+// member's valid cell before its order is visited.
+const lostCell = targetCell(stableTargets[0]);
+world.dominantSideMap[lostCell] = 1;
+world.worldControlMap[lostCell] = 2;
+assignMultirow();
+const replacementTargets = recoveryTargets();
+assert.notDeepEqual(replacementTargets[0], stableTargets[0]);
+assert.deepEqual(replacementTargets.slice(1), stableTargets.slice(1));
+assert.equal(new Set(replacementTargets.map(targetCell)).size, 100);
+assert.ok(
+	replacementTargets.every(
+		(target) => world.dominantSideMap[targetCell(target)] === 0,
+	),
+	"recovery destinations must remain friendly",
+);
+assignMultirow();
+assert.deepEqual(recoveryTargets(), replacementTargets);
+
+// A support unit covering contact abandons its old recovery cell. Reserving
+// that unused cell would block another unit's only nearby safe destination.
+const covering = fixture(2, "WITHDRAWING");
+Object.assign(covering.state, {
+	gridWidth: world.gridWidth,
+	gridHeight: world.gridHeight,
+	getGridIndex: world.getGridIndex,
+	landMask: new Uint8Array(world.landMask.length).fill(1),
+	dominantSideMap: new Int8Array(world.landMask.length).fill(1),
+	worldControlMap: new Uint16Array(world.landMask.length).fill(2),
+	areSidesHostile: (a, b) => a !== b,
+});
+covering.state.countryToSideMap.set(2, 1);
+const retreatCell = { lat: 0.125, lng: 2.125 };
+const contactCell = { lat: 0.125, lng: 20.125 };
+for (const position of [retreatCell, contactCell]) {
+	const cell = targetCell(position);
+	covering.state.dominantSideMap[cell] = 0;
+	covering.state.worldControlMap[cell] = 1;
+}
+Object.assign(covering.units[0], { lat: 0.125, lng: 1.875 });
+Object.assign(covering.units[1], contactCell, {
+	lastCombatTick: covering.state._simTickCount,
+	_taskForceUid: covering.force.id,
+	_taskForceOrder: { phase: "WITHDRAWING", target: retreatCell },
+});
+covering.force.unitRoles = {
+	0: { role: "LINE" },
+	1: { role: "SUPPORT" },
+};
+covering.ai.assignOperationalTaskForceOrders(
+	0,
+	covering.force,
+	null,
+	new Map(covering.units.map((unit) => [String(unit.id), unit])),
+);
+assert.equal(covering.units[0]._armyOrder.type, "WITHDRAW");
+assert.deepEqual(covering.units[0]._armyOrder.target, retreatCell);
+assert.equal(covering.units[1]._armyOrder.reason, "COVER_WITHDRAWAL");
+assert.deepEqual(covering.units[1]._armyOrder.target, contactCell);
 
 // Lateral spreading must not place recovery destinations in water or hostile land.
 const coast = fixture(100, "WITHDRAWING");

@@ -2134,6 +2134,7 @@ export const gameTimeDayDurationMs = 500;
 export let viewMode = "POLITICAL"; // 'POLITICAL' or 'FLAG'
 export let allianceViewEnabled = false; // when true, alliances override colors/flags in political/flag views
 export let showCountryLabels = true;
+export let showAdminRegions = true;
 export let showNonCapitalCities = true;
 // Cache for screen-space label curves so they don't move with the camera
 export const countryLabelAnchors = new Map(); // key: `${countryId}:${regionIndex}` -> { name, points, fontSize }
@@ -2366,22 +2367,6 @@ function compactVariableStrengthFormationsForSide(
 		formations.length,
 		chooseFormationBudget(totalPersonnel),
 	);
-	if (budget >= formations.length) {
-		const descriptors = distributeFormationPersonnel(
-			totalPersonnel,
-			formations.length,
-			{ nominalPersonnel: CONFIG.UNIT_TO_SOLDIER_RATIO },
-		);
-		for (let index = 0; index < formations.length; index++) {
-			setUnitFormationPersonnel(
-				formations[index],
-				descriptors[index].personnel,
-			);
-		}
-		soldiersPerUnit[sideIdx] = CONFIG.UNIT_TO_SOLDIER_RATIO;
-		return formations.length;
-	}
-
 	const countryGroups = new Map();
 	for (const formation of formations) {
 		let group = countryGroups.get(formation.sovereignId);
@@ -2394,13 +2379,43 @@ function compactVariableStrengthFormationsForSide(
 	const groups = [...countryGroups.entries()].sort(
 		([leftId], [rightId]) => Number(leftId) - Number(rightId),
 	);
+	// Weight by each country's current personnel so countries keep their own
+	// strength (e.g. real force data); equal formations reduce to the count.
+	const groupWeights = groups.map(([countryId, group]) => ({
+		countryId,
+		weight:
+			group.reduce((sum, unit) => sum + getLiveFormationPersonnel(unit), 0) ||
+			group.length,
+	}));
+	const personnelQuotas = allocateLargestRemainderQuotas(
+		groupWeights,
+		totalPersonnel,
+	);
+	const personnelByCountry = new Map(
+		personnelQuotas.map((entry) => [entry.countryId, entry.quota]),
+	);
+	if (budget >= formations.length) {
+		for (const [rawCountryId, group] of groups) {
+			const descriptors = distributeFormationPersonnel(
+				Math.max(
+					group.length,
+					personnelByCountry.get(Number(rawCountryId)) ?? group.length,
+				),
+				group.length,
+				{ nominalPersonnel: CONFIG.UNIT_TO_SOLDIER_RATIO },
+			);
+			for (let index = 0; index < group.length; index++) {
+				setUnitFormationPersonnel(group[index], descriptors[index].personnel);
+			}
+		}
+		soldiersPerUnit[sideIdx] = CONFIG.UNIT_TO_SOLDIER_RATIO;
+		return formations.length;
+	}
+
 	const minimumMarkers = Math.min(budget, groups.length);
 	const markerRemainder = Math.max(0, budget - minimumMarkers);
 	const markerQuotas = allocateLargestRemainderQuotas(
-		groups.map(([countryId, group]) => ({
-			countryId,
-			weight: group.length,
-		})),
+		groupWeights,
 		markerRemainder,
 	);
 	const markerQuotaByCountry = new Map(
@@ -2413,16 +2428,6 @@ function compactVariableStrengthFormationsForSide(
 			(markerQuotaByCountry.get(countryId) || 0) + 1,
 		);
 	}
-	const personnelQuotas = allocateLargestRemainderQuotas(
-		groups.map(([countryId, group]) => ({
-			countryId,
-			weight: group.length,
-		})),
-		totalPersonnel,
-	);
-	const personnelByCountry = new Map(
-		personnelQuotas.map((entry) => [entry.countryId, entry.quota]),
-	);
 	const retained = new Set();
 	for (const [rawCountryId, group] of groups) {
 		const countryId = Number(rawCountryId);
@@ -2517,6 +2522,9 @@ export let currentUsername = null;
 export let flagCodes = null;
 
 export let currentScenarioContext = null; // { id, name, ownerUsername }
+export function setCurrentScenarioContext(value) {
+	currentScenarioContext = value;
+}
 
 export let hubReturnState = null;
 export let hubWasInEditor = false;
@@ -4141,11 +4149,12 @@ export function applyWorldBounds(widthDeg, heightDeg) {
 
 	const halfW = w / 2;
 	const halfH = h / 2;
+	const theater = currentScenarioContext?.theater?.bounds;
 	const bounds = mapRuntime.latLngBounds(
-		mapRuntime.latLng(-halfH, -halfW),
-		mapRuntime.latLng(halfH, halfW),
+		mapRuntime.latLng(theater?.[1] ?? -halfH, theater?.[0] ?? -halfW),
+		mapRuntime.latLng(theater?.[3] ?? halfH, theater?.[2] ?? halfW),
 	);
-	map.setMaxBounds(bounds);
+	map.setMaxBounds(bounds, Boolean(theater));
 
 	// If current center is outside new bounds, fit map into the new box
 	if (!bounds.contains(map.getCenter())) {
@@ -4164,6 +4173,14 @@ export function applyWorldBounds(widthDeg, heightDeg) {
 }
 
 export function isInsideWorldBoxLatLng(lat, lng) {
+	const theater = currentScenarioContext?.theater?.bounds;
+	if (theater)
+		return (
+			lat >= theater[1] &&
+			lat <= theater[3] &&
+			lng >= theater[0] &&
+			lng <= theater[2]
+		);
 	if (!worldWidthDeg || !worldHeightDeg) return true;
 	const halfW = worldWidthDeg / 2;
 	const halfH = worldHeightDeg / 2;
@@ -6315,6 +6332,19 @@ const showCitiesCheckbox = document.getElementById("show-cities-checkbox");
 const showBattlesCheckbox = document.getElementById("show-battles-checkbox");
 const showAllianceCheckbox = document.getElementById("show-alliance-checkbox");
 
+const showAdminRegionsCheckbox = document.getElementById(
+	"show-admin-regions-checkbox",
+);
+showAdminRegions = getCookie("mw_show_admin_regions") !== "false";
+if (showAdminRegionsCheckbox) {
+	showAdminRegionsCheckbox.checked = showAdminRegions;
+	showAdminRegionsCheckbox.addEventListener("change", (event) => {
+		showAdminRegions = event.target.checked;
+		setCookie("mw_show_admin_regions", String(showAdminRegions));
+		influenceLayer?.requestRender(RENDER_LAYERS.DYNAMIC);
+	});
+}
+
 const armyDiagnosticsCheckbox = document.getElementById(
 	"show-army-diagnostics-checkbox",
 );
@@ -6706,6 +6736,7 @@ menu_controls.bindEnterScenarioBtnClick();
 
 // Wire Scroller Cards
 menu_controls.bindScrollerChoiceModernClick();
+menu_controls.bindScrollerChoiceUkraine2023Click();
 menu_controls.bindScrollerChoice1936Click();
 menu_controls.bindScrollerChoice1914Click();
 

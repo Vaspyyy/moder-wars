@@ -3865,6 +3865,29 @@ input:focus-visible {
 .scroller-card:nth-child(3n) {
 	border-top-color: #e4b769;
 }
+.scroller-card.selected {
+	background: #17364b;
+	border-color: #7cc8ed;
+	box-shadow: inset 0 0 0 1px #7cc8ed;
+}
+.scroller-card:focus-visible {
+	outline: 2px solid #fff3df;
+	outline-offset: 4px;
+}
+.scroller-card-selection {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 20px;
+	margin-bottom: 8px;
+	color: #b6e7ff;
+	font-size: 12px;
+	font-weight: 800;
+	visibility: hidden;
+}
+.scroller-card.selected .scroller-card-selection {
+	visibility: visible;
+}
 #settings-overlay .settings-tab-btn {
 	color: #c4d4ef;
 	border-bottom: 2px solid #5ba7d1;
@@ -3917,7 +3940,7 @@ input:focus-visible {
 }
 #main-menu .menu-v2-container {
 	padding: clamp(28px, 6vw, 96px);
-	justify-content: center;
+	justify-content: safe center;
 	align-items: flex-start;
 	gap: 36px;
 	overflow-y: auto;
@@ -4039,8 +4062,12 @@ input:focus-visible {
 }
 #main-menu .scenario-scroller-v2 {
 	padding-right: 0;
-	max-height: 30vh;
-	flex: 0 1 auto;
+	max-height: none;
+	flex: 0 0 auto;
+	overflow-y: visible;
+}
+#main-menu .scenario-selection-container a {
+	color: var(--title-blue);
 }
 .title-screen-scenario-hint {
 	margin: 14px 0 0;

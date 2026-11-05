@@ -326,7 +326,10 @@ export function createSimulationWorld(runtime) {
 			? new Array(runtime.sides.length).fill(0)
 			: null;
 		for (const unit of runtime.units) {
-			const sideIndex = unit.sideIndex;
+			const rawSide = unit.sideIndex;
+			// Snapshot data must not turn a side-array index into an object property.
+			if (!Number.isInteger(rawSide)) continue;
+			const sideIndex = Number(rawSide);
 			const countsForLivePower =
 				unit.health > 0 &&
 				unit.deployTicks <= 0 &&
@@ -672,9 +675,15 @@ export function createSimulationWorld(runtime) {
 	}
 
 	function clearSideLandPlanSlots(sideIdx) {
-		if (sideIdx < 0) return;
+		if (
+			!Number.isInteger(sideIdx) ||
+			sideIdx < 0 ||
+			sideIdx >= runtime.sides.length
+		)
+			return;
+		sideIdx = Number(sideIdx);
 		if (sideIdx < runtime._warPlan.length) runtime._warPlan[sideIdx] = null;
-		const secondSlot = sideIdx + runtime.sides.length;
+		const secondSlot = sideIdx + Number(runtime.sides.length);
 		if (secondSlot < runtime._warPlan.length)
 			runtime._warPlan[secondSlot] = null;
 	}

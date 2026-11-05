@@ -205,6 +205,40 @@ function assertFullOwnerIntake(runtime, derived) {
 const originalError = console.error;
 console.error = (...args) => { if (!String(args).includes("simulated port failure") && !String(args).includes("simulated recovered state")) originalError(...args); };
 try {
+	const language = harness();
+	try {
+		const metadata = language.runtime.countryMetadata[0];
+		const sideCountry = language.runtime.sides[0][0];
+		metadata.displayName = sideCountry.displayName = "Захід";
+		await language.client.start();
+		const owner = language.workers[0];
+		assert.equal(owner.state.countryMetadata[0].displayName, undefined,
+			"localized metadata labels never enter the simulation owner");
+		assert.equal(owner.state.sides[0][0].displayName, undefined);
+		// Simulate both an old owner payload and a new language chosen in the UI.
+		owner.state.countryMetadata[0].displayName = "West";
+		owner.state.sides[0][0].displayName = "West";
+		metadata.displayName = sideCountry.displayName = "Запад";
+		owner.publishSnapshot({}, { values: {
+			countryMetadata: structuredClone(owner.state.countryMetadata),
+			sides: structuredClone(owner.state.sides),
+		} });
+		assert.equal(language.runtime.countryMetadata[0], metadata);
+		assert.equal(metadata.displayName, "Запад", "snapshots retain the UI language");
+		assert.equal(sideCountry.displayName, "Запад");
+		await language.client.suspend();
+		assert.equal(metadata.displayName, "Запад", "full handoff retains the UI language");
+		assert.equal(sideCountry.displayName, "Запад");
+		applySimulationState(language.runtime, {
+			countryMetadata: [{ id: metadata.id, name: "New authored name", displayName: "West" }],
+			sides: [[{ id: sideCountry.id, name: "New authored name", displayName: "West" }]],
+		});
+		assert.equal(metadata.name, "New authored name");
+		assert.equal(metadata.displayName, undefined,
+			"an actual rename invalidates the previous localized label");
+		assert.equal(sideCountry.displayName, undefined);
+	} finally { language.client.stop(); }
+
 	const lifecycle = harness();
 	try {
 		const beforeStart = lifecycle.runtime.units;

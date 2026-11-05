@@ -370,7 +370,15 @@ export function createAiRuntime(context) {
 	}
 
 	function discardNonHostileOperationalPlans(sideIndex) {
-		for (const slot of [sideIndex, sideIndex + context.sides.length]) {
+		if (
+			!Number.isInteger(sideIndex) ||
+			sideIndex < 0 ||
+			sideIndex >= context.sides.length
+		)
+			return;
+		sideIndex = Number(sideIndex);
+		const sideCount = Number(context.sides.length);
+		for (const slot of [sideIndex, sideIndex + sideCount]) {
 			const plan = context._warPlan[slot];
 			if (
 				isOperationalLandPlan(plan) &&
@@ -666,7 +674,15 @@ export function createAiRuntime(context) {
 	}
 
 	function clearOperationalPlanForTaskForce(sideIndex, taskForce) {
-		const slots = [sideIndex, sideIndex + context.sides.length];
+		if (
+			!Number.isInteger(sideIndex) ||
+			sideIndex < 0 ||
+			sideIndex >= context.sides.length
+		)
+			return;
+		sideIndex = Number(sideIndex);
+		const sideCount = Number(context.sides.length);
+		const slots = [sideIndex, sideIndex + sideCount];
 		for (const slot of slots) {
 			if (context._warPlan[slot]?.signature === taskForce.planSignature) {
 				context._warPlan[slot] = null;
@@ -688,6 +704,44 @@ export function createAiRuntime(context) {
 		const objective = taskForce.target || assembly;
 		const frontage = getOperationalFrontage(sideIndex, plan || taskForce);
 		const occupied = new Set();
+		const recoveryTargets = new Map();
+		const coveringWithdrawalUnits = new Set();
+		if (["WITHDRAWING", "REGROUPING"].includes(taskForce.phase)) {
+			// Reserve valid final destinations before allocating replacements. They
+			// already include formation depth and must not move on reassessment.
+			for (const unit of members) {
+				if (
+					taskForce.phase === "WITHDRAWING" &&
+					taskForce.unitRoles[String(unit.id)]?.role === "SUPPORT" &&
+					context._simTickCount - taskForce.phaseStartedTick < 120 &&
+					unit.health / (unit.maxHealth || 100) > 0.6 &&
+					unit.lastCombatTick != null &&
+					context._simTickCount - unit.lastCombatTick < 30
+				) {
+					// Covering troops stay at contact instead of using their old
+					// recovery cell. Leave that cell available to withdrawing units.
+					coveringWithdrawalUnits.add(unit);
+					continue;
+				}
+				const previousOrder = unit._taskForceOrder;
+				if (
+					unit._taskForceUid !== taskForce.id ||
+					!previousOrder?.target ||
+					!["WITHDRAWING", "REGROUPING"].includes(previousOrder.phase) ||
+					!isOperationalFriendlyPoint(previousOrder.target, sideIndex)
+				)
+					continue;
+				if (context.gridWidth && context.gridHeight) {
+					const cell = context.getGridIndex(
+						previousOrder.target.lat,
+						previousOrder.target.lng,
+					);
+					if (occupied.has(cell)) continue;
+					occupied.add(cell);
+				}
+				recoveryTargets.set(unit, previousOrder.target);
+			}
+		}
 		const operation = taskForce.encirclement;
 		const report = armyReports.get(sideIndex);
 		const byRole = new Map();
@@ -719,6 +773,7 @@ export function createAiRuntime(context) {
 				role === "LINE" ? 2.4 : 1.8,
 			);
 			const lateral = offset.lateral;
+			const recoveryTarget = recoveryTargets.get(unit);
 			let target = assembly;
 			let speed = 1;
 			if (taskForce.phase === "ASSEMBLING") {
@@ -798,14 +853,8 @@ export function createAiRuntime(context) {
 					0,
 					lateral,
 				);
-				const previousOrder = unit._taskForceOrder;
-				if (
-					unit._taskForceUid === taskForce.id &&
-					previousOrder?.target &&
-					["WITHDRAWING", "REGROUPING"].includes(previousOrder.phase) &&
-					isOperationalFriendlyPoint(previousOrder.target, sideIndex)
-				) {
-					target = previousOrder.target;
+				if (recoveryTarget) {
+					target = recoveryTarget;
 				} else if (target) {
 					const distanceSq = context.geoDistSq(
 						unit.lat,
@@ -891,14 +940,7 @@ export function createAiRuntime(context) {
 				type = "HOLD";
 				reason = "ATTACK_PAUSED_FLANK_UNCOVERED";
 			}
-			if (
-				taskForce.phase === "WITHDRAWING" &&
-				role === "SUPPORT" &&
-				context._simTickCount - taskForce.phaseStartedTick < 120 &&
-				unit.health / (unit.maxHealth || 100) > 0.6 &&
-				unit.lastCombatTick != null &&
-				context._simTickCount - unit.lastCombatTick < 30
-			) {
+			if (coveringWithdrawalUnits.has(unit)) {
 				target = { lat: unit.lat, lng: unit.lng };
 				type = "ASSAULT";
 				speed = 0.5;
@@ -913,7 +955,19 @@ export function createAiRuntime(context) {
 				speed = 1.4;
 				reason = "EXPLOIT_BREACH";
 			}
-			if (target && offset.depth > 0 && assembly && objective) {
+			const retainedRecoveryTarget = target && target === recoveryTarget;
+			if (recoveryTarget && !retainedRecoveryTarget) {
+				occupied.delete(
+					context.getGridIndex(recoveryTarget.lat, recoveryTarget.lng),
+				);
+			}
+			if (
+				target &&
+				!retainedRecoveryTarget &&
+				offset.depth > 0 &&
+				assembly &&
+				objective
+			) {
 				const dl = objective.lat - assembly.lat,
 					dg = context.lngDelta(objective.lng, assembly.lng);
 				const length = Math.hypot(dl, dg) || 1;
@@ -923,7 +977,12 @@ export function createAiRuntime(context) {
 					lng: ((target.lng - (dg / length) * offset.depth + 540) % 360) - 180,
 				};
 			}
-			if (target && context.gridWidth && context.gridHeight) {
+			if (
+				target &&
+				!retainedRecoveryTarget &&
+				context.gridWidth &&
+				context.gridHeight
+			) {
 				const safe = navigator.safePosition(
 					target,
 					sideIndex,
@@ -995,8 +1054,9 @@ export function createAiRuntime(context) {
 		const processedSides = new Set();
 		let processedCount = 0;
 
-		for (let step = 0; step < context.sides.length; step++) {
-			const sideIndex = (armySideCursor + step) % context.sides.length;
+		const sideCount = Number(context.sides.length);
+		for (let step = 0; step < sideCount; step++) {
+			const sideIndex = (armySideCursor + step) % sideCount;
 			const sideUid = context.sideUids[sideIndex];
 			if (!sideUid || !context.sides[sideIndex]?.length) continue;
 			if (
@@ -1068,8 +1128,8 @@ export function createAiRuntime(context) {
 				};
 				const slot = !context._warPlan[sideIndex]
 					? sideIndex
-					: !context._warPlan[sideIndex + context.sides.length]
-						? sideIndex + context.sides.length
+					: !context._warPlan[sideIndex + sideCount]
+						? sideIndex + sideCount
 						: sideIndex;
 				context._warPlan[slot] = beachheadPlan;
 				selectedPlans.push(beachheadPlan);

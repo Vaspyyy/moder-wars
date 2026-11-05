@@ -138,21 +138,32 @@ export function createAiPlanExecutor(context) {
 			// The world or side changed under the job: restart from current state.
 			if (
 				proposalJob.pending === context._pendingProposalSides &&
-				proposalJob.generation === context._simulationWorldGeneration
-			)
-				context._planReassessNeeded[proposalJob.sideIdx] ||=
-					proposalJob.forceReplace;
+				proposalJob.generation === context._simulationWorldGeneration &&
+				Number.isInteger(proposalJob.sideIdx) &&
+				proposalJob.sideIdx >= 0 &&
+				proposalJob.sideIdx < context.sides.length
+			) {
+				const sideIndex = Number(proposalJob.sideIdx);
+				context._planReassessNeeded[sideIndex] ||= proposalJob.forceReplace;
+			}
 			proposalJob = null;
 		}
 		if (!proposalJob) {
 			while (context._pendingProposalSides.length > 0) {
 				const si = context._pendingProposalSides[0];
-				if (context.sides[si] && context.sides[si].length > 0) break;
+				if (
+					Number.isInteger(si) &&
+					si >= 0 &&
+					si < context.sides.length &&
+					context.sides[si]?.length > 0
+				)
+					break;
 				context._pendingProposalSides.shift();
 				context._pendingProposalSideSet.delete(si);
 			}
-			const si = context._pendingProposalSides[0];
-			if (si === undefined) return null;
+			if (context._pendingProposalSides.length === 0) return null;
+			// The queue head passed the strict index guard above; store its numeric form.
+			const si = Number(context._pendingProposalSides[0]);
 			perf.proposalRuns++;
 			proposalJob = {
 				sideIdx: si,
@@ -208,8 +219,15 @@ export function createAiPlanExecutor(context) {
 		}
 
 		const finished = advanceProposalJob();
-		if (finished) {
-			const { sideIdx: si, forceReplace, proposals } = finished;
+		if (
+			finished &&
+			Number.isInteger(finished.sideIdx) &&
+			finished.sideIdx >= 0 &&
+			finished.sideIdx < context.sides.length
+		) {
+			const { forceReplace, proposals } = finished;
+			const si = Number(finished.sideIdx);
+			const sideCount = Number(context.sides.length);
 			// Score each proposal
 			const scoringBatch = {};
 			for (const p of proposals) {
@@ -226,7 +244,7 @@ export function createAiPlanExecutor(context) {
 				context._warPlan[si] = selected.land1;
 			}
 			if (selected.land2) {
-				const lSlot2 = si + context.sides.length;
+				const lSlot2 = si + sideCount;
 				if (!context._warPlan[lSlot2]) {
 					context._warPlan[lSlot2] = selected.land2;
 				}
@@ -721,14 +739,9 @@ export function createAiPlanExecutor(context) {
 		// Clean up plans for inactive sides
 		// Land plans use indices 0..sides.length-1 (slot 1) and
 		// sides.length..sides.length*2-1 (slot 2). Only null beyond slot 2.
-		for (
-			let si = context.sides.length * 2;
-			si < context._warPlan.length;
-			si++
-		) {
-			context._warPlan[si] = null;
-		}
-		for (let si = context.sides.length; si < context._navalPlan.length; si++) {
+		const inactiveSideStart = Number(context.sides.length);
+		context._warPlan.fill(null, inactiveSideStart * 2);
+		for (let si = inactiveSideStart; si < context._navalPlan.length; si++) {
 			// Release any assigned units
 			for (const u of context.units) {
 				if (u.navalAssigned) {
@@ -739,7 +752,7 @@ export function createAiPlanExecutor(context) {
 			context._navalPlan[si] = null;
 		}
 		for (
-			let si = context.sides.length;
+			let si = inactiveSideStart;
 			si < context._navalSupplyPlan.length;
 			si++
 		) {
@@ -751,15 +764,9 @@ export function createAiPlanExecutor(context) {
 			}
 			context._navalSupplyPlan[si] = null;
 		}
+		context._transportPlan.fill(null, inactiveSideStart);
 		for (
-			let si = context.sides.length;
-			si < context._transportPlan.length;
-			si++
-		) {
-			context._transportPlan[si] = null;
-		}
-		for (
-			let si = context.sides.length * 10;
+			let si = inactiveSideStart * 10;
 			si < context._coastalDefensePlan.length;
 			si++
 		) {
@@ -769,7 +776,7 @@ export function createAiPlanExecutor(context) {
 			context._coastalDefensePlan[si] = null;
 		}
 		for (
-			let si = context.sides.length * 10;
+			let si = inactiveSideStart * 10;
 			si < context._neutralGarrisonPlan.length;
 			si++
 		) {
@@ -779,7 +786,7 @@ export function createAiPlanExecutor(context) {
 			context._neutralGarrisonPlan[si] = null;
 		}
 		for (
-			let si = context.sides.length;
+			let si = inactiveSideStart;
 			si < context._defenderReactionPlan.length;
 			si++
 		) {

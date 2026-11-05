@@ -76,3 +76,20 @@ export function getTranslation(
 	}
 	return dict[key] || TRANSLATIONS.en[key] || key;
 }
+
+/** The saved UI language, or English when none is stored or it is unknown. */
+export function getLanguage() {
+	const saved =
+		typeof document !== "undefined" && typeof document.cookie === "string"
+			? getCookie("mw_lang")
+			: "en";
+	return Object.hasOwn(TRANSLATIONS, saved) ? saved : "en";
+}
+
+/** Translate a UI key in the saved language and fill `{name}` placeholders. */
+export function gameText(key, params = {}) {
+	const template = getTranslation(key, getLanguage());
+	return String(template).replace(/\{(\w+)\}/g, (match, name) =>
+		Object.hasOwn(params, name) ? String(params[name]) : match,
+	);
+}
