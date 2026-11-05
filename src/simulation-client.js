@@ -25,8 +25,10 @@ export function createSimulationClient(
 				new URL("../workers/war-simulation-worker.js", import.meta.url),
 				{ type: "module" },
 			),
-		onEvent = () => {},
-		onSnapshot = () => {},
+		onEvent = /** @type {(type: string, ...args: any[]) => void} */ (() => {}),
+		onSnapshot = /** @type {(info?: { fullOwner?: boolean }) => void} */ (
+			() => {}
+		),
 	} = {},
 ) {
 	let worker = null,

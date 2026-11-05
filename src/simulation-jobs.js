@@ -33,6 +33,7 @@ export const DEFAULT_SIMULATION_TILE_SIZE = 32;
  * @property {((job:DeterministicJob)=>void)|null} onComplete
  * @property {((job:DeterministicJob)=>void)|null} onCancel
  * @property {Record<string, unknown>} metadata Serializable scheduling context.
+ * @property {boolean} [_completionStarted] Internal guard against re-entrant completion.
  */
 
 /**
@@ -107,7 +108,7 @@ export function claimFixedItemRange(cursor, itemBudget) {
 
 /**
  * Create a range-based deterministic job.
- * @param {object} options
+ * @param {object} [options]
  * @param {string} options.id
  * @param {number} options.totalItems
  * @param {(start:number,end:number,job:DeterministicJob)=>void} options.processRange
@@ -119,7 +120,9 @@ export function claimFixedItemRange(cursor, itemBudget) {
  * @param {Record<string, unknown>} [options.metadata]
  * @returns {DeterministicJob}
  */
-export function createDeterministicJob(options = {}) {
+export function createDeterministicJob(
+	options = /** @type {any} validated at runtime */ ({}),
+) {
 	const id = String(options.id || "").trim();
 	if (!id) throw new TypeError("A deterministic job requires a stable id.");
 	if (typeof options.processRange !== "function") {
@@ -486,7 +489,9 @@ export function tileBoundsForIndex(
  * @param {number} [options.tileSize=DEFAULT_SIMULATION_TILE_SIZE]
  * @param {boolean} [options.includeNeighbors=true]
  */
-export function createDirtyTileTracker(options = {}) {
+export function createDirtyTileTracker(
+	options = /** @type {any} dimensions fall back to 1 */ ({}),
+) {
 	const gridWidth = positiveInteger(options.gridWidth);
 	const gridHeight = positiveInteger(options.gridHeight);
 	const tileSize = positiveInteger(

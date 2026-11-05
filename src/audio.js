@@ -174,10 +174,12 @@ export async function initAudio() {
 			const initialVol = savedVol !== "" ? parseFloat(savedVol) : 0.45; // Increased default volume
 			bgMusicGain.gain.setValueAtTime(initialVol, audioCtx.currentTime);
 
-			const slider = document.getElementById("music-volume-slider");
+			const slider = /** @type {HTMLInputElement} */ (
+				document.getElementById("music-volume-slider")
+			);
 			const valLabel = document.getElementById("music-vol-val");
 			if (slider && valLabel) {
-				slider.value = initialVol;
+				slider.value = String(initialVol);
 				valLabel.innerText = `${Math.round(initialVol * 100)}%`;
 			}
 
@@ -368,7 +370,7 @@ document.addEventListener(
 
 		const interactiveSelector =
 			'button, .menu-card, input, select, [role="button"], .side-header';
-		if (e.target.closest(interactiveSelector)) {
+		if (/** @type {Element} */ (e.target).closest(interactiveSelector)) {
 			playClickSound();
 		}
 	},

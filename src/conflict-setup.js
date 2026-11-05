@@ -159,9 +159,12 @@ export function createConflictSetup(runtime) {
                 </details>
             `;
 
-				slot.querySelector(".country-configuration").open =
-					expandedCountries.has(String(country.id));
-				const buffBtn = slot.querySelector(".buff-toggle-btn");
+				/** @type {HTMLDetailsElement} */ (
+					slot.querySelector(".country-configuration")
+				).open = expandedCountries.has(String(country.id));
+				const buffBtn = /** @type {HTMLElement} */ (
+					slot.querySelector(".buff-toggle-btn")
+				);
 				if (buffBtn) {
 					const buffLabelEl = buffBtn.querySelector(".buff-label");
 					const buffArrows = buffBtn.querySelectorAll(".buff-arrow");
@@ -292,15 +295,21 @@ export function createConflictSetup(runtime) {
 					});
 				}
 
-				slot.querySelector(".role-select").onchange = (e) => {
-					country.role = e.target.value;
+				/** @type {HTMLSelectElement} */ (
+					slot.querySelector(".role-select")
+				).onchange = (e) => {
+					country.role = /** @type {HTMLSelectElement} */ (e.target).value;
 				};
 
-				slot.querySelector(".strategy-select").onchange = (e) => {
-					country.strategy = e.target.value;
+				/** @type {HTMLSelectElement} */ (
+					slot.querySelector(".strategy-select")
+				).onchange = (e) => {
+					country.strategy = /** @type {HTMLSelectElement} */ (e.target).value;
 				};
 
-				slot.querySelector(".clear-slot-btn").onclick = (e) => {
+				/** @type {HTMLElement} */ (
+					slot.querySelector(".clear-slot-btn")
+				).onclick = (e) => {
 					e.stopPropagation();
 					const idx = sideList.findIndex((c) => c.id === country.id);
 					if (idx !== -1) sideList.splice(idx, 1);
@@ -308,7 +317,9 @@ export function createConflictSetup(runtime) {
 					runtime.influenceLayer.render();
 				};
 
-				const releaseBtn = slot.querySelector(".release-btn");
+				const releaseBtn = /** @type {HTMLElement} */ (
+					slot.querySelector(".release-btn")
+				);
 				if (releaseBtn) {
 					releaseBtn.onclick = (e) => {
 						e.stopPropagation();

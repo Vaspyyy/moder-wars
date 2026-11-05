@@ -22,7 +22,7 @@ import mapRuntime from "./map-runtime.ts";
 export function createGeographyLoader(context, loadSession) {
 	let rawGeometryRequest = null;
 	async function ensureRawGeography(
-		url = `${CONFIG.GEOJSON_BASE}${document.getElementById("map-res-select")?.value || "110m"}/cultural/ne_${document.getElementById("map-res-select")?.value || "110m"}_admin_0_countries.json`,
+		url = `${CONFIG.GEOJSON_BASE}${/** @type {HTMLSelectElement} */ (document.getElementById("map-res-select"))?.value || "110m"}/cultural/ne_${/** @type {HTMLSelectElement} */ (document.getElementById("map-res-select"))?.value || "110m"}_admin_0_countries.json`,
 	) {
 		if (context.rawGeoJsonData) return context.rawGeoJsonData;
 		const generation = loadSession.generation;
@@ -438,6 +438,16 @@ export function createGeographyLoader(context, loadSession) {
 		return String(url).match(/\/(10m|50m|110m)\//)?.[1] || "110m";
 	}
 
+	/**
+	 * @param {{
+	 *   gridResolution: number,
+	 *   gridWidth: number,
+	 *   gridHeight: number,
+	 *   mapResolution: string,
+	 *   onProgress?: (progress: any) => void,
+	 *   sourceUrl: string,
+	 * }} options
+	 */
 	async function loadEarthRaster({
 		gridResolution,
 		gridWidth: targetWidth,
@@ -778,7 +788,9 @@ export function createGeographyLoader(context, loadSession) {
 
 			// Load and rasterize mountain terrain
 			if (context.mountainsEnabled) {
-				const currentMapRes = document.getElementById("map-res-select").value;
+				const currentMapRes = /** @type {HTMLSelectElement} */ (
+					document.getElementById("map-res-select")
+				).value;
 				await loadTerrain(currentMapRes);
 			} else {
 				context.terrainMask.fill(0);

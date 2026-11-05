@@ -66,7 +66,14 @@ const COUNTRY_FIELDS = [
 	"color",
 ];
 
-/** An independently owned simulation. Presentation events contain no DOM references. */
+/**
+ * An independently owned simulation. Presentation events contain no DOM references.
+ * @param {Record<string, any>} [initial]
+ * @param {{
+ *   onEvent?: (type: string, ...args: any[]) => void,
+ *   onControlCellsChanged?: (indices: number[] | null) => void,
+ * }} [callbacks]
+ */
 export function createSimulationCore(
 	initial = {},
 	{ onEvent, onControlCellsChanged } = {},
@@ -82,7 +89,10 @@ export function createSimulationCore(
 	const total = state.gridWidth * state.gridHeight;
 	if (!Number.isSafeInteger(total) || total <= 0)
 		throw new RangeError("A simulation requires a nonempty grid");
-	for (const [name, Type] of [
+	for (const [
+		name,
+		Type,
+	] of /** @type {[string, new (length: number) => ArrayLike<number>][]} */ ([
 		["landMask", Uint8Array],
 		["worldControlMap", Uint16Array],
 		["deJureMap", Uint16Array],
@@ -91,7 +101,7 @@ export function createSimulationCore(
 		["primaryOccupierMap", Uint16Array],
 		["terrainMask", Float32Array],
 		["biomeMask", Uint8Array],
-	]) {
+	])) {
 		if (state[name] == null) state[name] = new Type(total);
 		if (state[name].length !== total)
 			throw new RangeError(`${name} grid size mismatch`);

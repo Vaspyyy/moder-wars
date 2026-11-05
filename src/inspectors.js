@@ -10,12 +10,12 @@ export function createInspectors(runtime) {
 
 		// Toggle editor-only fields, but keep the Combat Buff section visible even in war
 		const buffSection = document.getElementById("buff-editor-section");
-		document
-			.querySelectorAll("#country-inspector .editor-only")
-			.forEach((el) => {
-				if (el === buffSection) return; // handle buff separately
-				el.style.display = isWar ? "none" : "block";
-			});
+		/** @type {NodeListOf<HTMLElement>} */ (
+			document.querySelectorAll("#country-inspector .editor-only")
+		).forEach((el) => {
+			if (el === buffSection) return; // handle buff separately
+			el.style.display = isWar ? "none" : "block";
+		});
 		if (buffSection) {
 			buffSection.style.display = "block";
 		}

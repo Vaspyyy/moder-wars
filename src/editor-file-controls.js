@@ -33,7 +33,10 @@ export function createEditorFileControls(runtime) {
 			input.onchange = (e) => {
 				runtime.currentScenarioContext = null;
 				runtime.setLoadingThematic(true);
-				runtime.performPresetLoad(e.target.files[0], "EDITOR");
+				runtime.performPresetLoad(
+					/** @type {HTMLInputElement} */ (e.target).files[0],
+					"EDITOR",
+				);
 			};
 			input.click();
 		});
@@ -264,7 +267,7 @@ export function createEditorFileControls(runtime) {
 				input.type = "file";
 				input.accept = ".zip";
 				input.onchange = async (e) => {
-					const file = e.target.files[0];
+					const file = /** @type {HTMLInputElement} */ (e.target).files[0];
 					if (!file) return;
 
 					runtime.loadingStatus.innerText = "Importing countries from ZIP...";

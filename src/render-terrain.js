@@ -7,6 +7,7 @@ import { createRegionChunkCache } from "./render-regions.js";
 import { getScenarioTheaterClip } from "./scenario-theater.js";
 
 // This pass receives a frame snapshot; surface caches stay on the map layer.
+/** Runs as a method of the control map layer. @this {any} */
 export function drawTerrain(frame) {
 	const {
 		renderStatic,

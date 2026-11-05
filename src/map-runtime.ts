@@ -10,7 +10,9 @@ export class MapLayer extends Events {
 		map.addLayer(this);
 		return this;
 	}
-	static extend(methods: object) {
+	// Leaflet-style mixin: methods share a dynamic layer instance as `this`.
+	// biome-ignore lint/suspicious/noExplicitAny: mixin state is untyped JavaScript
+	static extend(methods: object & ThisType<any>) {
 		class Layer extends MapLayer {}
 		Object.assign(Layer.prototype, methods);
 		return Layer;

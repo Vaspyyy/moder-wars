@@ -1038,12 +1038,13 @@ export function createAiRuntime(context) {
 		context._aiLastOperationsTick = context._simTickCount;
 		context._aiOperationsDirty = false;
 		// Most ticks process no side, so index units only when one is due.
-		let unitsById = null;
+		const unitsById = unitIndex;
+		let unitsIndexed = false;
 		const indexUnits = () => {
-			if (unitsById) return;
+			if (unitsIndexed) return;
+			unitsIndexed = true;
 			unitIndex.clear();
 			for (const unit of context.units) unitIndex.set(String(unit.id), unit);
-			unitsById = unitIndex;
 			for (const id of serializedUnitIndex.keys()) {
 				if (!unitsById.has(id)) serializedUnitIndex.delete(id);
 			}

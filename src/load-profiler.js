@@ -12,8 +12,9 @@ function cloneReport(report) {
 
 function collectResources(startedAt) {
 	if (typeof performance?.getEntriesByType !== "function") return [];
-	return performance
-		.getEntriesByType("resource")
+	return /** @type {PerformanceResourceTiming[]} */ (
+		performance.getEntriesByType("resource")
+	)
 		.filter((entry) => entry.startTime >= startedAt)
 		.map((entry) => ({
 			name: entry.name,

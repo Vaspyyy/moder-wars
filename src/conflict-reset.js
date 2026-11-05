@@ -164,7 +164,9 @@ export function createConflictReset(runtime) {
 		resetToSelection();
 		runtime.updateRestartVisibility();
 		// Re-initialize landmask from features
-		const mapRes = document.getElementById("map-res-select").value;
+		const mapRes = /** @type {HTMLSelectElement} */ (
+			document.getElementById("map-res-select")
+		).value;
 		const geoUrl = `${runtime.CONFIG.GEOJSON_BASE}${mapRes}/cultural/ne_${mapRes}_admin_0_countries.json`;
 		runtime.loadCountries(geoUrl, runtime.gameMode === "EDITOR");
 	}

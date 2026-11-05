@@ -10,7 +10,9 @@ export function configureLanguageUi(callbacks) {
 export function applyLanguage(lang) {
 	if (!lang) lang = getCookie("mw_lang") || "en";
 	const dict = TRANSLATIONS[lang] || TRANSLATIONS.en;
-	document.querySelectorAll("[data-i18n]").forEach((el) => {
+	/** @type {NodeListOf<HTMLElement>} */ (
+		document.querySelectorAll("[data-i18n]")
+	).forEach((el) => {
 		const key = el.getAttribute("data-i18n");
 		const value = dict[key] || TRANSLATIONS.en[key];
 		if (value) {
@@ -45,7 +47,9 @@ export function applyLanguage(lang) {
 		}
 	}
 
-	const select = document.getElementById("language-select");
+	const select = /** @type {HTMLSelectElement} */ (
+		document.getElementById("language-select")
+	);
 	if (select) select.value = lang;
 	setCookie("mw_lang", lang);
 

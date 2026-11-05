@@ -1274,7 +1274,9 @@ const applicationRuntime = createLiveContext(
 			_lastPerfSuite = value;
 		},
 		color: (val) => {
-			document.querySelectorAll(".loading-status-text").forEach((el) => {
+			/** @type {NodeListOf<HTMLElement>} */ (
+				document.querySelectorAll(".loading-status-text")
+			).forEach((el) => {
 				el.style.color = val;
 			});
 		},
@@ -2796,67 +2798,99 @@ export function computeCountryUrbanPop() {
 }
 
 // UI Elements
-export const addSideBtn = document.getElementById("add-side-btn");
-export const ffaToggleBtn = document.getElementById("ffa-toggle-btn");
+export const addSideBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("add-side-btn")
+);
+export const ffaToggleBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("ffa-toggle-btn")
+);
 export const sidesContainer = document.getElementById("sides-container");
 export const editorToolbox = document.getElementById("editor-toolbox");
-export const editorCreateBtn = document.getElementById("editor-create-btn");
-export const editorTestBtn = document.getElementById("editor-test-btn");
-export const editorSaveBtn = document.getElementById("editor-save-btn");
-export const editorLoadBtn = document.getElementById("editor-load-btn");
-export const editorPaintBtn = document.getElementById("editor-paint-btn");
-export const editorFillBtn = document.getElementById("editor-fill-btn");
-export const editorUnclaimBtn = document.getElementById("editor-unclaim-btn");
-export const editorTerrainBtn = document.getElementById("editor-terrain-btn");
-export const terrainTypeSelect = document.getElementById("terrain-type-select");
+export const editorCreateBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-create-btn")
+);
+export const editorTestBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-test-btn")
+);
+export const editorSaveBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-save-btn")
+);
+export const editorLoadBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-load-btn")
+);
+export const editorPaintBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-paint-btn")
+);
+export const editorFillBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-fill-btn")
+);
+export const editorUnclaimBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-unclaim-btn")
+);
+export const editorTerrainBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-terrain-btn")
+);
+export const terrainTypeSelect = /** @type {HTMLSelectElement} */ (
+	document.getElementById("terrain-type-select")
+);
 export const terrainControls = document.getElementById("terrain-controls");
-export const editorPlaceDivisionBtn = document.getElementById(
-	"editor-place-division-btn",
+export const editorPlaceDivisionBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-place-division-btn")
 );
-export const editorSaveMultiBtn = document.getElementById(
-	"editor-save-multi-btn",
+export const editorSaveMultiBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-save-multi-btn")
 );
-export const editorSaveAllZipBtn = document.getElementById(
-	"editor-save-all-zip-btn",
+export const editorSaveAllZipBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-save-all-zip-btn")
 );
-export const editorLoadZipBtn = document.getElementById("editor-load-zip-btn");
-export const editorImportCountryBtn = document.getElementById(
-	"editor-import-country-from-scenario-btn",
+export const editorLoadZipBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-load-zip-btn")
 );
-export const editorCityNewBtn = document.getElementById("editor-city-new-btn");
-export const editorCityClearBtn = document.getElementById(
-	"editor-city-clear-btn",
+export const editorImportCountryBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-import-country-from-scenario-btn")
 );
-export const editorToolsPage1Btn = document.getElementById(
-	"editor-tools-page-1-btn",
+export const editorCityNewBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-city-new-btn")
 );
-export const editorToolsPage2Btn = document.getElementById(
-	"editor-tools-page-2-btn",
+export const editorCityClearBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-city-clear-btn")
 );
-export const editorToolsPage3Btn = document.getElementById(
-	"editor-tools-page-3-btn",
+export const editorToolsPage1Btn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-tools-page-1-btn")
 );
-export const editorToolsPage4Btn = document.getElementById(
-	"editor-tools-page-4-btn",
+export const editorToolsPage2Btn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-tools-page-2-btn")
 );
-export const editorToolsPage5Btn = document.getElementById(
-	"editor-tools-page-5-btn",
+export const editorToolsPage3Btn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-tools-page-3-btn")
 );
-export const editorExitBtn = document.getElementById("editor-exit-btn");
-export const editorMapSettingsBtn = document.getElementById(
-	"editor-map-settings-btn",
+export const editorToolsPage4Btn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-tools-page-4-btn")
+);
+export const editorToolsPage5Btn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-tools-page-5-btn")
+);
+export const editorExitBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-exit-btn")
+);
+export const editorMapSettingsBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-map-settings-btn")
 );
 export const brushControls = document.getElementById("brush-controls");
-export const brushSizeSlider = document.getElementById("brush-size-slider");
+export const brushSizeSlider = /** @type {HTMLInputElement} */ (
+	document.getElementById("brush-size-slider")
+);
 export const brushSizeVal = document.getElementById("brush-size-val");
-export const viewModeBtn = document.getElementById("view-mode-btn");
+export const viewModeBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("view-mode-btn")
+);
 export const arrowsToggleBtn = document.getElementById("arrows-toggle-btn");
 export const battlesToggleBtn = document.getElementById("battles-toggle-btn");
 export const labelsToggleBtn = document.getElementById("labels-toggle-btn");
 export const citiesToggleBtn = document.getElementById("cities-toggle-btn");
 export const warplansToggleBtn = document.getElementById("warplans-toggle-btn");
-export const allianceViewCheckbox = document.getElementById(
-	"alliance-view-checkbox",
+export const allianceViewCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("alliance-view-checkbox")
 );
 
 // Fully retire the legacy ARROWS button so it no longer appears or controls alliance view.
@@ -2867,48 +2901,76 @@ if (arrowsToggleBtn) {
 export const releaseModal = document.getElementById("release-modal");
 export const releasableListContainer =
 	document.getElementById("releasable-list");
-export const closeReleaseModalBtn = document.getElementById(
-	"close-release-modal",
+export const closeReleaseModalBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("close-release-modal")
 );
 
 export const createCountryModal = document.getElementById(
 	"create-country-modal",
 );
-export const confirmCreateBtn = document.getElementById("confirm-create-btn");
-export const cancelCreateBtn = document.getElementById("cancel-create-btn");
-export const newCountryNameInput = document.getElementById("new-country-name");
+export const confirmCreateBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("confirm-create-btn")
+);
+export const cancelCreateBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("cancel-create-btn")
+);
+export const newCountryNameInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("new-country-name")
+);
 export const newCountryColorInput =
 	document.getElementById("new-country-color");
-export const newCountryFlagInput = document.getElementById("new-country-flag");
+export const newCountryFlagInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("new-country-flag")
+);
 
 export const countryInspector = document.getElementById("country-inspector");
-export const inspectNameInput = document.getElementById("inspect-name-input");
-export const inspectFlagInput = document.getElementById("inspect-flag-input");
-export const inspectFetchFlagBtn = document.getElementById(
-	"inspect-fetch-flag-btn",
+export const inspectNameInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("inspect-name-input")
 );
-export const inspectFlagPreview = document.getElementById(
-	"inspect-flag-preview",
+export const inspectFlagInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("inspect-flag-input")
+);
+export const inspectFetchFlagBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("inspect-fetch-flag-btn")
+);
+export const inspectFlagPreview = /** @type {HTMLImageElement} */ (
+	document.getElementById("inspect-flag-preview")
 );
 export const inspectColorSwatch = document.getElementById(
 	"inspect-color-swatch",
 );
-export const inspectColorPicker = document.getElementById(
-	"inspect-color-picker",
+export const inspectColorPicker = /** @type {HTMLInputElement} */ (
+	document.getElementById("inspect-color-picker")
 );
-export const inspectPaintBtn = document.getElementById("inspect-paint-btn");
-export const inspectAnnexClickBtn = document.getElementById(
-	"inspect-annex-click-btn",
+export const inspectPaintBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("inspect-paint-btn")
 );
-export const closeInspectorBtn = document.getElementById("close-inspector-btn");
-export const inspectBuffBtn = document.getElementById("inspect-buff-btn");
+export const inspectAnnexClickBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("inspect-annex-click-btn")
+);
+export const closeInspectorBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("close-inspector-btn")
+);
+export const inspectBuffBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("inspect-buff-btn")
+);
 
-export const annexCountryInput = document.getElementById("annex-country-input");
-export const annexCountryBtn = document.getElementById("annex-country-btn");
-export const addAllyBtn = document.getElementById("add-ally-btn");
-export const clearAlliesBtn = document.getElementById("clear-allies-btn");
+export const annexCountryInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("annex-country-input")
+);
+export const annexCountryBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("annex-country-btn")
+);
+export const addAllyBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("add-ally-btn")
+);
+export const clearAlliesBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("clear-allies-btn")
+);
 export const allyList = document.getElementById("ally-list");
-export const allianceFlagInput = document.getElementById("alliance-flag-input");
+export const allianceFlagInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("alliance-flag-input")
+);
 
 // City inspector elements
 export const cityInspector = document.getElementById("city-inspector");
@@ -2917,23 +2979,23 @@ export const cityInspector = document.getElementById("city-inspector");
 export const importCountryModal = document.getElementById(
 	"import-country-modal",
 );
-export const importScenarioSelect = document.getElementById(
-	"import-scenario-select",
+export const importScenarioSelect = /** @type {HTMLSelectElement} */ (
+	document.getElementById("import-scenario-select")
 );
-export const importScenarioFileInput = document.getElementById(
-	"import-scenario-file",
+export const importScenarioFileInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("import-scenario-file")
 );
-export const importCountrySearch = document.getElementById(
-	"import-country-search",
+export const importCountrySearch = /** @type {HTMLInputElement} */ (
+	document.getElementById("import-country-search")
 );
 export const importCountryCardList = document.getElementById(
 	"import-country-card-list",
 );
-export const importCountryConfirmBtn = document.getElementById(
-	"import-country-confirm-btn",
+export const importCountryConfirmBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("import-country-confirm-btn")
 );
-export const importCountryCancelBtn = document.getElementById(
-	"import-country-cancel-btn",
+export const importCountryCancelBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("import-country-cancel-btn")
 );
 
 // Temporary holder for loaded scenario used for country import
@@ -2998,53 +3060,83 @@ export function renderImportCountryCards(filterText = "") {
 
 // Hook search box once
 menu_controls.bindImportCountrySearchInput();
-export const cityNameInput = document.getElementById("city-name-input");
-export const cityOwnerSelect = document.getElementById("city-owner-select");
-export const cityCapitalCheckbox = document.getElementById(
-	"city-capital-checkbox",
+export const cityNameInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("city-name-input")
 );
-export const cityMoveBtn = document.getElementById("city-move-btn");
-export const cityDeleteBtn = document.getElementById("city-delete-btn");
-export const cityCloseBtn = document.getElementById("city-close-btn");
+export const cityOwnerSelect = /** @type {HTMLSelectElement} */ (
+	document.getElementById("city-owner-select")
+);
+export const cityCapitalCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("city-capital-checkbox")
+);
+export const cityMoveBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("city-move-btn")
+);
+export const cityDeleteBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("city-delete-btn")
+);
+export const cityCloseBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("city-close-btn")
+);
 
-export const presetLowBtn = document.getElementById("preset-low-btn");
-export const presetDefaultBtn = document.getElementById("preset-default-btn");
-export const launchBtn = document.getElementById("launch-btn");
-export const musicVolumeSlider = document.getElementById("music-volume-slider");
+export const presetLowBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("preset-low-btn")
+);
+export const presetDefaultBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("preset-default-btn")
+);
+export const launchBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("launch-btn")
+);
+export const musicVolumeSlider = /** @type {HTMLInputElement} */ (
+	document.getElementById("music-volume-slider")
+);
 export const musicVolVal = document.getElementById("music-vol-val");
-export const saveSkipCheckbox = document.getElementById("save-skip-checkbox");
-export const mapResSelect = document.getElementById("map-res-select");
-export const gridResSelect = document.getElementById("grid-res-select");
-export const unitLimitSelect = document.getElementById("unit-limit-select");
-export const customTrackInput = document.getElementById("custom-track-input");
-export const clearCustomTrackBtn = document.getElementById(
-	"clear-custom-track-btn",
+export const saveSkipCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("save-skip-checkbox")
 );
-export const disableUnitsVisuallyCheckbox = document.getElementById(
-	"disable-units-visually-checkbox",
+export const mapResSelect = /** @type {HTMLSelectElement} */ (
+	document.getElementById("map-res-select")
 );
-export const hideCurvedLabelsCheckbox = document.getElementById(
-	"hide-curved-labels-checkbox",
+export const gridResSelect = /** @type {HTMLSelectElement} */ (
+	document.getElementById("grid-res-select")
+);
+export const unitLimitSelect = /** @type {HTMLSelectElement} */ (
+	document.getElementById("unit-limit-select")
+);
+export const customTrackInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("custom-track-input")
+);
+export const clearCustomTrackBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("clear-custom-track-btn")
+);
+export const disableUnitsVisuallyCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("disable-units-visually-checkbox")
+);
+export const hideCurvedLabelsCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("hide-curved-labels-checkbox")
 );
 export const disableAutoFullscreenCheckbox = document.getElementById(
 	"disable-auto-fullscreen-checkbox",
 );
-export const disableCountryGradientCheckbox = document.getElementById(
-	"disable-country-gradient-checkbox",
+export const disableCountryGradientCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("disable-country-gradient-checkbox")
 );
 
-export const useSystemFontCheckbox = document.getElementById(
-	"use-system-font-checkbox",
+export const useSystemFontCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("use-system-font-checkbox")
 );
-export const disableInvisibleBuffsCheckbox = document.getElementById(
-	"disable-invisible-buffs-checkbox",
+export const disableInvisibleBuffsCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("disable-invisible-buffs-checkbox")
 );
-export const benchmarkBtn = document.getElementById("benchmark-btn");
+export const benchmarkBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("benchmark-btn")
+);
 export const perfOverlay = document.getElementById("perf-overlay");
 export const benchmarkResults = document.getElementById("benchmark-results");
 export const benchmarkStatsEl = document.getElementById("benchmark-stats");
-export const benchmarkDismissBtn = document.getElementById(
-	"benchmark-dismiss-btn",
+export const benchmarkDismissBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("benchmark-dismiss-btn")
 );
 
 const settingsController = createSettingsController((id, value) => {
@@ -3087,18 +3179,24 @@ export const loadingOverlay = document.getElementById("loading-overlay");
 // Helper to update loading UI across both standard and thematic containers
 export const updateLoadingText = (status, progress = null, tip = null) => {
 	if (status !== undefined) {
-		document.querySelectorAll(".loading-status-text").forEach((el) => {
+		/** @type {NodeListOf<HTMLElement>} */ (
+			document.querySelectorAll(".loading-status-text")
+		).forEach((el) => {
 			el.innerText = status;
 		});
 	}
 	if (progress !== null) {
 		const pct = typeof progress === "string" ? progress : `${progress}%`;
-		document.querySelectorAll(".loading-bar-fill-el").forEach((el) => {
+		/** @type {NodeListOf<HTMLElement>} */ (
+			document.querySelectorAll(".loading-bar-fill-el")
+		).forEach((el) => {
 			el.style.width = pct;
 		});
 	}
 	if (tip !== null) {
-		document.querySelectorAll(".loading-tip-text").forEach((el) => {
+		/** @type {NodeListOf<HTMLElement>} */ (
+			document.querySelectorAll(".loading-tip-text")
+		).forEach((el) => {
 			el.innerText = tip;
 		});
 	}
@@ -3110,7 +3208,9 @@ export const loadingStatus = {
 		updateLoadingText(val);
 	},
 	get innerText() {
-		return document.querySelector(".loading-status-text")?.innerText;
+		return /** @type {HTMLElement | null} */ (
+			document.querySelector(".loading-status-text")
+		)?.innerText;
 	},
 	style: applicationRuntime,
 };
@@ -3126,33 +3226,39 @@ export function setLoadingThematic(enabled) {
 		loadingOverlay.classList.remove("thematic-overlay");
 	}
 }
-export const playModeBtn = document.getElementById("play-mode-btn");
+export const playModeBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("play-mode-btn")
+);
 
 export const editorSourceModal = document.getElementById("editor-source-modal");
-export const choiceSourceEarth = document.getElementById("choice-source-earth");
-export const choiceSourceBlank = document.getElementById("choice-source-blank");
-export const cancelSourceChoice = document.getElementById(
-	"cancel-source-choice",
+export const choiceSourceEarth = /** @type {HTMLButtonElement} */ (
+	document.getElementById("choice-source-earth")
+);
+export const choiceSourceBlank = /** @type {HTMLButtonElement} */ (
+	document.getElementById("choice-source-blank")
+);
+export const cancelSourceChoice = /** @type {HTMLButtonElement} */ (
+	document.getElementById("cancel-source-choice")
 );
 
 export const mapSettingsModal = document.getElementById("map-settings-modal");
-export const mapSettingsNameInput = document.getElementById(
-	"map-settings-name-input",
+export const mapSettingsNameInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("map-settings-name-input")
 );
-export const mapSettingsWidthInput = document.getElementById(
-	"map-settings-width-input",
+export const mapSettingsWidthInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("map-settings-width-input")
 );
-export const mapSettingsHeightInput = document.getElementById(
-	"map-settings-height-input",
+export const mapSettingsHeightInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("map-settings-height-input")
 );
-export const mapSettingsMissilesCheckbox = document.getElementById(
-	"map-settings-missiles-checkbox",
+export const mapSettingsMissilesCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("map-settings-missiles-checkbox")
 );
-export const mapSettingsApplyBtn = document.getElementById(
-	"map-settings-apply-btn",
+export const mapSettingsApplyBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("map-settings-apply-btn")
 );
-export const mapSettingsCancelBtn = document.getElementById(
-	"map-settings-cancel-btn",
+export const mapSettingsCancelBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("map-settings-cancel-btn")
 );
 
 export const conquestChoiceModal = document.getElementById(
@@ -3161,23 +3267,41 @@ export const conquestChoiceModal = document.getElementById(
 
 export const eraPageModern = document.getElementById("era-page-modern");
 export const eraPageWars = document.getElementById("era-page-wars");
-export const choiceModernDay = document.getElementById("choice-modern-day");
-export const cancelConquestChoice = document.getElementById(
-	"cancel-conquest-choice",
+export const choiceModernDay = /** @type {HTMLButtonElement} */ (
+	document.getElementById("choice-modern-day")
 );
-export const mainSettingsBtn = document.getElementById("main-settings-btn");
-export const minimizeSetupBtn = document.getElementById("minimize-setup-btn");
-export const minimizeStatsBtn = document.getElementById("minimize-stats-btn");
-export const minimizeStatusBtn = document.getElementById("minimize-status-btn");
-export const muteBtn = document.getElementById("mute-btn");
-export const ingameSettingsBtn = document.getElementById("ingame-settings-btn");
+export const cancelConquestChoice = /** @type {HTMLButtonElement} */ (
+	document.getElementById("cancel-conquest-choice")
+);
+export const mainSettingsBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("main-settings-btn")
+);
+export const minimizeSetupBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("minimize-setup-btn")
+);
+export const minimizeStatsBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("minimize-stats-btn")
+);
+export const minimizeStatusBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("minimize-status-btn")
+);
+export const muteBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("mute-btn")
+);
+export const ingameSettingsBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("ingame-settings-btn")
+);
 
 export const tutorialOverlay = document.getElementById("tutorial-overlay");
 export const tutorialStepContainer = document.getElementById(
 	"tutorial-step-container",
 );
-export const tutorialPrevBtn = document.getElementById("tutorial-prev-btn");
-export const tutorialNextBtn = document.getElementById("tutorial-next-btn");
+export const tutorialPrevBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("tutorial-prev-btn")
+);
+export const tutorialNextBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("tutorial-next-btn")
+);
 export const tutorialDotsContainer = document.getElementById("tutorial-dots");
 
 export let currentTutorialStep = 0;
@@ -3364,21 +3488,25 @@ export const mapUi = document.getElementById("main-ui");
 export const statusText = document.getElementById("status-text");
 export const setupPanel = document.getElementById("setup-panel");
 export const setupOptions = document.getElementById("setup-options");
-export const startBtn = document.getElementById("start-btn");
+export const startBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("start-btn")
+);
 
-export const noPeaceCheckbox = document.getElementById("no-peace-checkbox");
+export const noPeaceCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("no-peace-checkbox")
+);
 
-export const disableBombsCheckbox = document.getElementById(
-	"disable-bombs-checkbox",
+export const disableBombsCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("disable-bombs-checkbox")
 );
-export const setupDisableMountainsCheckbox = document.getElementById(
-	"setup-disable-mountains-checkbox",
+export const setupDisableMountainsCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("setup-disable-mountains-checkbox")
 );
-export const disablePuppetsCheckbox = document.getElementById(
-	"disable-puppets-checkbox",
+export const disablePuppetsCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("disable-puppets-checkbox")
 );
-export const mainDisableMountainsCheckbox = document.getElementById(
-	"disable-mountains-checkbox",
+export const mainDisableMountainsCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("disable-mountains-checkbox")
 );
 
 export const casualtyPanel = document.getElementById("casualty-panel");
@@ -3386,18 +3514,22 @@ export const leaderboardOverlay = document.getElementById(
 	"leaderboard-overlay",
 );
 export const leaderboardList = document.getElementById("leaderboard-list");
-export const closeLeaderboardBtn = document.getElementById(
-	"close-leaderboard-btn",
+export const closeLeaderboardBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("close-leaderboard-btn")
 );
 
 // Status & control panels
 export const statsPanel = document.getElementById("stats-panel");
 
-export const restartScenarioBtn = document.getElementById(
-	"restart-scenario-btn",
+export const restartScenarioBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("restart-scenario-btn")
 );
-export const quickRestartBtn = document.getElementById("quick-restart-btn");
-export const resetBtn = document.getElementById("reset-btn");
+export const quickRestartBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("quick-restart-btn")
+);
+export const resetBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("reset-btn")
+);
 
 // Buttons use clear text, ensure visibility is correct
 if (quickRestartBtn) {
@@ -3406,8 +3538,12 @@ if (quickRestartBtn) {
 if (resetBtn) {
 	resetBtn.textContent = "RESET";
 }
-export const mainMenuBtn = document.getElementById("main-menu-btn");
-export const leaderboardBtn = document.getElementById("leaderboard-btn");
+export const mainMenuBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("main-menu-btn")
+);
+export const leaderboardBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("leaderboard-btn")
+);
 
 export function updateRestartVisibility() {
 	if (!restartScenarioBtn || !mainMenuBtn || !quickRestartBtn) return;
@@ -3430,14 +3566,24 @@ export function updateRestartVisibility() {
 		if (leaderboardBtn) leaderboardBtn.style.display = "block";
 	}
 }
-export const pauseBtn = document.getElementById("pause-btn");
+export const pauseBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("pause-btn")
+);
 export const speedControls = document.getElementById("speed-controls");
 export const speedInputs = Array.from(
-	speedControls.querySelectorAll('input[name="simulation-speed"]'),
+	/** @type {NodeListOf<HTMLInputElement>} */ (
+		speedControls.querySelectorAll('input[name="simulation-speed"]')
+	),
 );
-export const godModeBtn = document.getElementById("god-mode-btn");
-export const godBombBtn = document.getElementById("god-bomb-btn");
-export const forcePeaceBtn = document.getElementById("force-peace-btn");
+export const godModeBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("god-mode-btn")
+);
+export const godBombBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("god-bomb-btn")
+);
+export const forcePeaceBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("force-peace-btn")
+);
 export const statsGrid = document.getElementById("stats-grid");
 export const tugOfWarContainer = document.getElementById(
 	"tug-of-war-container",
@@ -3471,7 +3617,9 @@ export function rebuildStatsPanel() {
 	});
 	statsGrid.innerHTML = gridHtml;
 	for (const s of activeSides) {
-		const sideStats = statsGrid.querySelector(`[data-side-idx="${s.idx}"]`);
+		const sideStats = /** @type {HTMLElement | null} */ (
+			statsGrid.querySelector(`[data-side-idx="${s.idx}"]`)
+		);
 		sideStats?.style.setProperty(
 			"--side-color",
 			sideColors[s.idx].replace(rgbaRe, "1)"),
@@ -3535,8 +3683,8 @@ export function rebuildStatsPanel() {
 	tugHtml += "</div>";
 	tugOfWarContainer.innerHTML = tugHtml;
 	for (const s of activeSides) {
-		const segment = tugOfWarContainer.querySelector(
-			`[data-tugsegment="${s.idx}"]`,
+		const segment = /** @type {HTMLElement | null} */ (
+			tugOfWarContainer.querySelector(`[data-tugsegment="${s.idx}"]`)
 		);
 		segment?.style.setProperty(
 			"--side-color",
@@ -3544,8 +3692,8 @@ export function rebuildStatsPanel() {
 		);
 		if (segment)
 			segment.style.width = `${Math.floor(100 / activeSides.length)}%`;
-		const label = tugOfWarContainer.querySelector(
-			`[data-sidecontrol="${s.idx}"]`,
+		const label = /** @type {HTMLElement | null} */ (
+			tugOfWarContainer.querySelector(`[data-sidecontrol="${s.idx}"]`)
 		);
 		label?.style.setProperty(
 			"--side-color",
@@ -3557,12 +3705,18 @@ export const treatyAlert = document.getElementById("treaty-alert");
 
 rebuildManpowerInputs();
 export const treatyMsg = document.getElementById("treaty-msg");
-export const timeSystemCheckbox = document.getElementById(
-	"enable-time-checkbox",
+export const timeSystemCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("enable-time-checkbox")
 );
-export const timeYearInput = document.getElementById("time-year-input");
-export const timeMonthInput = document.getElementById("time-month-input");
-export const timeDayInput = document.getElementById("time-day-input");
+export const timeYearInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("time-year-input")
+);
+export const timeMonthInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("time-month-input")
+);
+export const timeDayInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("time-day-input")
+);
 export const gameDateDisplay = document.getElementById("game-date-display");
 
 /**
@@ -3861,7 +4015,7 @@ influenceLayer = new ControlMapLayer().addTo(map);
 
 // Create dedicated pane for reference images to ensure they stay behind the control map but above base imagery
 map.createPane("refImagePane");
-map.getPane("refImagePane").style.zIndex = 350;
+map.getPane("refImagePane").style.zIndex = "350";
 
 /**
  * PERSISTENT GRID LOGIC
@@ -3892,7 +4046,7 @@ export function applyWorldBounds(widthDeg, heightDeg) {
 
 	// If current center is outside new bounds, fit map into the new box
 	if (!bounds.contains(map.getCenter())) {
-		map.fitBounds(bounds, { animate: true });
+		map.fitBounds(bounds);
 	}
 
 	// Force bounding box redraw
@@ -4150,7 +4304,9 @@ menu_controls.bindAddSideBtnClick();
 
 menu_controls.bindFfaToggleBtnClick();
 
-export const randomWarBtn = document.getElementById("random-war-btn");
+export const randomWarBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("random-war-btn")
+);
 
 menu_controls.bindRandomWarBtnClick();
 
@@ -5152,11 +5308,11 @@ function applyBroadSetupPosture(posture) {
 	for (const country of sides.flat()) {
 		if (country) country.strategy = strategy;
 	}
-	document
-		.querySelectorAll("#sides-container .strategy-select")
-		.forEach((select) => {
-			select.value = strategy;
-		});
+	/** @type {NodeListOf<HTMLSelectElement>} */ (
+		document.querySelectorAll("#sides-container .strategy-select")
+	).forEach((select) => {
+		select.value = strategy;
+	});
 }
 
 export function getAiOperationsSnapshot(
@@ -5259,24 +5415,24 @@ function updateWarOverview(force = false) {
 	renderWarOverview(warDeskOverviewRows());
 }
 
-function reopenConflictSetupAfterWar(...args) {
+function reopenConflictSetupAfterWar() {
 	simulationClient.stop();
 	resetLocalSimulationClock();
-	return lifecycle.reopenConflictSetupAfterWar(...args);
+	return lifecycle.reopenConflictSetupAfterWar();
 }
 
-export async function startWar(...args) {
+export async function startWar() {
 	simulationClient.stop();
 	ensureSideInfluenceMaps();
-	const result = await lifecycle.startWar(...args);
+	const result = await lifecycle.startWar();
 	if (gameState === "SIMULATING") await simulationClient.start();
 	return result;
 }
 
-export async function _startWarInner(...args) {
+export async function _startWarInner() {
 	simulationClient.stop();
 	ensureSideInfluenceMaps();
-	const result = await lifecycle._startWarInner(...args);
+	const result = await lifecycle._startWarInner();
 	if (gameState === "SIMULATING") await simulationClient.start();
 	return result;
 }
@@ -5547,6 +5703,10 @@ export function updateLoop() {
 	const realNow = performance.now();
 	const _frameDt = _perfLastTime > 0 ? realNow - _perfLastTime : 16.67;
 	if (_perfLastTime > 0) finalizePendingPerfFrame(_frameDt);
+	/**
+	 * Fields filled in later during the frame are declared here.
+	 * @type {Record<string, any> & { snapshotMs?: number, hudStart?: number, renderStart?: number } | null}
+	 */
 	let framePerfEntry = null;
 	const shouldTrackFrame =
 		window.__perf &&
@@ -5790,15 +5950,15 @@ export function updateLoop() {
 			}
 			if (currentSide !== -1) html += `</div>`;
 			casualtyContainer.innerHTML = html;
-			casualtyContainer
-				.querySelectorAll(".casualty-item[data-side]")
-				.forEach((item) => {
-					const sideIdx = Number(item.getAttribute("data-side"));
-					item.style.setProperty(
-						"--side-color",
-						sideColors[sideIdx].replace(rgbaRe, "1)"),
-					);
-				});
+			/** @type {NodeListOf<HTMLElement>} */ (
+				casualtyContainer.querySelectorAll(".casualty-item[data-side]")
+			).forEach((item) => {
+				const sideIdx = Number(item.getAttribute("data-side"));
+				item.style.setProperty(
+					"--side-color",
+					sideColors[sideIdx].replace(rgbaRe, "1)"),
+				);
+			});
 			_casualtyValueEls = {};
 			casualtyContainer.querySelectorAll("[data-cval]").forEach((el) => {
 				_casualtyValueEls[el.getAttribute("data-cval")] = el;
@@ -5994,14 +6154,14 @@ export function applyTreaty(...args) {
 	return lifecycle.applyTreaty(...args);
 }
 
-export function resetToSelection(...args) {
+export function resetToSelection() {
 	simulationClient.stop();
-	return lifecycle.resetToSelection(...args);
+	return lifecycle.resetToSelection();
 }
 
-export async function resetGame(...args) {
+export async function resetGame() {
 	simulationClient.stop();
-	return lifecycle.resetGame(...args);
+	return lifecycle.resetGame();
 }
 
 /**
@@ -6048,35 +6208,47 @@ menu_controls.bindCitiesToggleBtnClick();
 menu_controls.bindWarplansToggleBtnClick();
 
 // UI settings tab wiring
-const showWarplansCheckbox = document.getElementById("show-warplans-checkbox");
-const showLabelsCheckbox = document.getElementById("show-labels-checkbox");
-const showCitiesCheckbox = document.getElementById("show-cities-checkbox");
-const showBattlesCheckbox = document.getElementById("show-battles-checkbox");
-const showAllianceCheckbox = document.getElementById("show-alliance-checkbox");
+const showWarplansCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("show-warplans-checkbox")
+);
+const showLabelsCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("show-labels-checkbox")
+);
+const showCitiesCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("show-cities-checkbox")
+);
+const showBattlesCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("show-battles-checkbox")
+);
+const showAllianceCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("show-alliance-checkbox")
+);
 
-const showAdminRegionsCheckbox = document.getElementById(
-	"show-admin-regions-checkbox",
+const showAdminRegionsCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("show-admin-regions-checkbox")
 );
 showAdminRegions = getCookie("mw_show_admin_regions") !== "false";
 if (showAdminRegionsCheckbox) {
 	showAdminRegionsCheckbox.checked = showAdminRegions;
 	showAdminRegionsCheckbox.addEventListener("change", (event) => {
-		showAdminRegions = event.target.checked;
+		showAdminRegions = /** @type {HTMLInputElement} */ (event.target).checked;
 		setCookie("mw_show_admin_regions", String(showAdminRegions));
 		influenceLayer?.requestRender(RENDER_LAYERS.DYNAMIC);
 	});
 }
 
-const armyDiagnosticsCheckbox = document.getElementById(
-	"show-army-diagnostics-checkbox",
+const armyDiagnosticsCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("show-army-diagnostics-checkbox")
 );
 showArmyDiagnostics = getCookie("mw_show_army_decisions") === "true";
-const borderFadeCheckbox = document.getElementById("border-fade-checkbox");
+const borderFadeCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("border-fade-checkbox")
+);
 borderFadeEnabled = getCookie("mw_border_fade") === "true";
 if (borderFadeCheckbox) {
 	borderFadeCheckbox.checked = borderFadeEnabled;
 	borderFadeCheckbox.addEventListener("change", (event) => {
-		borderFadeEnabled = event.target.checked;
+		borderFadeEnabled = /** @type {HTMLInputElement} */ (event.target).checked;
 		if (!borderFadeEnabled) clearControlFades();
 		setCookie("mw_border_fade", borderFadeEnabled ? "true" : "false");
 		influenceLayer?.render();
@@ -6085,7 +6257,8 @@ if (borderFadeCheckbox) {
 if (armyDiagnosticsCheckbox) {
 	armyDiagnosticsCheckbox.checked = showArmyDiagnostics;
 	armyDiagnosticsCheckbox.addEventListener("change", (event) => {
-		showArmyDiagnostics = event.target.checked;
+		showArmyDiagnostics = /** @type {HTMLInputElement} */ (event.target)
+			.checked;
 		setCookie("mw_show_army_decisions", showArmyDiagnostics ? "true" : "false");
 		influenceLayer?.render();
 	});
@@ -6126,8 +6299,8 @@ menu_controls.bindShowAllianceCheckboxChange();
 menu_controls.bindNoPeaceCheckboxChange();
 
 // Secret Sounds checkbox
-const useSecretSoundsCheckbox = document.getElementById(
-	"use-secret-sounds-checkbox",
+const useSecretSoundsCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("use-secret-sounds-checkbox")
 );
 
 menu_controls.bindUseSecretSoundsCheckboxChange();
@@ -6286,29 +6459,48 @@ export function initializeEngine(refreshLoadedGeography = true) {
 	return initializeEngineOwned(refreshLoadedGeography);
 }
 function initializeEngineOwned(refreshLoadedGeography) {
-	const gridRes = parseFloat(document.getElementById("grid-res-select").value);
+	const gridRes = parseFloat(
+		/** @type {HTMLSelectElement} */ (
+			document.getElementById("grid-res-select")
+		).value,
+	);
 	const unitLimit = parseInt(
-		document.getElementById("unit-limit-select").value,
+		/** @type {HTMLSelectElement} */ (
+			document.getElementById("unit-limit-select")
+		).value,
 		10,
 	);
 
 	recruitModel =
-		document.getElementById("recruit-model-select")?.value || "balanced";
+		/** @type {HTMLSelectElement} */ (
+			document.getElementById("recruit-model-select")
+		)?.value || "balanced";
 
 	// Sync global toggles from both main settings and setup panel sources
 	const mtDisabled =
-		document.getElementById("disable-mountains-checkbox").checked ||
-		document.getElementById("setup-disable-mountains-checkbox").checked;
+		/** @type {HTMLInputElement} */ (
+			document.getElementById("disable-mountains-checkbox")
+		).checked ||
+		/** @type {HTMLInputElement} */ (
+			document.getElementById("setup-disable-mountains-checkbox")
+		).checked;
 	mountainsEnabled = !mtDisabled;
 
-	showUnitsVisually = !document.getElementById(
-		"disable-units-visually-checkbox",
-	).checked;
-	hideCurvedLabels = !!document.getElementById("hide-curved-labels-checkbox")
-		?.checked;
-	disableCountryGradient = !!document.getElementById(
-		"disable-country-gradient-checkbox",
-	)?.checked;
+	showUnitsVisually = !(
+		/** @type {HTMLInputElement} */ (
+			document.getElementById("disable-units-visually-checkbox")
+		).checked
+	);
+	hideCurvedLabels = !!(
+		/** @type {HTMLInputElement} */ (
+			document.getElementById("hide-curved-labels-checkbox")
+		)?.checked
+	);
+	disableCountryGradient = !!(
+		/** @type {HTMLInputElement} */ (
+			document.getElementById("disable-country-gradient-checkbox")
+		)?.checked
+	);
 
 	if (
 		worldControlMap &&
@@ -6409,7 +6601,9 @@ menu_controls.bindHudMenuClick();
 
 menu_controls.bindIngameSettingsBtnClick();
 
-export const closeSettingsBtn = document.getElementById("close-settings-btn");
+export const closeSettingsBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("close-settings-btn")
+);
 menu_controls.bindCloseSettingsBtnClick();
 
 menu_controls.bindPlayModeBtnClick();
@@ -6421,7 +6615,9 @@ menu_controls.bindBackToNavBtnClick();
  */
 
 export let queuedScenarioAction = null;
-export const enterScenarioBtn = document.getElementById("enter-scenario-btn");
+export const enterScenarioBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("enter-scenario-btn")
+);
 
 menu_controls.bindEnterScenarioBtnClick();
 
@@ -6572,7 +6768,9 @@ reference_controls.bindRefImageInputChange();
 
 reference_controls.bindRefOpacitySliderInput();
 
-export const refAboveCheckbox = document.getElementById("ref-above-checkbox");
+export const refAboveCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("ref-above-checkbox")
+);
 reference_controls.bindRefAboveCheckboxChange();
 
 reference_controls.bindRefScaleSliderInput();
@@ -6584,13 +6782,15 @@ editor_file_controls.bindEditorDownloadMapBtnClick();
 // -------- Procedural Nation Generation (For empty presets) --------
 export const noNationsModal = document.getElementById("no-nations-modal");
 
-export const randomNationsCountInput = document.getElementById(
-	"random-nations-count",
+export const randomNationsCountInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("random-nations-count")
 );
-export const confirmRandomGenBtn = document.getElementById(
-	"confirm-random-gen-btn",
+export const confirmRandomGenBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("confirm-random-gen-btn")
 );
-export const skipRandomGenBtn = document.getElementById("skip-random-gen-btn");
+export const skipRandomGenBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("skip-random-gen-btn")
+);
 
 /**
  * Procedurally populates all land cells on the map with a specified number of random nations.

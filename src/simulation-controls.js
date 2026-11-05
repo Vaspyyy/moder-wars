@@ -4,7 +4,9 @@ export function createSimulationControls(runtime) {
 		document.addEventListener(
 			"keydown",
 			(e) => {
-				const active = document.activeElement;
+				const active = /** @type {HTMLInputElement | null} */ (
+					document.activeElement
+				);
 				// Keep shortcuts out of text entry, select menus and browser commands.
 				if (
 					e.defaultPrevented ||

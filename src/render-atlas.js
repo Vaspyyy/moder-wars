@@ -130,6 +130,7 @@ export function getAtlasCoastPaths(layer, frame) {
 	if (!coast.worldPaths) {
 		const land = new Path2D(),
 			shore = new Path2D();
+		/** @type {(lng: number, lat: number) => [number, number]} */
 		const normalized = (lng, lat) => {
 			const sine = Math.sin(
 				(Math.max(-85.05112878, Math.min(85.05112878, lat)) * Math.PI) / 180,

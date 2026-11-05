@@ -487,8 +487,11 @@ export function loadScenario(url, options = {}) {
 				type: "module",
 			});
 	const startedAt = performance.now();
-	const baseUrl =
-		typeof window !== "undefined" ? window.location.href : import.meta.url;
+	// This module also loads in workers, where there is no window.
+	const pageWindow =
+		/** @type {{ window?: { location: { href: string } } }} */ (globalThis)
+			.window;
+	const baseUrl = pageWindow ? pageWindow.location.href : import.meta.url;
 	const scenarioUrl = new URL(String(url), baseUrl).href;
 	const jsonFallbackUrl = options.jsonFallbackUrl
 		? new URL(String(options.jsonFallbackUrl), baseUrl).href

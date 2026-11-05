@@ -1,5 +1,6 @@
 import { getCookie, setCookie } from "./preferences.js";
 
+/** @type {[id: string, key: string, fallback: string | boolean][]} */
 const SETTINGS = [
 	["map-res-select", "mw_map_res", "50m"],
 	["grid-res-select", "mw_grid_res", "0.1"],

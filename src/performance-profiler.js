@@ -361,6 +361,7 @@ function percentChange(current, baseline) {
 	return ((current - baseline) / baseline) * 100;
 }
 
+/** @type {[string, boolean][]} */
 const COMPARISON_METRICS = [
 	["medianAvgFps", true],
 	["medianFrameMs", false],

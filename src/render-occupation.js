@@ -47,6 +47,7 @@ function projectedPaths(region, gridWidth, res, project) {
 }
 
 /** Reuse the existing dynamic canvas; no world-sized texture or extra viewport surface. */
+/** Runs as a method of the control map layer. @this {any} */
 export function drawOccupationOverlay(frame) {
 	const { ctx, project, gridWidth, res, viewportKey, countryMetadata } = frame;
 	this._occupationRegions ??= createOccupationRegionCache();

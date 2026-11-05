@@ -1,5 +1,6 @@
 /** Live bindings let independent systems observe replaced state across callbacks. */
 export function createLiveContext(readers, writers = {}) {
+	/** @type {PropertyDescriptorMap} */
 	const descriptors = {};
 	for (const [name, get] of Object.entries(readers)) {
 		descriptors[name] = {

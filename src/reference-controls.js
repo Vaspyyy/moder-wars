@@ -6,7 +6,7 @@ export function createReferenceControls(runtime) {
 		document
 			.getElementById("custom-sat-input")
 			?.addEventListener("change", async (e) => {
-				const file = e.target.files[0];
+				const file = /** @type {HTMLInputElement} */ (e.target).files[0];
 				if (!file) return;
 				runtime.loadingStatus.innerText = "Loading Background Overlay...";
 				runtime.loadingOverlay.style.display = "flex";
@@ -43,7 +43,7 @@ export function createReferenceControls(runtime) {
 		document
 			.getElementById("ref-image-input")
 			?.addEventListener("change", async (e) => {
-				const file = e.target.files[0];
+				const file = /** @type {HTMLInputElement} */ (e.target).files[0];
 				if (!file) return;
 				runtime.loadingStatus.innerText = "Processing Reference Image...";
 				runtime.loadingOverlay.style.display = "flex";
@@ -68,8 +68,6 @@ export function createReferenceControls(runtime) {
 						runtime.referenceOverlay = runtime.mapRuntime
 							.imageOverlay(url, bounds, {
 								opacity: runtime.refOpacity,
-								interactive: false,
-								pane: "refImagePane",
 							})
 							.addTo(runtime.map);
 						runtime.updateRefHandles();
@@ -87,7 +85,9 @@ export function createReferenceControls(runtime) {
 		document
 			.getElementById("ref-opacity-slider")
 			?.addEventListener("input", (e) => {
-				runtime.refOpacity = parseFloat(e.target.value);
+				runtime.refOpacity = parseFloat(
+					/** @type {HTMLInputElement} */ (e.target).value,
+				);
 				if (runtime.referenceOverlay)
 					runtime.referenceOverlay.setOpacity(runtime.refOpacity);
 				if (runtime.influenceLayer) {
@@ -116,7 +116,9 @@ export function createReferenceControls(runtime) {
 		document
 			.getElementById("ref-scale-slider")
 			?.addEventListener("input", (e) => {
-				runtime.refScale = parseFloat(e.target.value);
+				runtime.refScale = parseFloat(
+					/** @type {HTMLInputElement} */ (e.target).value,
+				);
 				if (runtime.referenceOverlay && runtime.referenceImageUrl) {
 					const center = runtime.referenceOverlay.getBounds().getCenter();
 					const w = 40 * runtime.refScale;

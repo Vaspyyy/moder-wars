@@ -28,7 +28,7 @@ export function decodeAdminRegions(data) {
 
 /** Share one decoded data set and bound retries when optional geography is unavailable. */
 export function createAdminRegionsLoader({
-	fetcher = (...args) => fetch(...args),
+	fetcher = (input, init) => fetch(input, init),
 	now = () => Date.now(),
 	retryMs = 30_000,
 	maxAttempts = 3,

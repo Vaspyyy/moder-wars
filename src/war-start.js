@@ -83,7 +83,9 @@ export function createWarStart(runtime) {
 				});
 		if (runtime.gameMode === "CONQUEST")
 			runtime.applyBroadSetupPosture(
-				document.getElementById("setup-posture-select")?.value || "ADAPTIVE",
+				/** @type {HTMLSelectElement} */ (
+					document.getElementById("setup-posture-select")
+				)?.value || "ADAPTIVE",
 			);
 		runtime.initAudio().then(() => {
 			runtime.playWarAmbiance();
@@ -128,7 +130,9 @@ export function createWarStart(runtime) {
 		// Read optional manual manpower overrides from the setup inputs
 		runtime.manualSideManpower.fill(null);
 		for (let si = 0; si < runtime.sides.length; si++) {
-			const mpInput = document.getElementById(`manpower-side-${si}`);
+			const mpInput = /** @type {HTMLInputElement} */ (
+				document.getElementById(`manpower-side-${si}`)
+			);
 			const parsed = mpInput ? parseInt(mpInput.value, 10) : NaN;
 			runtime.manualSideManpower[si] =
 				!Number.isNaN(parsed) && parsed > 0 ? parsed : null;
@@ -190,8 +194,8 @@ export function createWarStart(runtime) {
 		});
 
 		// Cinematic Mode logic
-		runtime.cinematicMode = document.getElementById(
-			"cinematic-mode-checkbox",
+		runtime.cinematicMode = /** @type {HTMLInputElement} */ (
+			document.getElementById("cinematic-mode-checkbox")
 		)?.checked;
 		if (runtime.cinematicMode) {
 			document.getElementById("game-status").style.display = "none";

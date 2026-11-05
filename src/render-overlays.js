@@ -1,4 +1,5 @@
 // This pass receives a frame snapshot; surface caches stay on the map layer.
+/** Runs as a method of the control map layer. @this {any} */
 export function drawOverlays(frame) {
 	const {
 		viewportKey,

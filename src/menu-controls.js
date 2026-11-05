@@ -208,8 +208,8 @@ export function createMenuControls(runtime) {
 					"active",
 					runtime.showWarPlans,
 				);
-				const preferenceCheckbox = document.getElementById(
-					"show-warplans-checkbox",
+				const preferenceCheckbox = /** @type {HTMLInputElement} */ (
+					document.getElementById("show-warplans-checkbox")
 				);
 				if (preferenceCheckbox)
 					preferenceCheckbox.checked = runtime.showWarPlans;
@@ -355,7 +355,9 @@ export function createMenuControls(runtime) {
 					runtime.mountainsEnabled &&
 					runtime.terrainMask.every((v) => v === 0)
 				) {
-					const currentMapRes = document.getElementById("map-res-select").value;
+					const currentMapRes = /** @type {HTMLSelectElement} */ (
+						document.getElementById("map-res-select")
+					).value;
 					await runtime.loadTerrain(currentMapRes);
 				}
 				runtime.influenceLayer.render();
@@ -525,7 +527,9 @@ export function createMenuControls(runtime) {
 	}
 
 	function bindSettingsTabBtnClick() {
-		document.querySelectorAll(".settings-tab-btn").forEach((btn) => {
+		/** @type {NodeListOf<HTMLElement>} */ (
+			document.querySelectorAll(".settings-tab-btn")
+		).forEach((btn) => {
 			btn.addEventListener("click", () => {
 				const tab = btn.dataset.tab;
 				// Buttons UI
@@ -534,7 +538,9 @@ export function createMenuControls(runtime) {
 				});
 				btn.classList.add("active");
 				// Panes UI
-				document.querySelectorAll(".settings-tab-pane").forEach((pane) => {
+				/** @type {NodeListOf<HTMLElement>} */ (
+					document.querySelectorAll(".settings-tab-pane")
+				).forEach((pane) => {
 					pane.style.display = "none";
 				});
 				const target = document.getElementById(`settings-tab-${tab}`);
@@ -547,7 +553,9 @@ export function createMenuControls(runtime) {
 		document
 			.getElementById("language-select")
 			?.addEventListener("change", (event) =>
-				runtime.applyLanguage(event.target.value),
+				runtime.applyLanguage(
+					/** @type {HTMLSelectElement} */ (event.target).value,
+				),
 			);
 	}
 
@@ -605,7 +613,8 @@ export function createMenuControls(runtime) {
 
 	function bindHudMenuClick() {
 		document.getElementById("hud-menu")?.addEventListener("click", (event) => {
-			if (event.target.closest("button")) event.currentTarget.open = false;
+			if (/** @type {Element} */ (event.target).closest("button"))
+				/** @type {HTMLDetailsElement} */ (event.currentTarget).open = false;
 		});
 	}
 

@@ -53,9 +53,9 @@ export function createReferenceOverlay(runtime) {
 			];
 			runtime.referenceOverlay.setBounds(newBounds);
 		});
-		mCenter.on("dragend", (e) => {
+		mCenter.on("dragend", () => {
 			runtime.map.dragging.enable();
-			updateRefHandles(e);
+			updateRefHandles();
 		});
 		runtime.refHandles.push(mCenter);
 
@@ -92,10 +92,10 @@ export function createReferenceOverlay(runtime) {
 
 				if (newBounds) runtime.referenceOverlay.setBounds(newBounds);
 			});
-			marker.on("dragend", (e) => {
+			marker.on("dragend", () => {
 				// Re-enable map dragging once the handle drag is finished
 				runtime.map.dragging.enable();
-				updateRefHandles(e);
+				updateRefHandles();
 			});
 			runtime.refHandles.push(marker);
 		});

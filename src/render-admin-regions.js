@@ -93,7 +93,11 @@ function placeLabels(drawing, frame, language) {
 	return labels;
 }
 
-/** Draw geographic divisions on the existing surface without changing simulation provinces. */
+/**
+ * Draw geographic divisions on the existing surface without changing simulation provinces.
+ * Runs as a method of the control map layer.
+ * @this {any}
+ */
 export function drawAdminRegions(frame) {
 	this._adminRegionLabelBoxes = [];
 	if (!frame.enabled || frame.isCustomTerrain || frame.currentZoom < 4) return;

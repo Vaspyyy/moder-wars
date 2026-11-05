@@ -250,7 +250,9 @@ export function createEditorToolControls(runtime) {
 			runtime.editorUnclaimBtn.style.display = "block";
 
 			// Load real‑earth geography without establishing countries
-			const mapRes = document.getElementById("map-res-select").value;
+			const mapRes = /** @type {HTMLSelectElement} */ (
+				document.getElementById("map-res-select")
+			).value;
 			const geoUrl = `${runtime.CONFIG.GEOJSON_BASE}${mapRes}/cultural/ne_${mapRes}_admin_0_countries.json`;
 			await runtime.loadCountries(geoUrl, true);
 			runtime.initAudio();
@@ -281,9 +283,17 @@ export function createEditorToolControls(runtime) {
 	function bindConfirmBlankSizeBtnClick() {
 		document.getElementById("confirm-blank-size-btn").onclick = () => {
 			const w =
-				parseFloat(document.getElementById("blank-width-input").value) || 360;
+				parseFloat(
+					/** @type {HTMLInputElement} */ (
+						document.getElementById("blank-width-input")
+					).value,
+				) || 360;
 			const h =
-				parseFloat(document.getElementById("blank-height-input").value) || 180;
+				parseFloat(
+					/** @type {HTMLInputElement} */ (
+						document.getElementById("blank-height-input")
+					).value,
+				) || 180;
 
 			document.getElementById("blank-size-modal").style.display = "none";
 			runtime.isCustomTerrain = true;

@@ -14,6 +14,7 @@ export function createFrontHover(runtime) {
 	let hovered = null;
 	let pointer = null;
 	let frame = 0;
+	/** @type {ReturnType<typeof setInterval> | 0} */
 	let timer = 0;
 	let groupsCache = {
 		at: -Infinity,

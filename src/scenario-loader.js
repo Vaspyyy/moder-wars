@@ -30,7 +30,9 @@ export function createScenarioLoader(context, loadSession) {
 			countryMetadata: context.countryMetadata,
 			cities: context.cities,
 			gridRes: CONFIG.GRID_RES,
-			mapRes: document.getElementById("map-res-select").value,
+			mapRes: /** @type {HTMLSelectElement} */ (
+				document.getElementById("map-res-select")
+			).value,
 			imagery: "atlas",
 			disableCountryGradient: context.disableCountryGradient,
 			customSatelliteUrl: context.customSatelliteUrl,
@@ -68,13 +70,16 @@ export function createScenarioLoader(context, loadSession) {
 		const isCompiledSource =
 			typeof fileOrBlob === "string" ||
 			(typeof URL !== "undefined" && fileOrBlob instanceof URL);
+		/** @type {{ action: string, count?: number }} */
 		let userChoice = { action: "skip" };
 		const loadTrace = beginLoadTrace("scenario", {
 			targetMode,
 			source:
 				typeof fileOrBlob === "string" ? fileOrBlob : fileOrBlob.name || "blob",
 			gridResolution: Number(
-				document.getElementById("grid-res-select")?.value || CONFIG.GRID_RES,
+				/** @type {HTMLSelectElement} */ (
+					document.getElementById("grid-res-select")
+				)?.value || CONFIG.GRID_RES,
 			),
 		});
 
@@ -91,12 +96,16 @@ export function createScenarioLoader(context, loadSession) {
 
 			// Ensure engine is initialized with the CURRENT grid density before we use worldControlMap.
 			// This fixes cases where a preset was saved at a low grid density, but your settings are now higher.
-			const gridSelect = document.getElementById("grid-res-select");
+			const gridSelect = /** @type {HTMLSelectElement} */ (
+				document.getElementById("grid-res-select")
+			);
 			const desiredGridRes = gridSelect
 				? parseFloat(gridSelect.value)
 				: CONFIG.GRID_RES;
 			const selectedMapResolution =
-				document.getElementById("map-res-select")?.value || "110m";
+				/** @type {HTMLSelectElement} */ (
+					document.getElementById("map-res-select")
+				)?.value || "110m";
 			const targetGridWidth = Math.ceil(360 / desiredGridRes);
 			const targetGridHeight = Math.ceil(180 / desiredGridRes);
 			let compiledMaps = null;
@@ -286,8 +295,6 @@ export function createScenarioLoader(context, loadSession) {
 					mapRuntime
 						.imageOverlay(context.referenceImageUrl, bounds, {
 							opacity: context.refOpacity,
-							interactive: false,
-							pane: "refImagePane",
 						})
 						.addTo(context.map),
 				);
@@ -324,7 +331,9 @@ export function createScenarioLoader(context, loadSession) {
 					context.deJureMap.set(compiledMaps.deJure);
 				}
 			} else if (!context.rawGeoJsonData && !data.isCustomTerrain) {
-				const mapRes = document.getElementById("map-res-select").value;
+				const mapRes = /** @type {HTMLSelectElement} */ (
+					document.getElementById("map-res-select")
+				).value;
 				const geoUrl = `${CONFIG.GEOJSON_BASE}${mapRes}/cultural/ne_${mapRes}_admin_0_countries.json`;
 				await context.loadCountries(geoUrl, true, true, loadGeneration);
 			} else if (!data.isCustomTerrain) {
@@ -558,7 +567,9 @@ export function createScenarioLoader(context, loadSession) {
 				// Earth scenario without baked mountains: trigger dynamic GeoJSON terrain scan
 				const resToUse =
 					data.mapRes ||
-					document.getElementById("map-res-select").value ||
+					/** @type {HTMLSelectElement} */ (
+						document.getElementById("map-res-select")
+					).value ||
 					"110m";
 				await context.loadTerrain(resToUse);
 			}
