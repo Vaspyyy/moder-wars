@@ -1,4 +1,5 @@
 import { showAlert, showConfirm, showPrompt } from "./dialogs.js";
+import { COMPILED_SCENARIO_URLS } from "./scenario-codec.js";
 // Controls receive live state and commands; they do not import the application.
 export function createEditorFileControls(runtime) {
 	function bindEditorSaveBtnClick() {
@@ -209,8 +210,7 @@ export function createEditorFileControls(runtime) {
 
 				// Built-in import sources are compiled scenario packages.
 				const keyToUrl = {
-					"builtin:modern_2022":
-						"assets/maps/compiled/world-map-2022-v3.mwsc.gz?rev=a40b8db35255df20",
+					"builtin:modern_2022": COMPILED_SCENARIO_URLS.modern2022,
 				};
 				const url = keyToUrl[val];
 				if (!url) {

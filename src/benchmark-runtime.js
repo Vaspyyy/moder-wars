@@ -1,4 +1,5 @@
 import { showAlert } from "./dialogs.js";
+import { COMPILED_SCENARIO_URLS } from "./scenario-codec.js";
 // Dependencies are supplied by the application; this module does not import it.
 export function createBenchmarkRuntime(runtime) {
 	function restoreBenchmarkSettings() {
@@ -201,7 +202,7 @@ export function createBenchmarkRuntime(runtime) {
 			runtime.mainMenu.style.display = "none";
 			try {
 				await runtime.performPresetLoad(
-					"assets/maps/compiled/world-map-2022-v3.mwsc.gz?rev=a40b8db35255df20",
+					COMPILED_SCENARIO_URLS.modern2022,
 					"CONQUEST",
 					{ prederivedEarth: true },
 				);
