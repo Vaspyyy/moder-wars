@@ -40,6 +40,19 @@ for (const legacy of [
 	"assets/maps/WW2 Peru Update.json",
 ])
 	assert.ok(!existsSync(new URL(legacy, root)), `${legacy} must not ship`);
+assert.ok(
+	!existsSync(new URL("source-data/", root)),
+	"source-data must not ship",
+);
+for (const name of [
+	"world-map-2026-v3.mwsc.gz",
+	"ukraine-2023-v3.mwsc.gz",
+	"world-map-2022-v3.mwsc.gz",
+])
+	assert.ok(
+		existsSync(new URL(`assets/maps/compiled/${name}`, root)),
+		`${name} is missing from dist`,
+	);
 // Every audio file the game requests must be in the build output.
 const audioSource = readFileSync(
 	new URL("../src/audio.js", import.meta.url),
