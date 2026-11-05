@@ -1,9 +1,10 @@
+import { readWorldMap2022 } from "./source-data.mjs";
 import { readFileSync, writeFileSync } from "node:fs";
 
 // A decorative vector map built from bundled Natural Earth geometry. No game runtime.
 const root = new URL("../", import.meta.url);
 const geo = JSON.parse(readFileSync(new URL("assets/geodata/50m/cultural/ne_50m_admin_0_countries.json", root)));
-const scenario = JSON.parse(readFileSync(new URL("assets/maps/world map 2022.json", root)));
+const scenario = readWorldMap2022();
 const colors = new Map(scenario.metadata.map((country) => [country.name, country.color]));
 const project = ([lon, lat]) => [(lon + 60) * 24, (75 - lat) * 35];
 const point = (coordinates) => project(coordinates).map((n) => n.toFixed(1)).join(",");

@@ -200,14 +200,10 @@ export function createBenchmarkRuntime(runtime) {
 			runtime.loadingOverlay.style.display = "flex";
 			runtime.mainMenu.style.display = "none";
 			try {
-				const url = "assets/maps/world map 2022.json";
 				await runtime.performPresetLoad(
 					"assets/maps/compiled/world-map-2022-v3.mwsc.gz?rev=a40b8db35255df20",
 					"CONQUEST",
-					{
-						jsonFallbackUrl: url,
-						prederivedEarth: true,
-					},
+					{ prederivedEarth: true },
 				);
 			} catch (e) {
 				console.error(e);

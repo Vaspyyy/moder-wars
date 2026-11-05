@@ -678,19 +678,7 @@ export function createMenuControls(runtime) {
 			);
 	}
 
-	function bindScrollerChoice1936Click() {
-		document.getElementById("scroller-choice-1936").onclick = () =>
-			runtime.selectScenario("scroller-choice-1936", () =>
-				runtime.choice1936Scenario.click(),
-			);
-	}
 
-	function bindScrollerChoice1914Click() {
-		document.getElementById("scroller-choice-1914").onclick = () =>
-			runtime.selectScenario("scroller-choice-1914", () =>
-				runtime.choiceWW1Scenario.click(),
-			);
-	}
 
 	function bindChoiceModernDayClick() {
 		runtime.choiceModernDay.onclick = runtime.createScenarioHandler(
@@ -699,19 +687,7 @@ export function createMenuControls(runtime) {
 		);
 	}
 
-	function bindChoice1936ScenarioClick() {
-		runtime.choice1936Scenario.onclick = runtime.createScenarioHandler(
-			"ww2",
-			runtime.scenarioMenuDependencies,
-		);
-	}
 
-	function bindChoiceWW1ScenarioClick() {
-		runtime.choiceWW1Scenario.onclick = runtime.createScenarioHandler(
-			"ww1",
-			runtime.scenarioMenuDependencies,
-		);
-	}
 
 	function bindCancelConquestChoiceClick() {
 		runtime.cancelConquestChoice.onclick = () => {
@@ -923,11 +899,7 @@ export function createMenuControls(runtime) {
 		bindEnterScenarioBtnClick,
 		bindScrollerChoiceModernClick,
 		bindScrollerChoiceUkraine2023Click,
-		bindScrollerChoice1936Click,
-		bindScrollerChoice1914Click,
 		bindChoiceModernDayClick,
-		bindChoice1936ScenarioClick,
-		bindChoiceWW1ScenarioClick,
 		bindCancelConquestChoiceClick,
 		bindCloseReleaseModalBtnClick,
 		bindCancelCreateBtnClick,

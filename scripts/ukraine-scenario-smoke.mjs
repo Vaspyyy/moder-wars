@@ -1,3 +1,4 @@
+import { readWorldMap2022 } from "./source-data.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { gunzipSync, gzipSync } from "node:zlib";
@@ -81,11 +82,7 @@ for (const city of generated?.cities ?? source.cities) {
 		assert.equal(city.isCapital, false);
 }
 const base = heavy
-	? JSON.parse(
-			fs.readFileSync(
-				new URL("../assets/maps/world map 2022.json", import.meta.url),
-			),
-		)
+	? readWorldMap2022()
 	: { mapData: [] };
 const ids = new Set(source.theater.countryIds);
 for (const [i, owner] of base.mapData) {

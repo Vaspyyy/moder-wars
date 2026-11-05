@@ -34,7 +34,12 @@ for (const path of scripts) {
 			"simulation code belongs in the worker bundle",
 		);
 }
-assert.ok(existsSync(new URL("assets/maps/world map 2022.json", root)));
+for (const legacy of [
+	"assets/maps/world map 2022.json",
+	"assets/maps/world_war_1__1914_.json",
+	"assets/maps/WW2 Peru Update.json",
+])
+	assert.ok(!existsSync(new URL(legacy, root)), `${legacy} must not ship`);
 assert.ok(
 	existsSync(
 		new URL(

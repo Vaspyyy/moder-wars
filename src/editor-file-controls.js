@@ -426,16 +426,10 @@ export function createEditorFileControls(runtime) {
 						runtime.importScenarioFileInput.style.display = "none";
 				}
 
-				// Map built‑in keys to local preset JSONs
+				// Built-in import sources are compiled scenario packages.
 				const keyToUrl = {
-					"builtin:modern_2022": "@2022 world invis.json",
-					"builtin:ww2_1936": "assets/maps/WW2 Peru Update.json",
-					"builtin:ww2_1942": "1942.json",
-					"builtin:ww1_1914": "assets/maps/world_war_1__1914_.json",
-					"builtin:coldwar_1974": "better_cold_war_preset.json",
-					"builtin:coldwar_1948": "1948 (1).json",
-					"builtin:france_states": "France_states_preset (2).json",
-					"builtin:england_states": "England_states_preset.json",
+					"builtin:modern_2022":
+						"assets/maps/compiled/world-map-2022-v3.mwsc.gz?rev=a40b8db35255df20",
 				};
 				const url = keyToUrl[val];
 				if (!url) {

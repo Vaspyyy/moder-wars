@@ -34,8 +34,6 @@ export const COMPILED_SCENARIO_URLS = Object.freeze({
 	ukraine2023:
 		"assets/maps/compiled/ukraine-2023-v3.mwsc.gz?rev=6c3bd474fe7a8717",
 	modern: "assets/maps/compiled/world-map-2026-v3.mwsc.gz?rev=27c53583672479ed",
-	ww1: "assets/maps/compiled/world-war-1-1914-v3.mwsc.gz?rev=b76fc79757b50a5a",
-	ww2: "assets/maps/compiled/world-war-2-v3.mwsc.gz?rev=85c0a2cc2b8823b8",
 });
 
 function writeVarUint(target, offset, value) {

@@ -1,3 +1,4 @@
+import { readWorldMap2022 } from "./source-data.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -77,9 +78,7 @@ export function visualContours(capture) {
 }
 
 export function buildUkraine2023Scenario() {
-	const base = JSON.parse(
-		fs.readFileSync(path.join(root, "assets/maps/world map 2022.json"), "utf8"),
-	);
+	const base = readWorldMap2022();
 	const capture = JSON.parse(
 		fs.readFileSync(path.join(sourceDir, "deepstate-visual.json"), "utf8"),
 	);

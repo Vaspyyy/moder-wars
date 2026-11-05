@@ -6,13 +6,12 @@ import { gzipSync } from "node:zlib";
 import { writeUkraine2023Scenario } from "./build-ukraine-scenario.mjs";
 import { writeModern2026Scenario } from "./build-modern-2026-scenario.mjs";
 import { encodeScenario } from "../src/scenario-codec.js";
+import { readWorldMap2022Bytes } from "./source-data.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const outputDir = path.join(root, "assets/maps/compiled");
 const scenarios = [
-	["world map 2022.json", "world-map-2022-v3.mwsc.gz"],
-	["world_war_1__1914_.json", "world-war-1-1914-v3.mwsc.gz"],
-	["WW2 Peru Update.json", "world-war-2-v3.mwsc.gz"],
+	["world-map-2022.json.gz", "world-map-2022-v3.mwsc.gz", readWorldMap2022Bytes],
 ];
 
 fs.mkdirSync(outputDir, { recursive: true });
@@ -21,10 +20,9 @@ for (const staleName of fs.readdirSync(outputDir)) {
 		fs.unlinkSync(path.join(outputDir, staleName));
 	}
 }
-for (const [inputName, outputName] of scenarios) {
-	const inputPath = path.join(root, "assets/maps", inputName);
+for (const [inputName, outputName, readSource] of scenarios) {
 	const outputPath = path.join(outputDir, outputName);
-	const jsonBytes = fs.readFileSync(inputPath);
+	const jsonBytes = readSource();
 	const scenario = JSON.parse(jsonBytes.toString("utf8"));
 	const encoded = encodeScenario(scenario);
 	const compressed = gzipSync(encoded, { level: 9 });

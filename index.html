@@ -216,16 +216,6 @@
 <div class="scroller-card-desc" data-i18n="UI_UKRAINE_2023_DESC">Eurasian theater. Approximate control on 2023-01-01; fictional armies. Choose Ukraine and Russia to begin.</div>
 <div class="scroller-card-credits" data-i18n="UI_UKRAINE_2023_CREDITS">Independent visual reconstruction</div>
 </button>
-<div class="scroller-card" id="scroller-choice-1936" style="display:none">
-<div class="scroller-card-name">1936 INTERWAR</div>
-<div class="scroller-card-desc">The buildup to the most destructive war in history.</div>
-<div class="scroller-card-credits">Map: filip</div>
-</div>
-<div class="scroller-card" id="scroller-choice-1914" style="display:none">
-<div class="scroller-card-name">1914 GREAT WAR</div>
-<div class="scroller-card-desc">Empires collide on the trenches of Europe.</div>
-<div class="scroller-card-credits">Map: orange</div>
-</div>
 </div>
 </div>
 </div>
@@ -860,38 +850,6 @@
                                     </div>
                                 </button>
 
-                                <button id="choice-1936-scenario" class="era-card">
-                                    <div class="era-card-header">
-                                        <span class="era-chip">INTERWAR</span>
-                                        <span class="era-icon">
-                                            <svg viewBox="0 0 24 24" aria-hidden="true">
-                                                <path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5L12 15.8 7.1 18.2l.9-5.5-4-3.9 5.5-.8L12 3z" fill="currentColor"/>
-                                            </svg>
-                                        </span>
-                                    </div>
-                                    <div class="era-card-body">
-                                        <div class="era-name" data-i18n="WW2_SCENARIO">1936 SCENARIO</div>
-                                        <div class="era-desc" data-i18n="WW2_SCENARIO_SUB">Build‑up to global conflict</div>
-                                        <div class="era-meta">Revanchism • Rearmament</div>
-                                        <div class="era-meta">Map: filip</div>
-                                    </div>
-                                </button>
-
-                                <button id="choice-ww1-1914" class="era-card">
-                                    <div class="era-card-header">
-                                        <span class="era-chip">GREAT WAR</span>
-                                        <span class="era-icon">
-                                            <svg viewBox="0 0 24 24" aria-hidden="true">
-                                                <path d="M4 13a8 8 0 0116 0v3H4v-3zm2 4h12v2H6z" fill="currentColor"/>
-                                            </svg>
-                                        </span>
-                                    </div>
-                                    <div class="era-card-body">
-                                        <div class="era-name">1914 SCENARIO</div>
-                                        <div class="era-desc">Empires collide on trench frontiers</div>
-                                        <div class="era-meta">Alliances • Mobilisation • Map: orange</div>
-                                    </div>
-                                </button>
                             </div>
                         </div>
                     </div>
@@ -1039,11 +997,7 @@
                 <div style="font-size: 14px; color: #fff; font-weight: bold;">Merry raisan bran cereal box</div>
             </div>
             <div class="setting-group" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 20px;">
-                <label>Map Design (1936)</label>
-                <div style="font-size: 14px; color: #fff; font-weight: bold;">filip</div>
-            </div>
-            <div class="setting-group" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 20px;">
-                <label>Map Design (1914 &amp; 1974) &amp; Second Thumbnail Editing</label>
+                <label>Thumbnail Editing</label>
                 <div style="font-size: 14px; color: #fff; font-weight: bold;">orange</div>
             </div>
             <div class="setting-group" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 20px;">
@@ -1308,14 +1262,7 @@
                 <label>Source Scenario</label>
                 <select id="import-scenario-select" style="width:100%; padding:8px; background:#2a2a30; border:1px solid #444; border-radius:6px; color:#fff; font-size:12px;">
                     <option value="" selected disabled>-- choose source --</option>
-                    <option value="builtin:modern_2022">2022 (world invis)</option>
-                    <option value="builtin:ww2_1936">1936 Scenario (WW2)</option>
-                    <option value="builtin:ww2_1942">1942 Scenario (WW2)</option>
-                    <option value="builtin:ww1_1914">1914 Scenario (WW1)</option>
-                    <option value="builtin:coldwar_1974">1974 Cold War</option>
-                    <option value="builtin:coldwar_1948">1948 Scenario</option>
-                    <option value="builtin:france_states">France States Preset</option>
-                    <option value="builtin:england_states">England States Preset</option>
+                    <option value="builtin:modern_2022">2022 Modern Day</option>
                     <option value="file">Load from .json file…</option>
                 </select>
                 <small>Pick a built‑in era preset or load any saved scenario preset file.</small>

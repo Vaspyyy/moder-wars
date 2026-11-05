@@ -3,7 +3,7 @@ import { showAlert } from "./dialogs.js";
 import { beginLoadTrace } from "./load-profiler.js";
 import mapRuntime from "./map-runtime.ts";
 import { normalizeSavedCells } from "./saved-cells.js";
-import { loadScenario } from "./scenario-codec.js";
+import { decodeScenarioBinary, loadScenario } from "./scenario-codec.js";
 import { generateScenarioSnapshot } from "./scenario-export.js";
 import {
 	applyScenarioSovereigntyOverrides,
@@ -769,6 +769,30 @@ export function createScenarioLoader(context, loadSession) {
 		try {
 			const resp = await fetch(url);
 			if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+			if (/\.mwsc\.gz(?:\?|$)/.test(url)) {
+				const stream = resp.body.pipeThrough(new DecompressionStream("gzip"));
+				const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+				const decoded = decodeScenarioBinary(bytes);
+				const mapData = [];
+				for (let index = 0; index < decoded.land.length; index++) {
+					if (!decoded.land[index]) continue;
+					const biome = decoded.biome[index];
+					mapData.push(
+						biome
+							? [index, decoded.worldControl[index], biome]
+							: [index, decoded.worldControl[index]],
+					);
+				}
+				context.setImportScenarioBuffer({
+					metadata: decoded.scenario.metadata,
+					mapData,
+					gridRes: decoded.target.gridRes,
+				});
+				context.populateImportCountrySelect();
+				if (context.importScenarioSelect && context.lastImportScenarioKey)
+					context.importScenarioSelect.value = context.lastImportScenarioKey;
+				return;
+			}
 			const blob = await resp.blob();
 			await loadScenarioForCountryImportFromBlob(blob);
 		} catch (e) {

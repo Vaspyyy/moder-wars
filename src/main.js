@@ -341,8 +341,6 @@ const applicationRuntime = createLiveContext(
 		choiceModernDay: () => choiceModernDay,
 		enterScenarioBtn: () => enterScenarioBtn,
 		queuedScenarioAction: () => queuedScenarioAction,
-		choice1936Scenario: () => choice1936Scenario,
-		choiceWW1Scenario: () => choiceWW1Scenario,
 		createScenarioHandler: () => createScenarioHandler,
 		scenarioMenuDependencies: () => scenarioMenuDependencies,
 		cancelConquestChoice: () => cancelConquestChoice,
@@ -3410,10 +3408,6 @@ export const conquestChoiceModal = document.getElementById(
 export const eraPageModern = document.getElementById("era-page-modern");
 export const eraPageWars = document.getElementById("era-page-wars");
 export const choiceModernDay = document.getElementById("choice-modern-day");
-export const choice1936Scenario = document.getElementById(
-	"choice-1936-scenario",
-);
-export const choiceWW1Scenario = document.getElementById("choice-ww1-1914");
 export const cancelConquestChoice = document.getElementById(
 	"cancel-conquest-choice",
 );
@@ -4900,18 +4894,6 @@ export async function loadCities(
 					}))
 			: [];
 		setCities([...loadedCities, ...customCities]);
-
-		// Apply historical renames for the 1936 WW2 scenario
-		if (currentScenarioContext && currentScenarioContext.id === "ww2_1936") {
-			cities.forEach((city) => {
-				if (city.name === "Kaliningrad") {
-					city.name = "Koenisberg";
-				}
-				if (city.name === "Gdańsk" || city.name === "Gdansk") {
-					city.name = "Danzig";
-				}
-			});
-		}
 		return true;
 	} catch (err) {
 		console.error("Failed to load cities", err);
@@ -6575,12 +6557,6 @@ community_controls.bindRemixFromHubHandler();
 export function preloadAssets() {
 	const assets = [
 		"assets/images/2022.webp",
-		"assets/images/1974.webp",
-		"assets/images/1942.webp",
-		"assets/images/1936.webp",
-		"assets/images/1914.webp",
-		"assets/images/1804.webp",
-		"assets/images/1492.webp",
 	];
 	assets.forEach((src) => {
 		const img = new Image();
@@ -6737,8 +6713,6 @@ menu_controls.bindEnterScenarioBtnClick();
 // Wire Scroller Cards
 menu_controls.bindScrollerChoiceModernClick();
 menu_controls.bindScrollerChoiceUkraine2023Click();
-menu_controls.bindScrollerChoice1936Click();
-menu_controls.bindScrollerChoice1914Click();
 
 const scenarioMenuDependencies = {
 	primeAudio,
@@ -6752,21 +6726,8 @@ const scenarioMenuDependencies = {
 		currentScenarioContext = context;
 		activeScenarioId = null;
 	},
-	modernFallback: async () => {
-		gameMode = "CONQUEST";
-		gameState = "SELECTING_P1";
-		const mapRes = document.getElementById("map-res-select").value;
-		const geoUrl = `${CONFIG.GEOJSON_BASE}${mapRes}/cultural/ne_${mapRes}_admin_0_countries.json`;
-		mainMenu.style.display = "none";
-		await loadCountries(geoUrl, false);
-		initAudio();
-	},
 };
 menu_controls.bindChoiceModernDayClick();
-
-menu_controls.bindChoice1936ScenarioClick();
-
-menu_controls.bindChoiceWW1ScenarioClick();
 
 menu_controls.bindCancelConquestChoiceClick();
 

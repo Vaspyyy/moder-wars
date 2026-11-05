@@ -24,7 +24,6 @@ for (const key of ["modern", "ukraine2023"]) {
 			primeAudio() {}, setLoadingThematic() {}, initAudio() {}, focusScenario() {},
 			loadingStatus: {}, loadingOverlay, mainMenu,
 			setContext(value) { context = value; },
-			modernFallback() { assert.fail("Dated scenarios must not silently load legacy geography"); },
 			async loadPreset(url, mode, options) {
 				loads++;
 				assert.equal(url, COMPILED_SCENARIO_URLS[key]);

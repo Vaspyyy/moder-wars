@@ -8,13 +8,10 @@ import {
 	decodeScenarioBinary,
 	sha256Hex,
 } from "../src/scenario-codec.js";
+import { readWorldMap2022 } from "./source-data.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const pairs = [
-	["world map 2022.json", "world-map-2022-v3.mwsc.gz"],
-	["world_war_1__1914_.json", "world-war-1-1914-v3.mwsc.gz"],
-	["WW2 Peru Update.json", "world-war-2-v3.mwsc.gz"],
-];
+const pairs = [["world-map-2022.json.gz", "world-map-2022-v3.mwsc.gz", readWorldMap2022]];
 
 function provinceId(x, y, countryId, gridRes) {
 	if (countryId <= 0) return 0;
@@ -71,8 +68,8 @@ function legacyRemap(original, targetGridRes) {
 	return { width, height, worldControl, land };
 }
 
-for (const [jsonName, binaryName] of pairs) {
-	const original = JSON.parse(fs.readFileSync(path.join(root, "assets/maps", jsonName), "utf8"));
+for (const [jsonName, binaryName, readSource] of pairs) {
+	const original = readSource();
 	const compressedBytes = fs.readFileSync(
 		path.join(root, "assets/maps/compiled", binaryName),
 	);
