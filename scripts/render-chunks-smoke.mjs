@@ -299,16 +299,40 @@ assert.ok(
 const labelCache = createRegionChunkCache();
 const labelState = frame(128, 96);
 labelState.CONFIG.GRID_RES = 1;
-for (let y = 0; y < labelState.gridHeight; y++) labelState.worldControlMap[y * labelState.gridWidth + 100] = 2;
+for (let y = 0; y < labelState.gridHeight; y++)
+	labelState.worldControlMap[y * labelState.gridWidth + 100] = 2;
 const worldLabels = labelCache.getWorld(labelState);
-const labelKey = (regions) => regions.map((region) => `${region.id}:${region.count}:${region.latSum}:${region.lngSum}`).sort().join("|");
-assert.equal(labelCache.getWorld({ ...labelState, xMin: 70, xMax: 127, currentZoom: 3 }), worldLabels, "camera moves keep world label geometry");
-assert.equal(worldLabels.filter((region) => region.id === 2).length, 1, "offscreen territory still gets a label region");
+const labelKey = (regions) =>
+	regions
+		.map(
+			(region) =>
+				`${region.id}:${region.count}:${region.latSum}:${region.lngSum}`,
+		)
+		.sort()
+		.join("|");
+assert.equal(
+	labelCache.getWorld({ ...labelState, xMin: 70, xMax: 127, currentZoom: 3 }),
+	worldLabels,
+	"camera moves keep world label geometry",
+);
+assert.equal(
+	worldLabels.filter((region) => region.id === 2).length,
+	1,
+	"offscreen territory still gets a label region",
+);
 labelCache.get({ ...labelState, xMin: 0, xMax: 20 });
-assert.equal(labelKey(labelCache.getWorld(labelState)), labelKey(worldLabels), "a narrow view does not clip label regions");
+assert.equal(
+	labelKey(labelCache.getWorld(labelState)),
+	labelKey(worldLabels),
+	"a narrow view does not clip label regions",
+);
 labelState.worldControlMap[100] = 1;
 labelCache.invalidateTiles([3]);
-assert.notEqual(labelCache.getWorld(labelState), worldLabels, "territory changes refresh label geometry");
+assert.notEqual(
+	labelCache.getWorld(labelState),
+	worldLabels,
+	"territory changes refresh label geometry",
+);
 
 const calls = [];
 const layer = {};
