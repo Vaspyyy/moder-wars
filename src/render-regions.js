@@ -2,24 +2,22 @@
 // cached components along chunk edges instead of flood-filling visible land.
 const SIZE = 32;
 const LIMIT = 32768;
+// 0.2 degree samples at the default grid: small states still get a label.
+const WORLD_STEP = 2;
 
 export function createRegionChunkCache() {
 	const chunks = new Map();
 	let key;
 	let world;
 	let land;
-	let revision = 0;
-	let view;
-	let viewTileIds;
+	const views = { view: {}, world: {} };
 	let built = 0;
 	const clear = () => {
 		chunks.clear();
 		key = undefined;
-		view = undefined;
-		viewTileIds = undefined;
+		for (const slot of Object.values(views)) slot.key = undefined;
 		world = undefined;
 		land = undefined;
-		revision++;
 	};
 	const getChunk = (frame, cx, cy, step) => {
 		const columns = Math.ceil(frame.gridWidth / SIZE);
@@ -119,19 +117,166 @@ export function createRegionChunkCache() {
 		built++;
 		return chunk;
 	};
+	const sync = (frame) => {
+		const nextKey = [
+			frame.gridWidth,
+			frame.gridHeight,
+			frame.CONFIG.GRID_RES,
+			frame.isWar ? 1 : 0,
+			frame.viewMode === "FLAG" ? 1 : 0,
+			frame.sideKey,
+		].join(":");
+		if (
+			nextKey !== key ||
+			world !== frame.worldControlMap ||
+			land !== frame.landMask
+		) {
+			clear();
+			key = nextKey;
+			world = frame.worldControlMap;
+			land = frame.landMask;
+		}
+	};
+	const build = (slot, frame, step, minX, maxX, minY, maxY, pixels) => {
+		const viewKey = `${step}:${minX}:${maxX}:${minY}:${maxY}`;
+		if (slot.key === viewKey) return slot.regions;
+		const visible = new Map(),
+			nodes = [],
+			offsets = new Map();
+		const columns = Math.ceil(frame.gridWidth / SIZE);
+		for (let cy = minY; cy <= maxY; cy++) {
+			for (let cx = minX; cx <= maxX; cx++) {
+				const chunk = getChunk(frame, cx, cy, step);
+				visible.set(chunk.id, chunk);
+				offsets.set(chunk.id, nodes.length);
+				for (const component of chunk.components) nodes.push(component);
+			}
+		}
+		const parents = new Int32Array(nodes.length);
+		for (let i = 0; i < parents.length; i++) parents[i] = i;
+		const root = (index) => {
+			let current = index;
+			while (parents[current] !== current) {
+				parents[current] = parents[parents[current]];
+				current = parents[current];
+			}
+			return current;
+		};
+		const join = (a, localA, b, localB) => {
+			if (!a.owners[localA] || a.owners[localA] !== b.owners[localB]) return;
+			const first = root(offsets.get(a.id) + a.labels[localA] - 1);
+			const second = root(offsets.get(b.id) + b.labels[localB] - 1);
+			if (first !== second) parents[second] = first;
+		};
+		for (const chunk of visible.values()) {
+			const right = chunk.cx < maxX ? visible.get(chunk.id + 1) : null;
+			const below = chunk.cy < maxY ? visible.get(chunk.id + columns) : null;
+			if (right)
+				for (let y = 0; y < chunk.height; y += step)
+					join(chunk, y * SIZE + SIZE - step, right, y * SIZE);
+			if (below)
+				for (let x = 0; x < chunk.width; x += step)
+					join(chunk, (SIZE - step) * SIZE + x, below, x);
+		}
+		const groups = new Map();
+		for (let i = 0; i < nodes.length; i++) {
+			const component = nodes[i],
+				id = root(i);
+			let group = groups.get(id);
+			if (!group) {
+				group = {
+					id: component.id,
+					components: [],
+					pixels: [],
+					count: 0,
+					latSum: 0,
+					lngSum: 0,
+					regMinX: Infinity,
+					regMaxX: -Infinity,
+					regMinY: Infinity,
+					regMaxY: -Infinity,
+				};
+				groups.set(id, group);
+			}
+			group.components.push(component);
+			group.count += component.count;
+			group.latSum += component.latSum;
+			group.lngSum += component.lngSum;
+			group.regMinX = Math.min(group.regMinX, component.regMinX);
+			group.regMaxX = Math.max(group.regMaxX, component.regMaxX);
+			group.regMinY = Math.min(group.regMinY, component.regMinY);
+			group.regMaxY = Math.max(group.regMaxY, component.regMaxY);
+		}
+		const regions = [];
+		for (const group of groups.values()) {
+			const bins = Array.from({ length: 4 }, () => ({
+				latSum: 0,
+				lngSum: 0,
+				count: 0,
+			}));
+			const width = Math.max(1, group.regMaxX - group.regMinX + 1);
+			for (const component of group.components) {
+				if (pixels)
+					for (const pixel of component.pixels) group.pixels.push(pixel);
+				for (const [x, column] of component.columns) {
+					const bin =
+						bins[Math.min(3, Math.floor(((x - group.regMinX) / width) * 4))];
+					bin.latSum += column.latSum;
+					bin.lngSum += column.lngSum;
+					bin.count += column.count;
+				}
+			}
+			const centerLat = group.latSum / group.count,
+				centerLng = group.lngSum / group.count;
+			for (let i = 0; i < bins.length; i++) {
+				if (bins[i].count) continue;
+				let left, right;
+				for (let j = i - 1; j >= 0; j--)
+					if (bins[j].count) {
+						left = bins[j];
+						break;
+					}
+				for (let j = i + 1; j < 4; j++)
+					if (bins[j].count) {
+						right = bins[j];
+						break;
+					}
+				const neighbor = left || right;
+				bins[i] = {
+					latSum:
+						left && right
+							? (left.latSum / left.count + right.latSum / right.count) / 2
+							: neighbor
+								? neighbor.latSum / neighbor.count
+								: centerLat,
+					lngSum:
+						left && right
+							? (left.lngSum / left.count + right.lngSum / right.count) / 2
+							: neighbor
+								? neighbor.lngSum / neighbor.count
+								: centerLng,
+					count: 1,
+				};
+			}
+			delete group.components;
+			group.bins = bins;
+			regions.push(group);
+		}
+		slot.key = viewKey;
+		slot.regions = regions;
+		slot.tileIds = new Set(visible.keys());
+		return regions;
+	};
 	return {
 		clear,
 		invalidateTiles(tileKeys) {
-			let affectsView = false;
 			for (const tileKey of tileKeys) {
 				const id = Number(tileKey);
 				for (const step of [1, 2, 4]) chunks.delete(`${step}:${id}`);
-				if (viewTileIds?.has(id)) affectsView = true;
-			}
-			if (affectsView) {
-				revision++;
-				view = undefined;
-				viewTileIds = undefined;
+				for (const slot of Object.values(views))
+					if (slot.tileIds?.has(id)) {
+						slot.key = undefined;
+					}
 			}
 		},
 		get(frame) {
@@ -143,24 +288,7 @@ export function createRegionChunkCache() {
 						: frame.currentZoom < 6
 							? 2
 							: 1;
-			const nextKey = [
-				frame.gridWidth,
-				frame.gridHeight,
-				frame.CONFIG.GRID_RES,
-				frame.isWar ? 1 : 0,
-				frame.viewMode === "FLAG" ? 1 : 0,
-				frame.sideKey,
-			].join(":");
-			if (
-				nextKey !== key ||
-				world !== frame.worldControlMap ||
-				land !== frame.landMask
-			) {
-				clear();
-				key = nextKey;
-				world = frame.worldControlMap;
-				land = frame.landMask;
-			}
+			sync(frame);
 			const minX = Math.floor(Math.max(0, frame.xMin - 25) / SIZE),
 				maxX = Math.floor(
 					Math.min(frame.gridWidth - 1, frame.xMax + 25) / SIZE,
@@ -169,133 +297,37 @@ export function createRegionChunkCache() {
 				maxY = Math.floor(
 					Math.min(frame.gridHeight - 1, frame.yMax + 25) / SIZE,
 				);
-			const viewKey = `${step}:${minX}:${maxX}:${minY}:${maxY}:${revision}`;
-			if (view?.key === viewKey) return view.regions;
-			const visible = new Map(),
-				nodes = [],
-				offsets = new Map();
-			const columns = Math.ceil(frame.gridWidth / SIZE);
-			for (let cy = minY; cy <= maxY; cy++) {
-				for (let cx = minX; cx <= maxX; cx++) {
-					const chunk = getChunk(frame, cx, cy, step);
-					visible.set(chunk.id, chunk);
-					offsets.set(chunk.id, nodes.length);
-					for (const component of chunk.components) nodes.push(component);
-				}
-			}
-			const parents = new Int32Array(nodes.length);
-			for (let i = 0; i < parents.length; i++) parents[i] = i;
-			const root = (index) => {
-				let current = index;
-				while (parents[current] !== current) {
-					parents[current] = parents[parents[current]];
-					current = parents[current];
-				}
-				return current;
-			};
-			const join = (a, localA, b, localB) => {
-				if (!a.owners[localA] || a.owners[localA] !== b.owners[localB]) return;
-				const first = root(offsets.get(a.id) + a.labels[localA] - 1);
-				const second = root(offsets.get(b.id) + b.labels[localB] - 1);
-				if (first !== second) parents[second] = first;
-			};
-			for (const chunk of visible.values()) {
-				const right = chunk.cx < maxX ? visible.get(chunk.id + 1) : null;
-				const below = chunk.cy < maxY ? visible.get(chunk.id + columns) : null;
-				if (right)
-					for (let y = 0; y < chunk.height; y += step)
-						join(chunk, y * SIZE + SIZE - step, right, y * SIZE);
-				if (below)
-					for (let x = 0; x < chunk.width; x += step)
-						join(chunk, (SIZE - step) * SIZE + x, below, x);
-			}
-			const groups = new Map();
-			for (let i = 0; i < nodes.length; i++) {
-				const component = nodes[i],
-					id = root(i);
-				let group = groups.get(id);
-				if (!group) {
-					group = {
-						id: component.id,
-						components: [],
-						pixels: [],
-						count: 0,
-						latSum: 0,
-						lngSum: 0,
-						regMinX: Infinity,
-						regMaxX: -Infinity,
-						regMinY: Infinity,
-						regMaxY: -Infinity,
-					};
-					groups.set(id, group);
-				}
-				group.components.push(component);
-				group.count += component.count;
-				group.latSum += component.latSum;
-				group.lngSum += component.lngSum;
-				group.regMinX = Math.min(group.regMinX, component.regMinX);
-				group.regMaxX = Math.max(group.regMaxX, component.regMaxX);
-				group.regMinY = Math.min(group.regMinY, component.regMinY);
-				group.regMaxY = Math.max(group.regMaxY, component.regMaxY);
-			}
-			const regions = [];
-			for (const group of groups.values()) {
-				const bins = Array.from({ length: 4 }, () => ({
-					latSum: 0,
-					lngSum: 0,
-					count: 0,
-				}));
-				const width = Math.max(1, group.regMaxX - group.regMinX + 1);
-				for (const component of group.components) {
-					if (frame.viewMode === "FLAG")
-						for (const pixel of component.pixels) group.pixels.push(pixel);
-					for (const [x, column] of component.columns) {
-						const bin =
-							bins[Math.min(3, Math.floor(((x - group.regMinX) / width) * 4))];
-						bin.latSum += column.latSum;
-						bin.lngSum += column.lngSum;
-						bin.count += column.count;
-					}
-				}
-				const centerLat = group.latSum / group.count,
-					centerLng = group.lngSum / group.count;
-				for (let i = 0; i < bins.length; i++) {
-					if (bins[i].count) continue;
-					let left, right;
-					for (let j = i - 1; j >= 0; j--)
-						if (bins[j].count) {
-							left = bins[j];
-							break;
-						}
-					for (let j = i + 1; j < 4; j++)
-						if (bins[j].count) {
-							right = bins[j];
-							break;
-						}
-					const neighbor = left || right;
-					bins[i] = {
-						latSum:
-							left && right
-								? (left.latSum / left.count + right.latSum / right.count) / 2
-								: neighbor
-									? neighbor.latSum / neighbor.count
-									: centerLat,
-						lngSum:
-							left && right
-								? (left.lngSum / left.count + right.lngSum / right.count) / 2
-								: neighbor
-									? neighbor.lngSum / neighbor.count
-									: centerLng,
-						count: 1,
-					};
-				}
-				delete group.components;
-				group.bins = bins;
-				regions.push(group);
-			}
-			view = { key: viewKey, regions };
-			viewTileIds = new Set(visible.keys());
-			return regions;
+			return build(
+				views.view,
+				frame,
+				step,
+				minX,
+				maxX,
+				minY,
+				maxY,
+				frame.viewMode === "FLAG",
+			);
+		},
+		/**
+		 * Whole-world regions at a fixed sampling step. Label placement uses these so a
+		 * country's name is anchored to its full territory, not to the visible part of it.
+		 */
+		getWorld(frame) {
+			sync(frame);
+			return build(
+				views.world,
+				frame,
+				WORLD_STEP,
+				0,
+				Math.floor((frame.gridWidth - 1) / SIZE),
+				0,
+				Math.floor((frame.gridHeight - 1) / SIZE),
+				false,
+			);
+		},
+		/** True when territory changed since the last whole-world build. */
+		get worldStale() {
+			return views.world.key === undefined;
 		},
 		get stats() {
 			return { built, chunks: chunks.size };

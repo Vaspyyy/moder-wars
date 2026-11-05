@@ -70,12 +70,14 @@ export function drawLabels(frame) {
 		}
 
 		// PASS 7: Country Labels (HOI4 Curved Style)
-		// Drawn per contiguous region so overseas territories get their own labels,
-		// recomputed every frame in map-space so they move naturally with the camera.
+		// Placement comes from each contiguous region of the whole world, and the font
+		// scales with the map, so a name sits at a fixed spot on the map. Panning and
+		// zooming only move it as part of the map, never relative to the country.
 		if (showCountryLabels && regions?.length && countryMetadata) {
 			const mapSize = map.getSize();
-			const viewBounds = frame.viewBounds || map.getBounds();
 			const res = CONFIG.GRID_RES;
+			const fadeStart = Math.max(90, mapSize.y * 0.18);
+			const fadeEnd = Math.max(140, mapSize.y * 0.32);
 
 			const safeLatLngToPoint = (lat, lng) => {
 				if (Number.isNaN(lat) || Number.isNaN(lng)) return null;
@@ -86,32 +88,17 @@ export function drawLabels(frame) {
 				}
 			};
 
+			// Bigger regions claim space first; ties break on id so the order is stable.
+			if (this._labelOrderSource !== regions) {
+				this._labelOrderSource = regions;
+				this._labelOrder = [...regions].sort(
+					(a, b) => b.count - a.count || a.id - b.id,
+				);
+			}
 			const occupied = [];
-			const orderedRegions = isAtlas
-				? [...regions].sort((a, b) => b.count - a.count)
-				: regions;
-			orderedRegions.forEach((region) => {
+			for (const region of this._labelOrder) {
 				const meta = countryMetadata[region.id - 1];
-				if (!meta) return;
-
-				const centerLat = region.latSum / region.count;
-				const centerLng = region.lngSum / region.count;
-
-				// Skip regions far from the current view
-				if (!viewBounds.pad(0.5).contains([centerLat, centerLng])) return;
-				const pCenter = safeLatLngToPoint(centerLat, centerLng);
-				if (
-					!pCenter ||
-					pCenter.x < -400 ||
-					pCenter.x > mapSize.x + 400 ||
-					pCenter.y < -400 ||
-					pCenter.y > mapSize.y + 400
-				) {
-					return;
-				}
-
-				const nameRaw = meta.displayName || meta.name || "Unknown";
-				const name = nameRaw.toUpperCase();
+				if (!meta) continue;
 
 				// Area scale based on this region only
 				const pMin = safeLatLngToPoint(
@@ -119,28 +106,33 @@ export function drawLabels(frame) {
 					region.regMinX * res - 180,
 				);
 				const pMax = safeLatLngToPoint(
-					region.regMaxY * res - 90,
-					region.regMaxX * res - 180,
+					(region.regMaxY + 1) * res - 90,
+					(region.regMaxX + 1) * res - 180,
 				);
-				if (!pMin || !pMax) return;
+				if (!pMin || !pMax) continue;
 				const areaScale = Math.sqrt(
 					Math.abs(pMax.x - pMin.x) * Math.abs(pMax.y - pMin.y),
 				);
+				let fontSize = areaScale / (isAtlas ? 7 : 4.5);
+				if (fontSize < 7) continue;
 
-				const zoom = map.getZoom();
-				let fontSize = isAtlas
-					? Math.max(8, Math.min(26, 10 + zoom * 2, areaScale / 7))
-					: Math.max(8, Math.min(zoom * 12, areaScale / 4.5));
+				const nameRaw = meta.displayName || meta.name || "Unknown";
+				const name = nameRaw.toUpperCase();
 
 				// Build control points from region bins in lat/lng -> screen space
 				const points = (region.bins || []).map((bin) => {
 					if (!bin || bin.count <= 0) return null;
-					const lat = bin.latSum / bin.count;
-					const lng = bin.lngSum / bin.count;
-					return safeLatLngToPoint(lat, lng);
+					return safeLatLngToPoint(
+						bin.latSum / bin.count,
+						bin.lngSum / bin.count,
+					);
 				});
-
-				if (!points || points.length < 4) return;
+				if (points.length < 4) continue;
+				const pCenter = safeLatLngToPoint(
+					region.latSum / region.count,
+					region.lngSum / region.count,
+				);
+				if (!pCenter) continue;
 
 				// Fill any missing points by interpolating neighbours, or fall back to center
 				for (let i = 0; i < 4; i++) {
@@ -197,44 +189,60 @@ export function drawLabels(frame) {
 				const idealFontSize =
 					(pathLength * 0.9) / (name.length * (charFactor + spacingFactor));
 				fontSize = Math.min(idealFontSize, fontSize);
-				if (fontSize < 7) return;
+				if (fontSize < 7) continue;
 
-				if (isAtlas) {
-					const bounds = {
-						left: Infinity,
-						top: Infinity,
-						right: -Infinity,
-						bottom: -Infinity,
-					};
-					const textFraction = Math.min(
-						1,
-						(name.length * fontSize * (0.6 + spacingFactor)) / pathLength,
+				const bounds = {
+					left: Infinity,
+					top: Infinity,
+					right: -Infinity,
+					bottom: -Infinity,
+				};
+				const textFraction = Math.min(
+					1,
+					(name.length * fontSize * (0.6 + spacingFactor)) / pathLength,
+				);
+				for (let i = 0; i <= 10; i++) {
+					const p = this.getBezierPoint(
+						0.5 - textFraction / 2 + (i / 10) * textFraction,
+						points[0],
+						points[1],
+						points[2],
+						points[3],
 					);
-					for (let i = 0; i <= 10; i++) {
-						const p = this.getBezierPoint(
-							0.5 - textFraction / 2 + (i / 10) * textFraction,
-							points[0],
-							points[1],
-							points[2],
-							points[3],
-						);
-						bounds.left = Math.min(bounds.left, p.x - fontSize / 2);
-						bounds.right = Math.max(bounds.right, p.x + fontSize / 2);
-						bounds.top = Math.min(bounds.top, p.y - fontSize / 2);
-						bounds.bottom = Math.max(bounds.bottom, p.y + fontSize / 2);
-					}
+					bounds.left = Math.min(bounds.left, p.x - fontSize / 2);
+					bounds.right = Math.max(bounds.right, p.x + fontSize / 2);
+					bounds.top = Math.min(bounds.top, p.y - fontSize / 2);
+					bounds.bottom = Math.max(bounds.bottom, p.y + fontSize / 2);
+				}
+				if (isAtlas) {
+					// Collision runs for off-screen labels too, so which names survive
+					// does not depend on where the camera is.
+					const gap = fontSize * 0.3;
 					if (
 						occupied.some(
 							(box) =>
-								bounds.left < box.right + 5 &&
-								bounds.right > box.left - 5 &&
-								bounds.top < box.bottom + 5 &&
-								bounds.bottom > box.top - 5,
+								bounds.left < box.right + gap &&
+								bounds.right > box.left - gap &&
+								bounds.top < box.bottom + gap &&
+								bounds.bottom > box.top - gap,
 						)
 					)
-						return;
+						continue;
 					occupied.push(bounds);
 				}
+				if (
+					bounds.right < -40 ||
+					bounds.left > mapSize.x + 40 ||
+					bounds.bottom < -40 ||
+					bounds.top > mapSize.y + 40
+				)
+					continue;
+				// Names fade out once zoomed in so far that they would cover the screen.
+				if (fontSize >= fadeEnd) continue;
+				ctx.globalAlpha =
+					fontSize > fadeStart
+						? 1 - (fontSize - fadeStart) / (fadeEnd - fadeStart)
+						: 1;
 				this.drawTextOnCurve(
 					ctx,
 					name,
@@ -246,7 +254,8 @@ export function drawLabels(frame) {
 					fontSize * spacingFactor,
 					isAtlas,
 				);
-			});
+			}
+			ctx.globalAlpha = 1;
 		}
 		ctx.restore();
 		this._labelsCacheKey = labelsCacheKey;
