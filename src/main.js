@@ -3660,29 +3660,6 @@ export function rebuildStatsPanel() {
 	});
 	statsGrid.replaceChildren(...gridNodes);
 
-	_cachedSoldierEls = [];
-	_cachedCityEls = [];
-	_cachedTerritoryCtrlEls = [];
-	_cachedTerritorySegEls = [];
-	_cachedMomentumEls = [];
-	for (const s of activeSides) {
-		_cachedSoldierEls[s.idx] = document.querySelector(
-			`[data-sidesoldiers="${s.idx}"]`,
-		);
-		_cachedCityEls[s.idx] = document.querySelector(
-			`[data-sidecities="${s.idx}"]`,
-		);
-		_cachedTerritoryCtrlEls[s.idx] = document.querySelector(
-			`[data-sidecontrol="${s.idx}"]`,
-		);
-		_cachedTerritorySegEls[s.idx] = document.querySelector(
-			`[data-tugsegment="${s.idx}"]`,
-		);
-		_cachedMomentumEls[s.idx] = document.querySelector(
-			`[data-sidemomentum="${s.idx}"]`,
-		);
-	}
-
 	if (unitCountsDisplay) {
 		unitCountsDisplay.replaceChildren();
 		const spans = [];
@@ -3735,6 +3712,30 @@ export function rebuildStatsPanel() {
 			),
 		),
 	);
+
+	// Cache live-update targets after every rebuilt container is attached.
+	_cachedSoldierEls = [];
+	_cachedCityEls = [];
+	_cachedTerritoryCtrlEls = [];
+	_cachedTerritorySegEls = [];
+	_cachedMomentumEls = [];
+	for (const s of activeSides) {
+		_cachedSoldierEls[s.idx] = document.querySelector(
+			`[data-sidesoldiers="${s.idx}"]`,
+		);
+		_cachedCityEls[s.idx] = document.querySelector(
+			`[data-sidecities="${s.idx}"]`,
+		);
+		_cachedTerritoryCtrlEls[s.idx] = document.querySelector(
+			`[data-sidecontrol="${s.idx}"]`,
+		);
+		_cachedTerritorySegEls[s.idx] = document.querySelector(
+			`[data-tugsegment="${s.idx}"]`,
+		);
+		_cachedMomentumEls[s.idx] = document.querySelector(
+			`[data-sidemomentum="${s.idx}"]`,
+		);
+	}
 }
 
 /** One label/value pair in the side stats grid. */
