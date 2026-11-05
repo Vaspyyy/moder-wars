@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Modern Wars is a browser grand-strategy war simulator on a real-world map. It builds with Vite. The simulation, menus and most modules are JavaScript ES modules; the camera, projection, scene and PixiJS rendering modules (`src/*.ts`) are strict TypeScript. PixiJS and JSZip are npm dependencies bundled by Vite, so serving the source directory directly no longer works. `docs/MODERNIZATION.md` covers the build, deployment and rendering migration.
+Modern Wars is a browser grand-strategy war simulator on a real-world map. It builds with Vite. The simulation, menus and most modules are JavaScript ES modules; the camera, projection, scene and PixiJS rendering modules (`src/*.ts`) are strict TypeScript. PixiJS and JSZip are npm dependencies bundled by Vite, so serving the source directory directly no longer works.
 
 ## Commands
 
@@ -33,7 +33,7 @@ Asset maintenance scripts (only run after changing their source data): `scripts/
 
 ## Architecture
 
-**Entry.** `index.html` loads `src/entry.js`, which imports `src/bootstrap.js` (error overlay, service worker registration) and then `src/main.js`, a large (~7k lines) module that owns UI wiring and live game state. Systems receive state through `createLiveContext` (`src/runtime-context.js`), which builds getter/setter live bindings, so they don't import `main.js`. Only `renderer.js`, `editor.js`, `engine.js` and `firebase.js` still import from `main.js` directly.
+**Entry.** `index.html` loads `src/entry.js`, which imports `src/bootstrap.js` (error overlay, service worker registration) and then `src/main.js`, a large (~7k lines) module that owns UI wiring and live game state. Systems receive state through `createLiveContext` (`src/runtime-context.js`), which builds getter/setter live bindings, so they don't import `main.js`. Only `renderer.js`, `editor.js` and `engine.js` still import from `main.js` directly.
 
 **Simulation ownership.** The simulation runs in a resident module worker (`workers/war-simulation-worker.js`) built on `src/simulation-core.js`. The core composes the engine, world, state, tick, AI, territory and influence modules and is pure: no DOM, no `main.js`, so the same core runs in the worker, in Node smoke tests, and in the profiler. It advances on a fixed logical clock (`simulation-clock.js`) independent of rendering. Live clocks cap pending catch-up ticks at 60.
 - `src/simulation-client.js` is the main-thread side. Rendering reads mirrors only. Any mutation (editing, diplomacy) needs an acknowledged ownership handoff, where full state is captured/applied via `src/simulation-protocol.js`.
@@ -50,9 +50,10 @@ Asset maintenance scripts (only run after changing their source data): `scripts/
 - `occupation-regions.js` and `render-occupation.js` outline and hatch occupied territory within `historicalSource.territoryOwnerIds`. `admin-regions.js` and `render-admin-regions.js` lazily load Natural Earth admin-1 borders (`assets/geodata/admin1/`) as a reference overlay on Earth maps, not as simulation provinces.
 - Source data, licenses and required attributions are in `assets/scenarios/*/README.md`, `assets/geodata/admin1/README.md` and `docs/GEOGRAPHIC-DATA.md`. The DeepState and OpenStreetMap/Overture credits shown under the scenario cards are license requirements: keep them visible.
 
-**Other subsystems.** Editor (`editor*.js`), community sharing via Firebase (`community-*.js`, `firebase.js`), i18n (`i18n.js`, `translations.js`), preferences/settings, and in-game performance profiling (`performance-*.js`).
+**Other subsystems.** Editor (`editor*.js`), i18n (`i18n.js`, `translations.js`), preferences/settings, and in-game performance profiling (`performance-*.js`).
 
 ## Known state and performance
 
-- The scenario menu exposes Modern World 2026 (political geography from a pinned Overture release, no live frontlines; also the Modern Day card in the Choose Era menu) and Ukraine 2023 · Eurasia (approximate 2023-01-01 control, fictional armies). Both were ported from the Bald1nh0/moder-wars fork. The 2022 Modern Day data remains for the benchmark, country import and as the Ukraine build input, but is no longer offered in the menus. Older era data, thumbnails, hidden cards, and dormant handlers still exist in the code and are not supported eras.
-- `docs/PERFORMANCE-AUDIT.md` records measured CPU bottlenecks: per-unit enemy scans in `ground-unit.js`, proposal scoring in `ai-plan-execution.js` (proposal generation is now budgeted across ticks; see `docs/army-ai.md`), and full-world frontier scans in `frontline-core.js`. Check it before doing performance work, and measure with `scripts/profile-performance.mjs`.
+- The scenario menu exposes Modern World 2026 (political geography from a pinned Overture release, no live frontlines; also the Modern Day card in the Choose Era menu) and Ukraine 2023 · Eurasia (approximate 2023-01-01 control, fictional armies). Both were ported from the Bald1nh0/moder-wars fork. The compiled 2022 Modern Day package remains for the benchmark and country import, but is not offered in the menus. Its source JSON is the build input for the 2026, Ukraine and title-backdrop builds and lives gzipped in `source-data/` (read it with `scripts/source-data.mjs`); it is not under `assets/`, so it never deploys. The old WW1/WW2 eras were removed.
+- The game has no online features. Player-chosen images load as data URLs and the custom soundtrack is kept in Cache Storage (`src/local-files.js`). Do not add network backends.
+- Measured CPU bottlenecks: per-unit enemy scans in `ground-unit.js`, proposal scoring in `ai-plan-execution.js` (proposal generation is now budgeted across ticks; see `docs/army-ai.md`), and full-world frontier scans in `frontline-core.js`. Measure with `scripts/profile-performance.mjs` before and after performance work.
