@@ -21,10 +21,16 @@ assert.equal(isSimulationPhaseDue(Number.POSITIVE_INFINITY, 30, 11), false);
 const clean = decideRenderAdmission({ visualDirty: false, force: true });
 assert.equal(clean.admit, false);
 assert.equal(clean.reason, "clean");
-const normal = decideRenderAdmission({ simulationWorkMs: 12, simulationBudgetMs: 12 });
+const normal = decideRenderAdmission({
+	simulationWorkMs: 12,
+	simulationBudgetMs: 12,
+});
 assert.equal(normal.admit, true);
 assert.equal(normal.reason, "within-budget");
-const busy = decideRenderAdmission({ simulationWorkMs: 13, simulationBudgetMs: 12 });
+const busy = decideRenderAdmission({
+	simulationWorkMs: 13,
+	simulationBudgetMs: 12,
+});
 assert.equal(busy.admit, false);
 assert.equal(busy.reason, "simulation-over-budget");
 
@@ -33,20 +39,39 @@ for (const commitFlags of [
 	new Set(["territory", "field", ""]),
 	{ territory: true, field: 1, ignored: false },
 ]) {
-	const committed = decideRenderAdmission({ simulationWorkMs: 13, commitFlags });
+	const committed = decideRenderAdmission({
+		simulationWorkMs: 13,
+		commitFlags,
+	});
 	assert.equal(committed.admit, false);
 	assert.equal(committed.reason, "commit-frame");
 	assert.deepEqual(committed.commitFlags, ["field", "territory"]);
-	const forced = decideRenderAdmission({ simulationWorkMs: 13, commitFlags, force: true });
+	const forced = decideRenderAdmission({
+		simulationWorkMs: 13,
+		commitFlags,
+		force: true,
+	});
 	assert.equal(forced.admit, true);
 	assert.equal(forced.reason, "forced");
-	const bounded = decideRenderAdmission({ simulationWorkMs: 13, commitFlags, framesSinceRender: 2 });
+	const bounded = decideRenderAdmission({
+		simulationWorkMs: 13,
+		commitFlags,
+		framesSinceRender: 2,
+	});
 	assert.equal(bounded.admit, true);
 	assert.equal(bounded.reason, "max-deferral");
 }
-assert.deepEqual(decideRenderAdmission({ commitFlags: true }).commitFlags, ["commit"]);
-assert.equal(decideRenderAdmission({ simulationWorkMs: 100, framesSinceRender: 1 }).admit, false);
-assert.equal(decideRenderAdmission({ simulationWorkMs: 100, maxDeferredFrames: 0 }).admit, true);
+assert.deepEqual(decideRenderAdmission({ commitFlags: true }).commitFlags, [
+	"commit",
+]);
+assert.equal(
+	decideRenderAdmission({ simulationWorkMs: 100, framesSinceRender: 1 }).admit,
+	false,
+);
+assert.equal(
+	decideRenderAdmission({ simulationWorkMs: 100, maxDeferredFrames: 0 }).admit,
+	true,
+);
 const normalized = decideRenderAdmission({
 	simulationWorkMs: -1,
 	simulationBudgetMs: Number.NaN,

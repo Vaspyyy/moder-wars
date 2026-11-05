@@ -85,8 +85,12 @@ const cancellable = createDeterministicJob({
 	id: "coast-reset",
 	totalItems: 3,
 	processRange: () => {},
-	onComplete: () => { completed = true; },
-	onCancel: (job) => { cancellationReason = job.metadata.cancelReason; },
+	onComplete: () => {
+		completed = true;
+	},
+	onCancel: (job) => {
+		cancellationReason = job.metadata.cancelReason;
+	},
 });
 const cancellationQueue = createDeterministicJobQueue({ itemBudget: 1 });
 cancellationQueue.enqueue(cancellable);

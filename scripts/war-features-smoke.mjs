@@ -51,12 +51,22 @@ import { createTinySimulationState } from "./simulation-fixture.mjs";
 			if (expected) assert.deepEqual(first, expected);
 			else expected = first;
 		}
-		const { loadRiverLines } = await import("../src/river-lines.js?download-retry");
+		const { loadRiverLines } = await import(
+			"../src/river-lines.js?download-retry"
+		);
 		console.warn = () => {};
 		globalThis.fetch = async () => new Response(null, { status: 503 });
-		assert.equal(await loadRiverLines(), null, "unavailable rivers do not stop a war");
+		assert.equal(
+			await loadRiverLines(),
+			null,
+			"unavailable rivers do not stop a war",
+		);
 		globalThis.fetch = async () => new Response(decoded);
-		assert.deepEqual(await loadRiverLines(), expected, "a later war retries failed downloads");
+		assert.deepEqual(
+			await loadRiverLines(),
+			expected,
+			"a later war retries failed downloads",
+		);
 	} finally {
 		globalThis.fetch = originalFetch;
 		console.warn = originalWarn;
@@ -191,7 +201,10 @@ function lineWorld(width = 40, height = 40, res = 0.25) {
 				c = Math.floor((lng + 180) / res);
 			return r >= 0 && r < height && c >= 0 && c < width ? r * width + c : -1;
 		},
-		point: (r, c) => ({ lat: (r + 0.5) * res - 90, lng: (c + 0.5) * res - 180 }),
+		point: (r, c) => ({
+			lat: (r + 0.5) * res - 90,
+			lng: (c + 0.5) * res - 180,
+		}),
 	};
 }
 
@@ -263,7 +276,10 @@ function lineWorld(width = 40, height = 40, res = 0.25) {
 	assert.equal(operation.trapped, 1);
 	assert.ok(operation.pocketCells.includes(20 * 40 + 21));
 	for (const point of operation.shoulders)
-		assert.equal(world.dominantSideMap[world.getGridIndex(point.lat, point.lng)], 0);
+		assert.equal(
+			world.dominantSideMap[world.getGridIndex(point.lat, point.lng)],
+			0,
+		);
 	assert.equal(armyPocketClosed(world, 0, operation), false);
 	for (const cell of operation.closureCells) world.dominantSideMap[cell] = 0;
 	assert.equal(armyPocketClosed(world, 0, operation), true);
@@ -276,7 +292,9 @@ function lineWorld(width = 40, height = 40, res = 0.25) {
 
 // Defensive lines scale damage taken by the defender; peace offers use ticks.
 {
-	const core = createSimulationCore(createTinySimulationState({ paused: true }));
+	const core = createSimulationCore(
+		createTinySimulationState({ paused: true }),
+	);
 	const { state } = core;
 	const attacker = { kind: "navy" };
 	assert.equal(state.formationDamage(10, attacker, { lineDefense: 0.6 }), 6);

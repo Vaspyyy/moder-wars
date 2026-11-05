@@ -80,7 +80,9 @@ for (let trial = 0; trial < 40; trial++) {
 			case 5:
 				for (let index = 0; index < 3; index++) {
 					reference[index].phase = cached[index].phase = choose([
-						"ATTACKING", "REGROUPING", "WITHDRAWING",
+						"ATTACKING",
+						"REGROUPING",
+						"WITHDRAWING",
 					]);
 				}
 				break;
@@ -123,7 +125,13 @@ for (const resolution of [0.05, 0.15, 0.25, 1]) {
 	const gridHeight = 21;
 	const landMask = new Uint8Array(gridWidth * gridHeight);
 	const dominantSideMap = new Int8Array(landMask.length);
-	const frame = { CONFIG: { GRID_RES: resolution }, gridWidth, gridHeight, landMask, dominantSideMap };
+	const frame = {
+		CONFIG: { GRID_RES: resolution },
+		gridWidth,
+		gridHeight,
+		landMask,
+		dominantSideMap,
+	};
 	for (let trial = 0; trial < 150; trial++) {
 		for (let index = 0; index < landMask.length; index++) {
 			landMask[index] = choose([0, 1, 1]);
@@ -140,25 +148,52 @@ for (const resolution of [0.05, 0.15, 0.25, 1]) {
 					if (nr === row && nc === col) continue;
 					if (nr < 0 || nr >= gridHeight || nc < 0 || nc >= gridWidth) continue;
 					const index = nr * gridWidth + nc;
-					if (landMask[index] > 0 && dominantSideMap[index] === sideIndex) reference++;
+					if (landMask[index] > 0 && dominantSideMap[index] === sideIndex)
+						reference++;
 				}
 			}
-			assert.equal(countNearbyFriendlySupplyCells(frame, gridIndex, sideIndex), Math.min(8, reference));
+			assert.equal(
+				countNearbyFriendlySupplyCells(frame, gridIndex, sideIndex),
+				Math.min(8, reference),
+			);
 		}
 	}
 }
 
 // One scoring batch calculates coalition strength once, while independent scores
 // remain fresh. Use every strategy and plan type, with naval landing urgency.
-const types = ["CAPTURE_CITY", "ENCIRCLE", "PUSH_FRONT", "DEFEND", "NAVAL_INVASION", "NAVAL_SUPPLY", "COASTAL_DEFENSE", "NEUTRAL_GARRISON", "TRANSPORT"];
+const types = [
+	"CAPTURE_CITY",
+	"ENCIRCLE",
+	"PUSH_FRONT",
+	"DEFEND",
+	"NAVAL_INVASION",
+	"NAVAL_SUPPLY",
+	"COASTAL_DEFENSE",
+	"NEUTRAL_GARRISON",
+	"TRANSPORT",
+];
 let powerCalls = 0;
 let enemyPowerCalls = 0;
 const plannerContext = {
 	sides: [[{ id: 1, strategy: "BALANCED" }], [{ id: 2 }]],
 	latestCountryStats: new Map([[1, { units: 2400 }]]),
-	_tickUnitsBySide: [Array.from({ length: 2400 }, (_, id) => ({ id, health: 100, deployTicks: 0, power: 1 }))],
-	operationalUnitPower: (unit) => { powerCalls++; return unit.power; },
-	getKnownEnemyPowerForSide: () => { enemyPowerCalls++; return 1200; },
+	_tickUnitsBySide: [
+		Array.from({ length: 2400 }, (_, id) => ({
+			id,
+			health: 100,
+			deployTicks: 0,
+			power: 1,
+		})),
+	],
+	operationalUnitPower: (unit) => {
+		powerCalls++;
+		return unit.power;
+	},
+	getKnownEnemyPowerForSide: () => {
+		enemyPowerCalls++;
+		return 1200;
+	},
 	_navalPlan: [null, { phase: "LANDING", target: { lat: 0, lng: 0 } }],
 	areSidesHostile: (left, right) => left !== right,
 	getGridIndex: () => 0,
@@ -170,24 +205,43 @@ const planner = createAiPlanner(plannerContext);
 const proposals = Array.from({ length: 40 }, (_, index) => ({
 	type: types[index % types.length],
 	target: { lat: index, lng: 0, isCapital: index % 3 === 0 },
-	geographicData: { reachesTarget: index % 2 === 0, minLandDist: index, minSeaDist: index + 1 },
+	geographicData: {
+		reachesTarget: index % 2 === 0,
+		minLandDist: index,
+		minSeaDist: index + 1,
+	},
 	riskAssessment: { ourForcesNear: index + 1, enemyForcesNear: 3 },
 	threatScore: 0.7,
 	borderLength: 10,
 	strandedCount: 6,
 }));
-for (const strategy of ["BLITZ", "AGGRESSIVE", "BALANCED", "DEFENSIVE", "TURTLE"]) {
+for (const strategy of [
+	"BLITZ",
+	"AGGRESSIVE",
+	"BALANCED",
+	"DEFENSIVE",
+	"TURTLE",
+]) {
 	plannerContext.sides[0][0].strategy = strategy;
 	const independent = proposals.map((proposal) => structuredClone(proposal));
 	const batched = proposals.map((proposal) => structuredClone(proposal));
 	powerCalls = enemyPowerCalls = 0;
-	const expected = independent.map((proposal) => planner.scoreProposal(proposal, 0));
+	const expected = independent.map((proposal) =>
+		planner.scoreProposal(proposal, 0),
+	);
 	assert.equal(powerCalls, 2400 * 40);
 	assert.equal(enemyPowerCalls, 40);
 	powerCalls = enemyPowerCalls = 0;
 	const batch = {};
-	assert.deepEqual(batched.map((proposal) => planner.scoreProposal(proposal, 0, batch)), expected);
-	assert.deepEqual(batched, independent, "scores and diagnostic breakdowns match");
+	assert.deepEqual(
+		batched.map((proposal) => planner.scoreProposal(proposal, 0, batch)),
+		expected,
+	);
+	assert.deepEqual(
+		batched,
+		independent,
+		"scores and diagnostic breakdowns match",
+	);
 	assert.equal(powerCalls, 2400);
 	assert.equal(enemyPowerCalls, 1);
 }
@@ -200,10 +254,19 @@ assert.equal(freshProposal.scoreBreakdown.globalForceRatio, 2409 / 1200);
 // instead of repulsion. Mixed forces, combat, fractional weights and partial
 // radius overlaps retain exactly the ordinary traversal and pair statistics.
 function visitFriendlyPair(left, right, distanceSq) {
-	const skips = (unit) => unit.navalAssigned || unit.supplyAssigned || unit.coastalAssigned;
+	const skips = (unit) =>
+		unit.navalAssigned || unit.supplyAssigned || unit.coastalAssigned;
 	if (!skips(left)) left._tickLocalAllyCount += right._tickAllyWeight || 1;
 	if (!skips(right)) right._tickLocalAllyCount += left._tickAllyWeight || 1;
-	if ((left._taskForceUid && left._taskForceUid === right._taskForceUid && !left._tickHasNearbyHostile && !right._tickHasNearbyHostile) || distanceSq >= 0.45 ** 2 || distanceSq <= 0.00001) return;
+	if (
+		(left._taskForceUid &&
+			left._taskForceUid === right._taskForceUid &&
+			!left._tickHasNearbyHostile &&
+			!right._tickHasNearbyHostile) ||
+		distanceSq >= 0.45 ** 2 ||
+		distanceSq <= 0.00001
+	)
+		return;
 	const distance = Math.sqrt(distanceSq);
 	const dLat = left.lat - right.lat;
 	let dLng = left.lng - right.lng;
@@ -220,28 +283,75 @@ function visitFriendlyPair(left, right, distanceSq) {
 		right.repulsionVector.lng -= dLng / distance;
 	}
 }
-for (const situation of ["dense", "cross-cell", "seam", "mixed", "hostile", "fractional", "radius", "assigned", "custom-filter"]) {
+for (const situation of [
+	"dense",
+	"cross-cell",
+	"seam",
+	"mixed",
+	"hostile",
+	"fractional",
+	"radius",
+	"assigned",
+	"custom-filter",
+]) {
 	const units = Array.from({ length: 100 }, (_, id) => ({
-		id, sideIndex: 0, lat: 0.01 + (id % 10) * 0.001, lng: 0.01 + Math.floor(id / 10) * 0.001,
-		_taskForceUid: "one", _tickHasNearbyHostile: false,
-		_tickAllyWeight: 1, _tickLocalAllyCount: 1, repulsionVector: null,
+		id,
+		sideIndex: 0,
+		lat: 0.01 + (id % 10) * 0.001,
+		lng: 0.01 + Math.floor(id / 10) * 0.001,
+		_taskForceUid: "one",
+		_tickHasNearbyHostile: false,
+		_tickAllyWeight: 1,
+		_tickLocalAllyCount: 1,
+		repulsionVector: null,
 	}));
-	if (situation === "cross-cell") for (const unit of units) unit.lng += unit.id < 50 ? 0.56 : 0.61;
-	if (situation === "seam") for (const unit of units) unit.lng = unit.id < 50 ? 179.98 : -179.98;
+	if (situation === "cross-cell")
+		for (const unit of units) unit.lng += unit.id < 50 ? 0.56 : 0.61;
+	if (situation === "seam")
+		for (const unit of units) unit.lng = unit.id < 50 ? 179.98 : -179.98;
 	if (situation === "mixed") units[0]._taskForceUid = "two";
 	if (situation === "hostile") units[0]._tickHasNearbyHostile = true;
 	if (situation === "fractional") units[0]._tickAllyWeight = 0.333;
-	if (situation === "radius") for (const unit of units) unit.lng += unit.id < 50 ? 0 : 0.59;
-	if (situation === "assigned") for (const unit of units.filter((unit) => unit.id % 3 === 0)) unit.navalAssigned = true;
+	if (situation === "radius")
+		for (const unit of units) unit.lng += unit.id < 50 ? 0 : 0.59;
+	if (situation === "assigned")
+		for (const unit of units.filter((unit) => unit.id % 3 === 0))
+			unit.navalAssigned = true;
 	const reference = structuredClone(units);
 	const options = { radiusCells: 1, radiusSq: 0.6 ** 2 };
-	if (situation === "custom-filter") options.acceptPair = (left, right) => (left.id + right.id) % 2 === 0;
-	const expected = forEachUnorderedNeighborPair(buildTacticalGrid(reference), 0, visitFriendlyPair, options);
-	const result = forEachUnorderedNeighborPair(buildTacticalGrid(units), 0, visitFriendlyPair, { ...options, aggregateCellPair: aggregateTaskForceCellPair });
-	assert.deepEqual(units, reference, `${situation}: preserve exact density and repulsion`);
+	if (situation === "custom-filter")
+		options.acceptPair = (left, right) => (left.id + right.id) % 2 === 0;
+	const expected = forEachUnorderedNeighborPair(
+		buildTacticalGrid(reference),
+		0,
+		visitFriendlyPair,
+		options,
+	);
+	const result = forEachUnorderedNeighborPair(
+		buildTacticalGrid(units),
+		0,
+		visitFriendlyPair,
+		{ ...options, aggregateCellPair: aggregateTaskForceCellPair },
+	);
+	assert.deepEqual(
+		units,
+		reference,
+		`${situation}: preserve exact density and repulsion`,
+	);
 	assert.equal(result.candidatePairs, expected.candidatePairs);
 	assert.equal(result.acceptedPairs, expected.acceptedPairs);
-	if (["dense", "cross-cell", "seam", "assigned"].includes(situation)) assert.ok(result.aggregatedPairs > 0, `${situation}: actually reduce pair work`);
-	if (["mixed", "hostile", "fractional", "custom-filter"].includes(situation)) assert.equal(result.aggregatedPairs, 0, `${situation}: preserve ordinary traversal`);
+	if (["dense", "cross-cell", "seam", "assigned"].includes(situation))
+		assert.ok(
+			result.aggregatedPairs > 0,
+			`${situation}: actually reduce pair work`,
+		);
+	if (["mixed", "hostile", "fractional", "custom-filter"].includes(situation))
+		assert.equal(
+			result.aggregatedPairs,
+			0,
+			`${situation}: preserve ordinary traversal`,
+		);
 }
-console.log("AI performance checks passed: 1,200 cache sequences, 1,200 supply classifications, BFS reuse, batched scores, and exact dense pair aggregation");
+console.log(
+	"AI performance checks passed: 1,200 cache sequences, 1,200 supply classifications, BFS reuse, batched scores, and exact dense pair aggregation",
+);

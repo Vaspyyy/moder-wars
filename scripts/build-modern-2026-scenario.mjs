@@ -1,11 +1,11 @@
-import { readWorldMap2022 } from "./source-data.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { gzipSync, gunzipSync } from "node:zlib";
+import { gunzipSync, gzipSync } from "node:zlib";
 import { encodeScenario } from "../src/scenario-codec.js";
+import { readWorldMap2022 } from "./source-data.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const sourcePath = path.join(

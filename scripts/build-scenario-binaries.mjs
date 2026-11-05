@@ -1,17 +1,21 @@
-import fs from "node:fs";
 import { createHash } from "node:crypto";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
-import { writeUkraine2023Scenario } from "./build-ukraine-scenario.mjs";
-import { writeModern2026Scenario } from "./build-modern-2026-scenario.mjs";
 import { encodeScenario } from "../src/scenario-codec.js";
+import { writeModern2026Scenario } from "./build-modern-2026-scenario.mjs";
+import { writeUkraine2023Scenario } from "./build-ukraine-scenario.mjs";
 import { readWorldMap2022Bytes } from "./source-data.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const outputDir = path.join(root, "assets/maps/compiled");
 const scenarios = [
-	["world-map-2022.json.gz", "world-map-2022-v3.mwsc.gz", readWorldMap2022Bytes],
+	[
+		"world-map-2022.json.gz",
+		"world-map-2022-v3.mwsc.gz",
+		readWorldMap2022Bytes,
+	],
 ];
 
 fs.mkdirSync(outputDir, { recursive: true });

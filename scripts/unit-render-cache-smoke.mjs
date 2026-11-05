@@ -32,7 +32,12 @@ function createSurfaceFactory(created) {
 const spriteLayer = {};
 const spriteSources = [];
 const createSpriteSurface = createSurfaceFactory(spriteSources);
-const flag = { complete: true, naturalWidth: 80, naturalHeight: 40, src: "flag-a" };
+const flag = {
+	complete: true,
+	naturalWidth: 80,
+	naturalHeight: 40,
+	src: "flag-a",
+};
 const firstSprite = getUnitFlagSprite(
 	spriteLayer,
 	flag,
@@ -48,9 +53,14 @@ assert.strictEqual(
 	"the same source and marker dimensions reuse the sprite",
 );
 assert.equal(spriteSources.length, 1);
-const bakedBorder = firstSprite.surface.calls.find(([name]) => name === "strokeRect");
+const bakedBorder = firstSprite.surface.calls.find(
+	([name]) => name === "strokeRect",
+);
 assert.ok(bakedBorder);
-assert.ok(bakedBorder[1] > 0 && bakedBorder[2] > 0, "sprite gutter keeps the full border inside its canvas");
+assert.ok(
+	bakedBorder[1] > 0 && bakedBorder[2] > 0,
+	"sprite gutter keeps the full border inside its canvas",
+);
 assert.equal(bakedBorder[3], 14);
 assert.equal(bakedBorder[4], 9);
 
@@ -64,7 +74,12 @@ assert.notStrictEqual(
 	firstSprite,
 	"a DPR change gets a pixel-density-specific sprite",
 );
-const otherFlag = { complete: true, naturalWidth: 80, naturalHeight: 40, src: "flag-b" };
+const otherFlag = {
+	complete: true,
+	naturalWidth: 80,
+	naturalHeight: 40,
+	src: "flag-b",
+};
 assert.notStrictEqual(
 	getUnitFlagSprite(spriteLayer, otherFlag, 14, 9, 1, createSpriteSurface),
 	firstSprite,
@@ -92,7 +107,10 @@ assert.notStrictEqual(
 );
 
 const editedCanvasFlag = { width: 80, height: 40 };
-assert.ok(isRenderFlagReady(editedCanvasFlag), "canvas flags are valid sources without an Image.complete property");
+assert.ok(
+	isRenderFlagReady(editedCanvasFlag),
+	"canvas flags are valid sources without an Image.complete property",
+);
 const editedBefore = getUnitFlagSprite(
 	spriteLayer,
 	editedCanvasFlag,
@@ -110,9 +128,17 @@ const editedAfter = getUnitFlagSprite(
 	1,
 	createSpriteSurface,
 );
-assert.notStrictEqual(editedAfter, editedBefore, "an in-place canvas edit can invalidate its old sprite");
+assert.notStrictEqual(
+	editedAfter,
+	editedBefore,
+	"an in-place canvas edit can invalidate its old sprite",
+);
 assert.ok(invalidateUnitFlagSprites(spriteLayer) > 0);
-assert.equal(spriteLayer._unitFlagSpriteCache.entries.size, 0, "full invalidation drops all cached sprites");
+assert.equal(
+	spriteLayer._unitFlagSpriteCache.entries.size,
+	0,
+	"full invalidation drops all cached sprites",
+);
 
 const loadingImage = { complete: false, naturalWidth: 0, naturalHeight: 0 };
 const createdBeforeLoad = spriteSources.length;
@@ -121,11 +147,17 @@ assert.equal(
 	null,
 	"incomplete images use the caller's fallback marker",
 );
-assert.equal(spriteSources.length, createdBeforeLoad, "loading sources do not allocate blank sprites");
+assert.equal(
+	spriteSources.length,
+	createdBeforeLoad,
+	"loading sources do not allocate blank sprites",
+);
 loadingImage.complete = true;
 loadingImage.naturalWidth = 80;
 loadingImage.naturalHeight = 40;
-assert.ok(getUnitFlagSprite(spriteLayer, loadingImage, 14, 9, 1, createSpriteSurface));
+assert.ok(
+	getUnitFlagSprite(spriteLayer, loadingImage, 14, 9, 1, createSpriteSurface),
+);
 
 for (let index = 0; index < 300; index++)
 	getUnitFlagSprite(
@@ -143,18 +175,22 @@ assert.ok(
 assert.ok(spriteLayer._unitFlagSpriteCache.pixels <= 4_000_000);
 
 function makeDrawContext(calls) {
-	return new Proxy({}, {
-		get(_target, key) {
-			if (key === "drawImage") return (...args) => calls.push(args);
-			if (key === "measureText") return (text) => ({ width: String(text).length * 5 });
-			if (key === "createRadialGradient")
-				return () => ({ addColorStop() {} });
-			return () => {};
+	return new Proxy(
+		{},
+		{
+			get(_target, key) {
+				if (key === "drawImage") return (...args) => calls.push(args);
+				if (key === "measureText")
+					return (text) => ({ width: String(text).length * 5 });
+				if (key === "createRadialGradient")
+					return () => ({ addColorStop() {} });
+				return () => {};
+			},
+			set(_target, _key, _value) {
+				return true;
+			},
 		},
-		set(_target, _key, _value) {
-			return true;
-		},
-	});
+	);
 }
 
 const variableUnit = {
@@ -178,7 +214,9 @@ const ordinaryUnit = {
 };
 const unitBucket = [variableUnit, ordinaryUnit];
 const bounds = {
-	pad() { return this; },
+	pad() {
+		return this;
+	},
 	getWest: () => -1,
 	getEast: () => 1,
 	getSouth: () => -1,
@@ -186,8 +224,18 @@ const bounds = {
 };
 const mainDrawCalls = [];
 const unitSurfaces = [];
-const countryFlag = { complete: true, naturalWidth: 80, naturalHeight: 40, src: "country" };
-const allianceFlag = { complete: true, naturalWidth: 60, naturalHeight: 30, src: "alliance" };
+const countryFlag = {
+	complete: true,
+	naturalWidth: 80,
+	naturalHeight: 40,
+	src: "country",
+};
+const allianceFlag = {
+	complete: true,
+	naturalWidth: 60,
+	naturalHeight: 30,
+	src: "alliance",
+};
 const pendingFlag = {
 	complete: false,
 	naturalWidth: 0,
@@ -200,7 +248,7 @@ const countryMetadata = [
 	{ id: 2, allianceFlagTempFlag: allianceFlag },
 ];
 let badgeCalls = 0;
-let paintedBadgeTexts = [];
+const paintedBadgeTexts = [];
 let requestedRenders = 0;
 let zoom = 6;
 const frame = {
@@ -262,13 +310,19 @@ const unitLayer = {};
 const paint = () => drawUnits.call(unitLayer, frame);
 
 paint();
-assert.equal(unitSurfaces.length, 1, "units with the same flag share one presized sprite");
+assert.equal(
+	unitSurfaces.length,
+	1,
+	"units with the same flag share one presized sprite",
+);
 assert.equal(
 	mainDrawCalls.filter(([image]) => image === unitSurfaces[0]).length,
 	2,
 	"each unit composites the cached sprite",
 );
-const firstSpriteDraw = mainDrawCalls.find(([image]) => image === unitSurfaces[0]);
+const firstSpriteDraw = mainDrawCalls.find(
+	([image]) => image === unitSurfaces[0],
+);
 assert.equal(firstSpriteDraw.length, 5);
 assert.equal(
 	firstSpriteDraw[3] * frame.dpr,
@@ -278,14 +332,26 @@ assert.equal(
 assert.equal(badgeCalls, 1);
 paint();
 assert.equal(unitSurfaces.length, 1, "a repeated paint reuses the flag sprite");
-assert.equal(badgeCalls, 1, "a repeated paint reuses the computed personnel badge");
+assert.equal(
+	badgeCalls,
+	1,
+	"a repeated paint reuses the computed personnel badge",
+);
 
 zoom = 7;
 paint();
-assert.equal(unitSurfaces.length, 2, "a zoom change builds the requested marker size");
+assert.equal(
+	unitSurfaces.length,
+	2,
+	"a zoom change builds the requested marker size",
+);
 frame.dpr = 2;
 paint();
-assert.equal(unitSurfaces.length, 3, "a DPR change rebuilds the sprite at its new pixel density");
+assert.equal(
+	unitSurfaces.length,
+	3,
+	"a DPR change rebuilds the sprite at its new pixel density",
+);
 
 variableUnit.personnel = 3500;
 paint();
@@ -299,30 +365,54 @@ paint();
 assert.equal(badgeCalls, 4, "health changes invalidate a health-derived badge");
 frame.CONFIG.UNIT_TO_SOLDIER_RATIO = 2000;
 paint();
-assert.equal(badgeCalls, 5, "reference personnel changes invalidate badge strength and text");
+assert.equal(
+	badgeCalls,
+	5,
+	"reference personnel changes invalidate badge strength and text",
+);
 assert.ok(paintedBadgeTexts.includes("2.5×"));
 const badgeDrawCount = paintedBadgeTexts.length;
 variableUnit.personnel = 1100;
 paint();
 assert.equal(badgeCalls, 6);
-assert.equal(paintedBadgeTexts.length, badgeDrawCount, "standard strength remains below the existing display threshold");
+assert.equal(
+	paintedBadgeTexts.length,
+	badgeDrawCount,
+	"standard strength remains below the existing display threshold",
+);
 variableUnit.personnel = 2400;
 paint();
 assert.equal(badgeCalls, 7);
-assert.equal(paintedBadgeTexts.length, badgeDrawCount + 1, "reinforced strength remains visible");
+assert.equal(
+	paintedBadgeTexts.length,
+	badgeDrawCount + 1,
+	"reinforced strength remains visible",
+);
 
 countryMetadata[0].tempFlag = pendingFlag;
 const surfacesBeforeLoad = unitSurfaces.length;
 paint();
-assert.equal(unitSurfaces.length, surfacesBeforeLoad, "pending flags keep the colored fallback");
+assert.equal(
+	unitSurfaces.length,
+	surfacesBeforeLoad,
+	"pending flags keep the colored fallback",
+);
 assert.equal(requestedRenders, 0);
 pendingFlag.complete = true;
 pendingFlag.naturalWidth = 80;
 pendingFlag.naturalHeight = 40;
 pendingFlag.onload();
-assert.equal(requestedRenders, 1, "an asynchronous flag load requests a new paint");
+assert.equal(
+	requestedRenders,
+	1,
+	"an asynchronous flag load requests a new paint",
+);
 paint();
-assert.equal(unitSurfaces.length, surfacesBeforeLoad + 1, "the loaded flag receives a cached sprite");
+assert.equal(
+	unitSurfaces.length,
+	surfacesBeforeLoad + 1,
+	"the loaded flag receives a cached sprite",
+);
 
 const liveCanvasFlag = { width: 80, height: 40 };
 countryMetadata[0].tempFlag = liveCanvasFlag;
@@ -355,21 +445,47 @@ assert.ok(unitLayer._unitStrengthBadgeCache instanceof WeakMap);
 const badgeCallsBeforeRemoval = badgeCalls;
 unitBucket.splice(unitBucket.indexOf(variableUnit), 1);
 paint();
-assert.equal(badgeCalls, badgeCallsBeforeRemoval, "removed units no longer participate in badge lookup");
+assert.equal(
+	badgeCalls,
+	badgeCallsBeforeRemoval,
+	"removed units no longer participate in badge lookup",
+);
 
 // The merged GPU path shares main's flag resolution and load notification but
 // leaves presized Canvas sprites to the fallback renderer.
 const markers = [];
-const gpuLayer = { _gpu: { active: true, beginMarkers() {}, endMarkers() {}, marker(unit, source) { markers.push([unit.id, source]); return true; } } };
+const gpuLayer = {
+	_gpu: {
+		active: true,
+		beginMarkers() {},
+		endMarkers() {},
+		marker(unit, source) {
+			markers.push([unit.id, source]);
+			return true;
+		},
+	},
+};
 const gpuSurfaceCount = unitSurfaces.length;
 const gpuDrawCount = mainDrawCalls.length;
 drawUnits.call(gpuLayer, frame);
 assert.deepEqual(markers, [[ordinaryUnit.id, liveCanvasFlag]]);
-assert.equal(unitSurfaces.length, gpuSurfaceCount, "GPU flags do not also build Canvas sprites");
-assert.equal(mainDrawCalls.length, gpuDrawCount, "GPU markers do not also paint fallback flags");
+assert.equal(
+	unitSurfaces.length,
+	gpuSurfaceCount,
+	"GPU flags do not also build Canvas sprites",
+);
+assert.equal(
+	mainDrawCalls.length,
+	gpuDrawCount,
+	"GPU markers do not also paint fallback flags",
+);
 gpuLayer._gpu.active = false;
 gpuLayer._gpu.marker = () => false;
 drawUnits.call(gpuLayer, frame);
-assert.equal(unitSurfaces.length, gpuSurfaceCount + 1, "Canvas fallback retains the new sprite cache");
+assert.equal(
+	unitSurfaces.length,
+	gpuSurfaceCount + 1,
+	"Canvas fallback retains the new sprite cache",
+);
 
 console.log("Unit sprite and badge cache smoke checks passed");

@@ -1,4 +1,9 @@
 import assert from "node:assert/strict";
+import { createAiRuntime } from "../src/ai-runtime.js";
+import {
+	advanceAiTaskForce,
+	createAiTaskForce,
+} from "../src/ai-task-forces.js";
 import {
 	allocateArmyCoverage,
 	buildArmySectors,
@@ -13,18 +18,12 @@ import {
 } from "../src/army-encirclement.js";
 import {
 	ARMY_NAVIGATION,
-	armyDistanceSq,
 	createArmyNavigator,
 	executeArmyOrder,
 } from "../src/army-navigation.js";
-import { createAiRuntime } from "../src/ai-runtime.js";
-import {
-	createAiTaskForce,
-	advanceAiTaskForce,
-} from "../src/ai-task-forces.js";
 import { executeGroundTarget } from "../src/ground-movement.js";
-import { captureSimulationState } from "../src/simulation-protocol.js";
 import { createSimulationCore } from "../src/simulation-core.js";
+import { captureSimulationState } from "../src/simulation-protocol.js";
 import { createTinySimulationState } from "./simulation-fixture.mjs";
 
 function world(width = 40, height = 30, res = 0.5) {
@@ -467,7 +466,7 @@ executeGroundTarget({
 assert.deepEqual({ lat: fighter.lat, lng: fighter.lng }, { lat: 0, lng: 0 });
 
 // Losing an exposed flank cancels an attack; stalls cannot persist forever.
-let stalled = createAiTaskForce({
+const stalled = createAiTaskForce({
 	signature: "stall",
 	phase: "ATTACKING",
 	launchPower: 10,
@@ -555,8 +554,10 @@ const originalRandom = Math.random;
 try {
 	const seededRun = () => {
 		let seed = 77;
-		Math.random = () =>
-			(seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 2 ** 32;
+		Math.random = () => {
+			seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+			return seed / 2 ** 32;
+		};
 		return runReplay();
 	};
 	assert.deepEqual(seededRun(), seededRun());

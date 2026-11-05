@@ -1,4 +1,4 @@
-import { showAlert, showConfirm, showPrompt } from "./dialogs.js";
+import { showAlert, showPrompt } from "./dialogs.js";
 import { COMPILED_SCENARIO_URLS } from "./scenario-codec.js";
 // Controls receive live state and commands; they do not import the application.
 export function createEditorFileControls(runtime) {
