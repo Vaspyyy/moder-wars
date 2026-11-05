@@ -5223,3 +5223,234 @@ div.text-left.card-body {
 	font: 12px monospace;
 	border-radius: 2px;
 }
+
+/* Element styles moved out of HTML templates in scripts. Selectors carry the
+   container id so they win where the inline styles used to. Values that
+   depend on runtime data (side and buff colors) stay inline. */
+
+#manpower-inputs-container div.manpower-side-field {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+#manpower-inputs-container span.manpower-side-label {
+	font-size: 12px;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+#manpower-inputs-container input.manpower-side-input {
+	width: 110px;
+	padding: 4px 6px;
+	background: #2a2a30;
+	border: 1px solid #444;
+	border-radius: 4px;
+	color: #fff;
+	font-size: 12px;
+}
+
+#sides-container .side-header > div.side-header-label {
+	font-size: 12px;
+	font-weight: 900;
+}
+
+#sides-container .side-header > div.side-header-troops {
+	font-size: 12px;
+	color: #777;
+	margin-top: 2px;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+#sides-container .setup-slot div.slot-name {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	align-items: center;
+	justify-content: center;
+	margin-bottom: 5px;
+}
+
+#sides-container .setup-slot div.slot-name-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	justify-content: center;
+}
+
+#sides-container .setup-slot img.slot-flag {
+	width: 22px;
+	height: 13px;
+	object-fit: cover;
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	flex-shrink: 0;
+	border-radius: 1px;
+}
+
+#sides-container .setup-slot span.slot-name-text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+#sides-container .setup-slot div.slot-troops {
+	font-size: 12px;
+	color: #777;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+#sides-container .setup-slot button.mini-btn.buff-toggle-btn {
+	margin-top: 4px;
+	font-size: 12px;
+	padding: 2px 6px;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	justify-content: center;
+}
+
+#sides-container .buff-toggle-btn span.buff-arrow {
+	font-size: 12px;
+}
+
+#sides-container .setup-slot button.mini-btn.add-allies-btn {
+	margin-top: 4px;
+	background: #16a085;
+	font-size: 12px;
+	padding: 2px 6px;
+}
+
+#sides-container .setup-slot button.mini-btn.release-btn {
+	background: #27ae60;
+	font-size: 12px;
+	padding: 2px 6px;
+	margin-top: 4px;
+}
+
+#releasable-list button.menu-card.releasable-card {
+	padding: 10px;
+	width: 100%;
+	text-align: left;
+}
+
+#releasable-list img.releasable-flag {
+	width: 30px;
+	height: 18px;
+	object-fit: cover;
+	border: 1px solid #444;
+	margin-right: 10px;
+}
+
+#releasable-list span.btn-text.releasable-name {
+	font-size: 12px;
+}
+
+div.import-country-card-list-div.import-country-card-list-div--compact {
+	font-size: 11px;
+}
+
+#import-country-card-list div.import-country-flag.import-country-flag--empty {
+	background: #000;
+}
+
+#import-country-card-list div.import-country-info {
+	flex: 1;
+	min-width: 0;
+}
+
+#inspect-buff-btn span.buff-arrow {
+	font-size: 12px;
+}
+
+#inspect-buff-btn span.buff-arrow.buff-arrow--prev {
+	margin-right: 4px;
+}
+
+#inspect-buff-btn span.buff-arrow.buff-arrow--next {
+	margin-left: 4px;
+}
+
+#inspect-buff-btn div.inspect-hidden-buff {
+	margin-top: 4px;
+	font-size: 12px;
+	color: #f1c40f;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+#ally-list div.ally-list-item {
+	font-size: 12px;
+	color: #ccc;
+	margin-bottom: 2px;
+}
+
+#leaderboard-list div.scroller-card.leaderboard-card {
+	padding: 10px;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+#leaderboard-list div.leaderboard-rank {
+	width: 30px;
+	/* biome-ignore lint/a11y/useGenericFontNames: Matches the former inline style exactly. */
+	font-family: "Playfair Display";
+	font-size: 18px;
+}
+
+#leaderboard-list .leaderboard-card > .leaderboard-flag {
+	width: 35px;
+	height: 22px;
+}
+
+#leaderboard-list div.leaderboard-flag.leaderboard-flag--empty {
+	background: #111;
+}
+
+#leaderboard-list div.scroller-card-name.leaderboard-name {
+	flex: 2;
+	font-size: 16px;
+	margin: 0;
+}
+
+#leaderboard-list div.leaderboard-tiles {
+	flex: 1;
+	text-align: right;
+	color: #888;
+	font-size: 12px;
+}
+
+#leaderboard-list div.leaderboard-units {
+	flex: 1;
+	text-align: right;
+	font-weight: bold;
+	font-size: 13px;
+}
+
+/* Reference image handles; the marker element carries .ref-handle or
+   .ref-handle-center. */
+.ref-handle > div.ref-handle-dot {
+	width: 14px;
+	height: 14px;
+	background: #27ae60;
+	border: 2px solid #fff;
+	border-radius: 50%;
+	box-shadow: 0 0 8px rgba(0, 0, 0, 0.6);
+}
+
+.ref-handle-center > div.ref-handle-dot.ref-handle-dot--center {
+	width: 20px;
+	height: 20px;
+	background: #2e86de;
+	border: 2px solid #fff;
+	border-radius: 50%;
+	box-shadow: 0 0 10px rgba(0, 0, 0, 0.7);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: white;
+	font-size: 12px;
+	font-weight: bold;
+}

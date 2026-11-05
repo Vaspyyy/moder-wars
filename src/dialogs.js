@@ -3,6 +3,8 @@
  * only one is open at a time; each call returns a promise that settles when the
  * player answers it. The DOM is built on first use, so importing is browser-free.
  */
+import { el } from "./dom.js";
+
 const queue = [];
 let current = null;
 let elements = null;
@@ -11,27 +13,45 @@ function build() {
 	const overlay = document.createElement("div");
 	overlay.className = "settings-overlay game-dialog-overlay";
 	overlay.style.display = "none";
-	overlay.innerHTML = `
-		<div class="settings-content game-dialog" role="alertdialog" aria-modal="true" aria-labelledby="game-dialog-title" aria-describedby="game-dialog-message">
-			<h2 class="settings-title game-dialog-title" id="game-dialog-title"></h2>
-			<p class="game-dialog-message" id="game-dialog-message"></p>
-			<input class="game-dialog-input" type="text" autocomplete="off" spellcheck="false">
-			<div class="game-dialog-actions">
-				<button type="button" class="start-btn game-dialog-cancel"></button>
-				<button type="button" class="start-btn game-dialog-ok"></button>
-			</div>
-		</div>`;
+	const title = el("h2", {
+		className: "settings-title game-dialog-title",
+		id: "game-dialog-title",
+	});
+	const message = el("p", {
+		className: "game-dialog-message",
+		id: "game-dialog-message",
+	});
+	const input = el("input", {
+		className: "game-dialog-input",
+		attrs: { type: "text", autocomplete: "off", spellcheck: "false" },
+	});
+	const cancel = el("button", {
+		className: "start-btn game-dialog-cancel",
+		attrs: { type: "button" },
+	});
+	const ok = el("button", {
+		className: "start-btn game-dialog-ok",
+		attrs: { type: "button" },
+	});
+	const dialog = el(
+		"div",
+		{
+			className: "settings-content game-dialog",
+			attrs: {
+				role: "alertdialog",
+				"aria-modal": "true",
+				"aria-labelledby": "game-dialog-title",
+				"aria-describedby": "game-dialog-message",
+			},
+		},
+		title,
+		message,
+		input,
+		el("div", { className: "game-dialog-actions" }, cancel, ok),
+	);
+	overlay.appendChild(dialog);
 	document.body.appendChild(overlay);
-	const dialog = overlay.firstElementChild;
-	elements = {
-		overlay,
-		dialog,
-		title: dialog.querySelector(".game-dialog-title"),
-		message: dialog.querySelector(".game-dialog-message"),
-		input: dialog.querySelector(".game-dialog-input"),
-		ok: dialog.querySelector(".game-dialog-ok"),
-		cancel: dialog.querySelector(".game-dialog-cancel"),
-	};
+	elements = { overlay, dialog, title, message, input, ok, cancel };
 	elements.ok.addEventListener("click", () => close(true));
 	elements.cancel.addEventListener("click", () => close(false));
 	// Clicking the backdrop dismisses an alert, but never answers a question.

@@ -1,4 +1,40 @@
 // Dependencies are supplied by the application; this module does not import it.
+import { el } from "./dom.js";
+
+/**
+ * Children of the country inspector's buff button: arrows around the visible
+ * buff label, plus the invisible buff when one is set. The spaces stand in for
+ * the whitespace the old template had between the inline spans.
+ * @param {string} label
+ * @param {string | null} [hiddenLabel]
+ */
+export function buffButtonContent(label, hiddenLabel = null) {
+	const children = [
+		el("span", {
+			className: "buff-arrow buff-arrow--prev",
+			text: "◀",
+			dataset: { dir: "-1" },
+		}),
+		" ",
+		el("span", { className: "buff-label", text: `BUFF: ${label}` }),
+		" ",
+		el("span", {
+			className: "buff-arrow buff-arrow--next",
+			text: "▶",
+			dataset: { dir: "1" },
+		}),
+	];
+	if (hiddenLabel) {
+		children.push(
+			el("div", {
+				className: "inspect-hidden-buff",
+				text: `INVISIBLE BUFF: ${hiddenLabel}`,
+			}),
+		);
+	}
+	return children;
+}
+
 export function createInspectors(runtime) {
 	function openInspector(id) {
 		runtime.editingCountryId = id;
@@ -62,7 +98,7 @@ export function createInspectors(runtime) {
 					}
 				}
 				const btnContainer = document.getElementById("recruit-sides-btns");
-				btnContainer.innerHTML = "";
+				btnContainer.replaceChildren();
 
 				runtime.sides.forEach((_side, idx) => {
 					const isCurrentSide = currentSideIdx === idx;
@@ -166,17 +202,17 @@ export function createInspectors(runtime) {
 		if (runtime.allyList) {
 			const allies = Array.isArray(meta.allies) ? meta.allies : [];
 			if (!allies.length) {
-				runtime.allyList.innerHTML = `<span style="font-size: 12px; color: #666;">No allies set.</span>`;
+				runtime.allyList.replaceChildren(
+					el("span", { className: "ally-list-span", text: "No allies set." }),
+				);
 			} else {
 				const items = allies
 					.map((aid) => runtime.countryMetadata[aid - 1])
 					.filter(Boolean)
-					.map(
-						(m) =>
-							`<div style="font-size: 12px; color:#ccc; margin-bottom:2px;">• ${m.name}</div>`,
-					)
-					.join("");
-				runtime.allyList.innerHTML = items;
+					.map((m) =>
+						el("div", { className: "ally-list-item", text: `• ${m.name}` }),
+					);
+				runtime.allyList.replaceChildren(...items);
 			}
 		}
 
@@ -218,16 +254,12 @@ export function createInspectors(runtime) {
 				runtime.BUFF_METADATA[currentBuff] || runtime.BUFF_METADATA.none;
 			const hMeta =
 				runtime.BUFF_METADATA[currentHidden] || runtime.BUFF_METADATA.none;
-			const hiddenLabel =
-				currentHidden !== "none"
-					? `<div style="margin-top:4px; font-size: 12px; color:#f1c40f; text-transform:uppercase; letter-spacing:0.5px;">INVISIBLE BUFF: ${hMeta.label}</div>`
-					: "";
-			runtime.inspectBuffBtn.innerHTML = `
-            <span class="buff-arrow" data-dir="-1" style="font-size: 12px; margin-right:4px;">◀</span>
-            <span class="buff-label">BUFF: ${bMeta.label}</span>
-            <span class="buff-arrow" data-dir="1" style="font-size: 12px; margin-left:4px;">▶</span>
-            ${hiddenLabel}
-        `;
+			runtime.inspectBuffBtn.replaceChildren(
+				...buffButtonContent(
+					bMeta.label,
+					currentHidden !== "none" ? hMeta.label : null,
+				),
+			);
 			runtime.inspectBuffBtn.style.background = bMeta.color;
 			runtime.inspectBuffBtn.style.color = bMeta.textColor;
 		}
@@ -253,7 +285,9 @@ export function createInspectors(runtime) {
 
 	function refreshCityOwnerSelect(selectedOwnerId) {
 		if (!runtime.cityOwnerSelect) return;
-		runtime.cityOwnerSelect.innerHTML = '<option value="">(None)</option>';
+		runtime.cityOwnerSelect.replaceChildren(
+			el("option", { attrs: { value: "" }, text: "(None)" }),
+		);
 		runtime.countryMetadata.forEach((m) => {
 			if (!m) return;
 			const opt = document.createElement("option");

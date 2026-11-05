@@ -1,5 +1,6 @@
 import { CONFIG } from "./config.js";
 import { showAlert } from "./dialogs.js";
+import { el } from "./dom.js";
 import { beginLoadTrace } from "./load-profiler.js";
 import mapRuntime from "./map-runtime.ts";
 import { normalizeSavedCells } from "./saved-cells.js";
@@ -761,11 +762,13 @@ export function createScenarioLoader(context, loadSession) {
 				context.importCountrySearch.disabled = true;
 			}
 			if (context.importCountryCardList) {
-				context.importCountryCardList.innerHTML = `
-                <div style="font-size:11px; color:#777; text-align:center; padding:10px;">
-                    Failed to load scenario
-                </div>
-            `;
+				context.importCountryCardList.replaceChildren(
+					el("div", {
+						className:
+							"import-country-card-list-div import-country-card-list-div--compact",
+						text: "Failed to load scenario",
+					}),
+				);
 			}
 		}
 	}

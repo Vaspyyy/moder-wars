@@ -10,7 +10,12 @@ const button = {
 		this[name] = value;
 	},
 };
-const note = { hidden: true };
+const note = {
+	hidden: true,
+	replaceChildren(...nodes) {
+		this.children = nodes;
+	},
+};
 const sides = [[{ id: 1 }, { id: 2 }], []];
 const context = vm.createContext({
 	ffaMode: false,
@@ -73,7 +78,11 @@ assert.match(context.statusText.textContent, /Maximum 2 sides/);
 class Node {
 	constructor() {
 		this.children = [];
-		this.style = {};
+		this.style = {
+			setProperty(name, value) {
+				this[name] = value;
+			},
+		};
 		this.dataset = {};
 	}
 	append(...nodes) {
@@ -82,9 +91,11 @@ class Node {
 	appendChild(node) {
 		this.children.push(node);
 	}
-	set innerHTML(value) {
-		this.html = value;
-		this.children = [];
+	replaceChildren(...nodes) {
+		this.children = nodes;
+	}
+	setAttribute(name, value) {
+		this[name] = value;
 	}
 	querySelectorAll() {
 		return [];

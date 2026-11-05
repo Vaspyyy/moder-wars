@@ -1,4 +1,5 @@
 import { showAlert, showConfirm } from "./dialogs.js";
+import { buffButtonContent } from "./inspectors.js";
 import { readFileAsDataUrl } from "./local-files.js";
 // Controls receive live state and commands; they do not import the application.
 export function createInspectorControls(runtime) {
@@ -381,11 +382,9 @@ export function createInspectorControls(runtime) {
 
 				const bMeta =
 					runtime.BUFF_METADATA[nextState] || runtime.BUFF_METADATA.none;
-				runtime.inspectBuffBtn.innerHTML = `
-            <span class="buff-arrow" data-dir="-1" style="font-size: 12px; margin-right:4px;">◀</span>
-            <span class="buff-label">BUFF: ${bMeta.label}</span>
-            <span class="buff-arrow" data-dir="1" style="font-size: 12px; margin-left:4px;">▶</span>
-        `;
+				runtime.inspectBuffBtn.replaceChildren(
+					...buffButtonContent(bMeta.label),
+				);
 				runtime.inspectBuffBtn.style.background = bMeta.color;
 				runtime.inspectBuffBtn.style.color = bMeta.textColor;
 

@@ -1,5 +1,6 @@
 import { createConflictPresentation } from "./conflict-presentation.js";
 import { showConfirm } from "./dialogs.js";
+import { el } from "./dom.js";
 import {
 	createPresentationScheduler,
 	createUnitSpatialMirror,
@@ -628,7 +629,6 @@ const applicationRuntime = createLiveContext(
 		sidesContainer: () => sidesContainer,
 		estimateUnitsForCountry: () => estimateUnitsForCountry,
 		openReleaseModal: () => openReleaseModal,
-		escapeHtml: () => escapeHtml,
 		importScenarioCountriesCache: () => importScenarioCountriesCache,
 		refHandles: () => refHandles,
 		isInsideWorldBoxLatLng: () => isInsideWorldBoxLatLng,
@@ -1762,15 +1762,6 @@ let _jsZipPromise = null;
 async function getJSZip() {
 	_jsZipPromise ||= import("jszip").then((module) => module.default);
 	return _jsZipPromise;
-}
-
-export function escapeHtml(s) {
-	return String(s)
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;")
-		.replace(/'/g, "&#39;");
 }
 
 /**
@@ -3013,32 +3004,45 @@ export function renderImportCountryCards(filterText = "") {
 	);
 
 	if (!filtered.length) {
-		importCountryCardList.innerHTML = `
-            <div style="font-size: 12px; color:#777; text-align:center; padding:10px;">
-                No countries match that search.
-            </div>
-        `;
+		importCountryCardList.replaceChildren(
+			el("div", {
+				className: "import-country-card-list-div",
+				text: "No countries match that search.",
+			}),
+		);
 		return;
 	}
 
-	importCountryCardList.innerHTML = filtered
-		.map((c) => {
+	importCountryCardList.replaceChildren(
+		...filtered.map((c) => {
 			const selectedClass = c.id === selectedImportCountryId ? " selected" : "";
 			const tilesLabel = c.tiles.toLocaleString();
-			const flagHtml = c.flagUrl
-				? `<img src="${c.flagUrl}" class="import-country-flag">`
-				: `<div class="import-country-flag" style="background:#000;"></div>`;
-			return `
-            <div class="import-country-card${selectedClass}" data-country-id="${c.id}">
-                ${flagHtml}
-                <div style="flex:1; min-width:0;">
-                    <div class="import-country-name">${c.name}</div>
-                    <div class="import-country-tiles">${tilesLabel} tiles</div>
-                </div>
-            </div>
-        `;
-		})
-		.join("");
+			return el(
+				"div",
+				{
+					className: `import-country-card${selectedClass}`,
+					dataset: { countryId: c.id },
+				},
+				c.flagUrl
+					? el("img", {
+							className: "import-country-flag",
+							props: { src: c.flagUrl },
+						})
+					: el("div", {
+							className: "import-country-flag import-country-flag--empty",
+						}),
+				el(
+					"div",
+					{ className: "import-country-info" },
+					el("div", { className: "import-country-name", text: c.name }),
+					el("div", {
+						className: "import-country-tiles",
+						text: `${tilesLabel} tiles`,
+					}),
+				),
+			);
+		}),
+	);
 
 	// Wire selection handlers
 	importCountryCardList
@@ -3411,15 +3415,26 @@ export function updateTutorialUI() {
 		tutorialOverlay.style.paddingRight = "0";
 	}
 
-	tutorialStepContainer.innerHTML = `
-        <div class="tutorial-step">
-            <div class="tutorial-header">
-                <span class="tutorial-icon">${step.icon}</span>
-                <h2 class="tutorial-title">${step.title}</h2>
-            </div>
-            <div class="tutorial-body">${step.content}</div>
-        </div>
-    `;
+	// Step text is a constant above; <b>…</b> marks bold runs. Build the runs as
+	// nodes rather than parsing the string as HTML.
+	const tutorialBody = el("div", { className: "tutorial-body" });
+	step.content.split(/<b>|<\/b>/).forEach((part, i) => {
+		if (part) tutorialBody.append(i % 2 ? el("b", { text: part }) : part);
+	});
+	tutorialStepContainer.replaceChildren(
+		el(
+			"div",
+			{ className: "tutorial-step" },
+			el(
+				"div",
+				{ className: "tutorial-header" },
+				el("span", { className: "tutorial-icon", text: step.icon }),
+				" ",
+				el("h2", { className: "tutorial-title", text: step.title }),
+			),
+			tutorialBody,
+		),
+	);
 
 	tutorialPrevBtn.style.visibility =
 		currentTutorialStep === 0 ? "hidden" : "visible";
@@ -3433,12 +3448,13 @@ export function updateTutorialUI() {
 	tutorialNextBtn.disabled = needsAction;
 	tutorialNextBtn.style.opacity = needsAction ? "0.5" : "1";
 
-	tutorialDotsContainer.innerHTML = activeTutorialSet
-		.map(
-			(_, i) =>
-				`<div class="dot ${i === currentTutorialStep ? "active" : ""}"></div>`,
-		)
-		.join("");
+	tutorialDotsContainer.replaceChildren(
+		...activeTutorialSet.map((_, i) =>
+			el("div", {
+				className: `dot ${i === currentTutorialStep ? "active" : ""}`,
+			}),
+		),
+	);
 
 	if (step.actionRequired === "LOAD_MAP") {
 		tutorialNextBtn.onclick = () => {
@@ -3598,33 +3614,51 @@ export function rebuildStatsPanel() {
 		.filter((x) => x.countries.length > 0);
 	if (activeSides.length < 2) return;
 
-	let gridHtml = "";
+	const gridNodes = [];
 	activeSides.forEach((s, pos) => {
 		const main = s.countries[0];
 		const name =
 			s.countries.length > 1
 				? `${main.name} +${s.countries.length - 1}`
 				: main.name || `Side ${String.fromCharCode(65 + s.idx)}`;
-		if (pos > 0) gridHtml += `<div class="stats-vs">VS</div>`;
-		gridHtml += `<div class="side-stats" data-side-idx="${s.idx}">
-			<div class="stat-name hud-side-accent" data-sidename="${s.idx}">${name}</div>
-            <div class="stat-metrics">
-				<div class="metric"><span class="metric-label">PERSONNEL</span><span class="metric-value hud-side-accent" data-sidesoldiers="${s.idx}">0</span></div>
-                <div class="metric"><span class="metric-label">CITIES</span><span class="metric-value" data-sidecities="${s.idx}">0</span></div>
-				<div class="metric"><span class="metric-label">MOMENTUM</span><span class="metric-value metric-value--momentum" data-sidemomentum="${s.idx}">◆ STALEMATE</span></div>
-            </div>
-        </div>`;
+		if (pos > 0)
+			gridNodes.push(el("div", { className: "stats-vs", text: "VS" }));
+		gridNodes.push(
+			el(
+				"div",
+				{
+					className: "side-stats",
+					dataset: { sideIdx: s.idx },
+					style: { "--side-color": sideColors[s.idx].replace(rgbaRe, "1)") },
+				},
+				el("div", {
+					className: "stat-name hud-side-accent",
+					dataset: { sidename: s.idx },
+					text: name,
+				}),
+				el(
+					"div",
+					{ className: "stat-metrics" },
+					statsMetric(
+						"PERSONNEL",
+						"metric-value hud-side-accent",
+						{
+							sidesoldiers: s.idx,
+						},
+						"0",
+					),
+					statsMetric("CITIES", "metric-value", { sidecities: s.idx }, "0"),
+					statsMetric(
+						"MOMENTUM",
+						"metric-value metric-value--momentum",
+						{ sidemomentum: s.idx },
+						"◆ STALEMATE",
+					),
+				),
+			),
+		);
 	});
-	statsGrid.innerHTML = gridHtml;
-	for (const s of activeSides) {
-		const sideStats = /** @type {HTMLElement | null} */ (
-			statsGrid.querySelector(`[data-side-idx="${s.idx}"]`)
-		);
-		sideStats?.style.setProperty(
-			"--side-color",
-			sideColors[s.idx].replace(rgbaRe, "1)"),
-		);
-	}
+	statsGrid.replaceChildren(...gridNodes);
 
 	_cachedSoldierEls = [];
 	_cachedCityEls = [];
@@ -3650,7 +3684,7 @@ export function rebuildStatsPanel() {
 	}
 
 	if (unitCountsDisplay) {
-		unitCountsDisplay.innerHTML = "";
+		unitCountsDisplay.replaceChildren();
 		const spans = [];
 		for (let i = 0; i < sides.length; i++) {
 			if (i > 0) {
@@ -3672,34 +3706,45 @@ export function rebuildStatsPanel() {
 		_cachedUnitCountSpans = spans;
 	}
 
-	let tugHtml = '<div class="tug-bar">';
-	activeSides.forEach((s) => {
-		tugHtml += `<div class="tug-segment" data-tugsegment="${s.idx}"></div>`;
-	});
-	tugHtml += '</div><div class="tug-labels">';
-	activeSides.forEach((s) => {
-		tugHtml += `<span class="control-pct hud-side-accent" data-sidecontrol="${s.idx}">${Math.floor(100 / activeSides.length)}%</span>`;
-	});
-	tugHtml += "</div>";
-	tugOfWarContainer.innerHTML = tugHtml;
-	for (const s of activeSides) {
-		const segment = /** @type {HTMLElement | null} */ (
-			tugOfWarContainer.querySelector(`[data-tugsegment="${s.idx}"]`)
-		);
-		segment?.style.setProperty(
-			"--side-color",
-			sideColors[s.idx].replace(rgbaRe, "0.85)"),
-		);
-		if (segment)
-			segment.style.width = `${Math.floor(100 / activeSides.length)}%`;
-		const label = /** @type {HTMLElement | null} */ (
-			tugOfWarContainer.querySelector(`[data-sidecontrol="${s.idx}"]`)
-		);
-		label?.style.setProperty(
-			"--side-color",
-			sideColors[s.idx].replace(rgbaRe, "1)"),
-		);
-	}
+	const tugWidth = `${Math.floor(100 / activeSides.length)}%`;
+	tugOfWarContainer.replaceChildren(
+		el(
+			"div",
+			{ className: "tug-bar" },
+			...activeSides.map((s) =>
+				el("div", {
+					className: "tug-segment",
+					dataset: { tugsegment: s.idx },
+					style: {
+						"--side-color": sideColors[s.idx].replace(rgbaRe, "0.85)"),
+						width: tugWidth,
+					},
+				}),
+			),
+		),
+		el(
+			"div",
+			{ className: "tug-labels" },
+			...activeSides.map((s) =>
+				el("span", {
+					className: "control-pct hud-side-accent",
+					dataset: { sidecontrol: s.idx },
+					text: tugWidth,
+					style: { "--side-color": sideColors[s.idx].replace(rgbaRe, "1)") },
+				}),
+			),
+		),
+	);
+}
+
+/** One label/value pair in the side stats grid. */
+function statsMetric(label, valueClass, dataset, value) {
+	return el(
+		"div",
+		{ className: "metric" },
+		el("span", { className: "metric-label", text: label }),
+		el("span", { className: valueClass, dataset, text: value }),
+	);
 }
 export const treatyAlert = document.getElementById("treaty-alert");
 
@@ -5919,16 +5964,17 @@ export function updateLoop() {
 					primaryActiveCountryBySide.set(entry.side, entry.id);
 				}
 			}
-			let html = "";
+			const sideLists = [];
+			let sideList = null;
 			let currentSide = -1;
 			for (const e of entriesFlat) {
 				const casualties = countryCasualties.get(e.id) || 0;
 				const formatted = influenceLayer.formatSoldiers(casualties);
 				const isDefeated = !activeIds.has(e.id);
 				if (e.side !== currentSide) {
-					if (currentSide !== -1) html += `</div>`;
 					currentSide = e.side;
-					html += `<div class="casualty-side-list">`;
+					sideList = el("div", { className: "casualty-side-list" });
+					sideLists.push(sideList);
 				}
 				const isPrimary = primaryActiveCountryBySide.get(e.side) === e.id;
 				const meta = countryMetadata[e.id - 1];
@@ -5938,27 +5984,39 @@ export function updateLoop() {
 						flagSrc = meta.tempFlag.toDataURL();
 					} catch (_e) {}
 				}
-				const safeFlagSrc = escapeHtml(flagSrc);
-				html += `<div class="casualty-item ${isPrimary ? "primary" : "secondary"} ${isDefeated ? "is-defeated" : ""}" data-ctype="cas-item" data-cid="${e.id}" data-side="${currentSide}">
-					<img src="${safeFlagSrc}" class="cas-flag ${isPrimary ? "" : "small"}" alt="" loading="lazy" decoding="async">
-					<div class="cas-value hud-side-accent" data-cval="${e.id}">${formatted}</div>`;
+				const item = el(
+					"div",
+					{
+						className: `casualty-item ${isPrimary ? "primary" : "secondary"} ${isDefeated ? "is-defeated" : ""}`,
+						dataset: { ctype: "cas-item", cid: e.id, side: currentSide },
+						style: {
+							"--side-color": sideColors[currentSide].replace(rgbaRe, "1)"),
+						},
+					},
+					el("img", {
+						className: `cas-flag ${isPrimary ? "" : "small"}`,
+						attrs: { alt: "", loading: "lazy", decoding: "async" },
+						props: { src: String(flagSrc) },
+					}),
+					el("div", {
+						className: "cas-value hud-side-accent",
+						dataset: { cval: e.id },
+						text: formatted,
+					}),
+				);
 				if (isPrimary) {
 					const mpRemaining = Math.max(0, sideSoldiers[currentSide]);
-					html += `<span class="cas-side-mp hud-side-accent" data-sidemp="${currentSide}">${influenceLayer.formatSoldiers(mpRemaining)}</span>`;
+					item.append(
+						el("span", {
+							className: "cas-side-mp hud-side-accent",
+							dataset: { sidemp: currentSide },
+							text: influenceLayer.formatSoldiers(mpRemaining),
+						}),
+					);
 				}
-				html += `</div>`;
+				sideList.append(item);
 			}
-			if (currentSide !== -1) html += `</div>`;
-			casualtyContainer.innerHTML = html;
-			/** @type {NodeListOf<HTMLElement>} */ (
-				casualtyContainer.querySelectorAll(".casualty-item[data-side]")
-			).forEach((item) => {
-				const sideIdx = Number(item.getAttribute("data-side"));
-				item.style.setProperty(
-					"--side-color",
-					sideColors[sideIdx].replace(rgbaRe, "1)"),
-				);
-			});
+			casualtyContainer.replaceChildren(...sideLists);
 			_casualtyValueEls = {};
 			casualtyContainer.querySelectorAll("[data-cval]").forEach((el) => {
 				_casualtyValueEls[el.getAttribute("data-cval")] = el;
@@ -6069,25 +6127,33 @@ export function openLeaderboard() {
 		return a.name.localeCompare(b.name);
 	});
 
-	leaderboardList.innerHTML = rows
-		.map((row, idx) => {
+	leaderboardList.replaceChildren(
+		...rows.map((row, idx) => {
 			const unitsLabel =
 				row.estUnits > 0 ? influenceLayer.formatSoldiers(row.estUnits) : "—";
 			const tilesLabel = row.tiles.toLocaleString();
 			const rank = idx + 1;
-			const flagSrc = row.flagUrl ? escapeHtml(row.flagUrl) : "";
-			const safeName = escapeHtml(row.name);
-			return `
-            <div class="scroller-card" style="padding: 10px; display: flex; align-items: center; gap: 10px;">
-                <div class="leaderboard-rank" style="width: 30px; font-family: 'Playfair Display'; font-size: 18px;">${rank}</div>
-                ${flagSrc ? `<img src="${flagSrc}" class="leaderboard-flag" style="width: 35px; height: 22px;">` : `<div class="leaderboard-flag" style="width: 35px; height: 22px; background:#111;"></div>`}
-                <div class="scroller-card-name" style="flex: 2; font-size: 16px; margin: 0;">${safeName}</div>
-                <div class="leaderboard-tiles" style="flex: 1; text-align: right; color: #888; font-size: 12px;">${tilesLabel}</div>
-                <div class="leaderboard-units" style="flex: 1; text-align: right; font-weight: bold; font-size: 13px;">${unitsLabel}</div>
-            </div>
-        `;
-		})
-		.join("");
+			return el(
+				"div",
+				{ className: "scroller-card leaderboard-card" },
+				el("div", { className: "leaderboard-rank", text: rank }),
+				row.flagUrl
+					? el("img", {
+							className: "leaderboard-flag",
+							props: { src: String(row.flagUrl) },
+						})
+					: el("div", {
+							className: "leaderboard-flag leaderboard-flag--empty",
+						}),
+				el("div", {
+					className: "scroller-card-name leaderboard-name",
+					text: String(row.name),
+				}),
+				el("div", { className: "leaderboard-tiles", text: tilesLabel }),
+				el("div", { className: "leaderboard-units", text: unitsLabel }),
+			);
+		}),
+	);
 
 	leaderboardOverlay.style.display = "flex";
 }

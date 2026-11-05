@@ -1,4 +1,5 @@
 import { showAlert } from "./dialogs.js";
+import { el } from "./dom.js";
 // Dependencies are supplied by the application; this module does not import it.
 export function createCountryImportMenu(runtime) {
 	function loadCountryFromPC() {
@@ -168,11 +169,12 @@ export function createCountryImportMenu(runtime) {
 			return;
 		const metaList = runtime.importScenarioBuffer.metadata || [];
 		if (!metaList.length) {
-			runtime.importCountryCardList.innerHTML = `
-            <div style="font-size: 12px; color:#777; text-align:center; padding:10px;">
-                No countries found in scenario
-            </div>
-        `;
+			runtime.importCountryCardList.replaceChildren(
+				el("div", {
+					className: "import-country-card-list-div",
+					text: "No countries found in scenario",
+				}),
+			);
 			runtime.importCountrySearch.disabled = true;
 			runtime.selectedImportCountryId = null;
 			runtime.importScenarioCountriesCache = [];
@@ -204,11 +206,12 @@ export function createCountryImportMenu(runtime) {
 			.sort((a, b) => b.tiles - a.tiles || a.name.localeCompare(b.name));
 
 		if (!sortedMeta.length) {
-			runtime.importCountryCardList.innerHTML = `
-            <div style="font-size: 12px; color:#777; text-align:center; padding:10px;">
-                No countries with territory found
-            </div>
-        `;
+			runtime.importCountryCardList.replaceChildren(
+				el("div", {
+					className: "import-country-card-list-div",
+					text: "No countries with territory found",
+				}),
+			);
 			runtime.importCountrySearch.disabled = true;
 			runtime.selectedImportCountryId = null;
 			runtime.importScenarioCountriesCache = [];
@@ -268,11 +271,12 @@ export function createCountryImportMenu(runtime) {
 			runtime.importCountrySearch.disabled = true;
 		}
 		if (runtime.importCountryCardList) {
-			runtime.importCountryCardList.innerHTML = `
-            <div style="font-size: 12px; color:#777; text-align:center; padding:10px;">
-                Choose a source scenario first
-            </div>
-        `;
+			runtime.importCountryCardList.replaceChildren(
+				el("div", {
+					className: "import-country-card-list-div",
+					text: "Choose a source scenario first",
+				}),
+			);
 		}
 		runtime.importCountryModal.style.display = "flex";
 	}

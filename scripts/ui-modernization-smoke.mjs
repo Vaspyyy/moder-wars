@@ -77,7 +77,7 @@ const clickHandler = audio.slice(audio.indexOf("// Global click listener"));
 assert.doesNotMatch(clickHandler, /requestFullscreen/);
 assert.doesNotMatch(main + controls, /addEventListener\("dblclick"/);
 assert.ok(!html.includes('id="war-desk-overview-tab"'));
-assert.ok(setup.includes('<details class="country-configuration">'));
+assert.match(setup, /el\(\s*"details",\s*\{ className: "country-configuration" \}/);
 assert.ok(
 	setup.includes("expandedCountries.has("),
 	"keep Configure expanded while editing country options",

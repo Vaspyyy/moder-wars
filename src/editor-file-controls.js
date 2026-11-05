@@ -1,4 +1,5 @@
 import { showAlert, showPrompt } from "./dialogs.js";
+import { el } from "./dom.js";
 import { COMPILED_SCENARIO_URLS } from "./scenario-codec.js";
 // Controls receive live state and commands; they do not import the application.
 export function createEditorFileControls(runtime) {
@@ -193,11 +194,12 @@ export function createEditorFileControls(runtime) {
 					runtime.importCountrySearch.disabled = true;
 				}
 				if (runtime.importCountryCardList) {
-					runtime.importCountryCardList.innerHTML = `
-                <div style="font-size: 12px; color:#777; text-align:center; padding:10px;">
-                    Loading…
-                </div>
-            `;
+					runtime.importCountryCardList.replaceChildren(
+						el("div", {
+							className: "import-country-card-list-div",
+							text: "Loading…",
+						}),
+					);
 				}
 
 				if (val === "file") {
@@ -217,8 +219,12 @@ export function createEditorFileControls(runtime) {
 				};
 				const url = keyToUrl[val];
 				if (!url) {
-					runtime.importScenarioSelect.innerHTML =
-						'<option value="">Unknown source selection</option>';
+					runtime.importScenarioSelect.replaceChildren(
+						el("option", {
+							attrs: { value: "" },
+							text: "Unknown source selection",
+						}),
+					);
 					runtime.importScenarioSelect.disabled = true;
 					return;
 				}

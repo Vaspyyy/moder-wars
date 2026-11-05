@@ -41,6 +41,7 @@ const APP_SHELL_PATHS = [
 	"src/developer-controls.js",
 	"src/defensive-lines.js",
 	"src/dialogs.js",
+	"src/dom.js",
 	"src/editor-commands.js",
 	"src/editor-file-controls.js",
 	"src/editor-tool-controls.js",
