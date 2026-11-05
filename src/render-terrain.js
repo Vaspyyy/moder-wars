@@ -36,7 +36,7 @@ export function drawTerrain(frame) {
 	} = frame;
 	const { ctx } = frame;
 	if (renderStatic) {
-		if (viewMode === "FLAG" || showCountryLabels) {
+		if (viewMode === "FLAG") {
 			if (!this._regionChunkCache)
 				this._regionChunkCache = createRegionChunkCache();
 			const geometry = this._regionChunkCache.get(frame);
@@ -44,6 +44,29 @@ export function drawTerrain(frame) {
 				regions.length = 0;
 				for (const region of geometry) regions.push(region);
 				this._sourceRegionGeometry = geometry;
+				this._regionsRevision++;
+				this._invalidLayers |= RENDER_LAYERS.LABELS;
+			}
+		}
+		if (showCountryLabels) {
+			if (!this._regionChunkCache)
+				this._regionChunkCache = createRegionChunkCache();
+			// Labels use the whole territory so they stay put while the camera moves.
+			// The world join costs tens of ms, so a running war refreshes it at most
+			// every 1.5 s; label positions then follow conquests in steps.
+			const now = performance.now();
+			const throttled =
+				frame.isWar &&
+				!frame.isPaused &&
+				this._labelRegions &&
+				this._regionChunkCache.worldStale &&
+				now - (this._labelRegionsBuiltAt || 0) < 1500;
+			const labelRegions = throttled
+				? this._labelRegions
+				: this._regionChunkCache.getWorld(frame);
+			if (this._labelRegions !== labelRegions) {
+				this._labelRegions = labelRegions;
+				this._labelRegionsBuiltAt = now;
 				this._regionsRevision++;
 				this._invalidLayers |= RENDER_LAYERS.LABELS;
 			}

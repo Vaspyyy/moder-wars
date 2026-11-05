@@ -69,11 +69,13 @@ function placeLabels(drawing, frame, language) {
 			top: point.y - 9,
 			bottom: point.y + 9,
 		};
+		// Only fully off-screen labels are skipped: hiding labels near the screen
+		// edge made state names pop in and out as the camera moved.
 		if (
-			box.left < 4 ||
-			box.right > mapSize.x - 4 ||
-			box.top < 85 ||
-			box.bottom > mapSize.y - 12
+			box.right < 0 ||
+			box.left > mapSize.x ||
+			box.bottom < 0 ||
+			box.top > mapSize.y
 		)
 			continue;
 		if (
