@@ -68,6 +68,7 @@ const checks = [
 	"tactical-grid",
 	"territory-ledger",
 	"ui-modernization",
+	"flags",
 ];
 // Smokes run elsewhere: this runner, module-graph (below, needs a flag) and
 // build-output (needs dist/, run by `npm run check` after the build).

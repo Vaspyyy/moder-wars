@@ -12,7 +12,7 @@ import { resolveWorkerAssetUrl } from "../src/worker-asset-url.js";
 const features = [
 	{
 		type: "Feature",
-		properties: { NAME: "Reference", ISO_A2: "RF" },
+		properties: { NAME: "Reference", ISO_A2: "NO" },
 		geometry: {
 			type: "Polygon",
 			coordinates: [
@@ -203,7 +203,7 @@ assert.equal(referenceRequests, 1);
 assert.equal(annexed, 1);
 await handlers.flag();
 assert.equal(referenceRequests, 2);
-assert.equal(selectedFlag, "https://flagcdn.com/w160/rf.webp");
+assert.equal(selectedFlag, "assets/flags/no.webp");
 assert.equal(runtime.loadingOverlay.style.display, "none");
 console.log(
 	"Single-worker geography rasterization and editor demand-load checks passed.",

@@ -1,5 +1,6 @@
 import { showAlert } from "./dialogs.js";
 import { el } from "./dom.js";
+import { localizeFlagUrl } from "./flags.js";
 // Dependencies are supplied by the application; this module does not import it.
 export function createCountryImportMenu(runtime) {
 	function loadCountryFromPC() {
@@ -40,7 +41,7 @@ export function createCountryImportMenu(runtime) {
 						data.metadata.color || "rgba(150, 150, 150, 0.5)",
 					),
 					isCustom: true,
-					flagUrl: data.metadata.flagUrl || null,
+					flagUrl: localizeFlagUrl(data.metadata.flagUrl) || null,
 					role: data.metadata.role || "OFFENSE",
 					overlordId: data.metadata.overlordId || null,
 					bounds: {
@@ -194,7 +195,7 @@ export function createCountryImportMenu(runtime) {
 			.map((m) => {
 				const tiles = tileCounts.get(m.id) || 0;
 				// Try to find a flagUrl from metadata if present
-				const flagUrl = m.flagUrl || null;
+				const flagUrl = localizeFlagUrl(m.flagUrl) || null;
 				return {
 					id: m.id,
 					name: m.name || `Country ${m.id}`,

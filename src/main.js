@@ -1615,6 +1615,7 @@ import { getCookie, setCookie } from "./preferences.js";
 
 export { getCookie, setCookie } from "./preferences.js";
 
+import { localFlagUrl } from "./flags.js";
 import { applyLanguage, configureLanguageUi, getTranslation } from "./i18n.js";
 
 export { applyLanguage, getTranslation, TRANSLATIONS } from "./i18n.js";
@@ -1794,7 +1795,7 @@ export function getFlagUrl(code, name) {
 		code = findCodeByName(name);
 	}
 	if (!code || code === "-99") return null;
-	return `https://flagcdn.com/w320/${code.toLowerCase()}.webp`;
+	return localFlagUrl(code);
 }
 
 // biome-ignore lint/complexity/useRegexLiterals: regex literal contains )$ which confuses some parsers

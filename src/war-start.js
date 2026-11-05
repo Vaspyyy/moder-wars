@@ -3,6 +3,7 @@ import {
 	normalizeScenarioDate,
 } from "./country-force-profiles.js";
 import { showAlert } from "./dialogs.js";
+import { localFlagUrl } from "./flags.js";
 import { distributeFormationPersonnel } from "./formation-strength.js";
 import { loadRiverLines, rasterizeRiverMask } from "./river-lines.js";
 // Explicit live context keeps replacements of arrays/state visible across awaits and callbacks.
@@ -337,9 +338,9 @@ export function createWarStart(runtime) {
 					} else {
 						const nameCode = runtime.findCodeByName(c.name);
 						const src = nameCode
-							? `https://flagcdn.com/w80/${nameCode}.webp`
+							? localFlagUrl(nameCode)
 							: c.feature
-								? `https://flagcdn.com/w80/${getCode(c.feature)}.webp`
+								? localFlagUrl(getCode(c.feature))
 								: null;
 						if (src) c.flag.src = src;
 					}

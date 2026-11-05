@@ -53,7 +53,7 @@ During a war, soldier totals appear separately for each home country on each dis
 
 ## Custom Scenarios
 
-Modern Wars can save and load custom scenario files and countries locally. The game has no online features: images, flags and soundtracks you pick stay on your device.
+Modern Wars can save and load custom scenario files and countries locally. The game has no online features: country flags ship with the game, and images, flags and soundtracks you pick stay on your device.
 
 ## Controls
 

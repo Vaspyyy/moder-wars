@@ -61,6 +61,8 @@ const APP_SHELL_PATHS = [
 	"src/influence-runtime.js",
 	"src/inspector-controls.js",
 	"src/inspectors.js",
+	"src/flag-manifest.js",
+	"src/flags.js",
 	"src/load-profiler.js",
 	"src/local-files.js",
 	"src/entry.js",

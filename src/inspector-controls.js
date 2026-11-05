@@ -1,4 +1,5 @@
 import { showAlert, showConfirm } from "./dialogs.js";
+import { localFlagUrl } from "./flags.js";
 import { buffButtonContent } from "./inspectors.js";
 import { readFileAsDataUrl } from "./local-files.js";
 // Controls receive live state and commands; they do not import the application.
@@ -115,7 +116,8 @@ export function createInspectorControls(runtime) {
 				}
 			}
 
-			if (!code) {
+			const flagUrl = code ? localFlagUrl(code) : null;
+			if (!flagUrl) {
 				showAlert(
 					"Could not find a modern flag for '" +
 						name +
@@ -124,7 +126,6 @@ export function createInspectorControls(runtime) {
 				return;
 			}
 
-			const flagUrl = `https://flagcdn.com/w160/${code}.webp`;
 			runtime.updateCountryFlag(runtime.editingCountryId, flagUrl);
 		});
 	}

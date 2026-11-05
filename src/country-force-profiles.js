@@ -88,7 +88,7 @@ export function normalizeCountryIso3(country) {
 		typeof country.flagUrl === "string"
 			? country.flagUrl
 					.match(
-						/^https:\/\/flagcdn\.com\/(?:w\d+\/)?([a-z]{2})\.(?:png|svg)$/i,
+						/^(?:https:\/\/flagcdn\.com\/(?:w\d+\/)?|assets\/flags\/)([a-z]{2})\.(?:png|svg|webp)$/i,
 					)?.[1]
 					?.toUpperCase()
 			: null;

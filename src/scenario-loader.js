@@ -1,6 +1,11 @@
 import { CONFIG } from "./config.js";
 import { showAlert } from "./dialogs.js";
 import { el } from "./dom.js";
+import {
+	localizeFlagUrl,
+	localizeMetaFlags,
+	localizeScenarioFlags,
+} from "./flags.js";
 import { beginLoadTrace } from "./load-profiler.js";
 import mapRuntime from "./map-runtime.ts";
 import { normalizeSavedCells } from "./saved-cells.js";
@@ -415,6 +420,7 @@ export function createScenarioLoader(context, loadSession) {
 					allies: Array.isArray(m.allies) ? m.allies : [],
 				};
 
+				localizeMetaFlags(meta);
 				// Load primary national flag image
 				if (meta.flagUrl) {
 					meta.tempFlag = new Image();
@@ -741,7 +747,7 @@ export function createScenarioLoader(context, loadSession) {
 				throw new Error("Invalid preset structure");
 			}
 			context.setImportScenarioBuffer({
-				metadata: data.metadata,
+				metadata: localizeScenarioFlags(data.metadata),
 				mapData: data.mapData,
 				gridRes: data.gridRes || CONFIG.GRID_RES,
 			});
@@ -792,7 +798,7 @@ export function createScenarioLoader(context, loadSession) {
 					);
 				}
 				context.setImportScenarioBuffer({
-					metadata: decoded.scenario.metadata,
+					metadata: localizeScenarioFlags(decoded.scenario.metadata),
 					mapData,
 					gridRes: decoded.target.gridRes,
 				});
@@ -835,7 +841,7 @@ export function createScenarioLoader(context, loadSession) {
 				sourceMeta.color || "rgba(150,150,150,0.5)",
 			),
 			isCustom: true,
-			flagUrl: sourceMeta.flagUrl || null,
+			flagUrl: localizeFlagUrl(sourceMeta.flagUrl) || null,
 			role: sourceMeta.role || "OFFENSE",
 			overlordId: sourceMeta.overlordId || null,
 			bounds: {

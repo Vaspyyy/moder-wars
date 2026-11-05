@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
 import { CONFIG } from "../src/config.js";
+import {
+	localizeFlagUrl,
+	localizeMetaFlags,
+	localizeScenarioFlags,
+} from "../src/flags.js";
 import { generateScenarioSnapshot } from "../src/scenario-export.js";
 
 function loadFactory(file, name, dependencies = {}) {
@@ -42,6 +47,9 @@ const makeGeography = loadFactory(
 );
 const makeScenario = loadFactory("scenario-loader.js", "createScenarioLoader", {
 	generateScenarioSnapshot,
+	localizeFlagUrl,
+	localizeMetaFlags,
+	localizeScenarioFlags,
 	document: { getElementById: () => ({ value: "110m" }) },
 	alert(message) {
 		throw new Error(message);

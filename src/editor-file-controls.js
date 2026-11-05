@@ -1,5 +1,6 @@
 import { showAlert, showPrompt } from "./dialogs.js";
 import { el } from "./dom.js";
+import { localizeFlagUrl } from "./flags.js";
 import { COMPILED_SCENARIO_URLS } from "./scenario-codec.js";
 // Controls receive live state and commands; they do not import the application.
 export function createEditorFileControls(runtime) {
@@ -316,7 +317,7 @@ export function createEditorFileControls(runtime) {
 										data.metadata.color || "rgba(150,150,150,0.5)",
 									),
 									isCustom: true,
-									flagUrl: data.metadata.flagUrl,
+									flagUrl: localizeFlagUrl(data.metadata.flagUrl),
 									role: data.metadata.role || "OFFENSE",
 									overlordId: data.metadata.overlordId,
 									bounds: {
