@@ -24,12 +24,12 @@
 <div class="scenario-selection-container">
 <div class="selection-header">
 <button class="selection-back-btn" id="close-settings-btn">
-<svg fill="currentColor" style="width:20px;height:20px;" viewbox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"></path></svg>
+<svg class="icon-20" fill="currentColor" viewbox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"></path></svg>
 <span>BACK</span>
 </button>
-<div class="settings-tab-container" style="margin-bottom:0;"><button class="settings-tab-btn active" data-tab="sys">Gameplay</button><button class="settings-tab-btn" data-tab="vis">Display</button><button class="settings-tab-btn" data-tab="aud">Audio</button><button class="settings-tab-btn" data-tab="ui">Interface</button><button class="settings-tab-btn" data-tab="eng">Advanced</button></div>
+<div class="settings-tab-container settings-overlay-div"><button class="settings-tab-btn active" data-tab="sys">Gameplay</button><button class="settings-tab-btn" data-tab="vis">Display</button><button class="settings-tab-btn" data-tab="aud">Audio</button><button class="settings-tab-btn" data-tab="ui">Interface</button><button class="settings-tab-btn" data-tab="eng">Advanced</button></div>
 </div>
-<div class="scenario-scroller-v2" style="padding-top: 10px;">
+<div class="scenario-scroller-v2 settings-overlay-div-2">
 <!-- System Tab -->
 <div class="settings-tab-pane" id="settings-tab-sys"><div class="setting-group">
 <label data-i18n="MAX_UNITS">Max Units (Global)</label>
@@ -49,13 +49,13 @@
 </select>
 <small>How army size is calculated. Balanced uses 50% population + 50% GDP.</small>
 </div><div class="setting-group">
-<label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-<input id="disable-invisible-buffs-checkbox" style="width: 18px; height: 18px; " type="checkbox"/>
+<label class="check-row" style="display: flex">
+<input id="disable-invisible-buffs-checkbox" type="checkbox"/>
 <span>Disable Invisible Buffs Globally</span>
 </label>
 <small>When enabled, hidden buffs are ignored and only visible buffs affect combat.</small>
-</div><div class="setting-group"><label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-<input id="disable-mountains-checkbox" style="width: 18px; height: 18px; " type="checkbox"/>
+</div><div class="setting-group"><label class="check-row" style="display: flex">
+<input id="disable-mountains-checkbox" type="checkbox"/>
 <span data-i18n="DISABLE_MT">Disable Mountains</span>
 </label></div></div>
 <!-- Engine Tab -->
@@ -78,66 +78,66 @@
 <small data-i18n="GRID_SUB">Density affects the smoothness of frontlines.</small>
 </div><div class="setting-group">
 <label>Performance Presets</label>
-<div style="display: flex; gap: 10px;">
-<button class="mini-btn" id="preset-low-btn" style="flex: 1; padding: 10px; ">LOW PERFORMANCE</button>
-<button class="mini-btn" id="preset-default-btn" style="flex: 1; padding: 10px; ">DEFAULT</button>
+<div class="gap-10" style="display: flex">
+<button class="mini-btn" id="preset-low-btn">LOW PERFORMANCE</button>
+<button class="mini-btn" id="preset-default-btn">DEFAULT</button>
 </div>
-<small style="margin-top: 8px;">Instantly adjust all resolution, visual, and unit settings.</small>
+<small class="settings-tab-eng-small">Instantly adjust all resolution, visual, and unit settings.</small>
 </div><button class="mini-btn" id="benchmark-btn">BENCHMARK</button></div>
 <!-- Presets Tab -->
 <!-- Visuals Tab -->
-<div class="settings-tab-pane" id="settings-tab-vis" style="display:none"><div class="setting-group"><label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-<input id="disable-country-gradient-checkbox" style="width: 18px; height: 18px; " type="checkbox"/>
+<div class="settings-tab-pane" id="settings-tab-vis" style="display:none"><div class="setting-group"><label class="check-row" style="display: flex">
+<input id="disable-country-gradient-checkbox" type="checkbox"/>
 <span>Disable Country Gradient</span>
-</label></div><div class="setting-group"><label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-<input checked="" id="show-warplans-checkbox" style="width: 18px; height: 18px; " type="checkbox"/>
+</label></div><div class="setting-group"><label class="check-row" style="display: flex">
+<input checked="" id="show-warplans-checkbox" type="checkbox"/>
 <span data-i18n="SHOW_AI_OPERATIONS">Show AI Operations</span>
-</label></div><div class="setting-group"><label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-<input id="show-army-diagnostics-checkbox" style="width: 18px; height: 18px;" type="checkbox"/>
+</label></div><div class="setting-group"><label class="check-row" style="display: flex">
+<input id="show-army-diagnostics-checkbox" type="checkbox"/>
 <span data-i18n="SHOW_ARMY_DIAGNOSTICS">Show Army Decisions</span>
-</label></div><div class="setting-group"><label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-<input checked="" id="show-labels-checkbox" style="width: 18px; height: 18px; " type="checkbox"/>
+</label></div><div class="setting-group"><label class="check-row" style="display: flex">
+<input checked="" id="show-labels-checkbox" type="checkbox"/>
 <span>Show Country Labels</span>
-</label></div><div class="setting-group"><label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-<input checked="" id="show-admin-regions-checkbox" style="width: 18px; height: 18px;" type="checkbox" aria-describedby="admin-regions-help"/>
+</label></div><div class="setting-group"><label class="check-row" style="display: flex">
+<input checked="" id="show-admin-regions-checkbox" type="checkbox" aria-describedby="admin-regions-help"/>
 <span data-i18n="UI_SHOW_ADMIN_REGIONS">Show regions / oblasts</span>
-</label><small id="admin-regions-help" data-i18n="UI_ADMIN_REGIONS_HELP">Modern administrative borders and names appear when zoomed in on Earth maps. Separate from military control.</small></div><div class="setting-group"><label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-<input checked="" id="show-cities-checkbox" style="width: 18px; height: 18px; " type="checkbox"/>
+</label><small id="admin-regions-help" data-i18n="UI_ADMIN_REGIONS_HELP">Modern administrative borders and names appear when zoomed in on Earth maps. Separate from military control.</small></div><div class="setting-group"><label class="check-row" style="display: flex">
+<input checked="" id="show-cities-checkbox" type="checkbox"/>
 <span>Show Cities</span>
-</label></div><div class="setting-group"><label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-<input id="show-battles-checkbox" style="width: 18px; height: 18px; " type="checkbox"/>
+</label></div><div class="setting-group"><label class="check-row" style="display: flex">
+<input id="show-battles-checkbox" type="checkbox"/>
 <span>Show Battle Visuals</span>
-</label></div><div class="setting-group"><label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-<input id="border-fade-checkbox" style="width: 18px; height: 18px; " type="checkbox"/>
+</label></div><div class="setting-group"><label class="check-row" style="display: flex">
+<input id="border-fade-checkbox" type="checkbox"/>
 <span>Fade Captured Land</span>
-</label></div><div class="setting-group"><label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-<input id="show-alliance-checkbox" style="width: 18px; height: 18px; " type="checkbox"/>
+</label></div><div class="setting-group"><label class="check-row" style="display: flex">
+<input id="show-alliance-checkbox" type="checkbox"/>
 <span>Alliance View</span>
-</label></div><div class="setting-group"><label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-<input id="disable-units-visually-checkbox" style="width: 18px; height: 18px; " type="checkbox"/>
+</label></div><div class="setting-group"><label class="check-row" style="display: flex">
+<input id="disable-units-visually-checkbox" type="checkbox"/>
 <span data-i18n="HIDE_UNITS">Hide Units Visually</span>
-</label></div><div class="setting-group"><label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-<input id="hide-curved-labels-checkbox" style="width: 18px; height: 18px; " type="checkbox"/>
+</label></div><div class="setting-group"><label class="check-row" style="display: flex">
+<input id="hide-curved-labels-checkbox" type="checkbox"/>
 <span>Hide Soldier Labels</span>
 </label></div></div>
 <div class="settings-tab-pane" id="settings-tab-aud" style="display:none"><div class="setting-group">
 <label data-i18n="BG_VOLUME">Background Music Volume</label>
-<div style="display: flex; align-items: center; gap: 10px;">
-<input id="music-volume-slider" max="1" min="0" step="0.01" style="flex: 1; cursor: pointer; " type="range" value="0.15"/>
-<span id="music-vol-val" style="  min-width: 35px; font-family: monospace;">15%</span>
+<div class="row-center-10" style="display: flex">
+<input id="music-volume-slider" max="1" min="0" step="0.01" type="range" value="0.15"/>
+<span id="music-vol-val">15%</span>
 </div>
 </div><div class="setting-group">
 <label>Custom Soundtrack</label>
-<div style="display: flex; flex-direction: column; gap: 8px;">
-<input accept="audio/*" id="custom-track-input" style=" " type="file"/>
-<div style="display: flex; gap: 6px;">
-<button class="mini-btn" id="clear-custom-track-btn" style="flex: 1;   padding: 4px;">Reset to Original</button>
+<div class="settings-tab-aud-div" style="display: flex">
+<input accept="audio/*" id="custom-track-input" type="file"/>
+<div class="settings-tab-aud-div-2" style="display: flex">
+<button class="mini-btn" id="clear-custom-track-btn">Reset to Original</button>
 </div>
-<small style=" ">Uploaded MP3s will replace the standard background loop.</small>
+<small>Pick an audio file to play as background music. It stays on this device.</small>
 </div>
-</div><div class="setting-group" style="display: flex; flex-direction: column; gap: 10px;">
-<label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-<input checked="" id="use-secret-sounds-checkbox" style="width: 18px; height: 18px; " type="checkbox"/>
+</div><div class="setting-group column-10" style="display: flex">
+<label class="check-row" style="display: flex">
+<input checked="" id="use-secret-sounds-checkbox" type="checkbox"/>
 <span>Use Secret Sounds</span>
 </label>
 </div></div>
@@ -159,18 +159,18 @@
 <option value="ar">العربية</option>
 </select>
 </div><div class="setting-group">
-<label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-<input id="use-system-font-checkbox" style="width: 18px; height: 18px; " type="checkbox"/>
+<label class="check-row" style="display: flex">
+<input id="use-system-font-checkbox" type="checkbox"/>
 <span>Use System Default Font</span>
 </label>
 <small>Replaces the Playfair Display title font with your browser's default system font.</small>
 </div><div class="setting-group">
-<label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-<input id="save-skip-checkbox" style="width: 18px; height: 18px; " type="checkbox"/>
+<label class="check-row" style="display: flex">
+<input id="save-skip-checkbox" type="checkbox"/>
 <span>Remember preferences</span>
 </label>
 </div></div>
-<button class="start-btn" id="launch-btn" style="margin-top: 20px; width: 100%;">Save settings</button>
+<button class="start-btn" id="launch-btn">Save settings</button>
 </div>
 </div>
 </div>
@@ -196,7 +196,7 @@
 <div class="scenario-selection-container" id="menu-scenario-selector" style="display: none;">
 <div class="selection-header">
 <button class="selection-back-btn" id="back-to-nav-btn">
-<svg fill="currentColor" style="width:20px;height:20px;" viewbox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"></path></svg>
+<svg class="icon-20" fill="currentColor" viewbox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"></path></svg>
 <span>BACK</span>
 </button>
 <h2 class="selection-title">Choose scenario</h2>
@@ -222,7 +222,7 @@
 <p class="scroller-card-desc"><span data-i18n="UI_MODERN_2026_SOURCE">Modern 2026 geographic data:</span> <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a> · <a href="https://docs.overturemaps.org/guides/divisions/" target="_blank" rel="noopener noreferrer">Overture Maps</a></p>
 <p class="scroller-card-desc"><span data-i18n="UI_UKRAINE_2023_SOURCE">Ukraine 2023 visual reference:</span> <a href="https://deepstatemap.live/" target="_blank" rel="noopener noreferrer">DeepStateMap.live</a></p>
 <p class="title-screen-scenario-hint">Select a scenario, then start.</p>
-<button class="start-btn" id="enter-scenario-btn" style="display:none; margin-top: 20px; animation: fadeIn 0.3s ease-out;">Start scenario</button>
+<button class="start-btn" id="enter-scenario-btn" style="display: none">Start scenario</button>
 </div>
 </div>
 </div>
@@ -231,35 +231,35 @@
 
 
 
-    <div id="fade-transition-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:black; z-index:9999; opacity:0; transition:opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1); pointer-events:none;"></div>
+    <div id="fade-transition-overlay" style="display: none"></div>
 
     <div id="loading-overlay" class="settings-overlay" style="display:none">
         <!-- Standard Generic Loading (Old Look) -->
-        <div id="loading-standard-content" class="settings-content" style="display: flex; flex-direction: column; align-items: center; text-align: center; gap: 15px;">
+        <div id="loading-standard-content" class="settings-content" style="display: flex">
             <div class="loader-spinner"></div>
-            <h2 class="loading-status-text settings-title" style="margin:0;">Loading...</h2>
-            <div class="loading-bar-container" style="width: 100%;">
+            <h2 class="loading-status-text settings-title loading-standard-content-h2">Loading...</h2>
+            <div class="loading-bar-container loading-standard-content-div">
                 <div class="loading-bar-fill-el loading-bar-fill"></div>
             </div>
             <div class="loading-tip-text loading-tip">Initializing satellite systems...</div>
         </div>
 
         <!-- Thematic Scenario Loading (New Look) -->
-        <div id="loading-thematic-content" class="menu-v2-container" style="display:none; pointer-events: none;">
+        <div id="loading-thematic-content" class="menu-v2-container" style="display: none">
             <div class="menu-v2-overlay"></div>
-            <div class="menu-v2-header" style="pointer-events: none;">
+            <div class="menu-v2-header loading-thematic-content-div">
                 <h1 class="menu-v2-title">MODERN WARS</h1>
                 <div class="menu-v2-author">System Loading...</div>
             </div>
-            <div class="menu-v2-nav" style="pointer-events: auto;">
+            <div class="menu-v2-nav loading-thematic-content-div-2">
                 <div class="scenario-selection-container">
                     <div class="selection-header">
                         <h2 class="selection-title">INITIALIZING</h2>
                     </div>
                     <div class="thematic-loading-body">
                         <div class="loader-spinner"></div>
-                        <h2 class="loading-status-text" style="font-size: 32px; margin: 0; color: #fff; text-transform: uppercase; letter-spacing: 1px;">Acquiring Assets...</h2>
-                        <div class="loading-bar-container" style="height: 2px; width: 300px;">
+                        <h2 class="loading-status-text loading-thematic-content-h2">Acquiring Assets...</h2>
+                        <div class="loading-bar-container loading-thematic-content-div-3">
                             <div class="loading-bar-fill-el loading-bar-fill"></div>
                         </div>
                         <div class="loading-tip-text loading-tip">Syncing satellite telemetry for global operations...</div>
@@ -271,43 +271,43 @@
 
     <div class="ui-overlay" style="display:none" id="main-ui">
         <!-- Editor Toolbox -->
-        <div id="editor-toolbox" class="status-panel" style="display:none; margin-bottom: 10px;">
+        <div id="editor-toolbox" class="status-panel" style="display: none">
             <div class="status-left">
-                <div style="display:flex; align-items:center; gap:8px;">
-                    <span style="font-size: 12px; color: #888; letter-spacing: 1px;" data-i18n="EDITOR_TOOLS">EDITOR TOOLS</span>
-                    <div style="display:flex; gap:4px;">
-                        <button id="editor-tools-page-1-btn" class="mini-btn" style="padding:2px 6px; font-size: 12px; background:#2e86de;">P1</button>
-                        <button id="editor-tools-page-2-btn" class="mini-btn" style="padding:2px 6px; font-size: 12px; background:#444;">P2</button>
-                        <button id="editor-tools-page-3-btn" class="mini-btn" style="padding:2px 6px; font-size: 12px; background:#444;">P3</button>
-                        <button id="editor-tools-page-4-btn" class="mini-btn" style="padding:2px 6px; font-size: 12px; background:#444;">City</button>
-                        <button id="editor-tools-page-5-btn" class="mini-btn" style="padding:2px 6px; font-size: 12px; background:#444;">Images</button>
+                <div class="editor-toolbox-div" style="display: flex">
+                    <span class="editor-toolbox-span" data-i18n="EDITOR_TOOLS">EDITOR TOOLS</span>
+                    <div class="gap-4" style="display: flex">
+                        <button id="editor-tools-page-1-btn" class="mini-btn">P1</button>
+                        <button id="editor-tools-page-2-btn" class="mini-btn">P2</button>
+                        <button id="editor-tools-page-3-btn" class="mini-btn">P3</button>
+                        <button id="editor-tools-page-4-btn" class="mini-btn">City</button>
+                        <button id="editor-tools-page-5-btn" class="mini-btn">Images</button>
                     </div>
                 </div>
-                <div style="display: flex; gap: 10px; margin-top: 5px; flex-wrap: wrap;">
+                <div class="editor-toolbox-div-2" style="display: flex">
                     <button id="editor-create-btn" class="mini-btn" data-i18n="NEW_NATION">New Nation</button>
-                    <button id="editor-test-btn" class="mini-btn" style="background: #27ae60;" data-i18n="TEST_SCENARIO">Test Scenario</button>
-                    <button id="editor-save-btn" class="mini-btn" style="background: #8e44ad;" data-i18n="SAVE_PRESET">Save Preset</button>
-                    <button id="editor-load-btn" class="mini-btn" style="background: #2c3e50;" data-i18n="LOAD_PRESET">Load Preset</button>
-                    <button id="editor-save-country-btn" class="mini-btn" style="background: #27ae60;" data-i18n="SAVE_COUNTRY">Save Country</button>
-                    <button id="editor-load-country-btn" class="mini-btn" style="background: #8e44ad;" data-i18n="LOAD_COUNTRY">Load Country</button>
-                    <button id="editor-save-multi-btn" class="mini-btn" style="background: #e67e22;" title="Save all Ctrl-selected countries into one ZIP file.">Save Selected (ZIP)</button>
-                    <button id="editor-save-all-zip-btn" class="mini-btn" style="background: #d35400;" title="Save every country with territory in this scenario into a ZIP file.">Save All (ZIP)</button>
-                    <button id="editor-load-zip-btn" class="mini-btn" style="background: #16a085;" title="Load a ZIP of country files into this scenario.">Load ZIP</button>
-                    <button id="editor-import-country-from-scenario-btn" class="mini-btn" style="background: #2980b9;" title="Import a single country from a built-in era or a saved scenario into this map.">Import from Scenario</button>
+                    <button id="editor-test-btn" class="mini-btn" data-i18n="TEST_SCENARIO">Test Scenario</button>
+                    <button id="editor-save-btn" class="mini-btn" data-i18n="SAVE_PRESET">Save Preset</button>
+                    <button id="editor-load-btn" class="mini-btn" data-i18n="LOAD_PRESET">Load Preset</button>
+                    <button id="editor-save-country-btn" class="mini-btn" data-i18n="SAVE_COUNTRY">Save Country</button>
+                    <button id="editor-load-country-btn" class="mini-btn" data-i18n="LOAD_COUNTRY">Load Country</button>
+                    <button id="editor-save-multi-btn" class="mini-btn" title="Save all Ctrl-selected countries into one ZIP file.">Save Selected (ZIP)</button>
+                    <button id="editor-save-all-zip-btn" class="mini-btn" title="Save every country with territory in this scenario into a ZIP file.">Save All (ZIP)</button>
+                    <button id="editor-load-zip-btn" class="mini-btn" title="Load a ZIP of country files into this scenario.">Load ZIP</button>
+                    <button id="editor-import-country-from-scenario-btn" class="mini-btn" title="Import a single country from a built-in era or a saved scenario into this map.">Import from Scenario</button>
                     <button id="editor-paint-btn" class="mini-btn" style="display:none" data-i18n="PAINT">Paint Borders</button>
-                    <button id="editor-fill-btn" class="mini-btn" style="display:none; background: #d35400;" data-i18n="FILL">Fill</button>
-                    <button id="editor-unclaim-btn" class="mini-btn" style="display:none; background: #34495e;" data-i18n="UNCLAIM">Unclaim Tool</button>
-                    <button id="editor-terrain-btn" class="mini-btn" style="display:none; background: #e67e22;" title="Paint new land or carve oceans.">Terrain Brush</button>
-                    <button id="editor-place-division-btn" class="mini-btn" style="display:none; background:#27ae60;" title="Place a division for the selected nation by clicking on the map.">Place Division</button>
-                    <button id="editor-city-new-btn" class="mini-btn" style="display:none; background:#27ae60;" title="Create a new city by clicking on the map.">New City</button>
-                    <button id="editor-city-clear-btn" class="mini-btn" style="display:none; background:#c0392b;" title="Remove all cities from this scenario.">Clear Cities</button>
-                    <div id="brush-controls" style="display:none; align-items: center; gap: 8px; margin-left: 5px; border-left: 1px solid #444; padding-left: 10px;">
-                        <label style="font-size: 12px; color: #888; text-transform: uppercase;">Brush</label>
-                        <input type="range" id="brush-size-slider" min="0.1" max="3.0" step="0.1" value="0.5" style="width: 60px; height: 4px; cursor: pointer;">
-                        <span id="brush-size-val" style="font-size: 12px; color: #aaa; min-width: 20px;">0.5</span>
+                    <button id="editor-fill-btn" class="mini-btn" style="display: none" data-i18n="FILL">Fill</button>
+                    <button id="editor-unclaim-btn" class="mini-btn" style="display: none" data-i18n="UNCLAIM">Unclaim Tool</button>
+                    <button id="editor-terrain-btn" class="mini-btn" style="display: none" title="Paint new land or carve oceans.">Terrain Brush</button>
+                    <button id="editor-place-division-btn" class="mini-btn" style="display: none" title="Place a division for the selected nation by clicking on the map.">Place Division</button>
+                    <button id="editor-city-new-btn" class="mini-btn" style="display: none" title="Create a new city by clicking on the map.">New City</button>
+                    <button id="editor-city-clear-btn" class="mini-btn" style="display: none" title="Remove all cities from this scenario.">Clear Cities</button>
+                    <div id="brush-controls" style="display: none">
+                        <label class="brush-controls-label">Brush</label>
+                        <input type="range" id="brush-size-slider" min="0.1" max="3.0" step="0.1" value="0.5">
+                        <span id="brush-size-val">0.5</span>
                     </div>
-                    <div id="terrain-controls" style="display:none; align-items: center; gap: 8px; margin-left: 5px; border-left: 1px solid #444; padding-left: 10px;">
-                        <select id="terrain-type-select" class="mini-select" style="width: 70px;">
+                    <div id="terrain-controls" style="display: none">
+                        <select id="terrain-type-select" class="mini-select">
                             <option value="LAND">LAND</option>
                             <option value="DESERT">DESERT</option>
                             <option value="MOUNTAIN">MTN</option>
@@ -316,38 +316,38 @@
                     </div>
 
                     <!-- Page 5: Overlay Tools -->
-                    <div id="overlay-tools" style="display:none; align-items: center; gap: 10px; flex-wrap: wrap;">
-                        <div style="display: flex; flex-direction: column; gap: 4px; border-right: 1px solid #444; padding-right: 10px;">
-                            <label style="font-size: 12px; color: #888;">CUSTOM SATELLITE (BG)</label>
-                            <div style="display: flex; gap: 4px;">
+                    <div id="overlay-tools" style="display: none">
+                        <div class="overlay-tools-div" style="display: flex">
+                            <label class="hint-text">CUSTOM SATELLITE (BG)</label>
+                            <div class="gap-4" style="display: flex">
                                 <input type="file" id="custom-sat-input" accept="image/*" style="display:none;">
-                                <button id="upload-sat-btn" class="mini-btn" style="background:#2e86de; padding:4px 8px;">Upload BG</button>
-                                <button id="clear-sat-btn" class="mini-btn" style="background:#c0392b; padding:4px 8px;">Clear</button>
+                                <button id="upload-sat-btn" class="mini-btn">Upload BG</button>
+                                <button id="clear-sat-btn" class="mini-btn">Clear</button>
                             </div>
                         </div>
-                        <div style="display: flex; flex-direction: column; gap: 4px;">
-                            <label style="font-size: 12px; color: #888;">REFERENCE IMAGE (GUIDE)</label>
-                            <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+                        <div class="overlay-tools-div-2" style="display: flex">
+                            <label class="hint-text">REFERENCE IMAGE (GUIDE)</label>
+                            <div class="overlay-tools-div-3" style="display: flex">
                                 <input type="file" id="ref-image-input" accept="image/*" style="display:none;">
-                                <button id="upload-ref-btn" class="mini-btn" style="background:#27ae60; padding:4px 8px;">Upload Ref</button>
-                                <div style="display:flex; align-items:center; gap:4px;">
-                                    <span style="font-size: 12px; color:#555;">Opacity</span>
-                                    <input type="range" id="ref-opacity-slider" min="0" max="1" step="0.05" value="0.5" style="width:50px; height:4px;">
+                                <button id="upload-ref-btn" class="mini-btn">Upload Ref</button>
+                                <div class="row-center-4" style="display: flex">
+                                    <span class="muted-text">Opacity</span>
+                                    <input type="range" id="ref-opacity-slider" min="0" max="1" step="0.05" value="0.5">
                                 </div>
-                                <div style="display:flex; align-items:center; gap:4px;">
-                                    <span style="font-size: 12px; color:#555;">Scale</span>
-                                    <input type="range" id="ref-scale-slider" min="0.1" max="5" step="0.05" value="1" style="width:50px; height:4px;">
+                                <div class="row-center-4" style="display: flex">
+                                    <span class="muted-text">Scale</span>
+                                    <input type="range" id="ref-scale-slider" min="0.1" max="5" step="0.05" value="1">
                                 </div>
-                                <label style="display:flex; align-items:center; gap:4px; font-size: 12px; color:#777; cursor:pointer;">
-                                    <input type="checkbox" id="ref-above-checkbox" style="width:12px; height:12px;">
+                                <label class="overlay-tools-label" style="display: flex">
+                                    <input type="checkbox" id="ref-above-checkbox">
                                     <span>Draw Above Terrain</span>
                                 </label>
-                                <button id="clear-ref-btn" class="mini-btn" style="background:#c0392b; padding:4px 8px;">Clear</button>
+                                <button id="clear-ref-btn" class="mini-btn">Clear</button>
                             </div>
                         </div>
-                        <div style="display: flex; flex-direction: column; gap: 4px; border-left: 1px solid #444; padding-left: 10px;">
-                            <label style="font-size: 12px; color: #888;">EXPORT TOOLS</label>
-                            <button id="editor-download-map-btn" class="mini-btn" style="background:#8e44ad; padding:4px 8px;" title="Download a high-res PNG of your map's layout and terrain.">Download PNG</button>
+                        <div class="overlay-tools-div-4" style="display: flex">
+                            <label class="hint-text">EXPORT TOOLS</label>
+                            <button id="editor-download-map-btn" class="mini-btn" title="Download a high-res PNG of your map's layout and terrain.">Download PNG</button>
                         </div>
                     </div>
                 </div>
@@ -680,54 +680,54 @@
 
     <!-- Editor Source Modal -->
     <div id="editor-source-modal" class="settings-overlay" style="display:none">
-        <div class="settings-content" style="max-width: 500px;">
+        <div class="settings-content editor-source-modal-div">
             <h2 class="settings-title">CHOOSE TERRAIN SOURCE</h2>
-            <div style="display: grid; grid-template-columns: 1fr; gap: 15px; margin-bottom: 20px;">
-                <button id="choice-source-earth" class="menu-card primary" style="width: 100%; border: 1px solid rgba(255, 71, 87, 0.3);">
+            <div class="editor-source-modal-div-2" style="display: grid">
+                <button id="choice-source-earth" class="menu-card primary">
                     <div class="card-icon">
                         <svg viewBox="0 0 24 24" aria-hidden="true">
                             <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/>
                             <path d="M9 6h2l1 2-2 2 1 2-1 2H7l-1-2 1-2-1-2 3-2zM14 7l3 1v2l-1 2 1 2-1 2h-3l1-3-1-2 1-4z" fill="currentColor"/>
                         </svg>
                     </div>
-                    <div class="card-body" style="text-align: left;">
+                    <div class="card-body text-left">
                         <span class="btn-text">REAL EARTH</span>
                         <span class="btn-sub">Standard Map & Topography</span>
                     </div>
                 </button>
-                <button id="choice-source-blank" class="menu-card" style="width: 100%; border: 1px solid rgba(255,255,255,0.1);">
+                <button id="choice-source-blank" class="menu-card">
                     <div class="card-icon">
                         <svg viewBox="0 0 24 24" aria-hidden="true">
                             <rect x="5" y="5" width="14" height="14" fill="currentColor"/>
                         </svg>
                     </div>
-                    <div class="card-body" style="text-align: left;">
+                    <div class="card-body text-left">
                         <span class="btn-text">BLANK CANVAS</span>
                         <span class="btn-sub">Draw your own world from scratch</span>
                     </div>
                 </button>
             </div>
-            <button id="cancel-source-choice" class="start-btn" style="background: #444;">BACK</button>
+            <button id="cancel-source-choice" class="start-btn">BACK</button>
         </div>
     </div>
 
     <!-- Blank Canvas Size Modal -->
     <div id="blank-size-modal" class="settings-overlay" style="display:none">
-        <div class="settings-content" style="max-width: 400px;">
+        <div class="settings-content max-400">
             <h2 class="settings-title">CANVAS DIMENSIONS</h2>
             <div class="setting-group">
                 <label>Width (Degrees)</label>
-                <input type="number" id="blank-width-input" value="360" min="10" max="360" style="width: 100%; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px;">
+                <input type="number" id="blank-width-input" value="360" min="10" max="360">
                 <small>360 = Full World. Smaller values limit the map.</small>
             </div>
             <div class="setting-group">
                 <label>Height (Degrees)</label>
-                <input type="number" id="blank-height-input" value="180" min="10" max="180" style="width: 100%; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px;">
+                <input type="number" id="blank-height-input" value="180" min="10" max="180">
                 <small>180 = Full World.</small>
             </div>
-            <div style="display: flex; gap: 10px;">
+            <div class="gap-10" style="display: flex">
                 <button id="confirm-blank-size-btn" class="start-btn">Initialize Canvas</button>
-                <button id="cancel-blank-size-btn" class="start-btn" style="background: #444;">Back</button>
+                <button id="cancel-blank-size-btn" class="start-btn">Back</button>
             </div>
         </div>
     </div>
@@ -744,7 +744,7 @@
                 <div class="scenario-selection-container">
                     <div class="selection-header">
                         <button id="map-settings-cancel-btn" class="selection-back-btn">
-                            <svg viewBox="0 0 24 24" fill="currentColor" style="width:20px;height:20px;"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+                            <svg class="icon-20" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
                             <span>BACK</span>
                         </button>
                         <h2 class="selection-title">DIMENSIONS</h2>
@@ -752,26 +752,26 @@
                     <div class="scenario-scroller-v2">
                         <div class="setting-group">
                             <label>Map Name</label>
-                            <input type="text" id="map-settings-name-input" placeholder="e.g. Cold War Europe" style="width: 100%; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px;">
+                            <input type="text" id="map-settings-name-input" placeholder="e.g. Cold War Europe">
                         </div>
                         <div class="setting-group">
                             <label>World Width (Degrees)</label>
-                            <input type="number" id="map-settings-width-input" min="10" max="360" step="1" style="width: 100%; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px;">
+                            <input type="number" id="map-settings-width-input" min="10" max="360" step="1">
                             <small>360 = full longitude wrap. Smaller values confine the playable world.</small>
                         </div>
                         <div class="setting-group">
                             <label>World Height (Degrees)</label>
-                            <input type="number" id="map-settings-height-input" min="10" max="180" step="1" style="width: 100%; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px;">
+                            <input type="number" id="map-settings-height-input" min="10" max="180" step="1">
                             <small>180 = full pole‑to‑pole. Smaller values confine latitude.</small>
                         </div>
                         <div class="setting-group">
-                            <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
-                                <input type="checkbox" id="map-settings-missiles-checkbox" style="width: 18px; height: 18px; accent-color: #f39c12;">
+                            <label class="check-row" style="display: flex">
+                                <input type="checkbox" id="map-settings-missiles-checkbox">
                                 <span>Enable Long‑Range Missiles in This Map</span>
                             </label>
                             <small>When disabled, missile/bomb launches are fully disabled in this scenario.</small>
                         </div>
-                        <button id="map-settings-apply-btn" class="start-btn" style="margin-top: 20px;">Apply Strategic Changes</button>
+                        <button id="map-settings-apply-btn" class="start-btn">Apply Strategic Changes</button>
                     </div>
                 </div>
             </div>
@@ -790,7 +790,7 @@
                 <div class="scenario-selection-container">
                     <div class="selection-header">
                         <button id="cancel-conquest-choice" class="selection-back-btn">
-                            <svg viewBox="0 0 24 24" fill="currentColor" style="width:20px;height:20px;"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+                            <svg class="icon-20" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
                             <span>BACK</span>
                         </button>
                     </div>
@@ -828,20 +828,20 @@
             <h3 class="settings-title">Establish New Nation</h3>
             <div class="setting-group">
                 <label>Nation Name</label>
-                <input type="text" id="new-country-name" placeholder="e.g. New Atlantica" style="width: 100%; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px;">
+                <input type="text" id="new-country-name" placeholder="e.g. New Atlantica">
             </div>
             <div class="setting-group">
                 <label>Nation Color</label>
-                <input type="color" id="new-country-color" value="#ff4757" style="width: 100%; height: 40px; border: none; background: none; cursor: pointer;">
+                <input type="color" id="new-country-color" value="#ff4757">
             </div>
             <div class="setting-group">
                 <label>National Flag</label>
-                <input type="file" id="new-country-flag" accept="image/*" style="font-size: 12px; color: #888;">
+                <input type="file" id="new-country-flag" accept="image/*">
                 <small>Upload a square or rectangular PNG/JPG</small>
             </div>
-            <div style="display: flex; gap: 10px;">
+            <div class="gap-10" style="display: flex">
                 <button id="confirm-create-btn" class="start-btn">Confirm</button>
-                <button id="cancel-create-btn" class="start-btn" style="background: #444;">Cancel</button>
+                <button id="cancel-create-btn" class="start-btn">Cancel</button>
             </div>
         </div>
     </div>
@@ -852,40 +852,40 @@
 
     <!-- Release Selection Modal -->
     <div id="release-modal" class="settings-overlay" style="display:none">
-        <div class="settings-content" style="max-width: 400px;">
+        <div class="settings-content max-400">
             <h3 class="settings-title">Release Nation</h3>
-            <div id="releasable-list" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; max-height: 300px; overflow-y: auto; padding-right: 5px;">
+            <div id="releasable-list" style="display: flex">
                 <!-- Releasables injected here -->
             </div>
-            <button id="close-release-modal" class="start-btn" style="background: #444;">Cancel</button>
+            <button id="close-release-modal" class="start-btn">Cancel</button>
         </div>
     </div>
 
     <!-- Credits Modal -->
     <div id="credits-modal" class="settings-overlay" style="display:none">
-        <div class="settings-content" style="text-align: center;">
+        <div class="settings-content credits-modal-div">
             <h3 class="settings-title">Intel Assets & Credits</h3>
-            <div class="setting-group" style="margin-top: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 20px;">
+            <div class="setting-group credits-modal-div-2">
                 <label>Logo & Thumbnail Design</label>
-                <div style="font-size: 14px; color: #fff; font-weight: bold;">Merry raisan bran cereal box</div>
+                <div class="credit-name">Merry raisan bran cereal box</div>
             </div>
-            <div class="setting-group" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 20px;">
+            <div class="setting-group credit-group">
                 <label>Thumbnail Editing</label>
-                <div style="font-size: 14px; color: #fff; font-weight: bold;">orange</div>
+                <div class="credit-name">orange</div>
             </div>
-            <div class="setting-group" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 20px;">
+            <div class="setting-group credit-group">
                 <label>Soundtrack</label>
-                <div style="font-size: 14px; color: #fff; font-weight: bold;">OST - Tyler Cunningham Music</div>
+                <div class="credit-name">OST - Tyler Cunningham Music</div>
             </div>
-            <div class="setting-group" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 20px;">
+            <div class="setting-group credit-group">
                 <label>Label Engine</label>
-                <div style="font-size: 14px; color: #fff; font-weight: bold;">certaincoin (HOI4 Style Curved Labels)</div>
+                <div class="credit-name">certaincoin (HOI4 Style Curved Labels)</div>
             </div>
             <div class="setting-group">
                 <label>Development</label>
-                <div style="font-size: 14px; color: #fff; font-weight: bold;">man_82</div>
+                <div class="credit-name">man_82</div>
             </div>
-            <button id="close-credits-btn" class="start-btn" style="background: #444;">Dismiss</button>
+            <button id="close-credits-btn" class="start-btn">Dismiss</button>
         </div>
     </div>
 
@@ -901,18 +901,18 @@
                 <div class="scenario-selection-container">
                     <div class="selection-header">
                         <button id="close-leaderboard-btn" class="selection-back-btn">
-                            <svg viewBox="0 0 24 24" fill="currentColor" style="width:20px;height:20px;"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+                            <svg class="icon-20" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
                             <span>BACK</span>
                         </button>
                         <h2 class="selection-title">LEADERBOARD</h2>
                     </div>
-                    <div class="leaderboard-header" style="margin-top: 10px;">
-                        <span style="flex: 2;">Country</span>
-                        <span style="flex: 1; text-align:right;">Tiles</span>
-                        <span style="flex: 1; text-align:right;">Units</span>
-                        <span style="width: 40px; text-align:right;">#</span>
+                    <div class="leaderboard-header leaderboard-overlay-div">
+                        <span class="leaderboard-overlay-span">Country</span>
+                        <span class="leaderboard-overlay-span-2">Tiles</span>
+                        <span class="leaderboard-overlay-span-2">Units</span>
+                        <span class="leaderboard-overlay-span-3">#</span>
                     </div>
-                    <div id="leaderboard-list" class="scenario-scroller-v2 leaderboard-list" style="gap: 6px; padding-right: 5px;">
+                    <div id="leaderboard-list" class="scenario-scroller-v2 leaderboard-list">
                         <!-- rows injected by JS -->
                     </div>
                 </div>
@@ -920,7 +920,7 @@
         </div>
     </div>
 
-    <div id="perf-overlay" style="display:none; position:absolute; bottom:8px; right:8px; background:rgba(0,0,0,0.75); color:#0f0; padding:4px 10px; border-radius:2px; font:10px monospace; z-index:2000; pointer-events:none; border:1px solid rgba(0,255,0,0.3);">
+    <div id="perf-overlay" style="display: none">
             FPS: -- | Frame: --ms
     </div>
 
@@ -932,10 +932,10 @@
                 <!-- Content injected by JS -->
             </div>
             <div class="tutorial-navigation">
-                <button id="tutorial-skip-btn" class="mini-btn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1);">Skip Tutorial</button>
+                <button id="tutorial-skip-btn" class="mini-btn">Skip Tutorial</button>
                 <button id="tutorial-prev-btn" class="mini-btn">Back</button>
                 <div id="tutorial-dots"></div>
-                <button id="tutorial-next-btn" class="start-btn" style="width: auto; padding: 10px 30px;">Next</button>
+                <button id="tutorial-next-btn" class="start-btn">Next</button>
             </div>
         </div>
     </div>
@@ -945,130 +945,130 @@
 
 
     <!-- Country Inspector -->
-    <div id="country-inspector" class="setup-panel" style="display:none; position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); z-index: 1010; max-width: 300px; padding: 15px;">
-        <div style="margin-bottom: 15px;">
-            <label style="font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px;">Nation Name</label>
-            <input type="text" id="inspect-name-input" placeholder="Nation Name" style="width: 100%; background: transparent; border: none; border-bottom: 1px solid #444; color: white; font-size: 18px; font-weight: bold; outline: none; padding: 5px 0;">
+    <div id="country-inspector" class="setup-panel" style="display: none">
+        <div class="country-inspector-div">
+            <label class="caps-hint">Nation Name</label>
+            <input type="text" id="inspect-name-input" placeholder="Nation Name">
         </div>
 
 
 
-        <div id="mid-war-recruitment" style="display:none; margin-bottom: 15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
-            <label style="font-size: 12px; color: #888; text-transform: uppercase; display: block; margin-bottom: 8px; text-align: center; letter-spacing: 1px;">Mobilize Into Conflict</label>
-            <div id="recruit-sides-btns" style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 10px;">
+        <div id="mid-war-recruitment" style="display: none">
+            <label class="mid-war-recruitment-label" style="display: block">Mobilize Into Conflict</label>
+            <div id="recruit-sides-btns" style="display: flex">
                 <!-- Join Side buttons injected here -->
             </div>
-            <button id="vassalize-btn" class="start-btn" style="display:none; background: #9b59b6; font-size: 12px; padding: 10px;">FORCE VASSALIZATION</button>
-            <button id="exit-conflict-btn" class="start-btn" style="display:none; background: #27ae60; font-size: 12px; padding: 10px; margin-top: 8px;">EXIT CONFLICT (ANNEX OCCUPIED)</button>
+            <button id="vassalize-btn" class="start-btn" style="display: none">FORCE VASSALIZATION</button>
+            <button id="exit-conflict-btn" class="start-btn" style="display: none">EXIT CONFLICT (ANNEX OCCUPIED)</button>
         </div>
 
-        <div style="text-align: center; margin-bottom: 15px;">
-            <div id="inspect-color-swatch" style="width: 100%; height: 6px; border-radius: 3px; margin-bottom: 10px; border: 1px solid rgba(255,255,255,0.2);"></div>
+        <div class="country-inspector-div-2">
+            <div id="inspect-color-swatch"></div>
 
-            <div class="editor-only" style="margin-bottom: 12px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 8px; text-align: left;">
-                <label style="font-size: 12px; color: #888; display: block; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px;">National Identity</label>
-                <div style="display: flex; gap: 10px; align-items: center;">
-                    <input type="color" id="inspect-color-picker" style="width: 40px; height: 30px; border: none; background: none; cursor: pointer; padding: 0;">
-                    <div style="flex: 1; display: flex; align-items: center; gap: 10px;">
-                        <img id="inspect-flag-preview" alt="" loading="lazy" decoding="async" style="width: 40px; height: 25px; object-fit: cover; background: #000; border: 1px solid #444; border-radius: 2px; display: none;">
-                        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
-                            <label style="font-size: 12px; color: #555; text-transform: uppercase; display: block;">Update Flag</label>
-                            <input type="file" id="inspect-flag-input" accept="image/*" style="font-size: 12px; color: #777; width: 100%;">
-                            <div style="display: flex; gap: 4px;">
-                                <button id="inspect-fetch-flag-btn" class="mini-btn" style="background: #34495e; font-size: 12px; padding: 2px 4px; flex: 1;">Fetch Modern</button>
+            <div class="editor-only country-inspector-div-3">
+                <label class="country-inspector-label" style="display: block">National Identity</label>
+                <div class="row-center-10" style="display: flex">
+                    <input type="color" id="inspect-color-picker">
+                    <div class="country-inspector-div-4" style="display: flex">
+                        <img id="inspect-flag-preview" alt="" loading="lazy" decoding="async" style="display: none">
+                        <div class="country-inspector-div-5" style="display: flex">
+                            <label class="country-inspector-label-2" style="display: block">Update Flag</label>
+                            <input type="file" id="inspect-flag-input" accept="image/*">
+                            <div class="gap-4" style="display: flex">
+                                <button id="inspect-fetch-flag-btn" class="mini-btn">Fetch Modern</button>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div class="editor-only" style="display: flex; gap: 5px; margin-bottom: 10px;">
-                <button id="inspect-paint-btn" class="start-btn" style="flex: 1; background: #2e86de; font-size: 12px; padding: 10px;">PAINT</button>
-                <button id="inspect-annex-click-btn" class="start-btn" style="flex: 1; background: #d35400; font-size: 12px; padding: 10px;">ANNEX CLICK</button>
+            <div class="editor-only stack-5" style="display: flex">
+                <button id="inspect-paint-btn" class="start-btn">PAINT</button>
+                <button id="inspect-annex-click-btn" class="start-btn">ANNEX CLICK</button>
             </div>
-            <div class="editor-only" style="display: flex; gap: 5px; margin-bottom: 10px;">
+            <div class="editor-only stack-5" style="display: flex">
             </div>
 
-            <div id="buff-editor-section" class="editor-only" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; margin-top: 5px;">
-                <label style="font-size: 12px; color: #888; display: block; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px;">Combat Buff</label>
-                <button id="inspect-buff-btn" class="mini-btn" style="width: 100%; margin-bottom: 10px; background:#444; font-size: 12px; padding:6px 8px;">
+            <div id="buff-editor-section" class="editor-only">
+                <label class="buff-editor-section-label" style="display: block">Combat Buff</label>
+                <button id="inspect-buff-btn" class="mini-btn">
                     BUFF: NONE
                 </button>
 
-                <div id="vassal-status-display" style="font-size: 12px; color: #f1c40f; margin-bottom: 8px; text-transform: uppercase; display: none;">
+                <div id="vassal-status-display" style="display: none">
                     Vassal of: <span id="overlord-name-disp">None</span>
                 </div>
-                <div id="inspector-release-container" style="display: none; margin-bottom: 10px;">
-                    <button id="inspect-release-btn" class="start-btn" style="background: #27ae60; font-size: 12px; padding: 10px; width: 100%;">RELEASE NATION...</button>
+                <div id="inspector-release-container" style="display: none">
+                    <button id="inspect-release-btn" class="start-btn">RELEASE NATION...</button>
                 </div>
-                <div style="display: flex; gap: 5px; margin-bottom: 10px;">
-                    <button id="set-overlord-btn" class="mini-btn" style="flex: 1; background: #8e44ad;" title="Set as puppet vassal">Vassalize</button>
-                    <button id="set-releasable-btn" class="mini-btn" style="flex: 1; background: #27ae60;" title="Absorb into another nation as a releasable core">Set Releasable</button>
-                    <button id="clear-overlord-btn" class="mini-btn" style="flex: 0.5; background: #444;">Clear</button>
+                <div class="stack-5" style="display: flex">
+                    <button id="set-overlord-btn" class="mini-btn" title="Set as puppet vassal">Vassalize</button>
+                    <button id="set-releasable-btn" class="mini-btn" title="Absorb into another nation as a releasable core">Set Releasable</button>
+                    <button id="clear-overlord-btn" class="mini-btn">Clear</button>
                 </div>
 
-                <div id="ally-controls" style="margin-bottom: 10px; padding: 8px; border-radius: 6px; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06);">
-                    <label style="font-size: 12px; color: #888; display: block; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px;">Alliances</label>
-                    <div id="ally-list" style="font-size: 12px; color: #ccc; margin-bottom: 6px; max-height: 80px; overflow-y: auto;">
-                        <span style="font-size: 12px; color: #666;">No allies set.</span>
+                <div id="ally-controls">
+                    <label class="ally-controls-label" style="display: block">Alliances</label>
+                    <div id="ally-list">
+                        <span class="ally-list-span">No allies set.</span>
                     </div>
-                    <div style="display: flex; gap: 5px;">
-                        <button id="add-ally-btn" class="mini-btn" style="flex: 1; background: #16a085;" title="Click to enter ally-select mode, then click another country on the map to form a mutual alliance.">Add Ally (Click Map)</button>
-                        <button id="clear-allies-btn" class="mini-btn" style="flex: 1; background: #444;" title="Remove all alliances for this country.">Clear Allies</button>
+                    <div class="ally-controls-div" style="display: flex">
+                        <button id="add-ally-btn" class="mini-btn" title="Click to enter ally-select mode, then click another country on the map to form a mutual alliance.">Add Ally (Click Map)</button>
+                        <button id="clear-allies-btn" class="mini-btn" title="Remove all alliances for this country.">Clear Allies</button>
                     </div>
-                    <div style="margin-top:6px; display:flex; flex-direction:column; gap:4px;">
-                        <label style="font-size: 12px; color:#888; text-transform:uppercase; letter-spacing:1px;">Alliance Flag</label>
-                        <input type="file" id="alliance-flag-input" accept="image/*" style="font-size: 12px; color:#777;">
+                    <div class="ally-controls-div-2" style="display: flex">
+                        <label class="caps-hint">Alliance Flag</label>
+                        <input type="file" id="alliance-flag-input" accept="image/*">
                     </div>
                 </div>
-                <label style="font-size: 12px; color: #888; display: block; margin-bottom: 5px; text-transform: uppercase;">Annex Modern Territory</label>
-                <div style="display: flex; gap: 5px;">
-                    <input type="text" id="annex-country-input" placeholder="e.g. Poland, France..." style="flex: 1; padding: 6px; font-size: 12px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 4px;">
-                    <button id="annex-country-btn" class="mini-btn" style="background: #e67e22;">Annex</button>
+                <label class="buff-editor-section-label-2" style="display: block">Annex Modern Territory</label>
+                <div class="buff-editor-section-div" style="display: flex">
+                    <input type="text" id="annex-country-input" placeholder="e.g. Poland, France...">
+                    <button id="annex-country-btn" class="mini-btn">Annex</button>
                 </div>
-                <small style="font-size: 12px; color: #666; display: block; margin-top: 4px;">This adds the territory of a real country to your selection.</small>
+                <small class="buff-editor-section-small" style="display: block">This adds the territory of a real country to your selection.</small>
             </div>
         </div>
-        <button id="close-inspector-btn" class="mini-btn" style="width: 100%;">Close</button>
+        <button id="close-inspector-btn" class="mini-btn">Close</button>
     </div>
 
     <!-- City Inspector -->
-    <div id="city-inspector" class="setup-panel" style="display:none; position: absolute; bottom: 80px; left: 10px; z-index: 1001; width: 220px; padding: 15px;">
-        <div style="margin-bottom: 10px;">
-            <label style="font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px;">City Name</label>
-            <input type="text" id="city-name-input" placeholder="City Name" style="width: 100%; background: transparent; border: none; border-bottom: 1px solid #444; color: white; font-size: 16px; font-weight: bold; outline: none; padding: 5px 0;">
+    <div id="city-inspector" class="setup-panel" style="display: none">
+        <div class="city-inspector-div">
+            <label class="caps-hint">City Name</label>
+            <input type="text" id="city-name-input" placeholder="City Name">
         </div>
-        <div style="margin-bottom: 10px;">
-            <label style="font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px;">Owner Nation</label>
-            <select id="city-owner-select" style="width: 100%; padding: 6px; background:#2a2a30; border:1px solid #444; border-radius:4px; color:#fff; font-size: 12px;">
+        <div class="city-inspector-div">
+            <label class="caps-hint">Owner Nation</label>
+            <select id="city-owner-select">
             </select>
         </div>
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
-            <label style="display:flex; align-items:center; gap:6px; font-size: 12px; color:#ccc; cursor:pointer;">
-                <input type="checkbox" id="city-capital-checkbox" style="width:16px; height:16px; accent-color:#f1c40f;">
+        <div class="city-inspector-div-2" style="display: flex">
+            <label class="city-inspector-label" style="display: flex">
+                <input type="checkbox" id="city-capital-checkbox">
                 <span>Set as Capital</span>
             </label>
         </div>
-        <div style="display:flex; gap:6px; margin-bottom:10px;">
-            <button id="city-move-btn" class="start-btn" style="flex:1; background:#2e86de; font-size: 12px; padding:10px;">Move City</button>
-            <button id="city-delete-btn" class="start-btn" style="flex:1; background:#c0392b; font-size: 12px; padding:10px;">Delete</button>
+        <div class="city-inspector-div-3" style="display: flex">
+            <button id="city-move-btn" class="start-btn">Move City</button>
+            <button id="city-delete-btn" class="start-btn">Delete</button>
         </div>
-        <button id="city-close-btn" class="mini-btn" style="width: 100%;">Close</button>
+        <button id="city-close-btn" class="mini-btn">Close</button>
     </div>
 
     <!-- Import Country From Scenario Modal -->
     <div id="import-country-modal" class="settings-overlay" style="display:none">
-        <div class="settings-content" style="max-width: 520px;">
+        <div class="settings-content import-country-modal-div">
             <h3 class="settings-title">Import Country From Scenario</h3>
             <div class="setting-group">
                 <label>Source Scenario</label>
-                <select id="import-scenario-select" style="width:100%; padding:8px; background:#2a2a30; border:1px solid #444; border-radius:6px; color:#fff; font-size:12px;">
+                <select id="import-scenario-select">
                     <option value="" selected disabled>-- choose source --</option>
                     <option value="builtin:modern_2022">2022 Modern Day</option>
                     <option value="file">Load from .json file…</option>
                 </select>
                 <small>Pick a built‑in era preset or load any saved scenario preset file.</small>
-                <input type="file" id="import-scenario-file" accept=".json" style="margin-top:8px; display:none; font-size: 12px; color:#aaa;">
+                <input type="file" id="import-scenario-file" accept=".json" style="display: none">
             </div>
             <div class="setting-group">
                 <label>Country To Import</label>
@@ -1076,41 +1076,41 @@
                     type="text"
                     id="import-country-search"
                     placeholder="Search country by name..."
-                    style="width:100%; padding:8px; background:#2a2a30; border:1px solid #444; border-radius:6px; color:#fff; font-size:12px; margin-bottom:8px;"
+                   
                     disabled
                 >
                 <div id="import-country-card-list" class="import-country-card-list">
-                    <div style="font-size: 12px; color:#777; text-align:center; padding:10px;">
+                    <div class="import-country-card-list-div">
                         Choose a source scenario first
                     </div>
                 </div>
                 <small>The selected country’s territory will be merged into this map as a new nation.</small>
             </div>
-            <div style="font-size: 12px; color:#777; margin-bottom:10px;">
+            <div class="import-country-modal-div-2">
                 Grid differences are handled automatically; imported borders are approximated to your current engine resolution.
             </div>
-            <div style="display:flex; gap:10px; margin-top:5px;">
-                <button id="import-country-confirm-btn" class="start-btn" style="flex:1;">Import</button>
-                <button id="import-country-cancel-btn" class="start-btn" style="flex:1; background:#444;">Cancel</button>
+            <div class="import-country-modal-div-3" style="display: flex">
+                <button id="import-country-confirm-btn" class="start-btn">Import</button>
+                <button id="import-country-cancel-btn" class="start-btn">Cancel</button>
             </div>
         </div>
     </div>
 
     <!-- No Nations Detection Modal -->
     <div id="no-nations-modal" class="settings-overlay" style="display:none">
-        <div class="settings-content" style="max-width: 420px;">
+        <div class="settings-content no-nations-modal-div">
             <h2 class="settings-title">UNINHABITED WORLD</h2>
-            <p style="color: #ccc; font-size: 13px; line-height: 1.6; text-align: center; margin-bottom: 20px;">
+            <p class="no-nations-modal-p">
                 Satellite analysis indicates this scenario contains no established nations. Would you like to procedurally generate a new geopolitical landscape?
             </p>
             <div class="setting-group">
                 <label>Number of Nations to Spawn</label>
-                <input type="number" id="random-nations-count" value="15" min="2" max="100" style="width: 100%; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px;">
+                <input type="number" id="random-nations-count" value="15" min="2" max="100">
                 <small>Nations will expand until they cover all available land.</small>
             </div>
-            <div style="display: flex; flex-direction: column; gap: 10px;">
-                <button id="confirm-random-gen-btn" class="start-btn" style="background: #27ae60;">Generate Civilization</button>
-                <button id="skip-random-gen-btn" class="start-btn" style="background: #444;">Continue Nationless</button>
+            <div class="column-10" style="display: flex">
+                <button id="confirm-random-gen-btn" class="start-btn">Generate Civilization</button>
+                <button id="skip-random-gen-btn" class="start-btn">Continue Nationless</button>
             </div>
         </div>
     </div>
@@ -1119,11 +1119,11 @@
 
     <script type="module" src="src/entry.js"></script>
 
-<div id="benchmark-results" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:9999; align-items:center; justify-content:center;">
-    <div style="background:#111; padding:32px 48px; border-radius:4px; border:1px solid rgba(0,255,0,0.3); text-align:center;">
-        <h2 style="color:#0f0; font:24px monospace; margin:0 0 24px;">BENCHMARK COMPLETE</h2>
-        <div id="benchmark-stats" style="color:#ccc; font:13px monospace; line-height:2.2;"></div>
-        <button id="benchmark-dismiss-btn" style="margin-top:24px; padding:10px 30px; background:#ff4757; border:none; color:#fff; cursor:pointer; font:12px monospace; border-radius:2px;">DISMISS</button>
+<div id="benchmark-results" style="display: none">
+    <div class="benchmark-results-div">
+        <h2 class="benchmark-results-h2">BENCHMARK COMPLETE</h2>
+        <div id="benchmark-stats"></div>
+        <button id="benchmark-dismiss-btn">DISMISS</button>
     </div>
 </div>
 
