@@ -784,8 +784,14 @@ export function createScenarioLoader(context, loadSession) {
 			const resp = await fetch(url);
 			if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 			if (/\.mwsc\.gz(?:\?|$)/.test(url)) {
-				const stream = resp.body.pipeThrough(new DecompressionStream("gzip"));
-				const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+				let bytes = new Uint8Array(await resp.arrayBuffer());
+				// A server may already have removed the gzip layer.
+				if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
+					const stream = new Blob([bytes])
+						.stream()
+						.pipeThrough(new DecompressionStream("gzip"));
+					bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+				}
 				const decoded = decodeScenarioBinary(bytes);
 				const mapData = [];
 				for (let index = 0; index < decoded.land.length; index++) {

@@ -4867,7 +4867,7 @@ div.text-left.card-body {
 }
 
 #perf-overlay {
-	position: absolute;
+	position: fixed;
 	bottom: 8px;
 	right: 8px;
 	background: rgba(0, 0, 0, 0.75);

@@ -43,7 +43,8 @@ export let bgMusicGain = null;
 // Track index currently playing from bgMusicUrls
 export let currentBgTrackIndex = null;
 export let customTrackUrl = null;
-let customTrackRestored = false;
+/** @type {Promise<void> | null} */
+let customTrackRestore = null;
 export let warAmbianceSource = null;
 export let warAmbianceGain = null;
 
@@ -84,10 +85,10 @@ export async function primeAudio() {
 
 export async function initAudio() {
 	await primeAudio();
-	if (!customTrackRestored) {
-		customTrackRestored = true;
-		customTrackUrl ??= await loadStoredCustomTrack();
-	}
+	customTrackRestore ||= loadStoredCustomTrack().then((url) => {
+		customTrackUrl ??= url;
+	});
+	await customTrackRestore;
 
 	if (isAudioLoading) return;
 

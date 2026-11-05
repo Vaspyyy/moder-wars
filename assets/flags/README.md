@@ -8,6 +8,8 @@ commercial and non-commercial use. The codes follow `assets/geodata/flagcodes.js
 `legacy/` holds the custom flags that the built-in scenarios used to load from
 WebSim's blob store (for example Transnistria, Abkhazia, East Germany). They are
 kept under their original file names so old scenario files resolve to them.
+They were uploaded by WebSim users for the original game, and their license
+is unknown. They are not covered by the Flagpedia statement above.
 
 Rebuild both with `node scripts/build-flags.mjs`, which also regenerates
 `src/flag-manifest.js`. At runtime, `src/flags.js` maps flagcdn.com and WebSim

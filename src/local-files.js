@@ -11,6 +11,34 @@ export function readFileAsDataUrl(file) {
 	});
 }
 
+const FLAG_MAX_WIDTH = 320;
+
+/**
+ * Read a flag image as a data URL, scaled down to the bundled flag width so a
+ * large photo does not bloat country metadata, state handoffs and exports.
+ * @param {Blob} file @returns {Promise<string>}
+ */
+export async function readFlagAsDataUrl(file) {
+	try {
+		const bitmap = await createImageBitmap(file);
+		const scale = Math.min(1, FLAG_MAX_WIDTH / bitmap.width);
+		if (scale < 1) {
+			const canvas = document.createElement("canvas");
+			canvas.width = FLAG_MAX_WIDTH;
+			canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+			canvas
+				.getContext("2d")
+				?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+			bitmap.close();
+			return canvas.toDataURL("image/webp", 0.9);
+		}
+		bitmap.close();
+	} catch {
+		// Formats createImageBitmap cannot read (such as some SVGs) stay as they are.
+	}
+	return readFileAsDataUrl(file);
+}
+
 const MEDIA_CACHE = "mw-user-media";
 const TRACK_KEY = "/__mw-user-media/custom-track";
 

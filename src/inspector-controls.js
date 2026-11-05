@@ -1,7 +1,7 @@
 import { showAlert, showConfirm } from "./dialogs.js";
 import { localFlagUrl } from "./flags.js";
 import { buffButtonContent } from "./inspectors.js";
-import { readFileAsDataUrl } from "./local-files.js";
+import { readFlagAsDataUrl } from "./local-files.js";
 // Controls receive live state and commands; they do not import the application.
 export function createInspectorControls(runtime) {
 	async function loadReferenceGeometry() {
@@ -43,7 +43,7 @@ export function createInspectorControls(runtime) {
 				try {
 					runtime.loadingStatus.innerText = "Loading Flag...";
 					runtime.loadingOverlay.style.display = "flex";
-					runtime.customCountryData.flagUrl = await readFileAsDataUrl(file);
+					runtime.customCountryData.flagUrl = await readFlagAsDataUrl(file);
 					runtime.loadingOverlay.style.display = "none";
 				} catch (e) {
 					console.error("Flag upload failed", e);
@@ -137,7 +137,7 @@ export function createInspectorControls(runtime) {
 				try {
 					runtime.loadingStatus.innerText = "Loading Flag...";
 					runtime.loadingOverlay.style.display = "flex";
-					const url = await readFileAsDataUrl(file);
+					const url = await readFlagAsDataUrl(file);
 
 					runtime.updateCountryFlag(runtime.editingCountryId, url);
 					runtime.loadingOverlay.style.display = "none";
@@ -274,7 +274,7 @@ export function createInspectorControls(runtime) {
 				try {
 					runtime.loadingStatus.innerText = "Loading Alliance Flag...";
 					runtime.loadingOverlay.style.display = "flex";
-					const url = await readFileAsDataUrl(file);
+					const url = await readFlagAsDataUrl(file);
 					const rootId = runtime.getAllianceRootId(runtime.editingCountryId);
 					if (!rootId) {
 						runtime.loadingOverlay.style.display = "none";

@@ -136,10 +136,7 @@ export function createConflictReset(runtime) {
 					await runtime.performPresetLoad(
 						runtime.currentScenarioContext.compiledUrl,
 						runtime.gameMode,
-						{
-							jsonFallbackUrl: runtime.currentScenarioContext.blobUrl,
-							prederivedEarth: true,
-						},
+						{ prederivedEarth: true },
 					);
 					runtime.loadingOverlay.style.display = "none";
 					return;

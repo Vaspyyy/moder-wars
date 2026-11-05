@@ -22,7 +22,7 @@ async function inBatches(items, size, task) {
 		await Promise.all(items.slice(i, i + size).map(task));
 }
 
-// Country and subdivision flags from flagcdn.com (flag-icons, MIT).
+// Country and subdivision flags from flagcdn.com (public domain per Flagpedia).
 const codes = Object.keys(
 	JSON.parse(readFileSync(new URL("assets/geodata/flagcodes.json", root))),
 )
