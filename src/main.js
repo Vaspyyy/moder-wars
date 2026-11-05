@@ -309,10 +309,6 @@ const applicationRuntime = createLiveContext(
 		stopBackgroundMusic: () => stopBackgroundMusic,
 		initAudio: () => initAudio,
 		clearCustomTrackBtn: () => clearCustomTrackBtn,
-		tabScenariosBtn: () => tabScenariosBtn,
-		switchHubTab: () => switchHubTab,
-		tabCountriesBtn: () => tabCountriesBtn,
-		tabFlagsBtn: () => tabFlagsBtn,
 		presetLowBtn: () => presetLowBtn,
 		settingsController: () => settingsController,
 		presetDefaultBtn: () => presetDefaultBtn,
@@ -337,7 +333,6 @@ const applicationRuntime = createLiveContext(
 		ingameSettingsBtn: () => ingameSettingsBtn,
 		closeSettingsBtn: () => closeSettingsBtn,
 		playModeBtn: () => playModeBtn,
-		selectScenario: () => selectScenario,
 		choiceModernDay: () => choiceModernDay,
 		enterScenarioBtn: () => enterScenarioBtn,
 		queuedScenarioAction: () => queuedScenarioAction,
@@ -378,8 +373,6 @@ const applicationRuntime = createLiveContext(
 		openLeaderboard: () => openLeaderboard,
 		closeLeaderboardBtn: () => closeLeaderboardBtn,
 		leaderboardOverlay: () => leaderboardOverlay,
-		closeHubBtn: () => closeHubBtn,
-		closeHub: () => closeHub,
 		minimizeSetupBtn: () => minimizeSetupBtn,
 		setupPanel: () => setupPanel,
 		minimizeStatsBtn: () => minimizeStatsBtn,
@@ -422,23 +415,8 @@ const applicationRuntime = createLiveContext(
 		paintAt: () => paintAt,
 		paintMaskId: () => paintMaskId,
 		applyPaintAt: () => applyPaintAt,
-		editorUpdateBtn: () => editorUpdateBtn,
-		activeScenarioId: () => activeScenarioId,
 		setLoadingThematic: () => setLoadingThematic,
 		generatePresetData: () => generatePresetData,
-		room: () => room,
-		shareCountryBtn: () => shareCountryBtn,
-		shareCountryNameInput: () => shareCountryNameInput,
-		shareCountryDescInput: () => shareCountryDescInput,
-		shareCountryModal: () => shareCountryModal,
-		shareFlagBtn: () => shareFlagBtn,
-		shareFlagNameInput: () => shareFlagNameInput,
-		shareFlagDescInput: () => shareFlagDescInput,
-		shareFlagModal: () => shareFlagModal,
-		cancelShareFlagBtn: () => cancelShareFlagBtn,
-		confirmShareFlagBtn: () => confirmShareFlagBtn,
-		cancelShareCountryBtn: () => cancelShareCountryBtn,
-		confirmShareCountryBtn: () => confirmShareCountryBtn,
 		editorSaveBtn: () => editorSaveBtn,
 		editorLoadBtn: () => editorLoadBtn,
 		performPresetLoad: () => performPresetLoad,
@@ -462,18 +440,12 @@ const applicationRuntime = createLiveContext(
 		importSingleCountryFromScenario: () => importSingleCountryFromScenario,
 		editorLoadZipBtn: () => editorLoadZipBtn,
 		parseColorToRGBA: () => parseColorToRGBA,
-		editorShareBtn: () => editorShareBtn,
-		uploadNameInput: () => uploadNameInput,
-		uploadDescInput: () => uploadDescInput,
-		uploadDetailsModal: () => uploadDetailsModal,
 		godBombBtn: () => godBombBtn,
 		godBombActive: () => godBombActive,
 		godBombSourceId: () => godBombSourceId,
 		godModeBtn: () => godModeBtn,
 		getTranslation: () => getTranslation,
 		editorToolbox: () => editorToolbox,
-		editorHubBtn: () => editorHubBtn,
-		editorLibraryBtn: () => editorLibraryBtn,
 		editorExitBtn: () => editorExitBtn,
 		editorTestBtn: () => editorTestBtn,
 		editorUnclaimBtn: () => editorUnclaimBtn,
@@ -492,24 +464,6 @@ const applicationRuntime = createLiveContext(
 		tickGameTime: () => tickGameTime,
 		performSimulationTick: () => performSimulationTick,
 		updateCountryFlag: () => updateCountryFlag,
-		scenarioHubModal: () => scenarioHubModal,
-		globalChatClose: () => globalChatClose,
-		globalChatModal: () => globalChatModal,
-		globalChatSend: () => globalChatSend,
-		globalChatInput: () => globalChatInput,
-		itemCommentSubmit: () => itemCommentSubmit,
-		currentCommentItemType: () => currentCommentItemType,
-		currentCommentItemId: () => currentCommentItemId,
-		itemCommentInput: () => itemCommentInput,
-		currentEditingCommentId: () => currentEditingCommentId,
-		currentReplyParentId: () => currentReplyParentId,
-		itemReplyIndicator: () => itemReplyIndicator,
-		itemCancelReplyBtn: () => itemCancelReplyBtn,
-		closeItemModalBtn: () => closeItemModalBtn,
-		itemCommentModal: () => itemCommentModal,
-		commentsUnsubscribe: () => commentsUnsubscribe,
-		cancelUploadBtn: () => cancelUploadBtn,
-		confirmUploadBtn: () => confirmUploadBtn,
 		mapRuntime: () => mapRuntime,
 		isPointInFeature: () => isPointInFeature,
 		provinceMap: () => provinceMap,
@@ -527,16 +481,10 @@ const applicationRuntime = createLiveContext(
 		setupOptions: () => setupOptions,
 		_attackers: () => _attackers,
 		_defenders: () => _defenders,
-		openHub: () => openHub,
 		saveCountryLocally: () => saveCountryLocally,
 		loadCountryFromPC: () => loadCountryFromPC,
 		editorImportCountryBtn: () => editorImportCountryBtn,
 		openImportCountryModal: () => openImportCountryModal,
-		editorFlagLibraryBtn: () => editorFlagLibraryBtn,
-		cancelEditorChoice: () => cancelEditorChoice,
-		editorChoiceModal: () => editorChoiceModal,
-		choiceExternalEditor: () => choiceExternalEditor,
-		choiceIngameEditor: () => choiceIngameEditor,
 		editorSourceModal: () => editorSourceModal,
 		cancelSourceChoice: () => cancelSourceChoice,
 		choiceSourceEarth: () => choiceSourceEarth,
@@ -549,7 +497,6 @@ const applicationRuntime = createLiveContext(
 		newCountryFlagInput: () => newCountryFlagInput,
 		customCountryData: () => customCountryData,
 		inspectNameInput: () => inspectNameInput,
-		inspectHubFlagBtn: () => inspectHubFlagBtn,
 		inspectFetchFlagBtn: () => inspectFetchFlagBtn,
 		findCodeByName: () => findCodeByName,
 		rawGeoJsonData: () => rawGeoJsonData,
@@ -681,24 +628,7 @@ const applicationRuntime = createLiveContext(
 		sidesContainer: () => sidesContainer,
 		estimateUnitsForCountry: () => estimateUnitsForCountry,
 		openReleaseModal: () => openReleaseModal,
-		currentUsername: () => currentUsername,
-		renderHub: () => renderHub,
-		hubCountryCache: () => hubCountryCache,
-		libraryList: () => libraryList,
 		escapeHtml: () => escapeHtml,
-		openItemModal: () => openItemModal,
-		hubFlagCache: () => hubFlagCache,
-		flagLibraryList: () => flagLibraryList,
-		globalChatList: () => globalChatList,
-		globalChatUnsubscribe: () => globalChatUnsubscribe,
-		initMultiplayer: () => initMultiplayer,
-		itemCommentsList: () => itemCommentsList,
-		itemModalTitle: () => itemModalTitle,
-		itemModalDesc: () => itemModalDesc,
-		itemModalActions: () => itemModalActions,
-		itemModalPreview: () => itemModalPreview,
-		itemModalPlayBtn: () => itemModalPlayBtn,
-		itemModalRemixBtn: () => itemModalRemixBtn,
 		importScenarioCountriesCache: () => importScenarioCountriesCache,
 		refHandles: () => refHandles,
 		isInsideWorldBoxLatLng: () => isInsideWorldBoxLatLng,
@@ -1145,18 +1075,6 @@ const applicationRuntime = createLiveContext(
 		simFrameCount: (value) => {
 			simFrameCount = value;
 		},
-		activeScenarioId: (value) => {
-			activeScenarioId = value;
-		},
-		currentEditingCommentId: (value) => {
-			currentEditingCommentId = value;
-		},
-		currentReplyParentId: (value) => {
-			currentReplyParentId = value;
-		},
-		commentsUnsubscribe: (value) => {
-			commentsUnsubscribe = value;
-		},
 		editingCountryId: (value) => {
 			editingCountryId = value;
 		},
@@ -1306,27 +1224,6 @@ const applicationRuntime = createLiveContext(
 		},
 		gameTimeDate: (value) => {
 			gameTimeDate = value;
-		},
-		room: (value) => {
-			room = value;
-		},
-		currentUsername: (value) => {
-			currentUsername = value;
-		},
-		hubCountryCache: (value) => {
-			hubCountryCache = value;
-		},
-		hubFlagCache: (value) => {
-			hubFlagCache = value;
-		},
-		globalChatUnsubscribe: (value) => {
-			globalChatUnsubscribe = value;
-		},
-		currentCommentItemType: (value) => {
-			currentCommentItemType = value;
-		},
-		currentCommentItemId: (value) => {
-			currentCommentItemId = value;
 		},
 		importScenarioCountriesCache: (value) => {
 			importScenarioCountriesCache = value;
@@ -1572,10 +1469,6 @@ import { createSimulationControls } from "./simulation-controls.js";
 
 const simulation_controls = createSimulationControls(applicationRuntime);
 
-import { createCommunityControls } from "./community-controls.js";
-
-const community_controls = createCommunityControls(applicationRuntime);
-
 import { createCountryActions } from "./country-actions.js";
 
 const country_actions = createCountryActions(applicationRuntime);
@@ -1643,27 +1536,6 @@ const {
 } = createConflictSetup(applicationRuntime);
 
 export { rebuildManpowerInputs, resetConflictSetupState, updateSidesUI };
-
-import { createCommunityLibrary } from "./community-library.js";
-
-const { initMultiplayer, renderCountryLibrary, renderFlagLibrary } =
-	createCommunityLibrary(applicationRuntime);
-
-export { initMultiplayer, renderCountryLibrary, renderFlagLibrary };
-
-import { createCommunityChat } from "./community-chat.js";
-
-const { renderGlobalChatList, _openGlobalChat } =
-	createCommunityChat(applicationRuntime);
-
-export { _openGlobalChat, renderGlobalChatList };
-
-import { createCommunityComments } from "./community-comments.js";
-
-const { renderCommentsList, openItemModal } =
-	createCommunityComments(applicationRuntime);
-
-export { openItemModal, renderCommentsList };
 
 import { createCountryImportMenu } from "./country-import-menu.js";
 
@@ -2158,7 +2030,6 @@ export let sides = [[], []];
 let _attackers = sides[0];
 let _defenders = sides[1];
 export let activeSideIndex = 0;
-export let activeScenarioId = null;
 export let ffaMode = false;
 export let randomWarMode = false;
 export let adjacencyCache = null;
@@ -2515,8 +2386,6 @@ export const sideCasualties = new Float64Array(MAX_SIDES);
 export const countryCasualties = new Map();
 export const casualtyByAttacker = new Map(); // Map<victimCountryId, Map<attackerSovereignId, loss>>
 export let initialCombatants = []; // Tracks nations that started the war for stable casualty menu display
-export let room = null;
-export let currentUsername = null;
 export let flagCodes = null;
 
 export let currentScenarioContext = null; // { id, name, ownerUsername }
@@ -2524,8 +2393,6 @@ export function setCurrentScenarioContext(value) {
 	currentScenarioContext = value;
 }
 
-export let hubReturnState = null;
-export let hubWasInEditor = false;
 export let godModeActive = false;
 export let godBombActive = false;
 export let godBombSourceId = -1;
@@ -2809,12 +2676,6 @@ export function setGameState(val) {
 	gameState = val;
 	simulationClient.syncControls();
 }
-export function setHubReturnState(val) {
-	hubReturnState = val;
-}
-export function setHubWasInEditor(val) {
-	hubWasInEditor = val;
-}
 export function setGodBombActive(val) {
 	godBombActive = val;
 }
@@ -2869,9 +2730,6 @@ export function setReferenceImageUrl(val) {
 }
 export function setSelectedImportCountryId(val) {
 	selectedImportCountryId = val;
-}
-export function setHubScenarioCache(val) {
-	hubScenarioCache = val;
 }
 export function setQueuedScenarioAction(val) {
 	queuedScenarioAction = val;
@@ -2944,15 +2802,8 @@ export const sidesContainer = document.getElementById("sides-container");
 export const editorToolbox = document.getElementById("editor-toolbox");
 export const editorCreateBtn = document.getElementById("editor-create-btn");
 export const editorTestBtn = document.getElementById("editor-test-btn");
-export const editorUpdateBtn = document.getElementById("editor-update-btn");
 export const editorSaveBtn = document.getElementById("editor-save-btn");
 export const editorLoadBtn = document.getElementById("editor-load-btn");
-export const editorShareBtn = document.getElementById("editor-share-btn");
-export const editorHubBtn = document.getElementById("editor-hub-btn");
-export const editorLibraryBtn = document.getElementById("editor-library-btn");
-export const editorFlagLibraryBtn = document.getElementById(
-	"editor-flag-library-btn",
-);
 export const editorPaintBtn = document.getElementById("editor-paint-btn");
 export const editorFillBtn = document.getElementById("editor-fill-btn");
 export const editorUnclaimBtn = document.getElementById("editor-unclaim-btn");
@@ -3013,94 +2864,12 @@ if (arrowsToggleBtn) {
 	arrowsToggleBtn.style.display = "none";
 }
 
-export const scenarioHubModal = document.getElementById("scenario-hub-modal");
-export const hubList = document.getElementById("hub-list");
-export const libraryList = document.getElementById("library-list");
-export const flagLibraryList = document.getElementById("flag-library-list");
-export const closeHubBtn = document.getElementById("close-hub-btn");
-export const tabScenariosBtn = document.getElementById("tab-scenarios-btn");
-export const tabCountriesBtn = document.getElementById("tab-countries-btn");
-export const tabFlagsBtn = document.getElementById("tab-flags-btn");
-
-// Item details + comments modal elements
-export const itemCommentModal = document.getElementById("item-comment-modal");
-export const itemModalTitle = document.getElementById("item-modal-title");
-export const itemModalDesc = document.getElementById("item-modal-desc");
-export const itemModalPreview = document.getElementById("item-modal-preview");
-export const itemCommentsList = document.getElementById("item-comments-list");
-export const itemCommentInput = document.getElementById("item-comment-input");
-export const itemCommentSubmit = document.getElementById("item-comment-submit");
-export const itemReplyIndicator = document.getElementById(
-	"item-reply-indicator",
-);
-export const itemCancelReplyBtn = document.getElementById(
-	"item-comment-cancel-reply",
-);
-export const closeItemModalBtn = document.getElementById(
-	"close-item-modal-btn",
-);
-export const itemModalActions = document.getElementById("item-modal-actions");
-export const itemModalPlayBtn = document.getElementById("item-modal-play");
-export const itemModalRemixBtn = document.getElementById("item-modal-remix");
-
-// Global chat modal elements
-export const globalChatModal = document.getElementById("global-chat-modal");
-export const globalChatList = document.getElementById("global-chat-list");
-export const globalChatInput = document.getElementById("global-chat-input");
-export const globalChatSend = document.getElementById("global-chat-send");
-export const globalChatClose = document.getElementById("global-chat-close");
-
-// Hub caches for item details
-export let hubScenarioCache = {};
-export let hubCountryCache = {};
-export let hubFlagCache = {};
-
-// Comment state
-export let currentCommentItemType = null;
-export let currentCommentItemId = null;
-export let currentReplyParentId = null;
-export let currentEditingCommentId = null;
-export let commentsUnsubscribe = null;
-
-// Global chat state
-export let globalChatUnsubscribe = null;
-
-export const uploadDetailsModal = document.getElementById(
-	"upload-details-modal",
-);
-export const confirmUploadBtn = document.getElementById("confirm-upload-btn");
-export const cancelUploadBtn = document.getElementById("cancel-upload-btn");
-export const uploadNameInput = document.getElementById("upload-scenario-name");
-export const uploadDescInput = document.getElementById("upload-scenario-desc");
-
-export const shareCountryModal = document.getElementById("share-country-modal");
-export const confirmShareCountryBtn = document.getElementById(
-	"confirm-share-country-btn",
-);
-export const cancelShareCountryBtn = document.getElementById(
-	"cancel-share-country-btn",
-);
-export const shareCountryNameInput =
-	document.getElementById("share-country-name");
-export const shareCountryDescInput =
-	document.getElementById("share-country-desc");
-
-export const shareFlagModal = document.getElementById("share-flag-modal");
 export const releaseModal = document.getElementById("release-modal");
 export const releasableListContainer =
 	document.getElementById("releasable-list");
 export const closeReleaseModalBtn = document.getElementById(
 	"close-release-modal",
 );
-export const confirmShareFlagBtn = document.getElementById(
-	"confirm-share-flag-btn",
-);
-export const cancelShareFlagBtn = document.getElementById(
-	"cancel-share-flag-btn",
-);
-export const shareFlagNameInput = document.getElementById("share-flag-name");
-export const shareFlagDescInput = document.getElementById("share-flag-desc");
-export const shareFlagBtn = document.getElementById("share-flag-btn");
 
 export const createCountryModal = document.getElementById(
 	"create-country-modal",
@@ -3118,9 +2887,6 @@ export const inspectFlagInput = document.getElementById("inspect-flag-input");
 export const inspectFetchFlagBtn = document.getElementById(
 	"inspect-fetch-flag-btn",
 );
-export const inspectHubFlagBtn = document.getElementById(
-	"inspect-hub-flag-btn",
-);
 export const inspectFlagPreview = document.getElementById(
 	"inspect-flag-preview",
 );
@@ -3134,7 +2900,6 @@ export const inspectPaintBtn = document.getElementById("inspect-paint-btn");
 export const inspectAnnexClickBtn = document.getElementById(
 	"inspect-annex-click-btn",
 );
-export const shareCountryBtn = document.getElementById("share-country-btn");
 export const closeInspectorBtn = document.getElementById("close-inspector-btn");
 export const inspectBuffBtn = document.getElementById("inspect-buff-btn");
 
@@ -3363,17 +3128,6 @@ export function setLoadingThematic(enabled) {
 }
 export const playModeBtn = document.getElementById("play-mode-btn");
 
-export const editorChoiceModal = document.getElementById("editor-choice-modal");
-export const choiceIngameEditor = document.getElementById(
-	"choice-ingame-editor",
-);
-export const choiceExternalEditor = document.getElementById(
-	"choice-external-editor",
-);
-export const cancelEditorChoice = document.getElementById(
-	"cancel-editor-choice",
-);
-
 export const editorSourceModal = document.getElementById("editor-source-modal");
 export const choiceSourceEarth = document.getElementById("choice-source-earth");
 export const choiceSourceBlank = document.getElementById("choice-source-blank");
@@ -3506,17 +3260,10 @@ export const editorTutorialSteps = [
 		actionRequired: "CLICK_NEXT",
 	},
 	{
-		icon: "📥",
-		title: "The Library",
-		content:
-			"Don't build alone. The <b>Country Library</b> lets you import nations designed by the community directly into your map.",
-		actionRequired: "CLICK_NEXT",
-	},
-	{
 		icon: "💾",
-		title: "Share Your Vision",
+		title: "Save Your Vision",
 		content:
-			"Once your map is complete, use <b>Save Preset</b> to keep it locally, or <b>Share to Hub</b> for others to play and remix!",
+			"Once your map is complete, use <b>Save Preset</b> to keep it as a file you can load or share yourself.",
 		actionRequired: "CLICK_FINISH",
 	},
 ];
@@ -4096,13 +3843,6 @@ import {
 	setOccupationChangeListener,
 	syncOccupationFromSideInfluence,
 } from "./engine.js";
-import {
-	closeHub,
-	openHub,
-	renderHub,
-	selectScenario,
-	switchHubTab,
-} from "./firebase.js";
 import { ControlMapLayer, RENDER_LAYERS } from "./renderer.js";
 
 export { ensureSideInfluenceMaps, getGridIndex, resetSideInfluenceMaps };
@@ -4968,7 +4708,7 @@ function handleCountryClickOwned(
 	}
 
 	if (gameState === "EDITOR_PLACING") {
-		placeNewCountry(latlng);
+		_placeNewCountry(latlng);
 		return;
 	}
 
@@ -4988,7 +4728,7 @@ function handleCountryClickOwned(
 				statusText.innerText = "SELECT SOURCE: Click a nation on the map first";
 			}
 		} else {
-			placeDivisionAt(latlng, editingCountryId);
+			_placeDivisionAt(latlng, editingCountryId);
 		}
 		return;
 	}
@@ -5042,7 +4782,7 @@ function handleCountryClickOwned(
 	if (gameState === "EDITOR_SELECTING_OVERLORD") {
 		const sovereignId = idx !== -1 ? worldControlMap[idx] : 0;
 		if (sovereignId > 0 && sovereignId !== selectingOverlordForId) {
-			setVassalage(selectingOverlordForId, sovereignId);
+			local_setVassalage(selectingOverlordForId, sovereignId);
 		} else {
 			statusText.innerText = "Selection Cancelled";
 		}
@@ -5080,7 +4820,7 @@ function handleCountryClickOwned(
 	if (gameState === "EDITOR_SELECTING_RELEASER") {
 		const sovereignId = idx !== -1 ? worldControlMap[idx] : 0;
 		if (sovereignId > 0 && sovereignId !== selectingOverlordForId) {
-			setAsReleasable(selectingOverlordForId, sovereignId);
+			local_setAsReleasable(selectingOverlordForId, sovereignId);
 		} else {
 			statusText.innerText = "Selection Cancelled";
 		}
@@ -5170,7 +4910,7 @@ function handleCountryClickOwned(
 		gameState === "EDITOR_FILLING_TERRAIN"
 	) {
 		if (gameState === "EDITOR_FILLING") {
-			fillAt(latlng);
+			_fillAt(latlng);
 		} else if (gameState === "EDITOR_FILLING_TERRAIN") {
 			fillTerrainAt(latlng);
 		} else if (sovereignId > 0) {
@@ -6403,8 +6143,6 @@ menu_controls.bindRestartScenarioBtnClick();
 menu_controls.bindResetBtnClick();
 // In‑game MENU button: return to main menu without full page reload
 
-editor_file_controls.bindEditorUpdateBtnClick();
-
 sandbox_controls.bindGodBombBtnClick();
 
 menu_controls.bindForcePeaceBtnClick();
@@ -6514,19 +6252,6 @@ menu_controls.bindCustomTrackInputChange();
 
 menu_controls.bindClearCustomTrackBtnClick();
 
-menu_controls.bindTabScenariosBtnClick();
-menu_controls.bindTabCountriesBtnClick();
-menu_controls.bindTabFlagsBtnClick();
-
-community_controls.bindDeleteScenarioHandler();
-
-community_controls.bindDeleteFlagHandler();
-
-/**
- * GLOBAL EXPORTS FOR HUB INTERACTION
- */
-community_controls.bindImportFlagFromLibraryHandler();
-
 export function saveCountryLocally(countryId) {
 	const meta = countryMetadata[countryId - 1];
 	if (!meta) return;
@@ -6542,22 +6267,12 @@ export function saveCountryLocally(countryId) {
 	statusText.innerText = `SAVED: ${meta.name} exported locally`;
 }
 
-community_controls.bindDeleteCountryHandler();
-
-community_controls.bindImportFromLibraryHandler();
-
-community_controls.bindPlayFromHubHandler();
-
-community_controls.bindRemixFromHubHandler();
-
 /**
  * PRELOAD CORE VISUAL ASSETS
  * Caches large menu backgrounds and thematic overlays to prevent flickering during transitions.
  */
 export function preloadAssets() {
-	const assets = [
-		"assets/images/2022.webp",
-	];
+	const assets = ["assets/images/2022.webp"];
 	assets.forEach((src) => {
 		const img = new Image();
 		img.src = src;
@@ -6724,7 +6439,6 @@ const scenarioMenuDependencies = {
 	loadPreset: performPresetLoad,
 	setContext: (context) => {
 		currentScenarioContext = context;
-		activeScenarioId = null;
 	},
 };
 menu_controls.bindChoiceModernDayClick();
@@ -6753,25 +6467,11 @@ inspector_controls.bindConfirmCreateBtnClick();
 
 inspector_controls.bindInspectNameInputInput();
 
-inspector_controls.bindInspectHubFlagBtnClick();
-
 inspector_controls.bindInspectFetchFlagBtnClick();
 
 inspector_controls.bindInspectFlagInputChange();
 
 inspector_controls.bindInspectColorPickerInput();
-
-editor_file_controls.bindShareCountryBtnClick();
-
-editor_file_controls.bindShareFlagBtnClick();
-
-editor_file_controls.bindCancelShareFlagBtnClick();
-
-editor_file_controls.bindConfirmShareFlagBtnClick();
-
-editor_file_controls.bindCancelShareCountryBtnClick();
-
-editor_file_controls.bindConfirmShareCountryBtnClick();
 
 inspector_controls.bindInspectPaintBtnClick();
 
@@ -6844,10 +6544,6 @@ editor_file_controls.bindEditorSaveBtnClick();
 
 editor_file_controls.bindEditorLoadBtnClick();
 
-editor_tool_controls.bindEditorHubBtnClick();
-
-editor_tool_controls.bindEditorLibraryBtnClick();
-
 editor_tool_controls.bindEditorSaveCountryBtnClick();
 
 editor_tool_controls.bindEditorLoadCountryBtnClick();
@@ -6915,8 +6611,6 @@ editor_file_controls.bindImportCountryConfirmBtnClick();
 
 editor_file_controls.bindEditorLoadZipBtnClick();
 
-editor_tool_controls.bindEditorFlagLibraryBtnClick();
-
 // City tools buttons
 inspector_controls.bindEditorCityNewBtnClick();
 
@@ -6925,36 +6619,6 @@ inspector_controls.bindEditorCityClearBtnClick();
 menu_controls.bindLeaderboardBtnClick();
 
 menu_controls.bindCloseLeaderboardBtnClick();
-
-menu_controls.bindCloseHubBtnClick();
-
-// -------- Item details + comments modal logic --------
-
-// -------- Global Chat Logic --------
-
-community_controls.bindGlobalChatCloseClick();
-
-community_controls.bindGlobalChatSendClick();
-
-community_controls.bindGlobalChatInputKeydown();
-
-community_controls.bindItemCommentSubmitClick();
-
-community_controls.bindItemCancelReplyBtnClick();
-
-community_controls.bindCloseItemModalBtnClick();
-
-editor_file_controls.bindEditorShareBtnClick();
-
-community_controls.bindCancelUploadBtnClick();
-
-community_controls.bindConfirmUploadBtnClick();
-
-editor_tool_controls.bindCancelEditorChoiceClick();
-
-editor_tool_controls.bindChoiceExternalEditorClick();
-
-editor_tool_controls.bindChoiceIngameEditorClick();
 
 editor_tool_controls.bindCancelSourceChoiceClick();
 

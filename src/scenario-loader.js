@@ -654,12 +654,6 @@ export function createScenarioLoader(context, loadSession) {
 			}
 			context.updateRestartVisibility();
 
-			if (context.activeScenarioId) {
-				context.editorUpdateBtn.style.display = "block";
-			} else {
-				context.editorUpdateBtn.style.display = "none";
-			}
-
 			// Capture Instant Quick Restart Snapshots immediately upon scenario load
 			context.setInitialWorldControlMapSnapshot(
 				data.theater

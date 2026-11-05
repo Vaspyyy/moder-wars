@@ -1,3 +1,5 @@
+import { readFileAsDataUrl } from "./local-files.js";
+
 // Controls receive live state and commands; they do not import the application.
 export function createReferenceControls(runtime) {
 	function bindCustomSatInputChange() {
@@ -6,10 +8,10 @@ export function createReferenceControls(runtime) {
 			?.addEventListener("change", async (e) => {
 				const file = e.target.files[0];
 				if (!file) return;
-				runtime.loadingStatus.innerText = "Uploading Background Overlay...";
+				runtime.loadingStatus.innerText = "Loading Background Overlay...";
 				runtime.loadingOverlay.style.display = "flex";
 				try {
-					const url = await websim.upload(file);
+					const url = await readFileAsDataUrl(file);
 					runtime.customSatelliteUrl = url;
 					runtime.customSatelliteImg = new Image();
 					runtime.customSatelliteImg.crossOrigin = "anonymous";
@@ -46,7 +48,7 @@ export function createReferenceControls(runtime) {
 				runtime.loadingStatus.innerText = "Processing Reference Image...";
 				runtime.loadingOverlay.style.display = "flex";
 				try {
-					const url = await websim.upload(file);
+					const url = await readFileAsDataUrl(file);
 					runtime.referenceImageUrl = url;
 					if (runtime.referenceOverlay)
 						runtime.map.removeLayer(runtime.referenceOverlay);

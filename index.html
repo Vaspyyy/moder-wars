@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://esm.sh; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.websim.ai https://*.websim.com wss:; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; connect-src 'self'; font-src 'self' https://fonts.gstatic.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self';">
     <title>MW-V0.28.1</title>
     <link rel="stylesheet" href="styles/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
@@ -286,13 +286,8 @@
                 <div style="display: flex; gap: 10px; margin-top: 5px; flex-wrap: wrap;">
                     <button id="editor-create-btn" class="mini-btn" data-i18n="NEW_NATION">New Nation</button>
                     <button id="editor-test-btn" class="mini-btn" style="background: #27ae60;" data-i18n="TEST_SCENARIO">Test Scenario</button>
-                    <button id="editor-update-btn" class="mini-btn" style="display:none; background: #27ae60; font-weight: bold; border: 1px solid #fff;" data-i18n="UPDATE_SCENARIO">Update Scenario</button>
                     <button id="editor-save-btn" class="mini-btn" style="background: #8e44ad;" data-i18n="SAVE_PRESET">Save Preset</button>
                     <button id="editor-load-btn" class="mini-btn" style="background: #2c3e50;" data-i18n="LOAD_PRESET">Load Preset</button>
-                    <button id="editor-share-btn" class="mini-btn" style="background: #e67e22;" data-i18n="SHARE_HUB">Share to Hub</button>
-                    <button id="editor-hub-btn" class="mini-btn" style="background: #f39c12;" data-i18n="HUB_TAB">Editor Hub</button>
-                    <button id="editor-library-btn" class="mini-btn" style="background: #27ae60;" data-i18n="COUNTRY_LIB">Country Library</button>
-                    <button id="editor-flag-library-btn" class="mini-btn" style="background: #2e86de;" data-i18n="FLAG_LIB">Flag Library</button>
                     <button id="editor-save-country-btn" class="mini-btn" style="background: #27ae60;" data-i18n="SAVE_COUNTRY">Save Country</button>
                     <button id="editor-load-country-btn" class="mini-btn" style="background: #8e44ad;" data-i18n="LOAD_COUNTRY">Load Country</button>
                     <button id="editor-save-multi-btn" class="mini-btn" style="background: #e67e22;" title="Save all Ctrl-selected countries into one ZIP file.">Save Selected (ZIP)</button>
@@ -682,37 +677,6 @@
 
 
 
-    <!-- Editor Choice Modal -->
-    <div id="editor-choice-modal" class="settings-overlay" style="display:none">
-        <div class="settings-content" style="max-width: 500px;">
-            <h2 class="settings-title">CHOOSE EDITOR MODULE</h2>
-            <div class="editor-choice-grid">
-                <button id="choice-ingame-editor" class="menu-card primary">
-                    <div class="card-icon">
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M4 20V9l8-5 8 5v11h-3v-7H7v7H4z" fill="currentColor"/>
-                        </svg>
-                    </div>
-                    <div class="card-body">
-                        <span class="btn-text">IN-GAME ENGINE</span>
-                        <span class="btn-sub">Integrated Map Builder</span>
-                    </div>
-                </button>
-                <button id="choice-external-editor" class="menu-card">
-                    <div class="card-icon">
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M4 20l4-1 9-9-3-3-9 9-1 4zM15 4l3 3 2-4-1-1-4 2z" fill="currentColor"/>
-                        </svg>
-                    </div>
-                    <div class="card-body">
-                        <span class="btn-text">EXTERNAL EDITOR</span>
-                        <span class="btn-sub">Advanced Standalone Module</span>
-                    </div>
-                </button>
-            </div>
-            <button id="cancel-editor-choice" class="start-btn" style="background: #444;">BACK TO MENU</button>
-        </div>
-    </div>
 
     <!-- Editor Source Modal -->
     <div id="editor-source-modal" class="settings-overlay" style="display:none">
@@ -882,100 +846,9 @@
         </div>
     </div>
 
-    <!-- Unified Editor Hub Modal -->
-    <div id="scenario-hub-modal" class="settings-overlay thematic-overlay" style="display:none">
-        <div class="menu-v2-overlay"></div>
-        <div class="menu-v2-container">
-            <div class="menu-v2-header">
-                <h1 class="menu-v2-title">EDITOR HUB</h1>
-                <div class="menu-v2-author">Community Content Network</div>
-            </div>
-            <div class="menu-v2-nav">
-                <div class="scenario-selection-container">
-                    <div class="selection-header">
-                        <button id="close-hub-btn" class="selection-back-btn">
-                            <svg viewBox="0 0 24 24" fill="currentColor" style="width:20px;height:20px;"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
-                            <span>EXIT</span>
-                        </button>
-                        <div class="hub-tabs">
-                            <button id="tab-scenarios-btn" class="mini-btn active">SCENARIOS</button>
-                            <button id="tab-countries-btn" class="mini-btn">NATIONS</button>
-                            <button id="tab-flags-btn" class="mini-btn">FLAGS</button>
-                        </div>
-                    </div>
 
-                    <div id="hub-list-container" class="scenario-scroller-v2" style="padding-right: 10px;">
-                        <div id="hub-list" style="display: flex; flex-direction: column; gap: 15px;">
-                            <div style="text-align: center; color: #666; padding: 40px;">Connecting to satellite network...</div>
-                        </div>
-                        <div id="library-list" style="display: none; flex-direction: column; gap: 15px;">
-                            <div style="text-align: center; color: #666; padding: 40px;">Searching archives...</div>
-                        </div>
-                        <div id="flag-library-list" style="display: none; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px;">
-                            <div style="grid-column: 1/-1; text-align: center; color: #666; padding: 40px;">Loading vexillology archives...</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 
-    <!-- Upload Details Modal -->
-    <div id="upload-details-modal" class="settings-overlay" style="display:none">
-        <div class="settings-content">
-            <h3 class="settings-title">Share Scenario</h3>
-            <div class="setting-group">
-                <label>Scenario Name</label>
-                <input type="text" id="upload-scenario-name" placeholder="e.g. World War III" style="width: 100%; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px;">
-            </div>
-            <div class="setting-group">
-                <label>Description</label>
-                <textarea id="upload-scenario-desc" placeholder="Briefly describe your scenario..." style="width: 100%; height: 80px; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px; font-family: inherit; resize: none;"></textarea>
-            </div>
-            <div style="display: flex; gap: 10px;">
-                <button id="confirm-upload-btn" class="start-btn" style="background: #27ae60;">Upload Now</button>
-                <button id="cancel-upload-btn" class="start-btn" style="background: #444;">Cancel</button>
-            </div>
-        </div>
-    </div>
 
-    <!-- Share Flag Modal -->
-    <div id="share-flag-modal" class="settings-overlay" style="display:none">
-        <div class="settings-content">
-            <h3 class="settings-title">Contribute to Flag Library</h3>
-            <div class="setting-group">
-                <label>Flag Name</label>
-                <input type="text" id="share-flag-name" placeholder="e.g. Imperial Banner" style="width: 100%; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px;">
-            </div>
-            <div class="setting-group">
-                <label>Description</label>
-                <textarea id="share-flag-desc" placeholder="History or details about this flag..." style="width: 100%; height: 80px; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px; font-family: inherit; resize: none;"></textarea>
-            </div>
-            <div style="display: flex; gap: 10px;">
-                <button id="confirm-share-flag-btn" class="start-btn" style="background: #2e86de;">Upload Flag</button>
-                <button id="cancel-share-flag-btn" class="start-btn" style="background: #444;">Cancel</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Share Country Modal -->
-    <div id="share-country-modal" class="settings-overlay" style="display:none">
-        <div class="settings-content">
-            <h3 class="settings-title">Contribute to Library</h3>
-            <div class="setting-group">
-                <label>Public Name</label>
-                <input type="text" id="share-country-name" placeholder="e.g. Neo Tokyo" style="width: 100%; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px;">
-            </div>
-            <div class="setting-group">
-                <label>Description</label>
-                <textarea id="share-country-desc" placeholder="Tell the world about this nation..." style="width: 100%; height: 80px; padding: 10px; background: #2a2a30; border: 1px solid #444; color: white; border-radius: 8px; font-family: inherit; resize: none;"></textarea>
-            </div>
-            <div style="display: flex; gap: 10px;">
-                <button id="confirm-share-country-btn" class="start-btn" style="background: #8e44ad;">Upload to Library</button>
-                <button id="cancel-share-country-btn" class="start-btn" style="background: #444;">Cancel</button>
-            </div>
-        </div>
-    </div>
 
     <!-- Release Selection Modal -->
     <div id="release-modal" class="settings-overlay" style="display:none">
@@ -1047,78 +920,10 @@
         </div>
     </div>
 
-    <!-- Item Details + Comments Modal -->
-    <div id="item-comment-modal" class="settings-overlay thematic-overlay" style="display:none">
-        <div class="menu-v2-overlay"></div>
-        <div class="menu-v2-container">
-            <div class="menu-v2-header">
-                <h1 id="item-modal-title" class="menu-v2-title" style="font-size: 48px;">ITEM DETAILS</h1>
-                <div id="item-modal-author-name" class="menu-v2-author" style="font-size: 18px;">Intel Report</div>
-            </div>
-            <div class="menu-v2-nav item-details-nav">
-                <div class="scenario-selection-container">
-                    <div class="selection-header">
-                        <button id="close-item-modal-btn" class="selection-back-btn">
-                            <svg viewBox="0 0 24 24" fill="currentColor" style="width:20px;height:20px;"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
-                            <span>BACK</span>
-                        </button>
-                        <div id="item-modal-actions" style="display:none; gap:8px; margin-left: auto;">
-                            <button id="item-modal-play" class="mini-btn active" style="background:#27ae60;">PLAY</button>
-                            <button id="item-modal-remix" class="mini-btn active" style="background:#8e44ad;">REMIX</button>
-                            <button id="item-modal-delete" class="mini-btn" style="background:#c0392b; display:none;">DEL</button>
-                        </div>
-                    </div>
-
-                    <div class="scenario-scroller-v2" style="gap: 20px;">
-                        <div class="item-detail-hero">
-                            <img id="item-modal-preview" src="" alt="" loading="lazy" decoding="async" style="width:100%; height:180px; object-fit:cover; border-radius:4px; border:1px solid rgba(255,255,255,0.1); display:none;">
-                            <div id="item-modal-desc" style="font-size:14px; color:#ccc; line-height:1.6; margin-top:10px;"></div>
-                        </div>
-
-                        <div class="scroller-section">
-                            <div class="scroller-label">COMMUNICATIONS LOG</div>
-                            <div id="item-comments-list" class="item-comments-v2"></div>
-
-                            <div class="comment-composer-v2">
-                                <textarea id="item-comment-input" placeholder="Transmit a message..." style="width:100%; min-height:80px; padding:12px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.1); color:#fff; border-radius:4px; font-family: inherit; font-size:13px; resize:none;"></textarea>
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
-                                    <span id="item-reply-indicator" style="font-size: 12px; color:#f1c40f; text-transform:uppercase; letter-spacing:1px; display:none;">REPLYING...</span>
-                                    <div style="display:flex; gap:6px; margin-left:auto;">
-                                        <button id="item-comment-cancel-reply" class="mini-btn" style="background:#444; display:none;">CANCEL</button>
-                                        <button id="item-comment-submit" class="start-btn" style="padding:10px 20px; width:auto; font-size:12px;">SEND TRANSMISSION</button>
-                </div>
-            </div>
-        </div>
-
-        <div id="perf-overlay" style="display:none; position:absolute; bottom:8px; right:8px; background:rgba(0,0,0,0.75); color:#0f0; padding:4px 10px; border-radius:2px; font:10px monospace; z-index:2000; pointer-events:none; border:1px solid rgba(0,255,0,0.3);">
+    <div id="perf-overlay" style="display:none; position:absolute; bottom:8px; right:8px; background:rgba(0,0,0,0.75); color:#0f0; padding:4px 10px; border-radius:2px; font:10px monospace; z-index:2000; pointer-events:none; border:1px solid rgba(0,255,0,0.3);">
             FPS: -- | Frame: --ms
-        </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
     </div>
 
-    <!-- Global Chat Modal -->
-    <div id="global-chat-modal" class="settings-overlay" style="display:none">
-        <div class="settings-content" style="max-width: 520px; width: 95%; max-height: 90vh;">
-            <h3 class="settings-title" style="margin-bottom: 10px;">GLOBAL CHAT</h3>
-            <div style="font-size: 12px; color:#777; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;">
-                Shared war-room across everyone in this project.
-            </div>
-            <div id="global-chat-list" style="flex:1; min-height:120px; max-height:320px; overflow-y:auto; padding:8px; border-radius:8px; background:rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.08); margin-bottom:10px;">
-                <div style="text-align:center; font-size: 12px; color:#666; padding:20px;">Connecting to command net...</div>
-            </div>
-            <div>
-                <textarea id="global-chat-input" placeholder="Type a message..." style="width:100%; min-height:50px; max-height:120px; padding:8px; background:#2a2a30; border:1px solid #444; color:#fff; border-radius:6px; font-size:12px; resize:vertical;"></textarea>
-                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:6px;">
-                    <button id="global-chat-send" class="start-btn" style="width:auto; padding:8px 16px;">Send</button>
-                    <button id="global-chat-close" class="start-btn" style="background:#444; width:auto; padding:8px 16px;">Close</button>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <!-- Tutorial Overlay -->
     <div id="tutorial-overlay" class="tutorial-popup-container" style="display:none">
@@ -1171,7 +976,6 @@
                             <input type="file" id="inspect-flag-input" accept="image/*" style="font-size: 12px; color: #777; width: 100%;">
                             <div style="display: flex; gap: 4px;">
                                 <button id="inspect-fetch-flag-btn" class="mini-btn" style="background: #34495e; font-size: 12px; padding: 2px 4px; flex: 1;">Fetch Modern</button>
-                                <button id="inspect-hub-flag-btn" class="mini-btn" style="background: #2e86de; font-size: 12px; padding: 2px 4px; flex: 1;">Hub Library</button>
                             </div>
                         </div>
                     </div>
@@ -1183,8 +987,6 @@
                 <button id="inspect-annex-click-btn" class="start-btn" style="flex: 1; background: #d35400; font-size: 12px; padding: 10px;">ANNEX CLICK</button>
             </div>
             <div class="editor-only" style="display: flex; gap: 5px; margin-bottom: 10px;">
-                <button id="share-country-btn" class="start-btn" style="flex: 1; background: #8e44ad; font-size: 12px; padding: 8px;">Share Country</button>
-                <button id="share-flag-btn" class="start-btn" style="flex: 1; background: #34495e; font-size: 12px; padding: 8px;">Share Flag</button>
             </div>
 
             <div id="buff-editor-section" class="editor-only" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; margin-top: 5px;">

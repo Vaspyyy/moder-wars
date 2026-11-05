@@ -198,18 +198,6 @@ export function createEditorToolControls(runtime) {
 		});
 	}
 
-	function bindEditorHubBtnClick() {
-		runtime.editorHubBtn.addEventListener("click", () => {
-			runtime.openHub("scenarios");
-		});
-	}
-
-	function bindEditorLibraryBtnClick() {
-		runtime.editorLibraryBtn.addEventListener("click", () => {
-			runtime.openHub("countries");
-		});
-	}
-
 	function bindEditorSaveCountryBtnClick() {
 		document
 			.getElementById("editor-save-country-btn")
@@ -235,39 +223,9 @@ export function createEditorToolControls(runtime) {
 		}
 	}
 
-	function bindEditorFlagLibraryBtnClick() {
-		runtime.editorFlagLibraryBtn.addEventListener("click", () => {
-			runtime.openHub("flags");
-		});
-	}
-
-	function bindCancelEditorChoiceClick() {
-		runtime.cancelEditorChoice.onclick = () => {
-			runtime.editorChoiceModal.style.display = "none";
-		};
-	}
-
-	function bindChoiceExternalEditorClick() {
-		runtime.choiceExternalEditor.onclick = () => {
-			window.open(
-				"https://websim.com/@thepineguy/modern-wars-alternative-editor",
-				"_blank",
-			);
-			runtime.editorChoiceModal.style.display = "none";
-		};
-	}
-
-	function bindChoiceIngameEditorClick() {
-		runtime.choiceIngameEditor.onclick = () => {
-			runtime.editorChoiceModal.style.display = "none";
-			runtime.editorSourceModal.style.display = "flex";
-		};
-	}
-
 	function bindCancelSourceChoiceClick() {
 		runtime.cancelSourceChoice.onclick = () => {
 			runtime.editorSourceModal.style.display = "none";
-			runtime.editorChoiceModal.style.display = "flex";
 		};
 	}
 
@@ -279,8 +237,6 @@ export function createEditorToolControls(runtime) {
 			runtime.gameMode = "EDITOR";
 			runtime.gameState = "EDITOR_ACTIVE";
 			runtime.currentScenarioContext = null;
-			runtime.activeScenarioId = null;
-			runtime.editorUpdateBtn.style.display = "none";
 			runtime.mainMenu.style.display = "none";
 			runtime.mapUi.style.display = "flex";
 			runtime.editorToolbox.style.display = "flex";
@@ -336,8 +292,6 @@ export function createEditorToolControls(runtime) {
 			runtime.gameMode = "EDITOR";
 			runtime.gameState = "EDITOR_ACTIVE";
 			runtime.currentScenarioContext = null;
-			runtime.activeScenarioId = null;
-			runtime.editorUpdateBtn.style.display = "none";
 			runtime.mainMenu.style.display = "none";
 			runtime.mapUi.style.display = "flex";
 			runtime.editorToolbox.style.display = "flex";
@@ -404,15 +358,9 @@ export function createEditorToolControls(runtime) {
 		bindEditorMapSettingsBtnClick,
 		bindEditorToolPages,
 		bindEditorTestBtnClick,
-		bindEditorHubBtnClick,
-		bindEditorLibraryBtnClick,
 		bindEditorSaveCountryBtnClick,
 		bindEditorLoadCountryBtnClick,
 		bindEditorImportCountryBtnClick,
-		bindEditorFlagLibraryBtnClick,
-		bindCancelEditorChoiceClick,
-		bindChoiceExternalEditorClick,
-		bindChoiceIngameEditorClick,
 		bindCancelSourceChoiceClick,
 		bindChoiceSourceEarthClick,
 		bindChoiceSourceBlankClick,

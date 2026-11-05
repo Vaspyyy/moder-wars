@@ -121,7 +121,7 @@ export function drawOverlays(frame) {
 		}
 
 		// Draw Reference Image Guide (Over everything) when "Draw Above Terrain" is enabled.
-		// Hidden during preview capture to ensure clean Hub thumbnails and exports.
+		// Hidden during preview capture to keep thumbnails and exports clean.
 		// This pass runs last so the reference image sits on top of terrain, countries, oceans, and units.
 		if (
 			!this._isCapturing &&

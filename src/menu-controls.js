@@ -1,6 +1,29 @@
+import { SCENARIO_MENU_BGS } from "./constants.js";
 import { showAlert, showConfirm } from "./dialogs.js";
+import { clearStoredCustomTrack, storeCustomTrack } from "./local-files.js";
 // Controls receive live state and commands; they do not import the application.
 export function createMenuControls(runtime) {
+	function selectScenario(cardId, action) {
+		for (const card of document.querySelectorAll(".scroller-card")) {
+			card.classList.remove("selected");
+			if (card.tagName === "BUTTON") card.setAttribute("aria-pressed", "false");
+		}
+		const selectedCard = document.getElementById(cardId);
+		if (selectedCard) {
+			selectedCard.classList.add("selected");
+			if (selectedCard.tagName === "BUTTON")
+				selectedCard.setAttribute("aria-pressed", "true");
+		}
+		const bgUrl = SCENARIO_MENU_BGS[cardId] || "assets/images/title-map.svg";
+		if (runtime.mainMenu)
+			runtime.mainMenu.style.backgroundImage = `url('${bgUrl}')`;
+		if (runtime.enterScenarioBtn) {
+			runtime.enterScenarioBtn.style.display = "block";
+			runtime.queuedScenarioAction = action;
+		}
+		runtime.playClickSound();
+	}
+
 	function bindImportCountrySearchInput() {
 		if (runtime.importCountrySearch) {
 			runtime.importCountrySearch.addEventListener("input", () => {
@@ -410,13 +433,12 @@ export function createMenuControls(runtime) {
 				const file = e.target.files[0];
 				if (!file) return;
 
-				runtime.loadingStatus.innerText = "Uploading Soundtrack...";
+				runtime.loadingStatus.innerText = "Loading Soundtrack...";
 				runtime.loadingOverlay.style.display = "flex";
 
 				try {
-					const url = await websim.upload(file);
+					const url = await storeCustomTrack(file);
 					runtime.setCustomTrack(url);
-					runtime.setCookie("mw_custom_track", url);
 
 					// Restart music with new track
 					runtime.stopBackgroundMusic();
@@ -425,7 +447,7 @@ export function createMenuControls(runtime) {
 					showAlert("Custom soundtrack applied and saved!");
 				} catch (err) {
 					console.error(err);
-					showAlert("Failed to upload soundtrack.");
+					showAlert("Failed to load soundtrack.");
 					runtime.loadingOverlay.style.display = "none";
 				}
 			});
@@ -436,7 +458,7 @@ export function createMenuControls(runtime) {
 		if (runtime.clearCustomTrackBtn) {
 			runtime.clearCustomTrackBtn.addEventListener("click", () => {
 				runtime.setCustomTrack(null);
-				runtime.setCookie("mw_custom_track", "");
+				clearStoredCustomTrack().catch((error) => console.warn(error));
 				if (runtime.customTrackInput) runtime.customTrackInput.value = "";
 
 				runtime.stopBackgroundMusic();
@@ -444,18 +466,6 @@ export function createMenuControls(runtime) {
 				showAlert("Soundtrack reset to original.");
 			});
 		}
-	}
-
-	function bindTabScenariosBtnClick() {
-		runtime.tabScenariosBtn.onclick = () => runtime.switchHubTab("scenarios");
-	}
-
-	function bindTabCountriesBtnClick() {
-		runtime.tabCountriesBtn.onclick = () => runtime.switchHubTab("countries");
-	}
-
-	function bindTabFlagsBtnClick() {
-		runtime.tabFlagsBtn.onclick = () => runtime.switchHubTab("flags");
 	}
 
 	function bindPresetLowBtnClick() {
@@ -626,7 +636,7 @@ export function createMenuControls(runtime) {
 			const selector = document.getElementById("menu-scenario-selector");
 			navMain.style.display = "none";
 			selector.style.display = "flex";
-			runtime.selectScenario("scroller-choice-modern", () =>
+			selectScenario("scroller-choice-modern", () =>
 				runtime.choiceModernDay.click(),
 			);
 		});
@@ -660,7 +670,7 @@ export function createMenuControls(runtime) {
 
 	function bindScrollerChoiceModernClick() {
 		document.getElementById("scroller-choice-modern").onclick = () =>
-			runtime.selectScenario("scroller-choice-modern", () =>
+			selectScenario("scroller-choice-modern", () =>
 				runtime.choiceModernDay.click(),
 			);
 	}
@@ -668,7 +678,7 @@ export function createMenuControls(runtime) {
 	function bindScrollerChoiceUkraine2023Click() {
 		const cardId = "scroller-choice-ukraine2023";
 		document.getElementById(cardId).onclick = () =>
-			runtime.selectScenario(
+			selectScenario(
 				cardId,
 				runtime.createScenarioHandler("ukraine2023", {
 					...runtime.scenarioMenuDependencies,
@@ -678,16 +688,12 @@ export function createMenuControls(runtime) {
 			);
 	}
 
-
-
 	function bindChoiceModernDayClick() {
 		runtime.choiceModernDay.onclick = runtime.createScenarioHandler(
 			"modern",
 			runtime.scenarioMenuDependencies,
 		);
 	}
-
-
 
 	function bindCancelConquestChoiceClick() {
 		runtime.cancelConquestChoice.onclick = () => {
@@ -808,12 +814,6 @@ export function createMenuControls(runtime) {
 		}
 	}
 
-	function bindCloseHubBtnClick() {
-		runtime.closeHubBtn.addEventListener("click", () => {
-			runtime.closeHub();
-		});
-	}
-
 	function bindMinimizeSetupBtnClick() {
 		runtime.minimizeSetupBtn.onclick = (e) => {
 			e.stopPropagation();
@@ -878,9 +878,6 @@ export function createMenuControls(runtime) {
 		bindSpeedSelectorChange,
 		bindCustomTrackInputChange,
 		bindClearCustomTrackBtnClick,
-		bindTabScenariosBtnClick,
-		bindTabCountriesBtnClick,
-		bindTabFlagsBtnClick,
 		bindPresetLowBtnClick,
 		bindPresetDefaultBtnClick,
 		bindLaunchBtnClick,
@@ -912,7 +909,6 @@ export function createMenuControls(runtime) {
 		bindImportCountryCancelBtnClick,
 		bindLeaderboardBtnClick,
 		bindCloseLeaderboardBtnClick,
-		bindCloseHubBtnClick,
 		bindMinimizeSetupBtnClick,
 		bindMinimizeStatsBtnClick,
 		bindMinimizeStatusBtnClick,

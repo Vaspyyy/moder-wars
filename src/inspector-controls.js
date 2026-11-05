@@ -1,4 +1,5 @@
 import { showAlert, showConfirm } from "./dialogs.js";
+import { readFileAsDataUrl } from "./local-files.js";
 // Controls receive live state and commands; they do not import the application.
 export function createInspectorControls(runtime) {
 	async function loadReferenceGeometry() {
@@ -38,9 +39,9 @@ export function createInspectorControls(runtime) {
 
 			if (file) {
 				try {
-					runtime.loadingStatus.innerText = "Uploading Flag...";
+					runtime.loadingStatus.innerText = "Loading Flag...";
 					runtime.loadingOverlay.style.display = "flex";
-					runtime.customCountryData.flagUrl = await websim.upload(file);
+					runtime.customCountryData.flagUrl = await readFileAsDataUrl(file);
 					runtime.loadingOverlay.style.display = "none";
 				} catch (e) {
 					console.error("Flag upload failed", e);
@@ -69,12 +70,6 @@ export function createInspectorControls(runtime) {
 				runtime.recalculateAllBounds();
 				runtime.influenceLayer.render();
 			}
-		});
-	}
-
-	function bindInspectHubFlagBtnClick() {
-		runtime.inspectHubFlagBtn.addEventListener("click", () => {
-			runtime.openHub("flags");
 		});
 	}
 
@@ -138,9 +133,9 @@ export function createInspectorControls(runtime) {
 			const file = e.target.files[0];
 			if (file && runtime.editingCountryId > 0) {
 				try {
-					runtime.loadingStatus.innerText = "Uploading Flag...";
+					runtime.loadingStatus.innerText = "Loading Flag...";
 					runtime.loadingOverlay.style.display = "flex";
-					const url = await websim.upload(file);
+					const url = await readFileAsDataUrl(file);
 
 					runtime.updateCountryFlag(runtime.editingCountryId, url);
 					runtime.loadingOverlay.style.display = "none";
@@ -275,9 +270,9 @@ export function createInspectorControls(runtime) {
 				const file = e.target.files[0];
 				if (!file || runtime.editingCountryId <= 0) return;
 				try {
-					runtime.loadingStatus.innerText = "Uploading Alliance Flag...";
+					runtime.loadingStatus.innerText = "Loading Alliance Flag...";
 					runtime.loadingOverlay.style.display = "flex";
-					const url = await websim.upload(file);
+					const url = await readFileAsDataUrl(file);
 					const rootId = runtime.getAllianceRootId(runtime.editingCountryId);
 					if (!rootId) {
 						runtime.loadingOverlay.style.display = "none";
@@ -303,7 +298,7 @@ export function createInspectorControls(runtime) {
 				} catch (err) {
 					console.error("Alliance flag upload failed", err);
 					runtime.loadingOverlay.style.display = "none";
-					showAlert("Failed to upload alliance flag.");
+					showAlert("Failed to load alliance flag.");
 				}
 			});
 		}
@@ -532,7 +527,6 @@ export function createInspectorControls(runtime) {
 	return {
 		bindConfirmCreateBtnClick,
 		bindInspectNameInputInput,
-		bindInspectHubFlagBtnClick,
 		bindInspectFetchFlagBtnClick,
 		bindInspectFlagInputChange,
 		bindInspectColorPickerInput,
