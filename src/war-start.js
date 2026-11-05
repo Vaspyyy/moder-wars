@@ -3,6 +3,7 @@ import {
 	normalizeScenarioDate,
 } from "./country-force-profiles.js";
 import { showAlert } from "./dialogs.js";
+import { localFlagUrl } from "./flags.js";
 import { distributeFormationPersonnel } from "./formation-strength.js";
 import { loadRiverLines, rasterizeRiverMask } from "./river-lines.js";
 // Explicit live context keeps replacements of arrays/state visible across awaits and callbacks.
@@ -83,7 +84,9 @@ export function createWarStart(runtime) {
 				});
 		if (runtime.gameMode === "CONQUEST")
 			runtime.applyBroadSetupPosture(
-				document.getElementById("setup-posture-select")?.value || "ADAPTIVE",
+				/** @type {HTMLSelectElement} */ (
+					document.getElementById("setup-posture-select")
+				)?.value || "ADAPTIVE",
 			);
 		runtime.initAudio().then(() => {
 			runtime.playWarAmbiance();
@@ -128,7 +131,9 @@ export function createWarStart(runtime) {
 		// Read optional manual manpower overrides from the setup inputs
 		runtime.manualSideManpower.fill(null);
 		for (let si = 0; si < runtime.sides.length; si++) {
-			const mpInput = document.getElementById(`manpower-side-${si}`);
+			const mpInput = /** @type {HTMLInputElement} */ (
+				document.getElementById(`manpower-side-${si}`)
+			);
 			const parsed = mpInput ? parseInt(mpInput.value, 10) : NaN;
 			runtime.manualSideManpower[si] =
 				!Number.isNaN(parsed) && parsed > 0 ? parsed : null;
@@ -190,8 +195,8 @@ export function createWarStart(runtime) {
 		});
 
 		// Cinematic Mode logic
-		runtime.cinematicMode = document.getElementById(
-			"cinematic-mode-checkbox",
+		runtime.cinematicMode = /** @type {HTMLInputElement} */ (
+			document.getElementById("cinematic-mode-checkbox")
 		)?.checked;
 		if (runtime.cinematicMode) {
 			document.getElementById("game-status").style.display = "none";
@@ -333,9 +338,9 @@ export function createWarStart(runtime) {
 					} else {
 						const nameCode = runtime.findCodeByName(c.name);
 						const src = nameCode
-							? `https://flagcdn.com/w80/${nameCode}.webp`
+							? localFlagUrl(nameCode)
 							: c.feature
-								? `https://flagcdn.com/w80/${getCode(c.feature)}.webp`
+								? localFlagUrl(getCode(c.feature))
 								: null;
 						if (src) c.flag.src = src;
 					}

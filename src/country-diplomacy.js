@@ -1,4 +1,6 @@
 // Dependencies are supplied by the application; this module does not import it.
+import { el } from "./dom.js";
+
 export function createCountryDiplomacy(runtime) {
 	function openReleaseModal(releaserId, sideIdx) {
 		const releasables = runtime.countryMetadata.filter(
@@ -6,32 +8,41 @@ export function createCountryDiplomacy(runtime) {
 		);
 		if (releasables.length === 0) return;
 
-		runtime.releasableListContainer.innerHTML = releasables
-			.map((m) => {
-				if (!Number.isFinite(m.id)) return "";
-				const safeId = Number(m.id);
-				const safeName = runtime.escapeHtml(m.name);
-				const safeFlagUrl = runtime.escapeHtml(m.flagUrl || "");
-				return `
-        <button class="menu-card" style="padding: 10px; width: 100%; text-align: left;" data-release-nation-id="${safeId}" data-release-releaser-id="${releaserId}" data-release-side-idx="${sideIdx}">
-            <img src="${safeFlagUrl}" style="width: 30px; height: 18px; object-fit: cover; border: 1px solid #444; margin-right: 10px;">
-            <div class="card-body">
-                <span class="btn-text" style="font-size: 12px;">${safeName}</span>
-            </div>
-        </button>
-    `;
-			})
-			.join("");
-		runtime.releasableListContainer
-			.querySelectorAll("[data-release-nation-id]")
-			.forEach((btn) => {
-				btn.addEventListener("click", () => {
-					const nationId = Number(btn.dataset.releaseNationId);
-					const relId = Number(btn.dataset.releaseReleaserId);
-					const sIdx = Number(btn.dataset.releaseSideIdx);
-					window.releaseNation(nationId, relId, sIdx);
-				});
+		const buttons = [];
+		for (const m of releasables) {
+			if (!Number.isFinite(m.id)) continue;
+			const btn = el(
+				"button",
+				{
+					className: "menu-card releasable-card",
+					dataset: {
+						releaseNationId: Number(m.id),
+						releaseReleaserId: releaserId,
+						releaseSideIdx: sideIdx,
+					},
+				},
+				el("img", {
+					className: "releasable-flag",
+					props: { src: String(m.flagUrl || "") },
+				}),
+				el(
+					"div",
+					{ className: "card-body" },
+					el("span", {
+						className: "btn-text releasable-name",
+						text: String(m.name),
+					}),
+				),
+			);
+			btn.addEventListener("click", () => {
+				const nationId = Number(btn.dataset.releaseNationId);
+				const relId = Number(btn.dataset.releaseReleaserId);
+				const sIdx = Number(btn.dataset.releaseSideIdx);
+				window.releaseNation(nationId, relId, sIdx);
 			});
+			buttons.push(btn);
+		}
+		runtime.releasableListContainer.replaceChildren(...buttons);
 
 		runtime.releaseModal.style.display = "flex";
 	}

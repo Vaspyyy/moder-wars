@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { readdirSync } from "node:fs";
 
 const checks = [
 	"admin-regions",
@@ -50,7 +51,40 @@ const checks = [
 	"speed-selector",
 	"war-desk",
 	"ui-modules",
+	"ai-performance",
+	"cli-profiler",
+	"ffa-setup",
+	"geo-cache",
+	"geo-raster",
+	"influence-grid",
+	"load-asset-manifest",
+	"mop-up",
+	"observer-overlay",
+	"performance-profiler",
+	"setup-simplification",
+	"simulation-jobs",
+	"simulation-phase-wheel",
+	"surrender",
+	"tactical-grid",
+	"territory-ledger",
+	"ui-modernization",
+	"flags",
 ];
+// Smokes run elsewhere: this runner, module-graph (below, needs a flag) and
+// build-output (needs dist/, run by `npm run check` after the build).
+const runSeparately = new Set([
+	"modernization",
+	"module-graph",
+	"build-output",
+]);
+const unlisted = readdirSync(new URL(".", import.meta.url))
+	.filter((file) => file.endsWith("-smoke.mjs"))
+	.map((file) => file.slice(0, -"-smoke.mjs".length))
+	.filter((name) => !checks.includes(name) && !runSeparately.has(name));
+if (unlisted.length) {
+	console.error(`Smoke scripts missing from the suite: ${unlisted.join(", ")}`);
+	process.exit(1);
+}
 // Keep the focused integration suite explicit. No browser or game entry is evaluated.
 for (const name of checks) {
 	const result = spawnSync(process.execPath, [`scripts/${name}-smoke.mjs`], {

@@ -1,6 +1,29 @@
+import { SCENARIO_MENU_BGS } from "./constants.js";
 import { showAlert, showConfirm } from "./dialogs.js";
+import { clearStoredCustomTrack, storeCustomTrack } from "./local-files.js";
 // Controls receive live state and commands; they do not import the application.
 export function createMenuControls(runtime) {
+	function selectScenario(cardId, action) {
+		for (const card of document.querySelectorAll(".scroller-card")) {
+			card.classList.remove("selected");
+			if (card.tagName === "BUTTON") card.setAttribute("aria-pressed", "false");
+		}
+		const selectedCard = document.getElementById(cardId);
+		if (selectedCard) {
+			selectedCard.classList.add("selected");
+			if (selectedCard.tagName === "BUTTON")
+				selectedCard.setAttribute("aria-pressed", "true");
+		}
+		const bgUrl = SCENARIO_MENU_BGS[cardId] || "assets/images/title-map.svg";
+		if (runtime.mainMenu)
+			runtime.mainMenu.style.backgroundImage = `url('${bgUrl}')`;
+		if (runtime.enterScenarioBtn) {
+			runtime.enterScenarioBtn.style.display = "block";
+			runtime.queuedScenarioAction = action;
+		}
+		runtime.playClickSound();
+	}
+
 	function bindImportCountrySearchInput() {
 		if (runtime.importCountrySearch) {
 			runtime.importCountrySearch.addEventListener("input", () => {
@@ -185,8 +208,8 @@ export function createMenuControls(runtime) {
 					"active",
 					runtime.showWarPlans,
 				);
-				const preferenceCheckbox = document.getElementById(
-					"show-warplans-checkbox",
+				const preferenceCheckbox = /** @type {HTMLInputElement} */ (
+					document.getElementById("show-warplans-checkbox")
 				);
 				if (preferenceCheckbox)
 					preferenceCheckbox.checked = runtime.showWarPlans;
@@ -332,7 +355,9 @@ export function createMenuControls(runtime) {
 					runtime.mountainsEnabled &&
 					runtime.terrainMask.every((v) => v === 0)
 				) {
-					const currentMapRes = document.getElementById("map-res-select").value;
+					const currentMapRes = /** @type {HTMLSelectElement} */ (
+						document.getElementById("map-res-select")
+					).value;
 					await runtime.loadTerrain(currentMapRes);
 				}
 				runtime.influenceLayer.render();
@@ -410,13 +435,12 @@ export function createMenuControls(runtime) {
 				const file = e.target.files[0];
 				if (!file) return;
 
-				runtime.loadingStatus.innerText = "Uploading Soundtrack...";
+				runtime.loadingStatus.innerText = "Loading Soundtrack...";
 				runtime.loadingOverlay.style.display = "flex";
 
 				try {
-					const url = await websim.upload(file);
+					const url = await storeCustomTrack(file);
 					runtime.setCustomTrack(url);
-					runtime.setCookie("mw_custom_track", url);
 
 					// Restart music with new track
 					runtime.stopBackgroundMusic();
@@ -425,7 +449,7 @@ export function createMenuControls(runtime) {
 					showAlert("Custom soundtrack applied and saved!");
 				} catch (err) {
 					console.error(err);
-					showAlert("Failed to upload soundtrack.");
+					showAlert("Failed to load soundtrack.");
 					runtime.loadingOverlay.style.display = "none";
 				}
 			});
@@ -436,7 +460,7 @@ export function createMenuControls(runtime) {
 		if (runtime.clearCustomTrackBtn) {
 			runtime.clearCustomTrackBtn.addEventListener("click", () => {
 				runtime.setCustomTrack(null);
-				runtime.setCookie("mw_custom_track", "");
+				clearStoredCustomTrack().catch((error) => console.warn(error));
 				if (runtime.customTrackInput) runtime.customTrackInput.value = "";
 
 				runtime.stopBackgroundMusic();
@@ -444,18 +468,6 @@ export function createMenuControls(runtime) {
 				showAlert("Soundtrack reset to original.");
 			});
 		}
-	}
-
-	function bindTabScenariosBtnClick() {
-		runtime.tabScenariosBtn.onclick = () => runtime.switchHubTab("scenarios");
-	}
-
-	function bindTabCountriesBtnClick() {
-		runtime.tabCountriesBtn.onclick = () => runtime.switchHubTab("countries");
-	}
-
-	function bindTabFlagsBtnClick() {
-		runtime.tabFlagsBtn.onclick = () => runtime.switchHubTab("flags");
 	}
 
 	function bindPresetLowBtnClick() {
@@ -515,7 +527,9 @@ export function createMenuControls(runtime) {
 	}
 
 	function bindSettingsTabBtnClick() {
-		document.querySelectorAll(".settings-tab-btn").forEach((btn) => {
+		/** @type {NodeListOf<HTMLElement>} */ (
+			document.querySelectorAll(".settings-tab-btn")
+		).forEach((btn) => {
 			btn.addEventListener("click", () => {
 				const tab = btn.dataset.tab;
 				// Buttons UI
@@ -524,7 +538,9 @@ export function createMenuControls(runtime) {
 				});
 				btn.classList.add("active");
 				// Panes UI
-				document.querySelectorAll(".settings-tab-pane").forEach((pane) => {
+				/** @type {NodeListOf<HTMLElement>} */ (
+					document.querySelectorAll(".settings-tab-pane")
+				).forEach((pane) => {
 					pane.style.display = "none";
 				});
 				const target = document.getElementById(`settings-tab-${tab}`);
@@ -537,7 +553,9 @@ export function createMenuControls(runtime) {
 		document
 			.getElementById("language-select")
 			?.addEventListener("change", (event) =>
-				runtime.applyLanguage(event.target.value),
+				runtime.applyLanguage(
+					/** @type {HTMLSelectElement} */ (event.target).value,
+				),
 			);
 	}
 
@@ -595,7 +613,8 @@ export function createMenuControls(runtime) {
 
 	function bindHudMenuClick() {
 		document.getElementById("hud-menu")?.addEventListener("click", (event) => {
-			if (event.target.closest("button")) event.currentTarget.open = false;
+			if (/** @type {Element} */ (event.target).closest("button"))
+				/** @type {HTMLDetailsElement} */ (event.currentTarget).open = false;
 		});
 	}
 
@@ -626,7 +645,7 @@ export function createMenuControls(runtime) {
 			const selector = document.getElementById("menu-scenario-selector");
 			navMain.style.display = "none";
 			selector.style.display = "flex";
-			runtime.selectScenario("scroller-choice-modern", () =>
+			selectScenario("scroller-choice-modern", () =>
 				runtime.choiceModernDay.click(),
 			);
 		});
@@ -660,7 +679,7 @@ export function createMenuControls(runtime) {
 
 	function bindScrollerChoiceModernClick() {
 		document.getElementById("scroller-choice-modern").onclick = () =>
-			runtime.selectScenario("scroller-choice-modern", () =>
+			selectScenario("scroller-choice-modern", () =>
 				runtime.choiceModernDay.click(),
 			);
 	}
@@ -668,7 +687,7 @@ export function createMenuControls(runtime) {
 	function bindScrollerChoiceUkraine2023Click() {
 		const cardId = "scroller-choice-ukraine2023";
 		document.getElementById(cardId).onclick = () =>
-			runtime.selectScenario(
+			selectScenario(
 				cardId,
 				runtime.createScenarioHandler("ukraine2023", {
 					...runtime.scenarioMenuDependencies,
@@ -678,37 +697,9 @@ export function createMenuControls(runtime) {
 			);
 	}
 
-	function bindScrollerChoice1936Click() {
-		document.getElementById("scroller-choice-1936").onclick = () =>
-			runtime.selectScenario("scroller-choice-1936", () =>
-				runtime.choice1936Scenario.click(),
-			);
-	}
-
-	function bindScrollerChoice1914Click() {
-		document.getElementById("scroller-choice-1914").onclick = () =>
-			runtime.selectScenario("scroller-choice-1914", () =>
-				runtime.choiceWW1Scenario.click(),
-			);
-	}
-
 	function bindChoiceModernDayClick() {
 		runtime.choiceModernDay.onclick = runtime.createScenarioHandler(
 			"modern",
-			runtime.scenarioMenuDependencies,
-		);
-	}
-
-	function bindChoice1936ScenarioClick() {
-		runtime.choice1936Scenario.onclick = runtime.createScenarioHandler(
-			"ww2",
-			runtime.scenarioMenuDependencies,
-		);
-	}
-
-	function bindChoiceWW1ScenarioClick() {
-		runtime.choiceWW1Scenario.onclick = runtime.createScenarioHandler(
-			"ww1",
 			runtime.scenarioMenuDependencies,
 		);
 	}
@@ -832,12 +823,6 @@ export function createMenuControls(runtime) {
 		}
 	}
 
-	function bindCloseHubBtnClick() {
-		runtime.closeHubBtn.addEventListener("click", () => {
-			runtime.closeHub();
-		});
-	}
-
 	function bindMinimizeSetupBtnClick() {
 		runtime.minimizeSetupBtn.onclick = (e) => {
 			e.stopPropagation();
@@ -902,9 +887,6 @@ export function createMenuControls(runtime) {
 		bindSpeedSelectorChange,
 		bindCustomTrackInputChange,
 		bindClearCustomTrackBtnClick,
-		bindTabScenariosBtnClick,
-		bindTabCountriesBtnClick,
-		bindTabFlagsBtnClick,
 		bindPresetLowBtnClick,
 		bindPresetDefaultBtnClick,
 		bindLaunchBtnClick,
@@ -923,11 +905,7 @@ export function createMenuControls(runtime) {
 		bindEnterScenarioBtnClick,
 		bindScrollerChoiceModernClick,
 		bindScrollerChoiceUkraine2023Click,
-		bindScrollerChoice1936Click,
-		bindScrollerChoice1914Click,
 		bindChoiceModernDayClick,
-		bindChoice1936ScenarioClick,
-		bindChoiceWW1ScenarioClick,
 		bindCancelConquestChoiceClick,
 		bindCloseReleaseModalBtnClick,
 		bindCancelCreateBtnClick,
@@ -940,7 +918,6 @@ export function createMenuControls(runtime) {
 		bindImportCountryCancelBtnClick,
 		bindLeaderboardBtnClick,
 		bindCloseLeaderboardBtnClick,
-		bindCloseHubBtnClick,
 		bindMinimizeSetupBtnClick,
 		bindMinimizeStatsBtnClick,
 		bindMinimizeStatusBtnClick,

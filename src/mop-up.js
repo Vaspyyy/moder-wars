@@ -53,6 +53,16 @@ export function selectAssignedMopUpCountryId(countryIds, unitIndex) {
 	return Number(countryIds[normalizedIndex % countryIds.length]) || 0;
 }
 
+/**
+ * @param {ArrayLike<number>} cells
+ * @param {{
+ *   unitLat?: number,
+ *   unitLng?: number,
+ *   gridWidth?: number,
+ *   gridRes?: number,
+ *   isEligible?: (cellIndex: number) => boolean,
+ * }} [options]
+ */
 export function selectNearestMopUpCell(
 	cells,
 	{ unitLat, unitLng, gridWidth, gridRes, isEligible = () => true } = {},

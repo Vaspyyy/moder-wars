@@ -1,13 +1,13 @@
 {
 	"name": "modern-wars",
-	"version": "0.28.1",
+	"version": "0.28.2",
 	"private": true,
 	"type": "module",
 	"scripts": {
 		"dev": "vite --host 127.0.0.1",
 		"build": "vite build",
 		"preview": "vite preview --host 127.0.0.1",
-		"typecheck": "tsc --noEmit",
+		"typecheck": "tsc --noEmit && tsc -p tsconfig.js.json && tsc -p tsconfig.workers.json",
 		"lint": "biome check .",
 		"check": "npm run typecheck && npm run lint && npm run smoke && npm run build && node scripts/build-output-smoke.mjs",
 		"smoke": "node scripts/modernization-smoke.mjs"

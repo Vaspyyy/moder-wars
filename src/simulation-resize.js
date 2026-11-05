@@ -1,6 +1,8 @@
 import { toDenseInfluenceMap } from "./influence-grid.js";
 import { hasSavedCells, normalizeSavedCells } from "./saved-cells.js";
 
+/** @typedef {Int8Array | Uint8Array | Uint8ClampedArray | Int16Array | Uint16Array | Int32Array | Uint32Array | Float32Array | Float64Array} TypedArray */
+
 const GRID_FIELDS = [
 	"worldControlMap",
 	"deJureMap",
@@ -54,10 +56,13 @@ export function resizeSimulationGrid(runtime, newResolution) {
 			Math.floor(((x + 0.5) * newResolution) / oldResolution),
 		),
 	);
+	/** @param {TypedArray} source */
 	function resample(source) {
 		if (!ArrayBuffer.isView(source) || source.length !== oldSize)
 			throw new RangeError("Source grid size mismatch");
-		const target = new source.constructor(gridSize);
+		const target = new /** @type {new (length: number) => TypedArray} */ (
+			source.constructor
+		)(gridSize);
 		for (let y = 0; y < gridHeight; y++) {
 			const sourceRow = Math.min(
 				oldHeight - 1,

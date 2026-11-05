@@ -4,16 +4,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
-import {
-	decodeScenarioBinary,
-	sha256Hex,
-} from "../src/scenario-codec.js";
+import { decodeScenarioBinary, sha256Hex } from "../src/scenario-codec.js";
+import { readWorldMap2022 } from "./source-data.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const pairs = [
-	["world map 2022.json", "world-map-2022-v3.mwsc.gz"],
-	["world_war_1__1914_.json", "world-war-1-1914-v3.mwsc.gz"],
-	["WW2 Peru Update.json", "world-war-2-v3.mwsc.gz"],
+	["world-map-2022.json.gz", "world-map-2022-v3.mwsc.gz", readWorldMap2022],
 ];
 
 function provinceId(x, y, countryId, gridRes) {
@@ -32,11 +28,12 @@ function provinceId(x, y, countryId, gridRes) {
 	const cellX = Math.floor(nx + w1 + noise);
 	const cellY = Math.floor(ny + w2 + noise);
 	return (
-		(Math.abs(cellX * 73856093) ^
+		((Math.abs(cellX * 73856093) ^
 			Math.abs(cellY * 19349663) ^
 			Math.abs(countryId * 83492791)) >>>
+			0) |
 		0
-	) | 0;
+	);
 }
 
 function legacyRemap(original, targetGridRes) {
@@ -71,8 +68,8 @@ function legacyRemap(original, targetGridRes) {
 	return { width, height, worldControl, land };
 }
 
-for (const [jsonName, binaryName] of pairs) {
-	const original = JSON.parse(fs.readFileSync(path.join(root, "assets/maps", jsonName), "utf8"));
+for (const [jsonName, binaryName, readSource] of pairs) {
+	const original = readSource();
 	const compressedBytes = fs.readFileSync(
 		path.join(root, "assets/maps/compiled", binaryName),
 	);
@@ -85,11 +82,27 @@ for (const [jsonName, binaryName] of pairs) {
 	const decoded = decodeScenarioBinary(binaryBytes, { expandSavedCells: true });
 	const expectedScenario = { ...original };
 	delete expectedScenario.mapData;
-	assert.deepEqual(decoded.scenario, expectedScenario, `${jsonName}: scenario metadata`);
-	assert.equal(decoded.entryCount, original.mapData.length, `${jsonName}: sparse entry count`);
+	assert.deepEqual(
+		decoded.scenario,
+		expectedScenario,
+		`${jsonName}: scenario metadata`,
+	);
+	assert.equal(
+		decoded.entryCount,
+		original.mapData.length,
+		`${jsonName}: sparse entry count`,
+	);
 	for (const [index, owner, biome = 0] of original.mapData) {
-		assert.equal(decoded.worldControl[index], owner, `${jsonName}: owner at ${index}`);
-		assert.equal(decoded.deJure[index], owner, `${jsonName}: deJure at ${index}`);
+		assert.equal(
+			decoded.worldControl[index],
+			owner,
+			`${jsonName}: owner at ${index}`,
+		);
+		assert.equal(
+			decoded.deJure[index],
+			owner,
+			`${jsonName}: deJure at ${index}`,
+		);
 		assert.equal(decoded.land[index], 1, `${jsonName}: land at ${index}`);
 		assert.equal(decoded.biome[index], biome, `${jsonName}: biome at ${index}`);
 		assert.equal(
@@ -103,7 +116,9 @@ for (const [jsonName, binaryName] of pairs) {
 			`${jsonName}: province at ${index}`,
 		);
 	}
-	console.log(`ok ${jsonName}: ${decoded.entryCount} cells, ${decoded.source.width}x${decoded.source.height}`);
+	console.log(
+		`ok ${jsonName}: ${decoded.entryCount} cells, ${decoded.source.width}x${decoded.source.height}`,
+	);
 
 	for (const targetGridRes of [0.15, 0.25]) {
 		const remapped = decodeScenarioBinary(binaryBytes, { targetGridRes });

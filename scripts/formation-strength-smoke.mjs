@@ -66,15 +66,11 @@ assert.deepEqual(getFormationStrengthBadge({ personnel: 1000 }), {
 	ariaLabel: "1000 personnel (1 times standard strength)",
 });
 assert.equal(formatFormationStrengthBadge({ personnel: 2500 }), "2.5×");
-assert.equal(
-	getFormationStrengthBadge({ personnel: 5000 }).tier,
-	"massed",
-);
+assert.equal(getFormationStrengthBadge({ personnel: 5000 }).tier, "massed");
 
 assert.throws(
 	() => distributeFormationPersonnel(1000, 0),
 	/formationCount must be positive/,
 );
-
 
 console.log("Formation strength smoke tests passed");

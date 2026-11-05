@@ -2,7 +2,10 @@ import { CONFIG } from "./config.js";
 import { createDeterministicJobQueue } from "./simulation-jobs.js";
 import { createTacticalGrid } from "./tactical-grid.js";
 
-/** One simulation owns these buffers, plans and caches. No UI references cross this boundary. */
+/**
+ * One simulation owns these buffers, plans and caches. No UI references cross this boundary.
+ * @param {Record<string, any>} [initial]
+ */
 export function createSimulationState(initial = {}) {
 	if (!initial || typeof initial !== "object" || Array.isArray(initial)) {
 		throw new TypeError("Simulation state must be an object.");

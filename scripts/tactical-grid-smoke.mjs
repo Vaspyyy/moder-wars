@@ -97,7 +97,10 @@ assert.equal(
 	}),
 	2,
 );
-assert.deepEqual(neighborCells, [...neighborCells].sort((left, right) => left - right));
+assert.deepEqual(
+	neighborCells,
+	[...neighborCells].sort((left, right) => left - right),
+);
 
 const visited = [];
 const pairStats = forEachUnorderedNeighborPair(

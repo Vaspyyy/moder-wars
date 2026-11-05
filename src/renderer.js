@@ -1032,7 +1032,9 @@ const ControlMapLayer = mapRuntime.Layer.extend({
 		const isSimplifiedMode = true;
 		const useSimplifiedBase = true;
 		const mapResolution =
-			document.getElementById("map-res-select")?.value || "110m";
+			/** @type {HTMLSelectElement} */ (
+				document.getElementById("map-res-select")
+			)?.value || "110m";
 		if (isAtlas && !isCustomTerrain) {
 			this._onAtlasCoastReady ??= () => {
 				if (this._disposed) return;

@@ -21,6 +21,15 @@ export function createHostilityChecker(relations, maxSides) {
 		(!relations || relations[a * maxSides + b] === 1);
 }
 
+/**
+ * Typed-array buffers reused across direction-field rebuilds.
+ * @typedef {object} DirectionFieldScratch
+ * @property {Float32Array} [lat]
+ * @property {Float32Array} [lng]
+ * @property {Int32Array} [source]
+ * @property {Int32Array} [queue]
+ */
+
 export function buildDirectionField({
 	landMask,
 	dominantSideMap,
@@ -28,7 +37,7 @@ export function buildDirectionField({
 	gridWidth,
 	gridHeight,
 	gridRes,
-	scratch = {},
+	scratch = /** @type {DirectionFieldScratch} */ ({}),
 }) {
 	const started = performance.now();
 	if (

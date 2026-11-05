@@ -384,15 +384,10 @@ const EDITOR_TOOL_PAGES = [
 	[
 		"editor-create-btn",
 		"editor-test-btn",
-		"editor-update-btn",
 		"editor-save-btn",
 		"editor-load-btn",
-		"editor-share-btn",
-		"editor-hub-btn",
 	],
 	[
-		"editor-library-btn",
-		"editor-flag-library-btn",
 		"editor-save-country-btn",
 		"editor-load-country-btn",
 		"editor-save-multi-btn",

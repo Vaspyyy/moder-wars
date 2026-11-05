@@ -1,15 +1,17 @@
+import { readFileAsDataUrl } from "./local-files.js";
+
 // Controls receive live state and commands; they do not import the application.
 export function createReferenceControls(runtime) {
 	function bindCustomSatInputChange() {
 		document
 			.getElementById("custom-sat-input")
 			?.addEventListener("change", async (e) => {
-				const file = e.target.files[0];
+				const file = /** @type {HTMLInputElement} */ (e.target).files[0];
 				if (!file) return;
-				runtime.loadingStatus.innerText = "Uploading Background Overlay...";
+				runtime.loadingStatus.innerText = "Loading Background Overlay...";
 				runtime.loadingOverlay.style.display = "flex";
 				try {
-					const url = await websim.upload(file);
+					const url = await readFileAsDataUrl(file);
 					runtime.customSatelliteUrl = url;
 					runtime.customSatelliteImg = new Image();
 					runtime.customSatelliteImg.crossOrigin = "anonymous";
@@ -41,12 +43,12 @@ export function createReferenceControls(runtime) {
 		document
 			.getElementById("ref-image-input")
 			?.addEventListener("change", async (e) => {
-				const file = e.target.files[0];
+				const file = /** @type {HTMLInputElement} */ (e.target).files[0];
 				if (!file) return;
 				runtime.loadingStatus.innerText = "Processing Reference Image...";
 				runtime.loadingOverlay.style.display = "flex";
 				try {
-					const url = await websim.upload(file);
+					const url = await readFileAsDataUrl(file);
 					runtime.referenceImageUrl = url;
 					if (runtime.referenceOverlay)
 						runtime.map.removeLayer(runtime.referenceOverlay);
@@ -66,8 +68,6 @@ export function createReferenceControls(runtime) {
 						runtime.referenceOverlay = runtime.mapRuntime
 							.imageOverlay(url, bounds, {
 								opacity: runtime.refOpacity,
-								interactive: false,
-								pane: "refImagePane",
 							})
 							.addTo(runtime.map);
 						runtime.updateRefHandles();
@@ -85,7 +85,9 @@ export function createReferenceControls(runtime) {
 		document
 			.getElementById("ref-opacity-slider")
 			?.addEventListener("input", (e) => {
-				runtime.refOpacity = parseFloat(e.target.value);
+				runtime.refOpacity = parseFloat(
+					/** @type {HTMLInputElement} */ (e.target).value,
+				);
 				if (runtime.referenceOverlay)
 					runtime.referenceOverlay.setOpacity(runtime.refOpacity);
 				if (runtime.influenceLayer) {
@@ -114,7 +116,9 @@ export function createReferenceControls(runtime) {
 		document
 			.getElementById("ref-scale-slider")
 			?.addEventListener("input", (e) => {
-				runtime.refScale = parseFloat(e.target.value);
+				runtime.refScale = parseFloat(
+					/** @type {HTMLInputElement} */ (e.target).value,
+				);
 				if (runtime.referenceOverlay && runtime.referenceImageUrl) {
 					const center = runtime.referenceOverlay.getBounds().getCenter();
 					const w = 40 * runtime.refScale;

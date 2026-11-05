@@ -1,9 +1,15 @@
 import { CONFIG } from "./config.js";
 import { showAlert } from "./dialogs.js";
+import { el } from "./dom.js";
+import {
+	localizeFlagUrl,
+	localizeMetaFlags,
+	localizeScenarioFlags,
+} from "./flags.js";
 import { beginLoadTrace } from "./load-profiler.js";
 import mapRuntime from "./map-runtime.ts";
 import { normalizeSavedCells } from "./saved-cells.js";
-import { loadScenario } from "./scenario-codec.js";
+import { decodeScenarioBinary, loadScenario } from "./scenario-codec.js";
 import { generateScenarioSnapshot } from "./scenario-export.js";
 import {
 	applyScenarioSovereigntyOverrides,
@@ -30,7 +36,9 @@ export function createScenarioLoader(context, loadSession) {
 			countryMetadata: context.countryMetadata,
 			cities: context.cities,
 			gridRes: CONFIG.GRID_RES,
-			mapRes: document.getElementById("map-res-select").value,
+			mapRes: /** @type {HTMLSelectElement} */ (
+				document.getElementById("map-res-select")
+			).value,
 			imagery: "atlas",
 			disableCountryGradient: context.disableCountryGradient,
 			customSatelliteUrl: context.customSatelliteUrl,
@@ -68,13 +76,16 @@ export function createScenarioLoader(context, loadSession) {
 		const isCompiledSource =
 			typeof fileOrBlob === "string" ||
 			(typeof URL !== "undefined" && fileOrBlob instanceof URL);
+		/** @type {{ action: string, count?: number }} */
 		let userChoice = { action: "skip" };
 		const loadTrace = beginLoadTrace("scenario", {
 			targetMode,
 			source:
 				typeof fileOrBlob === "string" ? fileOrBlob : fileOrBlob.name || "blob",
 			gridResolution: Number(
-				document.getElementById("grid-res-select")?.value || CONFIG.GRID_RES,
+				/** @type {HTMLSelectElement} */ (
+					document.getElementById("grid-res-select")
+				)?.value || CONFIG.GRID_RES,
 			),
 		});
 
@@ -91,12 +102,16 @@ export function createScenarioLoader(context, loadSession) {
 
 			// Ensure engine is initialized with the CURRENT grid density before we use worldControlMap.
 			// This fixes cases where a preset was saved at a low grid density, but your settings are now higher.
-			const gridSelect = document.getElementById("grid-res-select");
+			const gridSelect = /** @type {HTMLSelectElement} */ (
+				document.getElementById("grid-res-select")
+			);
 			const desiredGridRes = gridSelect
 				? parseFloat(gridSelect.value)
 				: CONFIG.GRID_RES;
 			const selectedMapResolution =
-				document.getElementById("map-res-select")?.value || "110m";
+				/** @type {HTMLSelectElement} */ (
+					document.getElementById("map-res-select")
+				)?.value || "110m";
 			const targetGridWidth = Math.ceil(360 / desiredGridRes);
 			const targetGridHeight = Math.ceil(180 / desiredGridRes);
 			let compiledMaps = null;
@@ -286,8 +301,6 @@ export function createScenarioLoader(context, loadSession) {
 					mapRuntime
 						.imageOverlay(context.referenceImageUrl, bounds, {
 							opacity: context.refOpacity,
-							interactive: false,
-							pane: "refImagePane",
 						})
 						.addTo(context.map),
 				);
@@ -324,7 +337,9 @@ export function createScenarioLoader(context, loadSession) {
 					context.deJureMap.set(compiledMaps.deJure);
 				}
 			} else if (!context.rawGeoJsonData && !data.isCustomTerrain) {
-				const mapRes = document.getElementById("map-res-select").value;
+				const mapRes = /** @type {HTMLSelectElement} */ (
+					document.getElementById("map-res-select")
+				).value;
 				const geoUrl = `${CONFIG.GEOJSON_BASE}${mapRes}/cultural/ne_${mapRes}_admin_0_countries.json`;
 				await context.loadCountries(geoUrl, true, true, loadGeneration);
 			} else if (!data.isCustomTerrain) {
@@ -405,6 +420,7 @@ export function createScenarioLoader(context, loadSession) {
 					allies: Array.isArray(m.allies) ? m.allies : [],
 				};
 
+				localizeMetaFlags(meta);
 				// Load primary national flag image
 				if (meta.flagUrl) {
 					meta.tempFlag = new Image();
@@ -558,7 +574,9 @@ export function createScenarioLoader(context, loadSession) {
 				// Earth scenario without baked mountains: trigger dynamic GeoJSON terrain scan
 				const resToUse =
 					data.mapRes ||
-					document.getElementById("map-res-select").value ||
+					/** @type {HTMLSelectElement} */ (
+						document.getElementById("map-res-select")
+					).value ||
 					"110m";
 				await context.loadTerrain(resToUse);
 			}
@@ -654,12 +672,6 @@ export function createScenarioLoader(context, loadSession) {
 			}
 			context.updateRestartVisibility();
 
-			if (context.activeScenarioId) {
-				context.editorUpdateBtn.style.display = "block";
-			} else {
-				context.editorUpdateBtn.style.display = "none";
-			}
-
 			// Capture Instant Quick Restart Snapshots immediately upon scenario load
 			context.setInitialWorldControlMapSnapshot(
 				data.theater
@@ -735,7 +747,7 @@ export function createScenarioLoader(context, loadSession) {
 				throw new Error("Invalid preset structure");
 			}
 			context.setImportScenarioBuffer({
-				metadata: data.metadata,
+				metadata: localizeScenarioFlags(data.metadata),
 				mapData: data.mapData,
 				gridRes: data.gridRes || CONFIG.GRID_RES,
 			});
@@ -756,11 +768,13 @@ export function createScenarioLoader(context, loadSession) {
 				context.importCountrySearch.disabled = true;
 			}
 			if (context.importCountryCardList) {
-				context.importCountryCardList.innerHTML = `
-                <div style="font-size:11px; color:#777; text-align:center; padding:10px;">
-                    Failed to load scenario
-                </div>
-            `;
+				context.importCountryCardList.replaceChildren(
+					el("div", {
+						className:
+							"import-country-card-list-div import-country-card-list-div--compact",
+						text: "Failed to load scenario",
+					}),
+				);
 			}
 		}
 	}
@@ -769,6 +783,36 @@ export function createScenarioLoader(context, loadSession) {
 		try {
 			const resp = await fetch(url);
 			if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+			if (/\.mwsc\.gz(?:\?|$)/.test(url)) {
+				let bytes = new Uint8Array(await resp.arrayBuffer());
+				// A server may already have removed the gzip layer.
+				if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
+					const stream = new Blob([bytes])
+						.stream()
+						.pipeThrough(new DecompressionStream("gzip"));
+					bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+				}
+				const decoded = decodeScenarioBinary(bytes);
+				const mapData = [];
+				for (let index = 0; index < decoded.land.length; index++) {
+					if (!decoded.land[index]) continue;
+					const biome = decoded.biome[index];
+					mapData.push(
+						biome
+							? [index, decoded.worldControl[index], biome]
+							: [index, decoded.worldControl[index]],
+					);
+				}
+				context.setImportScenarioBuffer({
+					metadata: localizeScenarioFlags(decoded.scenario.metadata),
+					mapData,
+					gridRes: decoded.target.gridRes,
+				});
+				context.populateImportCountrySelect();
+				if (context.importScenarioSelect && context.lastImportScenarioKey)
+					context.importScenarioSelect.value = context.lastImportScenarioKey;
+				return;
+			}
 			const blob = await resp.blob();
 			await loadScenarioForCountryImportFromBlob(blob);
 		} catch (e) {
@@ -803,7 +847,7 @@ export function createScenarioLoader(context, loadSession) {
 				sourceMeta.color || "rgba(150,150,150,0.5)",
 			),
 			isCustom: true,
-			flagUrl: sourceMeta.flagUrl || null,
+			flagUrl: localizeFlagUrl(sourceMeta.flagUrl) || null,
 			role: sourceMeta.role || "OFFENSE",
 			overlordId: sourceMeta.overlordId || null,
 			bounds: {

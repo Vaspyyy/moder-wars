@@ -20,14 +20,14 @@ export function createReferenceOverlay(runtime) {
 
 		const handleIcon = runtime.mapRuntime.divIcon({
 			className: "ref-handle",
-			html: '<div style="width:14px; height:14px; background:#27ae60; border:2px solid #fff; border-radius:50%; box-shadow:0 0 8px rgba(0,0,0,0.6);"></div>',
+			html: '<div class="ref-handle-dot"></div>',
 			iconSize: [14, 14],
 			iconAnchor: [7, 7],
 		});
 
 		const centerHandleIcon = runtime.mapRuntime.divIcon({
 			className: "ref-handle-center",
-			html: '<div style="width:20px; height:20px; background:#2e86de; border:2px solid #fff; border-radius:50%; box-shadow:0 0 10px rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; color:white; font-size:12px; font-weight:bold;">✥</div>',
+			html: '<div class="ref-handle-dot ref-handle-dot--center">✥</div>',
 			iconSize: [20, 20],
 			iconAnchor: [10, 10],
 		});
@@ -53,9 +53,9 @@ export function createReferenceOverlay(runtime) {
 			];
 			runtime.referenceOverlay.setBounds(newBounds);
 		});
-		mCenter.on("dragend", (e) => {
+		mCenter.on("dragend", () => {
 			runtime.map.dragging.enable();
-			updateRefHandles(e);
+			updateRefHandles();
 		});
 		runtime.refHandles.push(mCenter);
 
@@ -92,10 +92,10 @@ export function createReferenceOverlay(runtime) {
 
 				if (newBounds) runtime.referenceOverlay.setBounds(newBounds);
 			});
-			marker.on("dragend", (e) => {
+			marker.on("dragend", () => {
 				// Re-enable map dragging once the handle drag is finished
 				runtime.map.dragging.enable();
-				updateRefHandles(e);
+				updateRefHandles();
 			});
 			runtime.refHandles.push(marker);
 		});

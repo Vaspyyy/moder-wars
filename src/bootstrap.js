@@ -1,5 +1,11 @@
 window.onerror = (msg, _url, line, _col, err) => {
-	document.body.innerHTML = `<div style="background:#111;color:#f44;padding:20px;font-family:monospace;white-space:pre-wrap;font-size:14px;">JS Error at line ${line}:\n${msg}\n\n${err?.stack || ""}</div>`;
+	// Built with DOM APIs and inline styles so it shows even if the stylesheet
+	// failed to load and never parses the error text as markup.
+	const panel = document.createElement("div");
+	panel.style.cssText =
+		"background:#111;color:#f44;padding:20px;font-family:monospace;white-space:pre-wrap;font-size:14px;";
+	panel.textContent = `JS Error at line ${line}:\n${msg}\n\n${err?.stack || ""}`;
+	document.body.replaceChildren(panel);
 	return true;
 };
 

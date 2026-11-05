@@ -1,6 +1,6 @@
 // Service Worker — versioned offline shell plus persistent runtime data cache
 
-const CACHE_VERSION = "mw-v0.28.1";
+const CACHE_VERSION = "mw-v0.28.2";
 const APP_SHELL_PREFIX = "mw-app-shell-";
 const RUNTIME_PREFIX = "mw-runtime-";
 const LEGACY_CACHE_PREFIX = "mw-cache-";
@@ -25,10 +25,6 @@ const APP_SHELL_PATHS = [
 	"src/benchmark-runtime.js",
 	"src/bootstrap.js",
 	"src/border-fade.js",
-	"src/community-chat.js",
-	"src/community-comments.js",
-	"src/community-controls.js",
-	"src/community-library.js",
 	"src/config.js",
 	"src/conflict-diplomacy.js",
 	"src/conflict-personnel.js",
@@ -45,13 +41,13 @@ const APP_SHELL_PATHS = [
 	"src/developer-controls.js",
 	"src/defensive-lines.js",
 	"src/dialogs.js",
+	"src/dom.js",
 	"src/editor-commands.js",
 	"src/editor-file-controls.js",
 	"src/editor-tool-controls.js",
 	"src/editor.js",
 	"src/encirclement-pockets.js",
 	"src/engine.js",
-	"src/firebase.js",
 	"src/formation-strength.js",
 	"src/geo-raster-assets.js",
 	"src/geo-raster-core.js",
@@ -65,7 +61,10 @@ const APP_SHELL_PATHS = [
 	"src/influence-runtime.js",
 	"src/inspector-controls.js",
 	"src/inspectors.js",
+	"src/flag-manifest.js",
+	"src/flags.js",
 	"src/load-profiler.js",
+	"src/local-files.js",
 	"src/entry.js",
 	"src/map-camera.ts",
 	"src/map-projection.ts",
@@ -149,9 +148,14 @@ const APP_SHELL_PATHS = [
 	"workers/war-simulation-worker.js",
 ];
 
+// The worker-lib `self` type does not know it is a service worker.
+const serviceWorker = /** @type {ServiceWorkerGlobalScope} */ (
+	/** @type {unknown} */ (self)
+);
+
 // Resolve against the registration scope instead of the origin root. This keeps
 // installs working both locally and under a GitHub Pages project subpath.
-const scopeUrl = new URL(self.registration.scope);
+const scopeUrl = new URL(serviceWorker.registration.scope);
 const scopedUrl = (path) => new URL(path, scopeUrl).href;
 const APP_SHELL_URLS = APP_SHELL_PATHS.map(scopedUrl);
 const APP_SHELL_URL_SET = new Set(APP_SHELL_URLS);
@@ -227,16 +231,16 @@ async function cacheFirstRuntime(request) {
 	}
 }
 
-self.addEventListener("install", (event) => {
+serviceWorker.addEventListener("install", (event) => {
 	event.waitUntil(
 		caches
 			.open(APP_SHELL_CACHE)
 			.then((cache) => cache.addAll(APP_SHELL_URLS))
-			.then(() => self.skipWaiting()),
+			.then(() => serviceWorker.skipWaiting()),
 	);
 });
 
-self.addEventListener("activate", (event) => {
+serviceWorker.addEventListener("activate", (event) => {
 	const currentCaches = new Set([APP_SHELL_CACHE, RUNTIME_CACHE]);
 	const isModernWarsCache = (name) =>
 		name.startsWith(APP_SHELL_PREFIX) ||
@@ -255,11 +259,11 @@ self.addEventListener("activate", (event) => {
 						.map((name) => caches.delete(name)),
 				),
 			)
-			.then(() => self.clients.claim()),
+			.then(() => serviceWorker.clients.claim()),
 	);
 });
 
-self.addEventListener("fetch", (event) => {
+serviceWorker.addEventListener("fetch", (event) => {
 	const { request } = event;
 	if (request.method !== "GET" || request.headers.has("range")) return;
 

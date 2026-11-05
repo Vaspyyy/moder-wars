@@ -81,7 +81,10 @@ assert.deepEqual(
 	"task-force membership must be deterministic regardless of input order",
 );
 assert.deepEqual(deterministicAllocation.unitRoles, allocated.unitRoles);
-assert.deepEqual(deterministicAllocation.reserveUnitIds, allocated.reserveUnitIds);
+assert.deepEqual(
+	deterministicAllocation.reserveUnitIds,
+	allocated.reserveUnitIds,
+);
 
 const assignedBefore = [...allocated.assignedUnitIds];
 const rolesBefore = structuredClone(allocated.unitRoles);

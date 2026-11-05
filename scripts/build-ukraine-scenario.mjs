@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 import { encodeScenario } from "../src/scenario-codec.js";
 import { isInsideScenarioTheater } from "../src/scenario-theater.js";
+import { readWorldMap2022 } from "./source-data.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const sourceDir = path.join(root, "assets/scenarios/ukraine-2023");
@@ -77,9 +78,7 @@ export function visualContours(capture) {
 }
 
 export function buildUkraine2023Scenario() {
-	const base = JSON.parse(
-		fs.readFileSync(path.join(root, "assets/maps/world map 2022.json"), "utf8"),
-	);
+	const base = readWorldMap2022();
 	const capture = JSON.parse(
 		fs.readFileSync(path.join(sourceDir, "deepstate-visual.json"), "utf8"),
 	);
@@ -110,7 +109,7 @@ export function buildUkraine2023Scenario() {
 		geography.features.find((f) => f.properties.ADMIN === "Russia"),
 	).find((p) => inPolygon(p, 34.1, 44.95));
 	assert.ok(
-		crimea && crimea[0].every(([x, y]) => x > 32 && x < 37 && y > 44 && y < 47),
+		crimea?.[0].every(([x, y]) => x > 32 && x < 37 && y > 44 && y < 47),
 		"Crimea polygon must be a separate peninsula",
 	);
 	const sovereignPolygons = [...ukraine, crimea];
@@ -215,38 +214,71 @@ export function buildUkraine2023Scenario() {
 	}
 	// Keep European and Asian actors, plus their existing regional releasables.
 	// Global cell indices remain unchanged; only theater land and actors are packaged.
-	const countryCodes = new Set((
-		"ALB AND AUT BEL BGR BIH BLR CHE CYP CZE DEU DNK ESP EST FIN FRA GBR GRC HRV HUN IRL ISL ITA KOS LIE LTU LUX LVA MCO MDA MKD MLT MNE NLD NOR POL PRT ROU RUS SMR SRB SVK SVN SWE UKR VAT " +
-		"AFG ARE ARM AZE BGD BHR BRN BTN CHN GEO IDN IND IRN IRQ ISR JOR JPN KAZ KGZ KHM KOR KWT LAO LBN LKA MDV MMR MNG MYS NPL OMN PAK PHL PRK PSE QAT SAU SGP SYR THA TJK TKM TLS TUR TWN UZB VNM YEM"
-	).split(" "));
-	const codeOverrides = { France: "FRA", Norway: "NOR", Kosovo: "KOS", "Northern Cyprus": "CYP" };
-	const countryIds = new Set(geography.features.flatMap((feature, index) =>
-		countryCodes.has(codeOverrides[feature.properties.ADMIN] || feature.properties.ISO_A3) ? [index + 1] : [],
-	));
-	for (const id of [178,179,180,181,182,183,184,185,186,187,188,189,190,191,192,195,196,201,202,203]) countryIds.add(id);
-	const theater = { id: "eurasia", bounds: [-25, -12, 180, 85], countryIds: [...countryIds].sort((a,b)=>a-b), countryCodes: [...countryCodes].sort() };
-	const inTheaterCell = (index) => isInsideScenarioTheater(theater,
-		(Math.floor(index / width) + 0.5) * base.gridRes - 90,
-		(index % width + 0.5) * base.gridRes - 180,
+	const countryCodes = new Set(
+		(
+			"ALB AND AUT BEL BGR BIH BLR CHE CYP CZE DEU DNK ESP EST FIN FRA GBR GRC HRV HUN IRL ISL ITA KOS LIE LTU LUX LVA MCO MDA MKD MLT MNE NLD NOR POL PRT ROU RUS SMR SRB SVK SVN SWE UKR VAT " +
+			"AFG ARE ARM AZE BGD BHR BRN BTN CHN GEO IDN IND IRN IRQ ISR JOR JPN KAZ KGZ KHM KOR KWT LAO LBN LKA MDV MMR MNG MYS NPL OMN PAK PHL PRK PSE QAT SAU SGP SYR THA TJK TKM TLS TUR TWN UZB VNM YEM"
+		).split(" "),
 	);
-	base.mapData = base.mapData.filter(([index, owner]) => countryIds.has(owner) && inTheaterCell(index));
-	base.metadata = base.metadata.filter(meta => countryIds.has(meta.id));
-	const retainedIds = new Set(base.metadata.map(meta => meta.id));
-	theater.countryIds = [...retainedIds].sort((a,b)=>a-b);
+	const codeOverrides = {
+		France: "FRA",
+		Norway: "NOR",
+		Kosovo: "KOS",
+		"Northern Cyprus": "CYP",
+	};
+	const countryIds = new Set(
+		geography.features.flatMap((feature, index) =>
+			countryCodes.has(
+				codeOverrides[feature.properties.ADMIN] || feature.properties.ISO_A3,
+			)
+				? [index + 1]
+				: [],
+		),
+	);
+	for (const id of [
+		178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192,
+		195, 196, 201, 202, 203,
+	])
+		countryIds.add(id);
+	const theater = {
+		id: "eurasia",
+		bounds: [-25, -12, 180, 85],
+		countryIds: [...countryIds].sort((a, b) => a - b),
+		countryCodes: [...countryCodes].sort(),
+	};
+	const inTheaterCell = (index) =>
+		isInsideScenarioTheater(
+			theater,
+			(Math.floor(index / width) + 0.5) * base.gridRes - 90,
+			((index % width) + 0.5) * base.gridRes - 180,
+		);
+	base.mapData = base.mapData.filter(
+		([index, owner]) => countryIds.has(owner) && inTheaterCell(index),
+	);
+	base.metadata = base.metadata.filter((meta) => countryIds.has(meta.id));
+	const retainedIds = new Set(base.metadata.map((meta) => meta.id));
+	theater.countryIds = [...retainedIds].sort((a, b) => a - b);
 	for (const meta of base.metadata) {
-		if (meta.savedCells) meta.savedCells = meta.savedCells.filter(([x,y]) => inTheaterCell(y * width + x));
-		if (meta.allies) meta.allies = meta.allies.filter(id => retainedIds.has(id));
+		if (meta.savedCells)
+			meta.savedCells = meta.savedCells.filter(([x, y]) =>
+				inTheaterCell(y * width + x),
+			);
+		if (meta.allies)
+			meta.allies = meta.allies.filter((id) => retainedIds.has(id));
 		if (!retainedIds.has(meta.overlordId)) meta.overlordId = null;
 		if (!retainedIds.has(meta.releasableBy)) meta.releasableBy = null;
 	}
-	base.cities = base.cities.filter(city => {
+	base.cities = base.cities.filter((city) => {
 		if (!isInsideScenarioTheater(theater, city.lat, city.lng)) return false;
-		const x = Math.floor((city.lng + 180) / base.gridRes), y = Math.floor((city.lat + 90) / base.gridRes);
+		const x = Math.floor((city.lng + 180) / base.gridRes),
+			y = Math.floor((city.lat + 90) / base.gridRes);
 		let owner = city.ownerId || control.get(y * width + x);
 		if (!owner) {
-			for (let dy = -1; dy <= 1 && !owner; dy++) for (let dx = -1; dx <= 1 && !owner; dx++) {
-				if (x+dx >= 0 && x+dx < width) owner = control.get((y+dy) * width + x+dx);
-			}
+			for (let dy = -1; dy <= 1 && !owner; dy++)
+				for (let dx = -1; dx <= 1 && !owner; dx++) {
+					if (x + dx >= 0 && x + dx < width)
+						owner = control.get((y + dy) * width + x + dx);
+				}
 		}
 		if (!retainedIds.has(owner)) return false;
 		city.ownerId = owner;

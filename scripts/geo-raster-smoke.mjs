@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { rasterizeGeoFeatures } from "../src/geo-raster-core.js";
+import { createDerivedRasterDescriptor } from "../src/geo.js";
 import {
 	combineScenarioEarthRasters,
 	loadPrederivedEarthRaster,
 } from "../src/geo-raster-assets.js";
-import { createDerivedRasterDescriptor } from "../src/geo.js";
+import { rasterizeGeoFeatures } from "../src/geo-raster-core.js";
 
 const polygon = (coordinates) => ({
 	geometry: { coordinates, type: "Polygon" },
@@ -198,7 +198,8 @@ for (const sourceResolution of sourceResolutions) {
 const canonicalOwners = decodedAssets.get("110m/0.25").ownerMap;
 const detailedOwners = decodedAssets.get("50m/0.25").ownerMap;
 const differingOwnerIndex = detailedOwners.findIndex(
-	(owner, index) => owner > 0 && canonicalOwners[index] > 0 && owner !== canonicalOwners[index],
+	(owner, index) =>
+		owner > 0 && canonicalOwners[index] > 0 && owner !== canonicalOwners[index],
 );
 assert.ok(
 	differingOwnerIndex >= 0,

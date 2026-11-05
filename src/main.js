@@ -1,5 +1,6 @@
 import { createConflictPresentation } from "./conflict-presentation.js";
 import { showConfirm } from "./dialogs.js";
+import { el } from "./dom.js";
 import {
 	createPresentationScheduler,
 	createUnitSpatialMirror,
@@ -309,10 +310,6 @@ const applicationRuntime = createLiveContext(
 		stopBackgroundMusic: () => stopBackgroundMusic,
 		initAudio: () => initAudio,
 		clearCustomTrackBtn: () => clearCustomTrackBtn,
-		tabScenariosBtn: () => tabScenariosBtn,
-		switchHubTab: () => switchHubTab,
-		tabCountriesBtn: () => tabCountriesBtn,
-		tabFlagsBtn: () => tabFlagsBtn,
 		presetLowBtn: () => presetLowBtn,
 		settingsController: () => settingsController,
 		presetDefaultBtn: () => presetDefaultBtn,
@@ -337,12 +334,9 @@ const applicationRuntime = createLiveContext(
 		ingameSettingsBtn: () => ingameSettingsBtn,
 		closeSettingsBtn: () => closeSettingsBtn,
 		playModeBtn: () => playModeBtn,
-		selectScenario: () => selectScenario,
 		choiceModernDay: () => choiceModernDay,
 		enterScenarioBtn: () => enterScenarioBtn,
 		queuedScenarioAction: () => queuedScenarioAction,
-		choice1936Scenario: () => choice1936Scenario,
-		choiceWW1Scenario: () => choiceWW1Scenario,
 		createScenarioHandler: () => createScenarioHandler,
 		scenarioMenuDependencies: () => scenarioMenuDependencies,
 		cancelConquestChoice: () => cancelConquestChoice,
@@ -380,8 +374,6 @@ const applicationRuntime = createLiveContext(
 		openLeaderboard: () => openLeaderboard,
 		closeLeaderboardBtn: () => closeLeaderboardBtn,
 		leaderboardOverlay: () => leaderboardOverlay,
-		closeHubBtn: () => closeHubBtn,
-		closeHub: () => closeHub,
 		minimizeSetupBtn: () => minimizeSetupBtn,
 		setupPanel: () => setupPanel,
 		minimizeStatsBtn: () => minimizeStatsBtn,
@@ -424,23 +416,8 @@ const applicationRuntime = createLiveContext(
 		paintAt: () => paintAt,
 		paintMaskId: () => paintMaskId,
 		applyPaintAt: () => applyPaintAt,
-		editorUpdateBtn: () => editorUpdateBtn,
-		activeScenarioId: () => activeScenarioId,
 		setLoadingThematic: () => setLoadingThematic,
 		generatePresetData: () => generatePresetData,
-		room: () => room,
-		shareCountryBtn: () => shareCountryBtn,
-		shareCountryNameInput: () => shareCountryNameInput,
-		shareCountryDescInput: () => shareCountryDescInput,
-		shareCountryModal: () => shareCountryModal,
-		shareFlagBtn: () => shareFlagBtn,
-		shareFlagNameInput: () => shareFlagNameInput,
-		shareFlagDescInput: () => shareFlagDescInput,
-		shareFlagModal: () => shareFlagModal,
-		cancelShareFlagBtn: () => cancelShareFlagBtn,
-		confirmShareFlagBtn: () => confirmShareFlagBtn,
-		cancelShareCountryBtn: () => cancelShareCountryBtn,
-		confirmShareCountryBtn: () => confirmShareCountryBtn,
 		editorSaveBtn: () => editorSaveBtn,
 		editorLoadBtn: () => editorLoadBtn,
 		performPresetLoad: () => performPresetLoad,
@@ -464,18 +441,12 @@ const applicationRuntime = createLiveContext(
 		importSingleCountryFromScenario: () => importSingleCountryFromScenario,
 		editorLoadZipBtn: () => editorLoadZipBtn,
 		parseColorToRGBA: () => parseColorToRGBA,
-		editorShareBtn: () => editorShareBtn,
-		uploadNameInput: () => uploadNameInput,
-		uploadDescInput: () => uploadDescInput,
-		uploadDetailsModal: () => uploadDetailsModal,
 		godBombBtn: () => godBombBtn,
 		godBombActive: () => godBombActive,
 		godBombSourceId: () => godBombSourceId,
 		godModeBtn: () => godModeBtn,
 		getTranslation: () => getTranslation,
 		editorToolbox: () => editorToolbox,
-		editorHubBtn: () => editorHubBtn,
-		editorLibraryBtn: () => editorLibraryBtn,
 		editorExitBtn: () => editorExitBtn,
 		editorTestBtn: () => editorTestBtn,
 		editorUnclaimBtn: () => editorUnclaimBtn,
@@ -494,24 +465,6 @@ const applicationRuntime = createLiveContext(
 		tickGameTime: () => tickGameTime,
 		performSimulationTick: () => performSimulationTick,
 		updateCountryFlag: () => updateCountryFlag,
-		scenarioHubModal: () => scenarioHubModal,
-		globalChatClose: () => globalChatClose,
-		globalChatModal: () => globalChatModal,
-		globalChatSend: () => globalChatSend,
-		globalChatInput: () => globalChatInput,
-		itemCommentSubmit: () => itemCommentSubmit,
-		currentCommentItemType: () => currentCommentItemType,
-		currentCommentItemId: () => currentCommentItemId,
-		itemCommentInput: () => itemCommentInput,
-		currentEditingCommentId: () => currentEditingCommentId,
-		currentReplyParentId: () => currentReplyParentId,
-		itemReplyIndicator: () => itemReplyIndicator,
-		itemCancelReplyBtn: () => itemCancelReplyBtn,
-		closeItemModalBtn: () => closeItemModalBtn,
-		itemCommentModal: () => itemCommentModal,
-		commentsUnsubscribe: () => commentsUnsubscribe,
-		cancelUploadBtn: () => cancelUploadBtn,
-		confirmUploadBtn: () => confirmUploadBtn,
 		mapRuntime: () => mapRuntime,
 		isPointInFeature: () => isPointInFeature,
 		provinceMap: () => provinceMap,
@@ -529,16 +482,10 @@ const applicationRuntime = createLiveContext(
 		setupOptions: () => setupOptions,
 		_attackers: () => _attackers,
 		_defenders: () => _defenders,
-		openHub: () => openHub,
 		saveCountryLocally: () => saveCountryLocally,
 		loadCountryFromPC: () => loadCountryFromPC,
 		editorImportCountryBtn: () => editorImportCountryBtn,
 		openImportCountryModal: () => openImportCountryModal,
-		editorFlagLibraryBtn: () => editorFlagLibraryBtn,
-		cancelEditorChoice: () => cancelEditorChoice,
-		editorChoiceModal: () => editorChoiceModal,
-		choiceExternalEditor: () => choiceExternalEditor,
-		choiceIngameEditor: () => choiceIngameEditor,
 		editorSourceModal: () => editorSourceModal,
 		cancelSourceChoice: () => cancelSourceChoice,
 		choiceSourceEarth: () => choiceSourceEarth,
@@ -551,7 +498,6 @@ const applicationRuntime = createLiveContext(
 		newCountryFlagInput: () => newCountryFlagInput,
 		customCountryData: () => customCountryData,
 		inspectNameInput: () => inspectNameInput,
-		inspectHubFlagBtn: () => inspectHubFlagBtn,
 		inspectFetchFlagBtn: () => inspectFetchFlagBtn,
 		findCodeByName: () => findCodeByName,
 		rawGeoJsonData: () => rawGeoJsonData,
@@ -683,24 +629,6 @@ const applicationRuntime = createLiveContext(
 		sidesContainer: () => sidesContainer,
 		estimateUnitsForCountry: () => estimateUnitsForCountry,
 		openReleaseModal: () => openReleaseModal,
-		currentUsername: () => currentUsername,
-		renderHub: () => renderHub,
-		hubCountryCache: () => hubCountryCache,
-		libraryList: () => libraryList,
-		escapeHtml: () => escapeHtml,
-		openItemModal: () => openItemModal,
-		hubFlagCache: () => hubFlagCache,
-		flagLibraryList: () => flagLibraryList,
-		globalChatList: () => globalChatList,
-		globalChatUnsubscribe: () => globalChatUnsubscribe,
-		initMultiplayer: () => initMultiplayer,
-		itemCommentsList: () => itemCommentsList,
-		itemModalTitle: () => itemModalTitle,
-		itemModalDesc: () => itemModalDesc,
-		itemModalActions: () => itemModalActions,
-		itemModalPreview: () => itemModalPreview,
-		itemModalPlayBtn: () => itemModalPlayBtn,
-		itemModalRemixBtn: () => itemModalRemixBtn,
 		importScenarioCountriesCache: () => importScenarioCountriesCache,
 		refHandles: () => refHandles,
 		isInsideWorldBoxLatLng: () => isInsideWorldBoxLatLng,
@@ -1147,18 +1075,6 @@ const applicationRuntime = createLiveContext(
 		simFrameCount: (value) => {
 			simFrameCount = value;
 		},
-		activeScenarioId: (value) => {
-			activeScenarioId = value;
-		},
-		currentEditingCommentId: (value) => {
-			currentEditingCommentId = value;
-		},
-		currentReplyParentId: (value) => {
-			currentReplyParentId = value;
-		},
-		commentsUnsubscribe: (value) => {
-			commentsUnsubscribe = value;
-		},
 		editingCountryId: (value) => {
 			editingCountryId = value;
 		},
@@ -1309,27 +1225,6 @@ const applicationRuntime = createLiveContext(
 		gameTimeDate: (value) => {
 			gameTimeDate = value;
 		},
-		room: (value) => {
-			room = value;
-		},
-		currentUsername: (value) => {
-			currentUsername = value;
-		},
-		hubCountryCache: (value) => {
-			hubCountryCache = value;
-		},
-		hubFlagCache: (value) => {
-			hubFlagCache = value;
-		},
-		globalChatUnsubscribe: (value) => {
-			globalChatUnsubscribe = value;
-		},
-		currentCommentItemType: (value) => {
-			currentCommentItemType = value;
-		},
-		currentCommentItemId: (value) => {
-			currentCommentItemId = value;
-		},
 		importScenarioCountriesCache: (value) => {
 			importScenarioCountriesCache = value;
 		},
@@ -1379,7 +1274,9 @@ const applicationRuntime = createLiveContext(
 			_lastPerfSuite = value;
 		},
 		color: (val) => {
-			document.querySelectorAll(".loading-status-text").forEach((el) => {
+			/** @type {NodeListOf<HTMLElement>} */ (
+				document.querySelectorAll(".loading-status-text")
+			).forEach((el) => {
 				el.style.color = val;
 			});
 		},
@@ -1574,10 +1471,6 @@ import { createSimulationControls } from "./simulation-controls.js";
 
 const simulation_controls = createSimulationControls(applicationRuntime);
 
-import { createCommunityControls } from "./community-controls.js";
-
-const community_controls = createCommunityControls(applicationRuntime);
-
 import { createCountryActions } from "./country-actions.js";
 
 const country_actions = createCountryActions(applicationRuntime);
@@ -1645,27 +1538,6 @@ const {
 } = createConflictSetup(applicationRuntime);
 
 export { rebuildManpowerInputs, resetConflictSetupState, updateSidesUI };
-
-import { createCommunityLibrary } from "./community-library.js";
-
-const { initMultiplayer, renderCountryLibrary, renderFlagLibrary } =
-	createCommunityLibrary(applicationRuntime);
-
-export { initMultiplayer, renderCountryLibrary, renderFlagLibrary };
-
-import { createCommunityChat } from "./community-chat.js";
-
-const { renderGlobalChatList, _openGlobalChat } =
-	createCommunityChat(applicationRuntime);
-
-export { _openGlobalChat, renderGlobalChatList };
-
-import { createCommunityComments } from "./community-comments.js";
-
-const { renderCommentsList, openItemModal } =
-	createCommunityComments(applicationRuntime);
-
-export { openItemModal, renderCommentsList };
 
 import { createCountryImportMenu } from "./country-import-menu.js";
 
@@ -1743,6 +1615,7 @@ import { getCookie, setCookie } from "./preferences.js";
 
 export { getCookie, setCookie } from "./preferences.js";
 
+import { localFlagUrl } from "./flags.js";
 import { applyLanguage, configureLanguageUi, getTranslation } from "./i18n.js";
 
 export { applyLanguage, getTranslation, TRANSLATIONS } from "./i18n.js";
@@ -1892,15 +1765,6 @@ async function getJSZip() {
 	return _jsZipPromise;
 }
 
-export function escapeHtml(s) {
-	return String(s)
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;")
-		.replace(/'/g, "&#39;");
-}
-
 /**
  * TRANSLATION SYSTEM (i18n)
  */
@@ -1931,7 +1795,7 @@ export function getFlagUrl(code, name) {
 		code = findCodeByName(name);
 	}
 	if (!code || code === "-99") return null;
-	return `https://flagcdn.com/w320/${code.toLowerCase()}.webp`;
+	return localFlagUrl(code);
 }
 
 // biome-ignore lint/complexity/useRegexLiterals: regex literal contains )$ which confuses some parsers
@@ -2160,7 +2024,6 @@ export let sides = [[], []];
 let _attackers = sides[0];
 let _defenders = sides[1];
 export let activeSideIndex = 0;
-export let activeScenarioId = null;
 export let ffaMode = false;
 export let randomWarMode = false;
 export let adjacencyCache = null;
@@ -2517,8 +2380,6 @@ export const sideCasualties = new Float64Array(MAX_SIDES);
 export const countryCasualties = new Map();
 export const casualtyByAttacker = new Map(); // Map<victimCountryId, Map<attackerSovereignId, loss>>
 export let initialCombatants = []; // Tracks nations that started the war for stable casualty menu display
-export let room = null;
-export let currentUsername = null;
 export let flagCodes = null;
 
 export let currentScenarioContext = null; // { id, name, ownerUsername }
@@ -2526,8 +2387,6 @@ export function setCurrentScenarioContext(value) {
 	currentScenarioContext = value;
 }
 
-export let hubReturnState = null;
-export let hubWasInEditor = false;
 export let godModeActive = false;
 export let godBombActive = false;
 export let godBombSourceId = -1;
@@ -2811,12 +2670,6 @@ export function setGameState(val) {
 	gameState = val;
 	simulationClient.syncControls();
 }
-export function setHubReturnState(val) {
-	hubReturnState = val;
-}
-export function setHubWasInEditor(val) {
-	hubWasInEditor = val;
-}
 export function setGodBombActive(val) {
 	godBombActive = val;
 }
@@ -2871,9 +2724,6 @@ export function setReferenceImageUrl(val) {
 }
 export function setSelectedImportCountryId(val) {
 	selectedImportCountryId = val;
-}
-export function setHubScenarioCache(val) {
-	hubScenarioCache = val;
 }
 export function setQueuedScenarioAction(val) {
 	queuedScenarioAction = val;
@@ -2940,74 +2790,99 @@ export function computeCountryUrbanPop() {
 }
 
 // UI Elements
-export const addSideBtn = document.getElementById("add-side-btn");
-export const ffaToggleBtn = document.getElementById("ffa-toggle-btn");
+export const addSideBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("add-side-btn")
+);
+export const ffaToggleBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("ffa-toggle-btn")
+);
 export const sidesContainer = document.getElementById("sides-container");
 export const editorToolbox = document.getElementById("editor-toolbox");
-export const editorCreateBtn = document.getElementById("editor-create-btn");
-export const editorTestBtn = document.getElementById("editor-test-btn");
-export const editorUpdateBtn = document.getElementById("editor-update-btn");
-export const editorSaveBtn = document.getElementById("editor-save-btn");
-export const editorLoadBtn = document.getElementById("editor-load-btn");
-export const editorShareBtn = document.getElementById("editor-share-btn");
-export const editorHubBtn = document.getElementById("editor-hub-btn");
-export const editorLibraryBtn = document.getElementById("editor-library-btn");
-export const editorFlagLibraryBtn = document.getElementById(
-	"editor-flag-library-btn",
+export const editorCreateBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-create-btn")
 );
-export const editorPaintBtn = document.getElementById("editor-paint-btn");
-export const editorFillBtn = document.getElementById("editor-fill-btn");
-export const editorUnclaimBtn = document.getElementById("editor-unclaim-btn");
-export const editorTerrainBtn = document.getElementById("editor-terrain-btn");
-export const terrainTypeSelect = document.getElementById("terrain-type-select");
+export const editorTestBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-test-btn")
+);
+export const editorSaveBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-save-btn")
+);
+export const editorLoadBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-load-btn")
+);
+export const editorPaintBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-paint-btn")
+);
+export const editorFillBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-fill-btn")
+);
+export const editorUnclaimBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-unclaim-btn")
+);
+export const editorTerrainBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-terrain-btn")
+);
+export const terrainTypeSelect = /** @type {HTMLSelectElement} */ (
+	document.getElementById("terrain-type-select")
+);
 export const terrainControls = document.getElementById("terrain-controls");
-export const editorPlaceDivisionBtn = document.getElementById(
-	"editor-place-division-btn",
+export const editorPlaceDivisionBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-place-division-btn")
 );
-export const editorSaveMultiBtn = document.getElementById(
-	"editor-save-multi-btn",
+export const editorSaveMultiBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-save-multi-btn")
 );
-export const editorSaveAllZipBtn = document.getElementById(
-	"editor-save-all-zip-btn",
+export const editorSaveAllZipBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-save-all-zip-btn")
 );
-export const editorLoadZipBtn = document.getElementById("editor-load-zip-btn");
-export const editorImportCountryBtn = document.getElementById(
-	"editor-import-country-from-scenario-btn",
+export const editorLoadZipBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-load-zip-btn")
 );
-export const editorCityNewBtn = document.getElementById("editor-city-new-btn");
-export const editorCityClearBtn = document.getElementById(
-	"editor-city-clear-btn",
+export const editorImportCountryBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-import-country-from-scenario-btn")
 );
-export const editorToolsPage1Btn = document.getElementById(
-	"editor-tools-page-1-btn",
+export const editorCityNewBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-city-new-btn")
 );
-export const editorToolsPage2Btn = document.getElementById(
-	"editor-tools-page-2-btn",
+export const editorCityClearBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-city-clear-btn")
 );
-export const editorToolsPage3Btn = document.getElementById(
-	"editor-tools-page-3-btn",
+export const editorToolsPage1Btn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-tools-page-1-btn")
 );
-export const editorToolsPage4Btn = document.getElementById(
-	"editor-tools-page-4-btn",
+export const editorToolsPage2Btn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-tools-page-2-btn")
 );
-export const editorToolsPage5Btn = document.getElementById(
-	"editor-tools-page-5-btn",
+export const editorToolsPage3Btn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-tools-page-3-btn")
 );
-export const editorExitBtn = document.getElementById("editor-exit-btn");
-export const editorMapSettingsBtn = document.getElementById(
-	"editor-map-settings-btn",
+export const editorToolsPage4Btn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-tools-page-4-btn")
+);
+export const editorToolsPage5Btn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-tools-page-5-btn")
+);
+export const editorExitBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-exit-btn")
+);
+export const editorMapSettingsBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("editor-map-settings-btn")
 );
 export const brushControls = document.getElementById("brush-controls");
-export const brushSizeSlider = document.getElementById("brush-size-slider");
+export const brushSizeSlider = /** @type {HTMLInputElement} */ (
+	document.getElementById("brush-size-slider")
+);
 export const brushSizeVal = document.getElementById("brush-size-val");
-export const viewModeBtn = document.getElementById("view-mode-btn");
+export const viewModeBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("view-mode-btn")
+);
 export const arrowsToggleBtn = document.getElementById("arrows-toggle-btn");
 export const battlesToggleBtn = document.getElementById("battles-toggle-btn");
 export const labelsToggleBtn = document.getElementById("labels-toggle-btn");
 export const citiesToggleBtn = document.getElementById("cities-toggle-btn");
 export const warplansToggleBtn = document.getElementById("warplans-toggle-btn");
-export const allianceViewCheckbox = document.getElementById(
-	"alliance-view-checkbox",
+export const allianceViewCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("alliance-view-checkbox")
 );
 
 // Fully retire the legacy ARROWS button so it no longer appears or controls alliance view.
@@ -3015,137 +2890,79 @@ if (arrowsToggleBtn) {
 	arrowsToggleBtn.style.display = "none";
 }
 
-export const scenarioHubModal = document.getElementById("scenario-hub-modal");
-export const hubList = document.getElementById("hub-list");
-export const libraryList = document.getElementById("library-list");
-export const flagLibraryList = document.getElementById("flag-library-list");
-export const closeHubBtn = document.getElementById("close-hub-btn");
-export const tabScenariosBtn = document.getElementById("tab-scenarios-btn");
-export const tabCountriesBtn = document.getElementById("tab-countries-btn");
-export const tabFlagsBtn = document.getElementById("tab-flags-btn");
-
-// Item details + comments modal elements
-export const itemCommentModal = document.getElementById("item-comment-modal");
-export const itemModalTitle = document.getElementById("item-modal-title");
-export const itemModalDesc = document.getElementById("item-modal-desc");
-export const itemModalPreview = document.getElementById("item-modal-preview");
-export const itemCommentsList = document.getElementById("item-comments-list");
-export const itemCommentInput = document.getElementById("item-comment-input");
-export const itemCommentSubmit = document.getElementById("item-comment-submit");
-export const itemReplyIndicator = document.getElementById(
-	"item-reply-indicator",
-);
-export const itemCancelReplyBtn = document.getElementById(
-	"item-comment-cancel-reply",
-);
-export const closeItemModalBtn = document.getElementById(
-	"close-item-modal-btn",
-);
-export const itemModalActions = document.getElementById("item-modal-actions");
-export const itemModalPlayBtn = document.getElementById("item-modal-play");
-export const itemModalRemixBtn = document.getElementById("item-modal-remix");
-
-// Global chat modal elements
-export const globalChatModal = document.getElementById("global-chat-modal");
-export const globalChatList = document.getElementById("global-chat-list");
-export const globalChatInput = document.getElementById("global-chat-input");
-export const globalChatSend = document.getElementById("global-chat-send");
-export const globalChatClose = document.getElementById("global-chat-close");
-
-// Hub caches for item details
-export let hubScenarioCache = {};
-export let hubCountryCache = {};
-export let hubFlagCache = {};
-
-// Comment state
-export let currentCommentItemType = null;
-export let currentCommentItemId = null;
-export let currentReplyParentId = null;
-export let currentEditingCommentId = null;
-export let commentsUnsubscribe = null;
-
-// Global chat state
-export let globalChatUnsubscribe = null;
-
-export const uploadDetailsModal = document.getElementById(
-	"upload-details-modal",
-);
-export const confirmUploadBtn = document.getElementById("confirm-upload-btn");
-export const cancelUploadBtn = document.getElementById("cancel-upload-btn");
-export const uploadNameInput = document.getElementById("upload-scenario-name");
-export const uploadDescInput = document.getElementById("upload-scenario-desc");
-
-export const shareCountryModal = document.getElementById("share-country-modal");
-export const confirmShareCountryBtn = document.getElementById(
-	"confirm-share-country-btn",
-);
-export const cancelShareCountryBtn = document.getElementById(
-	"cancel-share-country-btn",
-);
-export const shareCountryNameInput =
-	document.getElementById("share-country-name");
-export const shareCountryDescInput =
-	document.getElementById("share-country-desc");
-
-export const shareFlagModal = document.getElementById("share-flag-modal");
 export const releaseModal = document.getElementById("release-modal");
 export const releasableListContainer =
 	document.getElementById("releasable-list");
-export const closeReleaseModalBtn = document.getElementById(
-	"close-release-modal",
+export const closeReleaseModalBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("close-release-modal")
 );
-export const confirmShareFlagBtn = document.getElementById(
-	"confirm-share-flag-btn",
-);
-export const cancelShareFlagBtn = document.getElementById(
-	"cancel-share-flag-btn",
-);
-export const shareFlagNameInput = document.getElementById("share-flag-name");
-export const shareFlagDescInput = document.getElementById("share-flag-desc");
-export const shareFlagBtn = document.getElementById("share-flag-btn");
 
 export const createCountryModal = document.getElementById(
 	"create-country-modal",
 );
-export const confirmCreateBtn = document.getElementById("confirm-create-btn");
-export const cancelCreateBtn = document.getElementById("cancel-create-btn");
-export const newCountryNameInput = document.getElementById("new-country-name");
+export const confirmCreateBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("confirm-create-btn")
+);
+export const cancelCreateBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("cancel-create-btn")
+);
+export const newCountryNameInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("new-country-name")
+);
 export const newCountryColorInput =
 	document.getElementById("new-country-color");
-export const newCountryFlagInput = document.getElementById("new-country-flag");
+export const newCountryFlagInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("new-country-flag")
+);
 
 export const countryInspector = document.getElementById("country-inspector");
-export const inspectNameInput = document.getElementById("inspect-name-input");
-export const inspectFlagInput = document.getElementById("inspect-flag-input");
-export const inspectFetchFlagBtn = document.getElementById(
-	"inspect-fetch-flag-btn",
+export const inspectNameInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("inspect-name-input")
 );
-export const inspectHubFlagBtn = document.getElementById(
-	"inspect-hub-flag-btn",
+export const inspectFlagInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("inspect-flag-input")
 );
-export const inspectFlagPreview = document.getElementById(
-	"inspect-flag-preview",
+export const inspectFetchFlagBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("inspect-fetch-flag-btn")
+);
+export const inspectFlagPreview = /** @type {HTMLImageElement} */ (
+	document.getElementById("inspect-flag-preview")
 );
 export const inspectColorSwatch = document.getElementById(
 	"inspect-color-swatch",
 );
-export const inspectColorPicker = document.getElementById(
-	"inspect-color-picker",
+export const inspectColorPicker = /** @type {HTMLInputElement} */ (
+	document.getElementById("inspect-color-picker")
 );
-export const inspectPaintBtn = document.getElementById("inspect-paint-btn");
-export const inspectAnnexClickBtn = document.getElementById(
-	"inspect-annex-click-btn",
+export const inspectPaintBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("inspect-paint-btn")
 );
-export const shareCountryBtn = document.getElementById("share-country-btn");
-export const closeInspectorBtn = document.getElementById("close-inspector-btn");
-export const inspectBuffBtn = document.getElementById("inspect-buff-btn");
+export const inspectAnnexClickBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("inspect-annex-click-btn")
+);
+export const closeInspectorBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("close-inspector-btn")
+);
+export const inspectBuffBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("inspect-buff-btn")
+);
 
-export const annexCountryInput = document.getElementById("annex-country-input");
-export const annexCountryBtn = document.getElementById("annex-country-btn");
-export const addAllyBtn = document.getElementById("add-ally-btn");
-export const clearAlliesBtn = document.getElementById("clear-allies-btn");
+export const annexCountryInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("annex-country-input")
+);
+export const annexCountryBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("annex-country-btn")
+);
+export const addAllyBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("add-ally-btn")
+);
+export const clearAlliesBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("clear-allies-btn")
+);
 export const allyList = document.getElementById("ally-list");
-export const allianceFlagInput = document.getElementById("alliance-flag-input");
+export const allianceFlagInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("alliance-flag-input")
+);
 
 // City inspector elements
 export const cityInspector = document.getElementById("city-inspector");
@@ -3154,23 +2971,23 @@ export const cityInspector = document.getElementById("city-inspector");
 export const importCountryModal = document.getElementById(
 	"import-country-modal",
 );
-export const importScenarioSelect = document.getElementById(
-	"import-scenario-select",
+export const importScenarioSelect = /** @type {HTMLSelectElement} */ (
+	document.getElementById("import-scenario-select")
 );
-export const importScenarioFileInput = document.getElementById(
-	"import-scenario-file",
+export const importScenarioFileInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("import-scenario-file")
 );
-export const importCountrySearch = document.getElementById(
-	"import-country-search",
+export const importCountrySearch = /** @type {HTMLInputElement} */ (
+	document.getElementById("import-country-search")
 );
 export const importCountryCardList = document.getElementById(
 	"import-country-card-list",
 );
-export const importCountryConfirmBtn = document.getElementById(
-	"import-country-confirm-btn",
+export const importCountryConfirmBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("import-country-confirm-btn")
 );
-export const importCountryCancelBtn = document.getElementById(
-	"import-country-cancel-btn",
+export const importCountryCancelBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("import-country-cancel-btn")
 );
 
 // Temporary holder for loaded scenario used for country import
@@ -3188,32 +3005,45 @@ export function renderImportCountryCards(filterText = "") {
 	);
 
 	if (!filtered.length) {
-		importCountryCardList.innerHTML = `
-            <div style="font-size: 12px; color:#777; text-align:center; padding:10px;">
-                No countries match that search.
-            </div>
-        `;
+		importCountryCardList.replaceChildren(
+			el("div", {
+				className: "import-country-card-list-div",
+				text: "No countries match that search.",
+			}),
+		);
 		return;
 	}
 
-	importCountryCardList.innerHTML = filtered
-		.map((c) => {
+	importCountryCardList.replaceChildren(
+		...filtered.map((c) => {
 			const selectedClass = c.id === selectedImportCountryId ? " selected" : "";
 			const tilesLabel = c.tiles.toLocaleString();
-			const flagHtml = c.flagUrl
-				? `<img src="${c.flagUrl}" class="import-country-flag">`
-				: `<div class="import-country-flag" style="background:#000;"></div>`;
-			return `
-            <div class="import-country-card${selectedClass}" data-country-id="${c.id}">
-                ${flagHtml}
-                <div style="flex:1; min-width:0;">
-                    <div class="import-country-name">${c.name}</div>
-                    <div class="import-country-tiles">${tilesLabel} tiles</div>
-                </div>
-            </div>
-        `;
-		})
-		.join("");
+			return el(
+				"div",
+				{
+					className: `import-country-card${selectedClass}`,
+					dataset: { countryId: c.id },
+				},
+				c.flagUrl
+					? el("img", {
+							className: "import-country-flag",
+							props: { src: c.flagUrl },
+						})
+					: el("div", {
+							className: "import-country-flag import-country-flag--empty",
+						}),
+				el(
+					"div",
+					{ className: "import-country-info" },
+					el("div", { className: "import-country-name", text: c.name }),
+					el("div", {
+						className: "import-country-tiles",
+						text: `${tilesLabel} tiles`,
+					}),
+				),
+			);
+		}),
+	);
 
 	// Wire selection handlers
 	importCountryCardList
@@ -3235,53 +3065,83 @@ export function renderImportCountryCards(filterText = "") {
 
 // Hook search box once
 menu_controls.bindImportCountrySearchInput();
-export const cityNameInput = document.getElementById("city-name-input");
-export const cityOwnerSelect = document.getElementById("city-owner-select");
-export const cityCapitalCheckbox = document.getElementById(
-	"city-capital-checkbox",
+export const cityNameInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("city-name-input")
 );
-export const cityMoveBtn = document.getElementById("city-move-btn");
-export const cityDeleteBtn = document.getElementById("city-delete-btn");
-export const cityCloseBtn = document.getElementById("city-close-btn");
+export const cityOwnerSelect = /** @type {HTMLSelectElement} */ (
+	document.getElementById("city-owner-select")
+);
+export const cityCapitalCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("city-capital-checkbox")
+);
+export const cityMoveBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("city-move-btn")
+);
+export const cityDeleteBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("city-delete-btn")
+);
+export const cityCloseBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("city-close-btn")
+);
 
-export const presetLowBtn = document.getElementById("preset-low-btn");
-export const presetDefaultBtn = document.getElementById("preset-default-btn");
-export const launchBtn = document.getElementById("launch-btn");
-export const musicVolumeSlider = document.getElementById("music-volume-slider");
+export const presetLowBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("preset-low-btn")
+);
+export const presetDefaultBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("preset-default-btn")
+);
+export const launchBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("launch-btn")
+);
+export const musicVolumeSlider = /** @type {HTMLInputElement} */ (
+	document.getElementById("music-volume-slider")
+);
 export const musicVolVal = document.getElementById("music-vol-val");
-export const saveSkipCheckbox = document.getElementById("save-skip-checkbox");
-export const mapResSelect = document.getElementById("map-res-select");
-export const gridResSelect = document.getElementById("grid-res-select");
-export const unitLimitSelect = document.getElementById("unit-limit-select");
-export const customTrackInput = document.getElementById("custom-track-input");
-export const clearCustomTrackBtn = document.getElementById(
-	"clear-custom-track-btn",
+export const saveSkipCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("save-skip-checkbox")
 );
-export const disableUnitsVisuallyCheckbox = document.getElementById(
-	"disable-units-visually-checkbox",
+export const mapResSelect = /** @type {HTMLSelectElement} */ (
+	document.getElementById("map-res-select")
 );
-export const hideCurvedLabelsCheckbox = document.getElementById(
-	"hide-curved-labels-checkbox",
+export const gridResSelect = /** @type {HTMLSelectElement} */ (
+	document.getElementById("grid-res-select")
+);
+export const unitLimitSelect = /** @type {HTMLSelectElement} */ (
+	document.getElementById("unit-limit-select")
+);
+export const customTrackInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("custom-track-input")
+);
+export const clearCustomTrackBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("clear-custom-track-btn")
+);
+export const disableUnitsVisuallyCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("disable-units-visually-checkbox")
+);
+export const hideCurvedLabelsCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("hide-curved-labels-checkbox")
 );
 export const disableAutoFullscreenCheckbox = document.getElementById(
 	"disable-auto-fullscreen-checkbox",
 );
-export const disableCountryGradientCheckbox = document.getElementById(
-	"disable-country-gradient-checkbox",
+export const disableCountryGradientCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("disable-country-gradient-checkbox")
 );
 
-export const useSystemFontCheckbox = document.getElementById(
-	"use-system-font-checkbox",
+export const useSystemFontCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("use-system-font-checkbox")
 );
-export const disableInvisibleBuffsCheckbox = document.getElementById(
-	"disable-invisible-buffs-checkbox",
+export const disableInvisibleBuffsCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("disable-invisible-buffs-checkbox")
 );
-export const benchmarkBtn = document.getElementById("benchmark-btn");
+export const benchmarkBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("benchmark-btn")
+);
 export const perfOverlay = document.getElementById("perf-overlay");
 export const benchmarkResults = document.getElementById("benchmark-results");
 export const benchmarkStatsEl = document.getElementById("benchmark-stats");
-export const benchmarkDismissBtn = document.getElementById(
-	"benchmark-dismiss-btn",
+export const benchmarkDismissBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("benchmark-dismiss-btn")
 );
 
 const settingsController = createSettingsController((id, value) => {
@@ -3324,18 +3184,24 @@ export const loadingOverlay = document.getElementById("loading-overlay");
 // Helper to update loading UI across both standard and thematic containers
 export const updateLoadingText = (status, progress = null, tip = null) => {
 	if (status !== undefined) {
-		document.querySelectorAll(".loading-status-text").forEach((el) => {
+		/** @type {NodeListOf<HTMLElement>} */ (
+			document.querySelectorAll(".loading-status-text")
+		).forEach((el) => {
 			el.innerText = status;
 		});
 	}
 	if (progress !== null) {
 		const pct = typeof progress === "string" ? progress : `${progress}%`;
-		document.querySelectorAll(".loading-bar-fill-el").forEach((el) => {
+		/** @type {NodeListOf<HTMLElement>} */ (
+			document.querySelectorAll(".loading-bar-fill-el")
+		).forEach((el) => {
 			el.style.width = pct;
 		});
 	}
 	if (tip !== null) {
-		document.querySelectorAll(".loading-tip-text").forEach((el) => {
+		/** @type {NodeListOf<HTMLElement>} */ (
+			document.querySelectorAll(".loading-tip-text")
+		).forEach((el) => {
 			el.innerText = tip;
 		});
 	}
@@ -3347,7 +3213,9 @@ export const loadingStatus = {
 		updateLoadingText(val);
 	},
 	get innerText() {
-		return document.querySelector(".loading-status-text")?.innerText;
+		return /** @type {HTMLElement | null} */ (
+			document.querySelector(".loading-status-text")
+		)?.innerText;
 	},
 	style: applicationRuntime,
 };
@@ -3363,44 +3231,39 @@ export function setLoadingThematic(enabled) {
 		loadingOverlay.classList.remove("thematic-overlay");
 	}
 }
-export const playModeBtn = document.getElementById("play-mode-btn");
-
-export const editorChoiceModal = document.getElementById("editor-choice-modal");
-export const choiceIngameEditor = document.getElementById(
-	"choice-ingame-editor",
-);
-export const choiceExternalEditor = document.getElementById(
-	"choice-external-editor",
-);
-export const cancelEditorChoice = document.getElementById(
-	"cancel-editor-choice",
+export const playModeBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("play-mode-btn")
 );
 
 export const editorSourceModal = document.getElementById("editor-source-modal");
-export const choiceSourceEarth = document.getElementById("choice-source-earth");
-export const choiceSourceBlank = document.getElementById("choice-source-blank");
-export const cancelSourceChoice = document.getElementById(
-	"cancel-source-choice",
+export const choiceSourceEarth = /** @type {HTMLButtonElement} */ (
+	document.getElementById("choice-source-earth")
+);
+export const choiceSourceBlank = /** @type {HTMLButtonElement} */ (
+	document.getElementById("choice-source-blank")
+);
+export const cancelSourceChoice = /** @type {HTMLButtonElement} */ (
+	document.getElementById("cancel-source-choice")
 );
 
 export const mapSettingsModal = document.getElementById("map-settings-modal");
-export const mapSettingsNameInput = document.getElementById(
-	"map-settings-name-input",
+export const mapSettingsNameInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("map-settings-name-input")
 );
-export const mapSettingsWidthInput = document.getElementById(
-	"map-settings-width-input",
+export const mapSettingsWidthInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("map-settings-width-input")
 );
-export const mapSettingsHeightInput = document.getElementById(
-	"map-settings-height-input",
+export const mapSettingsHeightInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("map-settings-height-input")
 );
-export const mapSettingsMissilesCheckbox = document.getElementById(
-	"map-settings-missiles-checkbox",
+export const mapSettingsMissilesCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("map-settings-missiles-checkbox")
 );
-export const mapSettingsApplyBtn = document.getElementById(
-	"map-settings-apply-btn",
+export const mapSettingsApplyBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("map-settings-apply-btn")
 );
-export const mapSettingsCancelBtn = document.getElementById(
-	"map-settings-cancel-btn",
+export const mapSettingsCancelBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("map-settings-cancel-btn")
 );
 
 export const conquestChoiceModal = document.getElementById(
@@ -3409,27 +3272,41 @@ export const conquestChoiceModal = document.getElementById(
 
 export const eraPageModern = document.getElementById("era-page-modern");
 export const eraPageWars = document.getElementById("era-page-wars");
-export const choiceModernDay = document.getElementById("choice-modern-day");
-export const choice1936Scenario = document.getElementById(
-	"choice-1936-scenario",
+export const choiceModernDay = /** @type {HTMLButtonElement} */ (
+	document.getElementById("choice-modern-day")
 );
-export const choiceWW1Scenario = document.getElementById("choice-ww1-1914");
-export const cancelConquestChoice = document.getElementById(
-	"cancel-conquest-choice",
+export const cancelConquestChoice = /** @type {HTMLButtonElement} */ (
+	document.getElementById("cancel-conquest-choice")
 );
-export const mainSettingsBtn = document.getElementById("main-settings-btn");
-export const minimizeSetupBtn = document.getElementById("minimize-setup-btn");
-export const minimizeStatsBtn = document.getElementById("minimize-stats-btn");
-export const minimizeStatusBtn = document.getElementById("minimize-status-btn");
-export const muteBtn = document.getElementById("mute-btn");
-export const ingameSettingsBtn = document.getElementById("ingame-settings-btn");
+export const mainSettingsBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("main-settings-btn")
+);
+export const minimizeSetupBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("minimize-setup-btn")
+);
+export const minimizeStatsBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("minimize-stats-btn")
+);
+export const minimizeStatusBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("minimize-status-btn")
+);
+export const muteBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("mute-btn")
+);
+export const ingameSettingsBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("ingame-settings-btn")
+);
 
 export const tutorialOverlay = document.getElementById("tutorial-overlay");
 export const tutorialStepContainer = document.getElementById(
 	"tutorial-step-container",
 );
-export const tutorialPrevBtn = document.getElementById("tutorial-prev-btn");
-export const tutorialNextBtn = document.getElementById("tutorial-next-btn");
+export const tutorialPrevBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("tutorial-prev-btn")
+);
+export const tutorialNextBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("tutorial-next-btn")
+);
 export const tutorialDotsContainer = document.getElementById("tutorial-dots");
 
 export let currentTutorialStep = 0;
@@ -3512,17 +3389,10 @@ export const editorTutorialSteps = [
 		actionRequired: "CLICK_NEXT",
 	},
 	{
-		icon: "📥",
-		title: "The Library",
-		content:
-			"Don't build alone. The <b>Country Library</b> lets you import nations designed by the community directly into your map.",
-		actionRequired: "CLICK_NEXT",
-	},
-	{
 		icon: "💾",
-		title: "Share Your Vision",
+		title: "Save Your Vision",
 		content:
-			"Once your map is complete, use <b>Save Preset</b> to keep it locally, or <b>Share to Hub</b> for others to play and remix!",
+			"Once your map is complete, use <b>Save Preset</b> to keep it as a file you can load or share yourself.",
 		actionRequired: "CLICK_FINISH",
 	},
 ];
@@ -3546,15 +3416,26 @@ export function updateTutorialUI() {
 		tutorialOverlay.style.paddingRight = "0";
 	}
 
-	tutorialStepContainer.innerHTML = `
-        <div class="tutorial-step">
-            <div class="tutorial-header">
-                <span class="tutorial-icon">${step.icon}</span>
-                <h2 class="tutorial-title">${step.title}</h2>
-            </div>
-            <div class="tutorial-body">${step.content}</div>
-        </div>
-    `;
+	// Step text is a constant above; <b>…</b> marks bold runs. Build the runs as
+	// nodes rather than parsing the string as HTML.
+	const tutorialBody = el("div", { className: "tutorial-body" });
+	step.content.split(/<b>|<\/b>/).forEach((part, i) => {
+		if (part) tutorialBody.append(i % 2 ? el("b", { text: part }) : part);
+	});
+	tutorialStepContainer.replaceChildren(
+		el(
+			"div",
+			{ className: "tutorial-step" },
+			el(
+				"div",
+				{ className: "tutorial-header" },
+				el("span", { className: "tutorial-icon", text: step.icon }),
+				" ",
+				el("h2", { className: "tutorial-title", text: step.title }),
+			),
+			tutorialBody,
+		),
+	);
 
 	tutorialPrevBtn.style.visibility =
 		currentTutorialStep === 0 ? "hidden" : "visible";
@@ -3568,12 +3449,13 @@ export function updateTutorialUI() {
 	tutorialNextBtn.disabled = needsAction;
 	tutorialNextBtn.style.opacity = needsAction ? "0.5" : "1";
 
-	tutorialDotsContainer.innerHTML = activeTutorialSet
-		.map(
-			(_, i) =>
-				`<div class="dot ${i === currentTutorialStep ? "active" : ""}"></div>`,
-		)
-		.join("");
+	tutorialDotsContainer.replaceChildren(
+		...activeTutorialSet.map((_, i) =>
+			el("div", {
+				className: `dot ${i === currentTutorialStep ? "active" : ""}`,
+			}),
+		),
+	);
 
 	if (step.actionRequired === "LOAD_MAP") {
 		tutorialNextBtn.onclick = () => {
@@ -3623,21 +3505,25 @@ export const mapUi = document.getElementById("main-ui");
 export const statusText = document.getElementById("status-text");
 export const setupPanel = document.getElementById("setup-panel");
 export const setupOptions = document.getElementById("setup-options");
-export const startBtn = document.getElementById("start-btn");
+export const startBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("start-btn")
+);
 
-export const noPeaceCheckbox = document.getElementById("no-peace-checkbox");
+export const noPeaceCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("no-peace-checkbox")
+);
 
-export const disableBombsCheckbox = document.getElementById(
-	"disable-bombs-checkbox",
+export const disableBombsCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("disable-bombs-checkbox")
 );
-export const setupDisableMountainsCheckbox = document.getElementById(
-	"setup-disable-mountains-checkbox",
+export const setupDisableMountainsCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("setup-disable-mountains-checkbox")
 );
-export const disablePuppetsCheckbox = document.getElementById(
-	"disable-puppets-checkbox",
+export const disablePuppetsCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("disable-puppets-checkbox")
 );
-export const mainDisableMountainsCheckbox = document.getElementById(
-	"disable-mountains-checkbox",
+export const mainDisableMountainsCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("disable-mountains-checkbox")
 );
 
 export const casualtyPanel = document.getElementById("casualty-panel");
@@ -3645,18 +3531,22 @@ export const leaderboardOverlay = document.getElementById(
 	"leaderboard-overlay",
 );
 export const leaderboardList = document.getElementById("leaderboard-list");
-export const closeLeaderboardBtn = document.getElementById(
-	"close-leaderboard-btn",
+export const closeLeaderboardBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("close-leaderboard-btn")
 );
 
 // Status & control panels
 export const statsPanel = document.getElementById("stats-panel");
 
-export const restartScenarioBtn = document.getElementById(
-	"restart-scenario-btn",
+export const restartScenarioBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("restart-scenario-btn")
 );
-export const quickRestartBtn = document.getElementById("quick-restart-btn");
-export const resetBtn = document.getElementById("reset-btn");
+export const quickRestartBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("quick-restart-btn")
+);
+export const resetBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("reset-btn")
+);
 
 // Buttons use clear text, ensure visibility is correct
 if (quickRestartBtn) {
@@ -3665,8 +3555,12 @@ if (quickRestartBtn) {
 if (resetBtn) {
 	resetBtn.textContent = "RESET";
 }
-export const mainMenuBtn = document.getElementById("main-menu-btn");
-export const leaderboardBtn = document.getElementById("leaderboard-btn");
+export const mainMenuBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("main-menu-btn")
+);
+export const leaderboardBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("leaderboard-btn")
+);
 
 export function updateRestartVisibility() {
 	if (!restartScenarioBtn || !mainMenuBtn || !quickRestartBtn) return;
@@ -3689,14 +3583,24 @@ export function updateRestartVisibility() {
 		if (leaderboardBtn) leaderboardBtn.style.display = "block";
 	}
 }
-export const pauseBtn = document.getElementById("pause-btn");
+export const pauseBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("pause-btn")
+);
 export const speedControls = document.getElementById("speed-controls");
 export const speedInputs = Array.from(
-	speedControls.querySelectorAll('input[name="simulation-speed"]'),
+	/** @type {NodeListOf<HTMLInputElement>} */ (
+		speedControls.querySelectorAll('input[name="simulation-speed"]')
+	),
 );
-export const godModeBtn = document.getElementById("god-mode-btn");
-export const godBombBtn = document.getElementById("god-bomb-btn");
-export const forcePeaceBtn = document.getElementById("force-peace-btn");
+export const godModeBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("god-mode-btn")
+);
+export const godBombBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("god-bomb-btn")
+);
+export const forcePeaceBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("force-peace-btn")
+);
 export const statsGrid = document.getElementById("stats-grid");
 export const tugOfWarContainer = document.getElementById(
 	"tug-of-war-container",
@@ -3711,32 +3615,106 @@ export function rebuildStatsPanel() {
 		.filter((x) => x.countries.length > 0);
 	if (activeSides.length < 2) return;
 
-	let gridHtml = "";
+	const gridNodes = [];
 	activeSides.forEach((s, pos) => {
 		const main = s.countries[0];
 		const name =
 			s.countries.length > 1
 				? `${main.name} +${s.countries.length - 1}`
 				: main.name || `Side ${String.fromCharCode(65 + s.idx)}`;
-		if (pos > 0) gridHtml += `<div class="stats-vs">VS</div>`;
-		gridHtml += `<div class="side-stats" data-side-idx="${s.idx}">
-			<div class="stat-name hud-side-accent" data-sidename="${s.idx}">${name}</div>
-            <div class="stat-metrics">
-				<div class="metric"><span class="metric-label">PERSONNEL</span><span class="metric-value hud-side-accent" data-sidesoldiers="${s.idx}">0</span></div>
-                <div class="metric"><span class="metric-label">CITIES</span><span class="metric-value" data-sidecities="${s.idx}">0</span></div>
-				<div class="metric"><span class="metric-label">MOMENTUM</span><span class="metric-value metric-value--momentum" data-sidemomentum="${s.idx}">◆ STALEMATE</span></div>
-            </div>
-        </div>`;
-	});
-	statsGrid.innerHTML = gridHtml;
-	for (const s of activeSides) {
-		const sideStats = statsGrid.querySelector(`[data-side-idx="${s.idx}"]`);
-		sideStats?.style.setProperty(
-			"--side-color",
-			sideColors[s.idx].replace(rgbaRe, "1)"),
+		if (pos > 0)
+			gridNodes.push(el("div", { className: "stats-vs", text: "VS" }));
+		gridNodes.push(
+			el(
+				"div",
+				{
+					className: "side-stats",
+					dataset: { sideIdx: s.idx },
+					style: { "--side-color": sideColors[s.idx].replace(rgbaRe, "1)") },
+				},
+				el("div", {
+					className: "stat-name hud-side-accent",
+					dataset: { sidename: s.idx },
+					text: name,
+				}),
+				el(
+					"div",
+					{ className: "stat-metrics" },
+					statsMetric(
+						"PERSONNEL",
+						"metric-value hud-side-accent",
+						{
+							sidesoldiers: s.idx,
+						},
+						"0",
+					),
+					statsMetric("CITIES", "metric-value", { sidecities: s.idx }, "0"),
+					statsMetric(
+						"MOMENTUM",
+						"metric-value metric-value--momentum",
+						{ sidemomentum: s.idx },
+						"◆ STALEMATE",
+					),
+				),
+			),
 		);
+	});
+	statsGrid.replaceChildren(...gridNodes);
+
+	if (unitCountsDisplay) {
+		unitCountsDisplay.replaceChildren();
+		const spans = [];
+		for (let i = 0; i < sides.length; i++) {
+			if (i > 0) {
+				const vs = document.createElement("span");
+				vs.className = "hud-vs-separator";
+				vs.textContent = " vs ";
+				unitCountsDisplay.appendChild(vs);
+			}
+			const span = document.createElement("span");
+			span.className = "hud-side-accent";
+			span.style.setProperty(
+				"--side-color",
+				sideColors[i].replace(rgbaRe, "1)"),
+			);
+			span.textContent = "0";
+			unitCountsDisplay.appendChild(span);
+			spans[i] = span;
+		}
+		_cachedUnitCountSpans = spans;
 	}
 
+	const tugWidth = `${Math.floor(100 / activeSides.length)}%`;
+	tugOfWarContainer.replaceChildren(
+		el(
+			"div",
+			{ className: "tug-bar" },
+			...activeSides.map((s) =>
+				el("div", {
+					className: "tug-segment",
+					dataset: { tugsegment: s.idx },
+					style: {
+						"--side-color": sideColors[s.idx].replace(rgbaRe, "0.85)"),
+						width: tugWidth,
+					},
+				}),
+			),
+		),
+		el(
+			"div",
+			{ className: "tug-labels" },
+			...activeSides.map((s) =>
+				el("span", {
+					className: "control-pct hud-side-accent",
+					dataset: { sidecontrol: s.idx },
+					text: tugWidth,
+					style: { "--side-color": sideColors[s.idx].replace(rgbaRe, "1)") },
+				}),
+			),
+		),
+	);
+
+	// Cache live-update targets after every rebuilt container is attached.
 	_cachedSoldierEls = [];
 	_cachedCityEls = [];
 	_cachedTerritoryCtrlEls = [];
@@ -3759,69 +3737,33 @@ export function rebuildStatsPanel() {
 			`[data-sidemomentum="${s.idx}"]`,
 		);
 	}
+}
 
-	if (unitCountsDisplay) {
-		unitCountsDisplay.innerHTML = "";
-		const spans = [];
-		for (let i = 0; i < sides.length; i++) {
-			if (i > 0) {
-				const vs = document.createElement("span");
-				vs.className = "hud-vs-separator";
-				vs.textContent = " vs ";
-				unitCountsDisplay.appendChild(vs);
-			}
-			const span = document.createElement("span");
-			span.className = "hud-side-accent";
-			span.style.setProperty(
-				"--side-color",
-				sideColors[i].replace(rgbaRe, "1)"),
-			);
-			span.textContent = "0";
-			unitCountsDisplay.appendChild(span);
-			spans[i] = span;
-		}
-		_cachedUnitCountSpans = spans;
-	}
-
-	let tugHtml = '<div class="tug-bar">';
-	activeSides.forEach((s) => {
-		tugHtml += `<div class="tug-segment" data-tugsegment="${s.idx}"></div>`;
-	});
-	tugHtml += '</div><div class="tug-labels">';
-	activeSides.forEach((s) => {
-		tugHtml += `<span class="control-pct hud-side-accent" data-sidecontrol="${s.idx}">${Math.floor(100 / activeSides.length)}%</span>`;
-	});
-	tugHtml += "</div>";
-	tugOfWarContainer.innerHTML = tugHtml;
-	for (const s of activeSides) {
-		const segment = tugOfWarContainer.querySelector(
-			`[data-tugsegment="${s.idx}"]`,
-		);
-		segment?.style.setProperty(
-			"--side-color",
-			sideColors[s.idx].replace(rgbaRe, "0.85)"),
-		);
-		if (segment)
-			segment.style.width = `${Math.floor(100 / activeSides.length)}%`;
-		const label = tugOfWarContainer.querySelector(
-			`[data-sidecontrol="${s.idx}"]`,
-		);
-		label?.style.setProperty(
-			"--side-color",
-			sideColors[s.idx].replace(rgbaRe, "1)"),
-		);
-	}
+/** One label/value pair in the side stats grid. */
+function statsMetric(label, valueClass, dataset, value) {
+	return el(
+		"div",
+		{ className: "metric" },
+		el("span", { className: "metric-label", text: label }),
+		el("span", { className: valueClass, dataset, text: value }),
+	);
 }
 export const treatyAlert = document.getElementById("treaty-alert");
 
 rebuildManpowerInputs();
 export const treatyMsg = document.getElementById("treaty-msg");
-export const timeSystemCheckbox = document.getElementById(
-	"enable-time-checkbox",
+export const timeSystemCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("enable-time-checkbox")
 );
-export const timeYearInput = document.getElementById("time-year-input");
-export const timeMonthInput = document.getElementById("time-month-input");
-export const timeDayInput = document.getElementById("time-day-input");
+export const timeYearInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("time-year-input")
+);
+export const timeMonthInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("time-month-input")
+);
+export const timeDayInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("time-day-input")
+);
 export const gameDateDisplay = document.getElementById("game-date-display");
 
 /**
@@ -4102,13 +4044,6 @@ import {
 	setOccupationChangeListener,
 	syncOccupationFromSideInfluence,
 } from "./engine.js";
-import {
-	closeHub,
-	openHub,
-	renderHub,
-	selectScenario,
-	switchHubTab,
-} from "./firebase.js";
 import { ControlMapLayer, RENDER_LAYERS } from "./renderer.js";
 
 export { ensureSideInfluenceMaps, getGridIndex, resetSideInfluenceMaps };
@@ -4127,7 +4062,7 @@ influenceLayer = new ControlMapLayer().addTo(map);
 
 // Create dedicated pane for reference images to ensure they stay behind the control map but above base imagery
 map.createPane("refImagePane");
-map.getPane("refImagePane").style.zIndex = 350;
+map.getPane("refImagePane").style.zIndex = "350";
 
 /**
  * PERSISTENT GRID LOGIC
@@ -4158,7 +4093,7 @@ export function applyWorldBounds(widthDeg, heightDeg) {
 
 	// If current center is outside new bounds, fit map into the new box
 	if (!bounds.contains(map.getCenter())) {
-		map.fitBounds(bounds, { animate: true });
+		map.fitBounds(bounds);
 	}
 
 	// Force bounding box redraw
@@ -4416,7 +4351,9 @@ menu_controls.bindAddSideBtnClick();
 
 menu_controls.bindFfaToggleBtnClick();
 
-export const randomWarBtn = document.getElementById("random-war-btn");
+export const randomWarBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("random-war-btn")
+);
 
 menu_controls.bindRandomWarBtnClick();
 
@@ -4900,18 +4837,6 @@ export async function loadCities(
 					}))
 			: [];
 		setCities([...loadedCities, ...customCities]);
-
-		// Apply historical renames for the 1936 WW2 scenario
-		if (currentScenarioContext && currentScenarioContext.id === "ww2_1936") {
-			cities.forEach((city) => {
-				if (city.name === "Kaliningrad") {
-					city.name = "Koenisberg";
-				}
-				if (city.name === "Gdańsk" || city.name === "Gdansk") {
-					city.name = "Danzig";
-				}
-			});
-		}
 		return true;
 	} catch (err) {
 		console.error("Failed to load cities", err);
@@ -4986,7 +4911,7 @@ function handleCountryClickOwned(
 	}
 
 	if (gameState === "EDITOR_PLACING") {
-		placeNewCountry(latlng);
+		_placeNewCountry(latlng);
 		return;
 	}
 
@@ -5006,7 +4931,7 @@ function handleCountryClickOwned(
 				statusText.innerText = "SELECT SOURCE: Click a nation on the map first";
 			}
 		} else {
-			placeDivisionAt(latlng, editingCountryId);
+			_placeDivisionAt(latlng, editingCountryId);
 		}
 		return;
 	}
@@ -5060,7 +4985,7 @@ function handleCountryClickOwned(
 	if (gameState === "EDITOR_SELECTING_OVERLORD") {
 		const sovereignId = idx !== -1 ? worldControlMap[idx] : 0;
 		if (sovereignId > 0 && sovereignId !== selectingOverlordForId) {
-			setVassalage(selectingOverlordForId, sovereignId);
+			local_setVassalage(selectingOverlordForId, sovereignId);
 		} else {
 			statusText.innerText = "Selection Cancelled";
 		}
@@ -5098,7 +5023,7 @@ function handleCountryClickOwned(
 	if (gameState === "EDITOR_SELECTING_RELEASER") {
 		const sovereignId = idx !== -1 ? worldControlMap[idx] : 0;
 		if (sovereignId > 0 && sovereignId !== selectingOverlordForId) {
-			setAsReleasable(selectingOverlordForId, sovereignId);
+			local_setAsReleasable(selectingOverlordForId, sovereignId);
 		} else {
 			statusText.innerText = "Selection Cancelled";
 		}
@@ -5188,7 +5113,7 @@ function handleCountryClickOwned(
 		gameState === "EDITOR_FILLING_TERRAIN"
 	) {
 		if (gameState === "EDITOR_FILLING") {
-			fillAt(latlng);
+			_fillAt(latlng);
 		} else if (gameState === "EDITOR_FILLING_TERRAIN") {
 			fillTerrainAt(latlng);
 		} else if (sovereignId > 0) {
@@ -5430,11 +5355,11 @@ function applyBroadSetupPosture(posture) {
 	for (const country of sides.flat()) {
 		if (country) country.strategy = strategy;
 	}
-	document
-		.querySelectorAll("#sides-container .strategy-select")
-		.forEach((select) => {
-			select.value = strategy;
-		});
+	/** @type {NodeListOf<HTMLSelectElement>} */ (
+		document.querySelectorAll("#sides-container .strategy-select")
+	).forEach((select) => {
+		select.value = strategy;
+	});
 }
 
 export function getAiOperationsSnapshot(
@@ -5537,24 +5462,24 @@ function updateWarOverview(force = false) {
 	renderWarOverview(warDeskOverviewRows());
 }
 
-function reopenConflictSetupAfterWar(...args) {
+function reopenConflictSetupAfterWar() {
 	simulationClient.stop();
 	resetLocalSimulationClock();
-	return lifecycle.reopenConflictSetupAfterWar(...args);
+	return lifecycle.reopenConflictSetupAfterWar();
 }
 
-export async function startWar(...args) {
+export async function startWar() {
 	simulationClient.stop();
 	ensureSideInfluenceMaps();
-	const result = await lifecycle.startWar(...args);
+	const result = await lifecycle.startWar();
 	if (gameState === "SIMULATING") await simulationClient.start();
 	return result;
 }
 
-export async function _startWarInner(...args) {
+export async function _startWarInner() {
 	simulationClient.stop();
 	ensureSideInfluenceMaps();
-	const result = await lifecycle._startWarInner(...args);
+	const result = await lifecycle._startWarInner();
 	if (gameState === "SIMULATING") await simulationClient.start();
 	return result;
 }
@@ -5825,6 +5750,10 @@ export function updateLoop() {
 	const realNow = performance.now();
 	const _frameDt = _perfLastTime > 0 ? realNow - _perfLastTime : 16.67;
 	if (_perfLastTime > 0) finalizePendingPerfFrame(_frameDt);
+	/**
+	 * Fields filled in later during the frame are declared here.
+	 * @type {Record<string, any> & { snapshotMs?: number, hudStart?: number, renderStart?: number } | null}
+	 */
 	let framePerfEntry = null;
 	const shouldTrackFrame =
 		window.__perf &&
@@ -6037,16 +5966,17 @@ export function updateLoop() {
 					primaryActiveCountryBySide.set(entry.side, entry.id);
 				}
 			}
-			let html = "";
+			const sideLists = [];
+			let sideList = null;
 			let currentSide = -1;
 			for (const e of entriesFlat) {
 				const casualties = countryCasualties.get(e.id) || 0;
 				const formatted = influenceLayer.formatSoldiers(casualties);
 				const isDefeated = !activeIds.has(e.id);
 				if (e.side !== currentSide) {
-					if (currentSide !== -1) html += `</div>`;
 					currentSide = e.side;
-					html += `<div class="casualty-side-list">`;
+					sideList = el("div", { className: "casualty-side-list" });
+					sideLists.push(sideList);
 				}
 				const isPrimary = primaryActiveCountryBySide.get(e.side) === e.id;
 				const meta = countryMetadata[e.id - 1];
@@ -6056,27 +5986,39 @@ export function updateLoop() {
 						flagSrc = meta.tempFlag.toDataURL();
 					} catch (_e) {}
 				}
-				const safeFlagSrc = escapeHtml(flagSrc);
-				html += `<div class="casualty-item ${isPrimary ? "primary" : "secondary"} ${isDefeated ? "is-defeated" : ""}" data-ctype="cas-item" data-cid="${e.id}" data-side="${currentSide}">
-					<img src="${safeFlagSrc}" class="cas-flag ${isPrimary ? "" : "small"}" alt="" loading="lazy" decoding="async">
-					<div class="cas-value hud-side-accent" data-cval="${e.id}">${formatted}</div>`;
+				const item = el(
+					"div",
+					{
+						className: `casualty-item ${isPrimary ? "primary" : "secondary"} ${isDefeated ? "is-defeated" : ""}`,
+						dataset: { ctype: "cas-item", cid: e.id, side: currentSide },
+						style: {
+							"--side-color": sideColors[currentSide].replace(rgbaRe, "1)"),
+						},
+					},
+					el("img", {
+						className: `cas-flag ${isPrimary ? "" : "small"}`,
+						attrs: { alt: "", loading: "lazy", decoding: "async" },
+						props: { src: String(flagSrc) },
+					}),
+					el("div", {
+						className: "cas-value hud-side-accent",
+						dataset: { cval: e.id },
+						text: formatted,
+					}),
+				);
 				if (isPrimary) {
 					const mpRemaining = Math.max(0, sideSoldiers[currentSide]);
-					html += `<span class="cas-side-mp hud-side-accent" data-sidemp="${currentSide}">${influenceLayer.formatSoldiers(mpRemaining)}</span>`;
-				}
-				html += `</div>`;
-			}
-			if (currentSide !== -1) html += `</div>`;
-			casualtyContainer.innerHTML = html;
-			casualtyContainer
-				.querySelectorAll(".casualty-item[data-side]")
-				.forEach((item) => {
-					const sideIdx = Number(item.getAttribute("data-side"));
-					item.style.setProperty(
-						"--side-color",
-						sideColors[sideIdx].replace(rgbaRe, "1)"),
+					item.append(
+						el("span", {
+							className: "cas-side-mp hud-side-accent",
+							dataset: { sidemp: currentSide },
+							text: influenceLayer.formatSoldiers(mpRemaining),
+						}),
 					);
-				});
+				}
+				sideList.append(item);
+			}
+			casualtyContainer.replaceChildren(...sideLists);
 			_casualtyValueEls = {};
 			casualtyContainer.querySelectorAll("[data-cval]").forEach((el) => {
 				_casualtyValueEls[el.getAttribute("data-cval")] = el;
@@ -6187,25 +6129,33 @@ export function openLeaderboard() {
 		return a.name.localeCompare(b.name);
 	});
 
-	leaderboardList.innerHTML = rows
-		.map((row, idx) => {
+	leaderboardList.replaceChildren(
+		...rows.map((row, idx) => {
 			const unitsLabel =
 				row.estUnits > 0 ? influenceLayer.formatSoldiers(row.estUnits) : "—";
 			const tilesLabel = row.tiles.toLocaleString();
 			const rank = idx + 1;
-			const flagSrc = row.flagUrl ? escapeHtml(row.flagUrl) : "";
-			const safeName = escapeHtml(row.name);
-			return `
-            <div class="scroller-card" style="padding: 10px; display: flex; align-items: center; gap: 10px;">
-                <div class="leaderboard-rank" style="width: 30px; font-family: 'Playfair Display'; font-size: 18px;">${rank}</div>
-                ${flagSrc ? `<img src="${flagSrc}" class="leaderboard-flag" style="width: 35px; height: 22px;">` : `<div class="leaderboard-flag" style="width: 35px; height: 22px; background:#111;"></div>`}
-                <div class="scroller-card-name" style="flex: 2; font-size: 16px; margin: 0;">${safeName}</div>
-                <div class="leaderboard-tiles" style="flex: 1; text-align: right; color: #888; font-size: 12px;">${tilesLabel}</div>
-                <div class="leaderboard-units" style="flex: 1; text-align: right; font-weight: bold; font-size: 13px;">${unitsLabel}</div>
-            </div>
-        `;
-		})
-		.join("");
+			return el(
+				"div",
+				{ className: "scroller-card leaderboard-card" },
+				el("div", { className: "leaderboard-rank", text: rank }),
+				row.flagUrl
+					? el("img", {
+							className: "leaderboard-flag",
+							props: { src: String(row.flagUrl) },
+						})
+					: el("div", {
+							className: "leaderboard-flag leaderboard-flag--empty",
+						}),
+				el("div", {
+					className: "scroller-card-name leaderboard-name",
+					text: String(row.name),
+				}),
+				el("div", { className: "leaderboard-tiles", text: tilesLabel }),
+				el("div", { className: "leaderboard-units", text: unitsLabel }),
+			);
+		}),
+	);
 
 	leaderboardOverlay.style.display = "flex";
 }
@@ -6272,14 +6222,14 @@ export function applyTreaty(...args) {
 	return lifecycle.applyTreaty(...args);
 }
 
-export function resetToSelection(...args) {
+export function resetToSelection() {
 	simulationClient.stop();
-	return lifecycle.resetToSelection(...args);
+	return lifecycle.resetToSelection();
 }
 
-export async function resetGame(...args) {
+export async function resetGame() {
 	simulationClient.stop();
-	return lifecycle.resetGame(...args);
+	return lifecycle.resetGame();
 }
 
 /**
@@ -6326,35 +6276,47 @@ menu_controls.bindCitiesToggleBtnClick();
 menu_controls.bindWarplansToggleBtnClick();
 
 // UI settings tab wiring
-const showWarplansCheckbox = document.getElementById("show-warplans-checkbox");
-const showLabelsCheckbox = document.getElementById("show-labels-checkbox");
-const showCitiesCheckbox = document.getElementById("show-cities-checkbox");
-const showBattlesCheckbox = document.getElementById("show-battles-checkbox");
-const showAllianceCheckbox = document.getElementById("show-alliance-checkbox");
+const showWarplansCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("show-warplans-checkbox")
+);
+const showLabelsCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("show-labels-checkbox")
+);
+const showCitiesCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("show-cities-checkbox")
+);
+const showBattlesCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("show-battles-checkbox")
+);
+const showAllianceCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("show-alliance-checkbox")
+);
 
-const showAdminRegionsCheckbox = document.getElementById(
-	"show-admin-regions-checkbox",
+const showAdminRegionsCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("show-admin-regions-checkbox")
 );
 showAdminRegions = getCookie("mw_show_admin_regions") !== "false";
 if (showAdminRegionsCheckbox) {
 	showAdminRegionsCheckbox.checked = showAdminRegions;
 	showAdminRegionsCheckbox.addEventListener("change", (event) => {
-		showAdminRegions = event.target.checked;
+		showAdminRegions = /** @type {HTMLInputElement} */ (event.target).checked;
 		setCookie("mw_show_admin_regions", String(showAdminRegions));
 		influenceLayer?.requestRender(RENDER_LAYERS.DYNAMIC);
 	});
 }
 
-const armyDiagnosticsCheckbox = document.getElementById(
-	"show-army-diagnostics-checkbox",
+const armyDiagnosticsCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("show-army-diagnostics-checkbox")
 );
 showArmyDiagnostics = getCookie("mw_show_army_decisions") === "true";
-const borderFadeCheckbox = document.getElementById("border-fade-checkbox");
+const borderFadeCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("border-fade-checkbox")
+);
 borderFadeEnabled = getCookie("mw_border_fade") === "true";
 if (borderFadeCheckbox) {
 	borderFadeCheckbox.checked = borderFadeEnabled;
 	borderFadeCheckbox.addEventListener("change", (event) => {
-		borderFadeEnabled = event.target.checked;
+		borderFadeEnabled = /** @type {HTMLInputElement} */ (event.target).checked;
 		if (!borderFadeEnabled) clearControlFades();
 		setCookie("mw_border_fade", borderFadeEnabled ? "true" : "false");
 		influenceLayer?.render();
@@ -6363,7 +6325,8 @@ if (borderFadeCheckbox) {
 if (armyDiagnosticsCheckbox) {
 	armyDiagnosticsCheckbox.checked = showArmyDiagnostics;
 	armyDiagnosticsCheckbox.addEventListener("change", (event) => {
-		showArmyDiagnostics = event.target.checked;
+		showArmyDiagnostics = /** @type {HTMLInputElement} */ (event.target)
+			.checked;
 		setCookie("mw_show_army_decisions", showArmyDiagnostics ? "true" : "false");
 		influenceLayer?.render();
 	});
@@ -6404,8 +6367,8 @@ menu_controls.bindShowAllianceCheckboxChange();
 menu_controls.bindNoPeaceCheckboxChange();
 
 // Secret Sounds checkbox
-const useSecretSoundsCheckbox = document.getElementById(
-	"use-secret-sounds-checkbox",
+const useSecretSoundsCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("use-secret-sounds-checkbox")
 );
 
 menu_controls.bindUseSecretSoundsCheckboxChange();
@@ -6420,8 +6383,6 @@ menu_controls.bindRestartScenarioBtnClick();
 
 menu_controls.bindResetBtnClick();
 // In‑game MENU button: return to main menu without full page reload
-
-editor_file_controls.bindEditorUpdateBtnClick();
 
 sandbox_controls.bindGodBombBtnClick();
 
@@ -6532,19 +6493,6 @@ menu_controls.bindCustomTrackInputChange();
 
 menu_controls.bindClearCustomTrackBtnClick();
 
-menu_controls.bindTabScenariosBtnClick();
-menu_controls.bindTabCountriesBtnClick();
-menu_controls.bindTabFlagsBtnClick();
-
-community_controls.bindDeleteScenarioHandler();
-
-community_controls.bindDeleteFlagHandler();
-
-/**
- * GLOBAL EXPORTS FOR HUB INTERACTION
- */
-community_controls.bindImportFlagFromLibraryHandler();
-
 export function saveCountryLocally(countryId) {
 	const meta = countryMetadata[countryId - 1];
 	if (!meta) return;
@@ -6560,28 +6508,12 @@ export function saveCountryLocally(countryId) {
 	statusText.innerText = `SAVED: ${meta.name} exported locally`;
 }
 
-community_controls.bindDeleteCountryHandler();
-
-community_controls.bindImportFromLibraryHandler();
-
-community_controls.bindPlayFromHubHandler();
-
-community_controls.bindRemixFromHubHandler();
-
 /**
  * PRELOAD CORE VISUAL ASSETS
  * Caches large menu backgrounds and thematic overlays to prevent flickering during transitions.
  */
 export function preloadAssets() {
-	const assets = [
-		"assets/images/2022.webp",
-		"assets/images/1974.webp",
-		"assets/images/1942.webp",
-		"assets/images/1936.webp",
-		"assets/images/1914.webp",
-		"assets/images/1804.webp",
-		"assets/images/1492.webp",
-	];
+	const assets = ["assets/images/2022.webp"];
 	assets.forEach((src) => {
 		const img = new Image();
 		img.src = src;
@@ -6595,29 +6527,48 @@ export function initializeEngine(refreshLoadedGeography = true) {
 	return initializeEngineOwned(refreshLoadedGeography);
 }
 function initializeEngineOwned(refreshLoadedGeography) {
-	const gridRes = parseFloat(document.getElementById("grid-res-select").value);
+	const gridRes = parseFloat(
+		/** @type {HTMLSelectElement} */ (
+			document.getElementById("grid-res-select")
+		).value,
+	);
 	const unitLimit = parseInt(
-		document.getElementById("unit-limit-select").value,
+		/** @type {HTMLSelectElement} */ (
+			document.getElementById("unit-limit-select")
+		).value,
 		10,
 	);
 
 	recruitModel =
-		document.getElementById("recruit-model-select")?.value || "balanced";
+		/** @type {HTMLSelectElement} */ (
+			document.getElementById("recruit-model-select")
+		)?.value || "balanced";
 
 	// Sync global toggles from both main settings and setup panel sources
 	const mtDisabled =
-		document.getElementById("disable-mountains-checkbox").checked ||
-		document.getElementById("setup-disable-mountains-checkbox").checked;
+		/** @type {HTMLInputElement} */ (
+			document.getElementById("disable-mountains-checkbox")
+		).checked ||
+		/** @type {HTMLInputElement} */ (
+			document.getElementById("setup-disable-mountains-checkbox")
+		).checked;
 	mountainsEnabled = !mtDisabled;
 
-	showUnitsVisually = !document.getElementById(
-		"disable-units-visually-checkbox",
-	).checked;
-	hideCurvedLabels = !!document.getElementById("hide-curved-labels-checkbox")
-		?.checked;
-	disableCountryGradient = !!document.getElementById(
-		"disable-country-gradient-checkbox",
-	)?.checked;
+	showUnitsVisually = !(
+		/** @type {HTMLInputElement} */ (
+			document.getElementById("disable-units-visually-checkbox")
+		).checked
+	);
+	hideCurvedLabels = !!(
+		/** @type {HTMLInputElement} */ (
+			document.getElementById("hide-curved-labels-checkbox")
+		)?.checked
+	);
+	disableCountryGradient = !!(
+		/** @type {HTMLInputElement} */ (
+			document.getElementById("disable-country-gradient-checkbox")
+		)?.checked
+	);
 
 	if (
 		worldControlMap &&
@@ -6718,7 +6669,9 @@ menu_controls.bindHudMenuClick();
 
 menu_controls.bindIngameSettingsBtnClick();
 
-export const closeSettingsBtn = document.getElementById("close-settings-btn");
+export const closeSettingsBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("close-settings-btn")
+);
 menu_controls.bindCloseSettingsBtnClick();
 
 menu_controls.bindPlayModeBtnClick();
@@ -6730,15 +6683,15 @@ menu_controls.bindBackToNavBtnClick();
  */
 
 export let queuedScenarioAction = null;
-export const enterScenarioBtn = document.getElementById("enter-scenario-btn");
+export const enterScenarioBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("enter-scenario-btn")
+);
 
 menu_controls.bindEnterScenarioBtnClick();
 
 // Wire Scroller Cards
 menu_controls.bindScrollerChoiceModernClick();
 menu_controls.bindScrollerChoiceUkraine2023Click();
-menu_controls.bindScrollerChoice1936Click();
-menu_controls.bindScrollerChoice1914Click();
 
 const scenarioMenuDependencies = {
 	primeAudio,
@@ -6750,23 +6703,9 @@ const scenarioMenuDependencies = {
 	loadPreset: performPresetLoad,
 	setContext: (context) => {
 		currentScenarioContext = context;
-		activeScenarioId = null;
-	},
-	modernFallback: async () => {
-		gameMode = "CONQUEST";
-		gameState = "SELECTING_P1";
-		const mapRes = document.getElementById("map-res-select").value;
-		const geoUrl = `${CONFIG.GEOJSON_BASE}${mapRes}/cultural/ne_${mapRes}_admin_0_countries.json`;
-		mainMenu.style.display = "none";
-		await loadCountries(geoUrl, false);
-		initAudio();
 	},
 };
 menu_controls.bindChoiceModernDayClick();
-
-menu_controls.bindChoice1936ScenarioClick();
-
-menu_controls.bindChoiceWW1ScenarioClick();
 
 menu_controls.bindCancelConquestChoiceClick();
 
@@ -6792,25 +6731,11 @@ inspector_controls.bindConfirmCreateBtnClick();
 
 inspector_controls.bindInspectNameInputInput();
 
-inspector_controls.bindInspectHubFlagBtnClick();
-
 inspector_controls.bindInspectFetchFlagBtnClick();
 
 inspector_controls.bindInspectFlagInputChange();
 
 inspector_controls.bindInspectColorPickerInput();
-
-editor_file_controls.bindShareCountryBtnClick();
-
-editor_file_controls.bindShareFlagBtnClick();
-
-editor_file_controls.bindCancelShareFlagBtnClick();
-
-editor_file_controls.bindConfirmShareFlagBtnClick();
-
-editor_file_controls.bindCancelShareCountryBtnClick();
-
-editor_file_controls.bindConfirmShareCountryBtnClick();
 
 inspector_controls.bindInspectPaintBtnClick();
 
@@ -6883,10 +6808,6 @@ editor_file_controls.bindEditorSaveBtnClick();
 
 editor_file_controls.bindEditorLoadBtnClick();
 
-editor_tool_controls.bindEditorHubBtnClick();
-
-editor_tool_controls.bindEditorLibraryBtnClick();
-
 editor_tool_controls.bindEditorSaveCountryBtnClick();
 
 editor_tool_controls.bindEditorLoadCountryBtnClick();
@@ -6915,7 +6836,9 @@ reference_controls.bindRefImageInputChange();
 
 reference_controls.bindRefOpacitySliderInput();
 
-export const refAboveCheckbox = document.getElementById("ref-above-checkbox");
+export const refAboveCheckbox = /** @type {HTMLInputElement} */ (
+	document.getElementById("ref-above-checkbox")
+);
 reference_controls.bindRefAboveCheckboxChange();
 
 reference_controls.bindRefScaleSliderInput();
@@ -6927,13 +6850,15 @@ editor_file_controls.bindEditorDownloadMapBtnClick();
 // -------- Procedural Nation Generation (For empty presets) --------
 export const noNationsModal = document.getElementById("no-nations-modal");
 
-export const randomNationsCountInput = document.getElementById(
-	"random-nations-count",
+export const randomNationsCountInput = /** @type {HTMLInputElement} */ (
+	document.getElementById("random-nations-count")
 );
-export const confirmRandomGenBtn = document.getElementById(
-	"confirm-random-gen-btn",
+export const confirmRandomGenBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("confirm-random-gen-btn")
 );
-export const skipRandomGenBtn = document.getElementById("skip-random-gen-btn");
+export const skipRandomGenBtn = /** @type {HTMLButtonElement} */ (
+	document.getElementById("skip-random-gen-btn")
+);
 
 /**
  * Procedurally populates all land cells on the map with a specified number of random nations.
@@ -6954,8 +6879,6 @@ editor_file_controls.bindImportCountryConfirmBtnClick();
 
 editor_file_controls.bindEditorLoadZipBtnClick();
 
-editor_tool_controls.bindEditorFlagLibraryBtnClick();
-
 // City tools buttons
 inspector_controls.bindEditorCityNewBtnClick();
 
@@ -6964,36 +6887,6 @@ inspector_controls.bindEditorCityClearBtnClick();
 menu_controls.bindLeaderboardBtnClick();
 
 menu_controls.bindCloseLeaderboardBtnClick();
-
-menu_controls.bindCloseHubBtnClick();
-
-// -------- Item details + comments modal logic --------
-
-// -------- Global Chat Logic --------
-
-community_controls.bindGlobalChatCloseClick();
-
-community_controls.bindGlobalChatSendClick();
-
-community_controls.bindGlobalChatInputKeydown();
-
-community_controls.bindItemCommentSubmitClick();
-
-community_controls.bindItemCancelReplyBtnClick();
-
-community_controls.bindCloseItemModalBtnClick();
-
-editor_file_controls.bindEditorShareBtnClick();
-
-community_controls.bindCancelUploadBtnClick();
-
-community_controls.bindConfirmUploadBtnClick();
-
-editor_tool_controls.bindCancelEditorChoiceClick();
-
-editor_tool_controls.bindChoiceExternalEditorClick();
-
-editor_tool_controls.bindChoiceIngameEditorClick();
 
 editor_tool_controls.bindCancelSourceChoiceClick();
 

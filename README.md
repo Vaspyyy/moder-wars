@@ -19,20 +19,20 @@ npm ci --ignore-scripts
 npm run dev
 ```
 
-`npm run check` runs strict TypeScript checks for the new engine modules, lint, Node regressions, a production build, and offline asset checks. `npm run build` outputs the static site to `dist/`; `npm run preview` serves that output. See [the migration and deployment notes](docs/MODERNIZATION.md) before merging or deploying.
+`npm run check` runs TypeScript checks (strict for the engine modules, `checkJs` for the JavaScript), Biome, the Node smoke suite, a production build, and offline asset checks. `npm run build` outputs the static site to `dist/`; `npm run preview` serves that output.
 
 ## Current Era
 
-The current **Choose Era** menu exposes one playable era:
+The scenario menu exposes two scenarios:
 
-- **2022 Modern Day** - current borders and geopolitics from `assets/maps/world map 2022.json`
+- **Modern World 2026** - political geography from a pinned Overture Maps release, with regions; no live frontlines
+- **Ukraine 2023 · Eurasia** - approximate control on 2023-01-01 with fictional armies
 
 ## What You Can Do
 
-- **PLAY** opens the 2022 Modern Day era and starts the conflict setup. The Basic panel covers AI posture and war rules, with + Side and FFA above the side cards. Optional manpower totals, date, and capture rules remain under Advanced. The simulation uses ground formations, naval planning, and optional missiles.
+- **PLAY** opens the scenario picker and starts the conflict setup. The Basic panel covers AI posture and war rules, with + Side and FFA above the side cards. Optional manpower totals, date, and capture rules remain under Advanced. The simulation uses ground formations, naval planning, and optional missiles.
 - **War Overview** shows manpower, casualties, and the percentage of original territory retained for each side and its countries. Country manpower shows deployed personnel; side manpower includes pooled reserves. Country rows are indented beneath their side totals.
 - **EDITOR** redraws borders, creates countries, manages cities, and saves or loads scenarios.
-- **COMMUNITY** browses, uploads, remixes, and downloads shared scenarios or countries.
 - **SETTINGS** groups preferences into Gameplay, Display, Audio, Interface, and Advanced. Benchmark and performance tuning live under Advanced.
 - Country cards keep identity and manpower visible, with buffs, allies, role, and doctrine under **Configure**.
 - The live toolbar has a five-bar speed selector: click 1×, 2×, 3×, 5× or 10× directly. Filled bars show the selected level; pausing retains your chosen speed. Restart, sandbox, sound, help, fullscreen, and navigation actions live under **Menu**.
@@ -53,7 +53,7 @@ During a war, soldier totals appear separately for each home country on each dis
 
 ## Custom Scenarios
 
-Modern Wars can load custom scenario files and community scenarios. This is separate from the built-in era picker: the main era menu currently exposes only 2022 Modern Day, but the editor and community tools can still create, import, remix, and share other setups.
+Modern Wars can save and load custom scenario files and countries locally. The game has no online features: country flags ship with the game, and images, flags and soundtracks you pick stay on your device.
 
 ## Controls
 
@@ -63,10 +63,6 @@ Modern Wars can load custom scenario files and community scenarios. This is sepa
 - Space pauses/resumes during a war; + / − changes the speed level. The speed selector also supports native radio-button arrow-key navigation.
 
 Speeds are target multipliers: large wars may reach the CPU's simulation limit before 5× or 10×. Lowering speed immediately clears accumulated catch-up time. Live clocks keep at most 60 pending ticks, so a slow period cannot leave minutes of time queued. Each completed tick still performs the full simulation; the calendar advances only for completed ticks.
-
-## Known State
-
-Older era data, thumbnails, hidden cards, dormant click handlers, and import presets may still exist in the codebase. They are not currently exposed as supported main-menu eras unless they are visible in the **Choose Era** screen.
 
 ## Development Notes
 
@@ -87,7 +83,7 @@ The title screen uses a dedicated vector backdrop with bundled 50m geography and
 - Install the locked npm dependencies and use Vite for local development.
 - Deploy the production output from `dist/` through the GitHub Actions Pages workflow.
 - The service worker caches aggressively. After source changes, hard-refresh the browser or bump `CACHE_VERSION`.
-- Game version appears in both `index.html` and `workers/service-worker.js`; keep them in sync.
+- The game version appears in `index.html`, `workers/service-worker.js`, `package.json` and `package-lock.json`; keep them in sync.
 
 ## Tech
 
@@ -149,4 +145,4 @@ Reports default to the ignored `performance-results/` directory. Each output dir
 
 These are controlled deployments using real map data, not exact menu-start reproductions. Loading and warmup are excluded from tick statistics. Worker transport exercises the production core, packed snapshots, changed map tiles, and mirror application through Node worker threads at two logical ticks per snapshot; it excludes the browser worker's real-time timer and rendering. CPU and heap sampling are separate from the reported timing runs. Heap sampling estimates allocation churn, including collected objects; ArrayBuffer memory is reported separately. This measures CPU costs, not browser FPS or GPU rendering.
 
-See [the measured bottleneck audit](docs/PERFORMANCE-AUDIT.md) for results and priorities. The harness uses [Node's V8 inspector](https://nodejs.org/api/inspector.html#cpu-profiler) and keeps all profiling machinery out of the game's runtime.
+The harness uses [Node's V8 inspector](https://nodejs.org/api/inspector.html#cpu-profiler) and keeps all profiling machinery out of the game's runtime.

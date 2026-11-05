@@ -577,7 +577,9 @@ function buildSnapshot(aggregate, context) {
  * @param {number} [options.defaultItemBudget=16384]
  * @param {(snapshot:TerritoryLedgerSnapshot)=>void} [options.onCommit]
  */
-export function createTerritoryLedger(options = {}) {
+export function createTerritoryLedger(
+	options = /** @type {any} validated at runtime */ ({}),
+) {
 	const gridWidth = positiveInteger(options.gridWidth);
 	const gridHeight = positiveInteger(options.gridHeight);
 	const totalCells = gridWidth * gridHeight;
@@ -1030,7 +1032,12 @@ export function createTerritoryLedger(options = {}) {
 		setCities(nextCities, nextOptions = {}) {
 			const nextGetCityCellIndex =
 				nextOptions.getCityCellIndex ?? getCityCellIndex;
-			const nextCityRevision = nextOptions.revision ?? cityRevision + 1;
+			// Opaque string revisions keep their historical suffixing behavior.
+			const nextCityRevision =
+				nextOptions.revision ??
+				(typeof cityRevision === "number"
+					? cityRevision + 1
+					: `${cityRevision}1`);
 			const nextCityIndex = normalizeCities(
 				nextCities || [],
 				nextGetCityCellIndex,

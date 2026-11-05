@@ -34,7 +34,32 @@ for (const path of scripts) {
 			"simulation code belongs in the worker bundle",
 		);
 }
-assert.ok(existsSync(new URL("assets/maps/world map 2022.json", root)));
+for (const legacy of [
+	"assets/maps/world map 2022.json",
+	"assets/maps/world_war_1__1914_.json",
+	"assets/maps/WW2 Peru Update.json",
+])
+	assert.ok(!existsSync(new URL(legacy, root)), `${legacy} must not ship`);
+assert.ok(
+	!existsSync(new URL("source-data/", root)),
+	"source-data must not ship",
+);
+for (const name of [
+	"world-map-2026-v3.mwsc.gz",
+	"ukraine-2023-v3.mwsc.gz",
+	"world-map-2022-v3.mwsc.gz",
+])
+	assert.ok(
+		existsSync(new URL(`assets/maps/compiled/${name}`, root)),
+		`${name} is missing from dist`,
+	);
+// Every audio file the game requests must be in the build output.
+const audioSource = readFileSync(
+	new URL("../src/audio.js", import.meta.url),
+	"utf8",
+);
+for (const [, path] of audioSource.matchAll(/"(assets\/audio\/[^"]+)"/g))
+	assert.ok(existsSync(new URL(path, root)), `${path} is missing from dist`);
 assert.ok(
 	existsSync(
 		new URL(

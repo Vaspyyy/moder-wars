@@ -1,4 +1,7 @@
 import { showAlert, showConfirm } from "./dialogs.js";
+import { localFlagUrl } from "./flags.js";
+import { buffButtonContent } from "./inspectors.js";
+import { readFlagAsDataUrl } from "./local-files.js";
 // Controls receive live state and commands; they do not import the application.
 export function createInspectorControls(runtime) {
 	async function loadReferenceGeometry() {
@@ -38,9 +41,9 @@ export function createInspectorControls(runtime) {
 
 			if (file) {
 				try {
-					runtime.loadingStatus.innerText = "Uploading Flag...";
+					runtime.loadingStatus.innerText = "Loading Flag...";
 					runtime.loadingOverlay.style.display = "flex";
-					runtime.customCountryData.flagUrl = await websim.upload(file);
+					runtime.customCountryData.flagUrl = await readFlagAsDataUrl(file);
 					runtime.loadingOverlay.style.display = "none";
 				} catch (e) {
 					console.error("Flag upload failed", e);
@@ -69,12 +72,6 @@ export function createInspectorControls(runtime) {
 				runtime.recalculateAllBounds();
 				runtime.influenceLayer.render();
 			}
-		});
-	}
-
-	function bindInspectHubFlagBtnClick() {
-		runtime.inspectHubFlagBtn.addEventListener("click", () => {
-			runtime.openHub("flags");
 		});
 	}
 
@@ -119,7 +116,8 @@ export function createInspectorControls(runtime) {
 				}
 			}
 
-			if (!code) {
+			const flagUrl = code ? localFlagUrl(code) : null;
+			if (!flagUrl) {
 				showAlert(
 					"Could not find a modern flag for '" +
 						name +
@@ -128,7 +126,6 @@ export function createInspectorControls(runtime) {
 				return;
 			}
 
-			const flagUrl = `https://flagcdn.com/w160/${code}.webp`;
 			runtime.updateCountryFlag(runtime.editingCountryId, flagUrl);
 		});
 	}
@@ -138,9 +135,9 @@ export function createInspectorControls(runtime) {
 			const file = e.target.files[0];
 			if (file && runtime.editingCountryId > 0) {
 				try {
-					runtime.loadingStatus.innerText = "Uploading Flag...";
+					runtime.loadingStatus.innerText = "Loading Flag...";
 					runtime.loadingOverlay.style.display = "flex";
-					const url = await websim.upload(file);
+					const url = await readFlagAsDataUrl(file);
 
 					runtime.updateCountryFlag(runtime.editingCountryId, url);
 					runtime.loadingOverlay.style.display = "none";
@@ -275,9 +272,9 @@ export function createInspectorControls(runtime) {
 				const file = e.target.files[0];
 				if (!file || runtime.editingCountryId <= 0) return;
 				try {
-					runtime.loadingStatus.innerText = "Uploading Alliance Flag...";
+					runtime.loadingStatus.innerText = "Loading Alliance Flag...";
 					runtime.loadingOverlay.style.display = "flex";
-					const url = await websim.upload(file);
+					const url = await readFlagAsDataUrl(file);
 					const rootId = runtime.getAllianceRootId(runtime.editingCountryId);
 					if (!rootId) {
 						runtime.loadingOverlay.style.display = "none";
@@ -303,7 +300,7 @@ export function createInspectorControls(runtime) {
 				} catch (err) {
 					console.error("Alliance flag upload failed", err);
 					runtime.loadingOverlay.style.display = "none";
-					showAlert("Failed to upload alliance flag.");
+					showAlert("Failed to load alliance flag.");
 				}
 			});
 		}
@@ -386,11 +383,9 @@ export function createInspectorControls(runtime) {
 
 				const bMeta =
 					runtime.BUFF_METADATA[nextState] || runtime.BUFF_METADATA.none;
-				runtime.inspectBuffBtn.innerHTML = `
-            <span class="buff-arrow" data-dir="-1" style="font-size: 12px; margin-right:4px;">◀</span>
-            <span class="buff-label">BUFF: ${bMeta.label}</span>
-            <span class="buff-arrow" data-dir="1" style="font-size: 12px; margin-left:4px;">▶</span>
-        `;
+				runtime.inspectBuffBtn.replaceChildren(
+					...buffButtonContent(bMeta.label),
+				);
 				runtime.inspectBuffBtn.style.background = bMeta.color;
 				runtime.inspectBuffBtn.style.color = bMeta.textColor;
 
@@ -532,7 +527,6 @@ export function createInspectorControls(runtime) {
 	return {
 		bindConfirmCreateBtnClick,
 		bindInspectNameInputInput,
-		bindInspectHubFlagBtnClick,
 		bindInspectFetchFlagBtnClick,
 		bindInspectFlagInputChange,
 		bindInspectColorPickerInput,

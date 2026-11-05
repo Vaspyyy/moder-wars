@@ -5,6 +5,11 @@ import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 import { build } from "vite";
 import { CONFIG } from "../src/config.js";
+import {
+	localizeFlagUrl,
+	localizeMetaFlags,
+	localizeScenarioFlags,
+} from "../src/flags.js";
 import { normalizeSavedCells } from "../src/saved-cells.js";
 import { decodeScenarioJson } from "../src/scenario-codec.js";
 import { generateScenarioSnapshot } from "../src/scenario-export.js";
@@ -178,6 +183,9 @@ const factory = vm.runInNewContext(
 		setTimeout,
 		normalizeSavedCells,
 		generateScenarioSnapshot,
+		localizeFlagUrl,
+		localizeMetaFlags,
+		localizeScenarioFlags,
 		applyScenarioSovereigntyOverrides,
 		applyScenarioTheater,
 		isInsideScenarioTheater,

@@ -34,8 +34,9 @@ export const COMPILED_SCENARIO_URLS = Object.freeze({
 	ukraine2023:
 		"assets/maps/compiled/ukraine-2023-v3.mwsc.gz?rev=6c3bd474fe7a8717",
 	modern: "assets/maps/compiled/world-map-2026-v3.mwsc.gz?rev=27c53583672479ed",
-	ww1: "assets/maps/compiled/world-war-1-1914-v3.mwsc.gz?rev=b76fc79757b50a5a",
-	ww2: "assets/maps/compiled/world-war-2-v3.mwsc.gz?rev=85c0a2cc2b8823b8",
+	// Benchmark baseline and country-import source; not offered in the menus.
+	modern2022:
+		"assets/maps/compiled/world-map-2022-v3.mwsc.gz?rev=a40b8db35255df20",
 });
 
 function writeVarUint(target, offset, value) {
@@ -486,8 +487,11 @@ export function loadScenario(url, options = {}) {
 				type: "module",
 			});
 	const startedAt = performance.now();
-	const baseUrl =
-		typeof window !== "undefined" ? window.location.href : import.meta.url;
+	// This module also loads in workers, where there is no window.
+	const pageWindow =
+		/** @type {{ window?: { location: { href: string } } }} */ (globalThis)
+			.window;
+	const baseUrl = pageWindow ? pageWindow.location.href : import.meta.url;
 	const scenarioUrl = new URL(String(url), baseUrl).href;
 	const jsonFallbackUrl = options.jsonFallbackUrl
 		? new URL(String(options.jsonFallbackUrl), baseUrl).href

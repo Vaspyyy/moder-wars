@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { gzipSync, gunzipSync } from "node:zlib";
+import { gunzipSync, gzipSync } from "node:zlib";
 import { decodeScenarioBinary, encodeScenario } from "../src/scenario-codec.js";
 import {
 	buildModern2026Scenario,

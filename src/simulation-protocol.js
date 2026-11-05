@@ -5,6 +5,8 @@ import {
 } from "./simulation-metrics.js";
 import { createSimulationState } from "./simulation-state.js";
 
+/** @typedef {Int8Array | Uint8Array | Uint8ClampedArray | Int16Array | Uint16Array | Int32Array | Uint32Array | Float32Array | Float64Array} TypedArray */
+
 export const SIMULATION_PROTOCOL_VERSION = 2;
 export const CONTROL_TILE_SIZE = 32;
 export const CONTROL_MAP_FIELDS = [
@@ -236,9 +238,12 @@ export function applySimulationState(
 		else if (
 			ArrayBuffer.isView(runtime[key]) &&
 			ArrayBuffer.isView(value) &&
-			runtime[key].length === value.length
+			/** @type {TypedArray} */ (runtime[key]).length ===
+				/** @type {TypedArray} */ (value).length
 		)
-			runtime[key].set(value);
+			/** @type {TypedArray} */ (runtime[key]).set(
+				/** @type {TypedArray} */ (value),
+			);
 		else if (runtime[key] instanceof Map && value instanceof Map) {
 			const target = runtime[key];
 			if (target === value) continue;
@@ -733,6 +738,11 @@ export function createPresentationSnapshotCache() {
 	return { values: new Map() };
 }
 
+/**
+ * @param {any} left
+ * @param {any} right
+ * @param {Map<any, any> & { reverse?: Map<any, any> }} [pairs] Visited pairs; `reverse` holds the right-to-left mapping.
+ */
 function presentationValueEqual(left, right, pairs = new Map()) {
 	if (left === right) return true;
 	if (typeof left === "function") return right === undefined;

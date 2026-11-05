@@ -3,8 +3,9 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { gzipSync, gunzipSync } from "node:zlib";
+import { gunzipSync, gzipSync } from "node:zlib";
 import { encodeScenario } from "../src/scenario-codec.js";
+import { readWorldMap2022 } from "./source-data.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const sourcePath = path.join(
@@ -149,9 +150,7 @@ export function buildModern2026Scenario() {
 	const sourceBytes = fs.readFileSync(sourcePath);
 	const source = JSON.parse(gunzipSync(sourceBytes));
 	assert.equal(source.release, release);
-	const base = JSON.parse(
-		fs.readFileSync(path.join(root, "assets/maps/world map 2022.json"), "utf8"),
-	);
+	const base = readWorldMap2022();
 	const flags = JSON.parse(
 		fs.readFileSync(path.join(root, "assets/geodata/flagcodes.json"), "utf8"),
 	);

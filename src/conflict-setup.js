@@ -1,18 +1,89 @@
 // Dependencies are supplied by the application; this module does not import it.
+import { el } from "./dom.js";
+
+const ROLE_OPTIONS = [
+	[
+		"OFFENSE",
+		"Offensive",
+		"OFF: Offensive main participant, pushes its own fronts.",
+	],
+	[
+		"SUPPORT",
+		"Support",
+		"SUP: Support nation; mostly sends troops to help allies instead of starting new invasions.",
+	],
+];
+
+const STRATEGY_OPTIONS = [
+	[
+		"TURTLE",
+		"Hold position",
+		"TUR: Zero offensive plans until force advantage. Pure defense.",
+	],
+	[
+		"DEFENSIVE",
+		"Defensive",
+		"DEF: Focuses on defending own cores and reclaiming lost land.",
+	],
+	[
+		"BALANCED",
+		"Balanced",
+		"BAL: Balanced offense and defense along the whole front.",
+	],
+	[
+		"AGGRESSIVE",
+		"Aggressive",
+		"AGG: Very aggressive, tries to push hard even when risky.",
+	],
+	[
+		"BLITZ",
+		"Blitz",
+		"BLZ: Blitz-style spearheads that seek breakthroughs and deep pushes.",
+	],
+];
+
+/** Builds a select whose options mark the current value with the selected attribute. */
+function buildSelect(className, label, title, options, current) {
+	return el(
+		"select",
+		{ className, title, attrs: { "aria-label": label } },
+		...options.map(([value, text, optionTitle]) =>
+			el("option", {
+				title: optionTitle,
+				text,
+				attrs: { value, selected: current === value },
+			}),
+		),
+	);
+}
+
 export function createConflictSetup(runtime) {
 	function rebuildManpowerInputs() {
 		const container = document.getElementById("manpower-inputs-container");
 		if (!container) return;
-		let html = "";
+		const fields = [];
 		for (let i = 0; i < runtime.sides.length; i++) {
 			const color = runtime.sideColors[i].replace(runtime.rgbaRe, "1)");
 			const label = `Side ${String.fromCharCode(65 + i)}`;
-			html += `<div style="display:flex; flex-direction:column; gap:2px;">
-            <span style="font-size: 12px; color:${color}; text-transform:uppercase; letter-spacing:0.5px;">${label}</span>
-            <input id="manpower-side-${i}" type="number" min="0" placeholder="auto" style="width:110px; padding:4px 6px; background:#2a2a30; border:1px solid #444; border-radius:4px; color:#fff; font-size: 12px;" title="Total soldiers for ${label}.">
-        </div>`;
+			fields.push(
+				el(
+					"div",
+					{ className: "manpower-side-field" },
+					el("span", {
+						className: "manpower-side-label",
+						text: label,
+						style: { color },
+					}),
+					el("input", {
+						id: `manpower-side-${i}`,
+						className: "manpower-side-input",
+						title: `Total soldiers for ${label}.`,
+						attrs: { type: "number", min: "0", placeholder: "auto" },
+					}),
+				),
+			);
 		}
-		container.innerHTML = html;
+		container.replaceChildren(...fields);
 	}
 
 	function updateSidesUI() {
@@ -24,7 +95,7 @@ export function createConflictSetup(runtime) {
 			].map((details) => details.closest(".setup-slot").dataset.countryId),
 		);
 		updateFfaSetupUi();
-		runtime.sidesContainer.innerHTML = "";
+		runtime.sidesContainer.replaceChildren();
 		let ffaParticipants = null;
 		if (runtime.ffaMode) {
 			const heading = document.createElement("div");
@@ -59,12 +130,16 @@ export function createConflictSetup(runtime) {
 			// Use A, B, C, D labels
 			const sideLabel = String.fromCharCode(65 + sideIdx);
 			if (sideList.length > 0 && sideTotalTroops > 0) {
-				sideHeader.innerHTML = `
-                <div style="font-size: 12px; font-weight:900;">SIDE ${sideLabel}</div>
-                <div style="font-size: 12px; color:#777; margin-top:2px; text-transform:uppercase; letter-spacing:0.5px;">
-                    ~ ${runtime.influenceLayer.formatSoldiers(sideTotalTroops)} troops
-                </div>
-            `;
+				sideHeader.replaceChildren(
+					el("div", {
+						className: "side-header-label",
+						text: `SIDE ${sideLabel}`,
+					}),
+					el("div", {
+						className: "side-header-troops",
+						text: `~ ${runtime.influenceLayer.formatSoldiers(sideTotalTroops)} troops`,
+					}),
+				);
 			} else {
 				sideHeader.innerText = `SIDE ${sideLabel}`;
 			}
@@ -121,47 +196,99 @@ export function createConflictSetup(runtime) {
 					runtime.getCookie("mw_lang") || "en",
 					"NATIONS",
 				);
-				slot.innerHTML = `
-                <button class="clear-slot-btn" type="button" aria-label="Remove country" title="Remove this country from the selected side.">×</button>
-                <div class="slot-name" title="${country.name}" style="display: flex; flex-direction: column; gap: 2px; align-items: center; justify-content: center; margin-bottom: 5px;">
-                    <div style="display: flex; align-items: center; gap: 8px; justify-content: center;">
-                        ${flagUrl ? `<img src="${flagUrl}" style="width: 22px; height: 13px; object-fit: cover; border: 1px solid rgba(255,255,255,0.2); flex-shrink: 0; border-radius: 1px;">` : ""}
-                        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${displayName}</span>
-                    </div>
-                    <div style="font-size: 12px; color: #777; text-transform: uppercase; letter-spacing: 0.5px;">~ ${estLabel} troops</div>
-                </div>
-                <details class="country-configuration">
-                    <summary>Configure</summary>
-                    <div class="country-configuration-actions">
-                    <button class="mini-btn buff-toggle-btn" style="margin-top: 4px; background:${bMeta.color}; color:${bMeta.textColor}; font-size: 12px; padding:2px 6px; display:flex; align-items:center; gap:4px; justify-content:center;" title="Adjust combat buffs: use ◀ / ▶ to move between CRIPPLED, WEAKENED, NONE, GOLIATH, DEITY, GODLY. Hold ALT while clicking to change an invisible buff that only affects combat.">
-                        <span class="buff-arrow" data-dir="-1" style="font-size: 12px;">◀</span>
-                        <span class="buff-label">BUFF: ${bMeta.label}</span>
-                        <span class="buff-arrow" data-dir="1" style="font-size: 12px;">▶</span>
-                    </button>
-                    <button class="mini-btn add-allies-btn" style="margin-top: 4px; background:#16a085; font-size: 12px; padding: 2px 6px;" title="Recruit all formal allies (overlord and vassals) of this nation into this side.">ADD ALLIES</button>
+				slot.replaceChildren(
+					el("button", {
+						className: "clear-slot-btn",
+						title: "Remove this country from the selected side.",
+						text: "×",
+						attrs: { type: "button", "aria-label": "Remove country" },
+					}),
+					el(
+						"div",
+						{ className: "slot-name", title: `${country.name}` },
+						el(
+							"div",
+							{ className: "slot-name-row" },
+							flagUrl &&
+								el("img", { className: "slot-flag", props: { src: flagUrl } }),
+							el("span", { className: "slot-name-text", text: displayName }),
+						),
+						el("div", {
+							className: "slot-troops",
+							text: `~ ${estLabel} troops`,
+						}),
+					),
+					el(
+						"details",
+						{ className: "country-configuration" },
+						el("summary", { text: "Configure" }),
+						el(
+							"div",
+							{ className: "country-configuration-actions" },
+							el(
+								"button",
+								{
+									className: "mini-btn buff-toggle-btn",
+									title:
+										"Adjust combat buffs: use ◀ / ▶ to move between CRIPPLED, WEAKENED, NONE, GOLIATH, DEITY, GODLY. Hold ALT while clicking to change an invisible buff that only affects combat.",
+									style: { background: bMeta.color, color: bMeta.textColor },
+								},
+								el("span", {
+									className: "buff-arrow",
+									text: "◀",
+									dataset: { dir: "-1" },
+								}),
+								el("span", {
+									className: "buff-label",
+									text: `BUFF: ${bMeta.label}`,
+								}),
+								el("span", {
+									className: "buff-arrow",
+									text: "▶",
+									dataset: { dir: "1" },
+								}),
+							),
+							el("button", {
+								className: "mini-btn add-allies-btn",
+								title:
+									"Recruit all formal allies (overlord and vassals) of this nation into this side.",
+								text: "ADD ALLIES",
+							}),
+							releasables.length > 0 &&
+								el("button", {
+									className: "mini-btn release-btn",
+									title:
+										"Release a releasable core from this country into the war.",
+									text: "RELEASE...",
+								}),
+						),
+						el(
+							"div",
+							{ className: "slot-controls" },
+							buildSelect(
+								"mini-select role-select",
+								"Country role",
+								"OFF: Leads attacks and creates new fronts. SUP: Sends expeditionary support to allied offensives instead of opening its own invasions.",
+								ROLE_OPTIONS,
+								country.role,
+							),
+							buildSelect(
+								"mini-select strategy-select",
+								"Country doctrine",
+								"Per-country behavior: TUR = pure defense; DEF = hold cores; BAL = mixed; AGG = push hard; BLZ = fast breakthroughs.",
+								STRATEGY_OPTIONS,
+								country.strategy,
+							),
+						),
+					),
+				);
 
-                    ${releasables.length > 0 ? `<button class="mini-btn release-btn" style="background: #27ae60; font-size: 12px; padding: 2px 6px; margin-top: 4px;" title="Release a releasable core from this country into the war.">RELEASE...</button>` : ""}
-                </div>
-                <div class="slot-controls">
-                    <select class="mini-select role-select" aria-label="Country role" title="OFF: Leads attacks and creates new fronts. SUP: Sends expeditionary support to allied offensives instead of opening its own invasions.">
-                        <option value="OFFENSE" ${country.role === "OFFENSE" ? "selected" : ""} title="OFF: Offensive main participant, pushes its own fronts.">Offensive</option>
-                        <option value="SUPPORT" ${country.role === "SUPPORT" ? "selected" : ""} title="SUP: Support nation; mostly sends troops to help allies instead of starting new invasions.">Support</option>
-                    </select>
-                    <select class="mini-select strategy-select" aria-label="Country doctrine" title="Per-country behavior: TUR = pure defense; DEF = hold cores; BAL = mixed; AGG = push hard; BLZ = fast breakthroughs.">
-                        <option value="TURTLE" ${country.strategy === "TURTLE" ? "selected" : ""} title="TUR: Zero offensive plans until force advantage. Pure defense.">Hold position</option>
-                        <option value="DEFENSIVE" ${country.strategy === "DEFENSIVE" ? "selected" : ""} title="DEF: Focuses on defending own cores and reclaiming lost land.">Defensive</option>
-                        <option value="BALANCED" ${country.strategy === "BALANCED" ? "selected" : ""} title="BAL: Balanced offense and defense along the whole front.">Balanced</option>
-                        <option value="AGGRESSIVE" ${country.strategy === "AGGRESSIVE" ? "selected" : ""} title="AGG: Very aggressive, tries to push hard even when risky.">Aggressive</option>
-                        <option value="BLITZ" ${country.strategy === "BLITZ" ? "selected" : ""} title="BLZ: Blitz-style spearheads that seek breakthroughs and deep pushes.">Blitz</option>
-                    </select>
-
-                </div>
-                </details>
-            `;
-
-				slot.querySelector(".country-configuration").open =
-					expandedCountries.has(String(country.id));
-				const buffBtn = slot.querySelector(".buff-toggle-btn");
+				/** @type {HTMLDetailsElement} */ (
+					slot.querySelector(".country-configuration")
+				).open = expandedCountries.has(String(country.id));
+				const buffBtn = /** @type {HTMLElement} */ (
+					slot.querySelector(".buff-toggle-btn")
+				);
 				if (buffBtn) {
 					const buffLabelEl = buffBtn.querySelector(".buff-label");
 					const buffArrows = buffBtn.querySelectorAll(".buff-arrow");
@@ -292,15 +419,21 @@ export function createConflictSetup(runtime) {
 					});
 				}
 
-				slot.querySelector(".role-select").onchange = (e) => {
-					country.role = e.target.value;
+				/** @type {HTMLSelectElement} */ (
+					slot.querySelector(".role-select")
+				).onchange = (e) => {
+					country.role = /** @type {HTMLSelectElement} */ (e.target).value;
 				};
 
-				slot.querySelector(".strategy-select").onchange = (e) => {
-					country.strategy = e.target.value;
+				/** @type {HTMLSelectElement} */ (
+					slot.querySelector(".strategy-select")
+				).onchange = (e) => {
+					country.strategy = /** @type {HTMLSelectElement} */ (e.target).value;
 				};
 
-				slot.querySelector(".clear-slot-btn").onclick = (e) => {
+				/** @type {HTMLElement} */ (
+					slot.querySelector(".clear-slot-btn")
+				).onclick = (e) => {
 					e.stopPropagation();
 					const idx = sideList.findIndex((c) => c.id === country.id);
 					if (idx !== -1) sideList.splice(idx, 1);
@@ -308,7 +441,9 @@ export function createConflictSetup(runtime) {
 					runtime.influenceLayer.render();
 				};
 
-				const releaseBtn = slot.querySelector(".release-btn");
+				const releaseBtn = /** @type {HTMLElement} */ (
+					slot.querySelector(".release-btn")
+				);
 				if (releaseBtn) {
 					releaseBtn.onclick = (e) => {
 						e.stopPropagation();

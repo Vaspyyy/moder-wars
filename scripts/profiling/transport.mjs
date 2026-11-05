@@ -95,7 +95,11 @@ export function runTransport(options) {
 				applySimulationState(mirror, snapshot.values, {
 					preserveCountryControls: true,
 				});
-				mirror.units = unpackPresentationUnits(snapshot.units, mirror.units, unitCache);
+				mirror.units = unpackPresentationUnits(
+					snapshot.units,
+					mirror.units,
+					unitCache,
+				);
 				const applyMs = performance.now() - started;
 				if (message.measured) {
 					applyTimes.push(applyMs);
@@ -163,7 +167,10 @@ if (!isMainThread) {
 			const postBegin = performance.now();
 			parentPort.postMessage(
 				{ snapshot, bytes, measured, sentNs: process.hrtime.bigint() },
-				collectTransferBuffers({ units: snapshot.units, tiles: snapshot.tiles }),
+				collectTransferBuffers({
+					units: snapshot.units,
+					tiles: snapshot.tiles,
+				}),
 			);
 			if (measured) postTimes.push(performance.now() - postBegin);
 			postedAt = performance.now();

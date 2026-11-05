@@ -1,4 +1,6 @@
 import { showAlert } from "./dialogs.js";
+import { el } from "./dom.js";
+import { localizeFlagUrl } from "./flags.js";
 // Dependencies are supplied by the application; this module does not import it.
 export function createCountryImportMenu(runtime) {
 	function loadCountryFromPC() {
@@ -6,7 +8,7 @@ export function createCountryImportMenu(runtime) {
 		input.type = "file";
 		input.accept = ".json";
 		input.onchange = async (e) => {
-			const file = e.target.files[0];
+			const file = /** @type {HTMLInputElement} */ (e.target).files[0];
 			if (!file) return;
 
 			runtime.loadingStatus.innerText = "Loading Country Data...";
@@ -39,7 +41,7 @@ export function createCountryImportMenu(runtime) {
 						data.metadata.color || "rgba(150, 150, 150, 0.5)",
 					),
 					isCustom: true,
-					flagUrl: data.metadata.flagUrl || null,
+					flagUrl: localizeFlagUrl(data.metadata.flagUrl) || null,
 					role: data.metadata.role || "OFFENSE",
 					overlordId: data.metadata.overlordId || null,
 					bounds: {
@@ -168,11 +170,12 @@ export function createCountryImportMenu(runtime) {
 			return;
 		const metaList = runtime.importScenarioBuffer.metadata || [];
 		if (!metaList.length) {
-			runtime.importCountryCardList.innerHTML = `
-            <div style="font-size: 12px; color:#777; text-align:center; padding:10px;">
-                No countries found in scenario
-            </div>
-        `;
+			runtime.importCountryCardList.replaceChildren(
+				el("div", {
+					className: "import-country-card-list-div",
+					text: "No countries found in scenario",
+				}),
+			);
 			runtime.importCountrySearch.disabled = true;
 			runtime.selectedImportCountryId = null;
 			runtime.importScenarioCountriesCache = [];
@@ -192,7 +195,7 @@ export function createCountryImportMenu(runtime) {
 			.map((m) => {
 				const tiles = tileCounts.get(m.id) || 0;
 				// Try to find a flagUrl from metadata if present
-				const flagUrl = m.flagUrl || null;
+				const flagUrl = localizeFlagUrl(m.flagUrl) || null;
 				return {
 					id: m.id,
 					name: m.name || `Country ${m.id}`,
@@ -204,11 +207,12 @@ export function createCountryImportMenu(runtime) {
 			.sort((a, b) => b.tiles - a.tiles || a.name.localeCompare(b.name));
 
 		if (!sortedMeta.length) {
-			runtime.importCountryCardList.innerHTML = `
-            <div style="font-size: 12px; color:#777; text-align:center; padding:10px;">
-                No countries with territory found
-            </div>
-        `;
+			runtime.importCountryCardList.replaceChildren(
+				el("div", {
+					className: "import-country-card-list-div",
+					text: "No countries with territory found",
+				}),
+			);
 			runtime.importCountrySearch.disabled = true;
 			runtime.selectedImportCountryId = null;
 			runtime.importScenarioCountriesCache = [];
@@ -268,11 +272,12 @@ export function createCountryImportMenu(runtime) {
 			runtime.importCountrySearch.disabled = true;
 		}
 		if (runtime.importCountryCardList) {
-			runtime.importCountryCardList.innerHTML = `
-            <div style="font-size: 12px; color:#777; text-align:center; padding:10px;">
-                Choose a source scenario first
-            </div>
-        `;
+			runtime.importCountryCardList.replaceChildren(
+				el("div", {
+					className: "import-country-card-list-div",
+					text: "Choose a source scenario first",
+				}),
+			);
 		}
 		runtime.importCountryModal.style.display = "flex";
 	}

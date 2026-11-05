@@ -56,9 +56,12 @@ export function createRegionChunkCache() {
 				const start = y * SIZE + x;
 				if (labels[start] || !owners[start]) continue;
 				const label = components.length + 1;
+				/** @type {number[]} */
+				const pixels = [];
 				const component = {
 					id: owners[start],
-					pixels: [],
+					/** @type {number[] | Uint32Array} */
+					pixels,
 					columns: new Map(),
 					count: 0,
 					latSum: 0,
@@ -85,7 +88,7 @@ export function createRegionChunkCache() {
 						gy = y0 + ly;
 					const lat = gy * frame.CONFIG.GRID_RES - 90,
 						lng = gx * frame.CONFIG.GRID_RES - 180;
-					component.pixels.push(gy * frame.gridWidth + gx);
+					pixels.push(gy * frame.gridWidth + gx);
 					component.count++;
 					component.latSum += lat;
 					component.lngSum += lng;
@@ -107,7 +110,7 @@ export function createRegionChunkCache() {
 					if (ly >= step) visit(local - step * SIZE);
 					if (ly + step < height) visit(local + step * SIZE);
 				}
-				component.pixels = new Uint32Array(component.pixels);
+				component.pixels = new Uint32Array(pixels);
 				components.push(component);
 			}
 		}

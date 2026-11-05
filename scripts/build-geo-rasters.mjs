@@ -66,8 +66,7 @@ function firstCellAtOrAfter(targetLng, gridResolution, gridWidth) {
 	let high = gridWidth;
 	while (low < high) {
 		const middle = (low + high) >> 1;
-		const center =
-			middle * gridResolution - 180 + gridResolution * 0.5;
+		const center = middle * gridResolution - 180 + gridResolution * 0.5;
 		if (center < targetLng) low = middle + 1;
 		else high = middle;
 	}
@@ -107,16 +106,8 @@ function rasterizeOwners(features, gridResolution, gridWidth, gridHeight) {
 					holes.push(...ringIntervals(polygon[ringIndex], lat));
 				}
 				for (const [left, right] of subtractIntervals(exterior, holes)) {
-					const startX = firstCellAtOrAfter(
-						left,
-						gridResolution,
-						gridWidth,
-					);
-					const endX = firstCellAtOrAfter(
-						right,
-						gridResolution,
-						gridWidth,
-					);
+					const startX = firstCellAtOrAfter(left, gridResolution, gridWidth);
+					const endX = firstCellAtOrAfter(right, gridResolution, gridWidth);
 					ownerMap.fill(featureIndex + 1, rowOffset + startX, rowOffset + endX);
 				}
 			}

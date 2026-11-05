@@ -2,12 +2,18 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { decodeScenarioBinary, encodeScenario } from "../src/scenario-codec.js";
-import { applyScenarioTheater, getScenarioTheaterClip, isInsideScenarioTheater, normalizeScenarioTheater } from "../src/scenario-theater.js";
 import { applyScenarioSovereigntyOverrides } from "../src/scenario-territory.js";
+import {
+	applyScenarioTheater,
+	getScenarioTheaterClip,
+	isInsideScenarioTheater,
+	normalizeScenarioTheater,
+} from "../src/scenario-theater.js";
 import {
 	buildUkraine2023Scenario,
 	pointInRing,
 } from "./build-ukraine-scenario.mjs";
+import { readWorldMap2022 } from "./source-data.mjs";
 
 const bytes = fs.readFileSync(
 	new URL("../assets/maps/compiled/ukraine-2023-v3.mwsc.gz", import.meta.url),
@@ -80,19 +86,20 @@ for (const city of generated?.cities ?? source.cities) {
 	if (["Donetsk", "Luhansk"].includes(city.name))
 		assert.equal(city.isCapital, false);
 }
-const base = heavy
-	? JSON.parse(
-			fs.readFileSync(
-				new URL("../assets/maps/world map 2022.json", import.meta.url),
-			),
-		)
-	: { mapData: [] };
+const base = heavy ? readWorldMap2022() : { mapData: [] };
 const ids = new Set(source.theater.countryIds);
 for (const [i, owner] of base.mapData) {
 	if (!sovereignCells.has(i))
 		assert.equal(
 			decoded.worldControl[i],
-			ids.has(owner) && isInsideScenarioTheater(source.theater, (Math.floor(i / 3600) + 0.5) * 0.1 - 90, (i % 3600 + 0.5) * 0.1 - 180) ? owner : 0,
+			ids.has(owner) &&
+				isInsideScenarioTheater(
+					source.theater,
+					(Math.floor(i / 3600) + 0.5) * 0.1 - 90,
+					((i % 3600) + 0.5) * 0.1 - 180,
+				)
+				? owner
+				: 0,
 			`Theater control at ${i} changed`,
 		);
 }
@@ -129,41 +136,128 @@ console.log(
 );
 
 assert.equal(source.theater.id, "eurasia");
-for (const name of ["United States of America", "Canada", "Brazil", "Egypt", "Australia"]) {
-    assert.ok(!source.metadata.some(meta => meta.name === name), `${name} excluded from selectable actors`);
+for (const name of [
+	"United States of America",
+	"Canada",
+	"Brazil",
+	"Egypt",
+	"Australia",
+]) {
+	assert.ok(
+		!source.metadata.some((meta) => meta.name === name),
+		`${name} excluded from selectable actors`,
+	);
 }
-for (const [lat, lng] of [[38.9,-77.0],[30.0,31.2],[-33.8,151.2],[-1.3,36.8]]) {
-    assert.equal(decoded.worldControl[idx(lat,lng)],0,"off-theater control absent");
-    assert.equal(decoded.land[idx(lat,lng)],0,"off-theater land absent");
+for (const [lat, lng] of [
+	[38.9, -77.0],
+	[30.0, 31.2],
+	[-33.8, 151.2],
+	[-1.3, 36.8],
+]) {
+	assert.equal(
+		decoded.worldControl[idx(lat, lng)],
+		0,
+		"off-theater control absent",
+	);
+	assert.equal(decoded.land[idx(lat, lng)], 0, "off-theater land absent");
 }
-for (const city of source.cities) assert.ok(isInsideScenarioTheater(source.theater,city.lat,city.lng));
-const prederivedLand=new Uint8Array(decoded.land.length).fill(1);
-const prederivedDeJure=new Uint16Array(decoded.deJure.length).fill(169);
+for (const city of source.cities)
+	assert.ok(isInsideScenarioTheater(source.theater, city.lat, city.lng));
+const prederivedLand = new Uint8Array(decoded.land.length).fill(1);
+const prederivedDeJure = new Uint16Array(decoded.deJure.length).fill(169);
 prederivedDeJure.set(decoded.deJure);
-applyScenarioTheater(source.theater,{worldControlMap:decoded.worldControl,deJureMap:prederivedDeJure,landMask:prederivedLand,gridWidth:3600,gridRes:0.1});
-assert.equal(prederivedLand[idx(38.9,-77.0)],0,"prederived Earth cannot restore the Americas");
-assert.equal(prederivedLand[idx(50.45,30.52)],1,"Kyiv remains land");
-console.log("Eurasia theater: excluded actors/land/cities and prederived-Earth masking passed");
+applyScenarioTheater(source.theater, {
+	worldControlMap: decoded.worldControl,
+	deJureMap: prederivedDeJure,
+	landMask: prederivedLand,
+	gridWidth: 3600,
+	gridRes: 0.1,
+});
+assert.equal(
+	prederivedLand[idx(38.9, -77.0)],
+	0,
+	"prederived Earth cannot restore the Americas",
+);
+assert.equal(prederivedLand[idx(50.45, 30.52)], 1, "Kyiv remains land");
+console.log(
+	"Eurasia theater: excluded actors/land/cities and prederived-Earth masking passed",
+);
 
 assert.ok(source.cities.length > 400, "Eurasian cities remain available");
-for (const name of ["Moscow", "Paris", "Oslo"]) assert.ok(source.cities.some(city => city.name === name), `${name} retained`);
-for (const name of ["Cairo", "Cape Town", "Washington, D.C.", "Sydney"]) assert.ok(!source.cities.some(city => city.name === name), `${name} excluded`);
-for (const name of ["France", "Norway", "Kosovo"]) assert.ok(source.metadata.some(meta => meta.name === name), `${name} retained despite source ISO aliases`);
-assert.throws(() => normalizeScenarioTheater({...source.theater, bounds: [20, 20, 10, 10]}), /Invalid scenario theater/);
+for (const name of ["Moscow", "Paris", "Oslo"])
+	assert.ok(
+		source.cities.some((city) => city.name === name),
+		`${name} retained`,
+	);
+for (const name of ["Cairo", "Cape Town", "Washington, D.C.", "Sydney"])
+	assert.ok(
+		!source.cities.some((city) => city.name === name),
+		`${name} excluded`,
+	);
+for (const name of ["France", "Norway", "Kosovo"])
+	assert.ok(
+		source.metadata.some((meta) => meta.name === name),
+		`${name} retained despite source ISO aliases`,
+	);
+assert.throws(
+	() =>
+		normalizeScenarioTheater({ ...source.theater, bounds: [20, 20, 10, 10] }),
+	/Invalid scenario theater/,
+);
 const originalPath = globalThis.Path2D;
-globalThis.Path2D = class { rects = []; rect(...args) { this.rects.push(args); } };
+globalThis.Path2D = class {
+	rects = [];
+	rect(...args) {
+		this.rects.push(args);
+	}
+};
 try {
-    const layer = {};
-    const frameAt = (lat,lng) => {
-        const x = Math.floor((lng+180)/0.1), y = Math.floor((lat+90)/0.1);
-        return { theater: source.theater, viewportKey: `${lat}:${lng}`, landMask: decoded.land, gridWidth: 3600, gridHeight: 1800, xMin: x-1, xMax: x+1, yMin: y-1, yMax: y+1, getGridPoint: (x,y) => ({x,y}) };
-    };
-    assert.equal(getScenarioTheaterClip(layer, frameAt(30,31.2)).rects.length, 0, "Cairo cannot be repainted by worldwide coastlines");
-    const moscow = frameAt(55.75,37.62);
-    const path = getScenarioTheaterClip(layer, moscow);
-    assert.ok(path.rects.length > 0, "Moscow remains visible");
-    assert.equal(getScenarioTheaterClip(layer, moscow), path, "Same viewport reuses the land clip");
-    assert.notEqual(getScenarioTheaterClip(layer, {...moscow, theater: {...source.theater}}), path, "A changed theater rebuilds its clip");
-    assert.equal(getScenarioTheaterClip(layer, {...moscow, theater: null}), null, "World scenarios have no theater clip");
-} finally { globalThis.Path2D = originalPath; }
-console.log("Eurasia theater: capital cities, ISO aliases and render clipping passed");
+	const layer = {};
+	const frameAt = (lat, lng) => {
+		const x = Math.floor((lng + 180) / 0.1),
+			y = Math.floor((lat + 90) / 0.1);
+		return {
+			theater: source.theater,
+			viewportKey: `${lat}:${lng}`,
+			landMask: decoded.land,
+			gridWidth: 3600,
+			gridHeight: 1800,
+			xMin: x - 1,
+			xMax: x + 1,
+			yMin: y - 1,
+			yMax: y + 1,
+			getGridPoint: (x, y) => ({ x, y }),
+		};
+	};
+	assert.equal(
+		getScenarioTheaterClip(layer, frameAt(30, 31.2)).rects.length,
+		0,
+		"Cairo cannot be repainted by worldwide coastlines",
+	);
+	const moscow = frameAt(55.75, 37.62);
+	const path = getScenarioTheaterClip(layer, moscow);
+	assert.ok(path.rects.length > 0, "Moscow remains visible");
+	assert.equal(
+		getScenarioTheaterClip(layer, moscow),
+		path,
+		"Same viewport reuses the land clip",
+	);
+	assert.notEqual(
+		getScenarioTheaterClip(layer, {
+			...moscow,
+			theater: { ...source.theater },
+		}),
+		path,
+		"A changed theater rebuilds its clip",
+	);
+	assert.equal(
+		getScenarioTheaterClip(layer, { ...moscow, theater: null }),
+		null,
+		"World scenarios have no theater clip",
+	);
+} finally {
+	globalThis.Path2D = originalPath;
+}
+console.log(
+	"Eurasia theater: capital cities, ISO aliases and render clipping passed",
+);

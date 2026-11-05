@@ -11,26 +11,14 @@ import {
 const gridWidth = 4;
 const gridHeight = 3;
 const landMask = new Uint8Array(gridWidth * gridHeight).fill(2);
-const worldControlMap = Uint16Array.from([
-	1, 1, 2, 2,
-	1, 1, 2, 2,
-	3, 3, 2, 2,
-]);
+const worldControlMap = Uint16Array.from([1, 1, 2, 2, 1, 1, 2, 2, 3, 3, 2, 2]);
 const deJureMap = Uint16Array.from(worldControlMap);
-const dominantSideMap = Int8Array.from([
-	0, 0, 1, 1,
-	0, 1, 1, 1,
-	2, 2, 1, 1,
-]);
+const dominantSideMap = Int8Array.from([0, 0, 1, 1, 0, 1, 1, 1, 2, 2, 1, 1]);
 const primaryOccupierMap = Uint16Array.from([
-	1, 1, 2, 2,
-	1, 2, 2, 2,
-	3, 3, 2, 2,
+	1, 1, 2, 2, 1, 2, 2, 2, 3, 3, 2, 2,
 ]);
 const occupationMap = Float32Array.from([
-	1, 1, -1, -1,
-	1, -1, -1, -1,
-	1, 1, -1, -1,
+	1, 1, -1, -1, 1, -1, -1, -1, 1, 1, -1, -1,
 ]);
 const maps = {
 	landMask,
@@ -76,7 +64,11 @@ assert.equal(ledger.getSnapshot(), null);
 const firstChunk = ledger.step(3);
 assert.equal(firstChunk.processedItems, 3);
 assert.equal(firstChunk.committed, false);
-assert.equal(ledger.getSnapshot(), null, "partial first generation must stay hidden");
+assert.equal(
+	ledger.getSnapshot(),
+	null,
+	"partial first generation must stay hidden",
+);
 assert.equal(commits.length, 0);
 
 const initialFlush = ledger.flush(3);
@@ -121,7 +113,6 @@ assert.equal(blue.capitalHeld, true);
 assert.deepEqual(blue.cityControlBySide, { 0: 1, 1: 1 });
 assert.equal(getSideLedger(initial, 1).citiesControlled, 2);
 assert.equal(getSideLedger(initial, 1).cityPopulationControlled, 250);
-
 
 // A controller mutation dirties its tile and neighboring tiles. The old
 // snapshot remains fully visible until the replacement generation commits.
@@ -202,7 +193,10 @@ for (let attempt = 0; attempt < 4 && !liveSnapshot; attempt++) {
 	const result = liveLedger.step(16);
 	if (result.committed) liveSnapshot = result.snapshot;
 }
-assert.ok(liveSnapshot, "a busy dirty tail must not require a synchronous flush");
+assert.ok(
+	liveSnapshot,
+	"a busy dirty tail must not require a synchronous flush",
+);
 assert.equal(getSideLedger(liveSnapshot, 1).territory, 3);
 
 // Hostility and coalition changes revoke the old snapshot immediately, rebuild
@@ -388,15 +382,12 @@ assert.equal(getCountryLedger(explicitCitySnapshot, 1).capitalHeld, true);
 const explicitCityStatus = explicitCityLedger.getStatus();
 assert.throws(
 	() =>
-		explicitCityLedger.setCities(
-			[{ id: "bad-city", ownerId: 1 }],
-			{
-				revision: "bad-cities",
-				getCityCellIndex() {
-					throw new Error("city resolver failed");
-				},
+		explicitCityLedger.setCities([{ id: "bad-city", ownerId: 1 }], {
+			revision: "bad-cities",
+			getCityCellIndex() {
+				throw new Error("city resolver failed");
 			},
-		),
+		}),
 	/city resolver failed/,
 );
 assert.equal(explicitCityLedger.getSnapshot(), explicitCitySnapshot);

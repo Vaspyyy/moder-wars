@@ -1,225 +1,9 @@
-import { showAlert, showConfirm, showPrompt } from "./dialogs.js";
+import { showAlert, showPrompt } from "./dialogs.js";
+import { el } from "./dom.js";
+import { localizeFlagUrl } from "./flags.js";
+import { COMPILED_SCENARIO_URLS } from "./scenario-codec.js";
 // Controls receive live state and commands; they do not import the application.
 export function createEditorFileControls(runtime) {
-	function bindEditorUpdateBtnClick() {
-		runtime.editorUpdateBtn.addEventListener("click", async () => {
-			if (!runtime.activeScenarioId) return;
-			if (
-				!(await showConfirm(
-					"Update existing scenario? This will overwrite the map file and thumbnail on the Hub.",
-					{ title: "Update scenario", okLabel: "Overwrite", danger: true },
-				))
-			)
-				return;
-
-			runtime.setLoadingThematic(false);
-			runtime.loadingStatus.innerText = "Updating Scenario...";
-			runtime.loadingOverlay.style.display = "flex";
-
-			try {
-				// 1. Generate updated preview
-				let previewUrl = null;
-				if (runtime.influenceLayer?._container) {
-					runtime.influenceLayer._isCapturing = true;
-					runtime.influenceLayer.render();
-					const canvas = runtime.influenceLayer._container;
-					const previewBlob = await new Promise((resolve) =>
-						canvas.toBlob(resolve, "image/jpeg", 0.8),
-					);
-					runtime.influenceLayer._isCapturing = false;
-					runtime.influenceLayer.render();
-					if (previewBlob) {
-						const previewFile = new File([previewBlob], "update_preview.jpg", {
-							type: "image/jpeg",
-						});
-						previewUrl = await websim.upload(previewFile);
-					}
-				}
-
-				// 2. Generate updated preset data
-				const currentName = runtime.statusText.innerText
-					.replace("REMIXING: ", "")
-					.replace("Map Editor (Alpha)", "Updated Scenario");
-				const saveData = runtime.generatePresetData(currentName);
-				const blob = new Blob([JSON.stringify(saveData)], {
-					type: "application/json",
-				});
-				const file = new File([blob], "updated_scenario.json", {
-					type: "application/json",
-				});
-				const blobUrl = await websim.upload(file);
-
-				// 3. Update existing record
-				await runtime.room
-					.collection("scenario_v1")
-					.update(runtime.activeScenarioId, {
-						previewUrl: previewUrl,
-						blobUrl: blobUrl,
-					});
-
-				runtime.loadingOverlay.style.display = "none";
-				showAlert("Scenario updated successfully!");
-			} catch (e) {
-				console.error(e);
-				showAlert("Update failed. You can only update scenarios you created.");
-				runtime.loadingOverlay.style.display = "none";
-			}
-		});
-	}
-
-	function bindShareCountryBtnClick() {
-		runtime.shareCountryBtn.addEventListener("click", () => {
-			if (runtime.editingCountryId <= 0) return;
-			const meta = runtime.countryMetadata[runtime.editingCountryId - 1];
-			if (!meta) return;
-
-			runtime.shareCountryNameInput.value = meta.name || "Custom Nation";
-			runtime.shareCountryDescInput.value = "";
-			runtime.shareCountryModal.style.display = "flex";
-		});
-	}
-
-	function bindShareFlagBtnClick() {
-		runtime.shareFlagBtn.addEventListener("click", () => {
-			if (runtime.editingCountryId <= 0) return;
-			const meta = runtime.countryMetadata[runtime.editingCountryId - 1];
-			if (!meta?.flagUrl) {
-				showAlert(
-					"This nation does not have a flag to share. Upload or fetch one first.",
-				);
-				return;
-			}
-
-			runtime.shareFlagNameInput.value = `${meta.name || "Custom"} Flag`;
-			runtime.shareFlagDescInput.value = "";
-			runtime.shareFlagModal.style.display = "flex";
-		});
-	}
-
-	function bindCancelShareFlagBtnClick() {
-		runtime.cancelShareFlagBtn.onclick = () => {
-			runtime.shareFlagModal.style.display = "none";
-		};
-	}
-
-	function bindConfirmShareFlagBtnClick() {
-		runtime.confirmShareFlagBtn.onclick = async () => {
-			if (runtime.editingCountryId <= 0) return;
-			const meta = runtime.countryMetadata[runtime.editingCountryId - 1];
-			if (!meta?.flagUrl) return;
-
-			const publicName =
-				runtime.shareFlagNameInput.value.trim() || "Custom Flag";
-			const description = runtime.shareFlagDescInput.value.trim();
-
-			runtime.shareFlagModal.style.display = "none";
-			runtime.loadingStatus.innerText = "Sharing Flag to Library...";
-			runtime.loadingOverlay.style.display = "flex";
-
-			try {
-				await runtime.room.collection("flag_library_v1").create({
-					name: publicName,
-					description: description,
-					flagUrl: meta.flagUrl,
-				});
-				runtime.loadingOverlay.style.display = "none";
-				showAlert("Flag successfully shared!");
-			} catch (e) {
-				console.error(e);
-				showAlert("Failed to share flag.");
-				runtime.loadingOverlay.style.display = "none";
-			}
-		};
-	}
-
-	function bindCancelShareCountryBtnClick() {
-		runtime.cancelShareCountryBtn.onclick = () => {
-			runtime.shareCountryModal.style.display = "none";
-		};
-	}
-
-	function bindConfirmShareCountryBtnClick() {
-		runtime.confirmShareCountryBtn.onclick = async () => {
-			if (runtime.editingCountryId <= 0) return;
-			const meta = runtime.countryMetadata[runtime.editingCountryId - 1];
-			if (!meta) return;
-
-			const publicName =
-				runtime.shareCountryNameInput.value.trim() ||
-				meta.name ||
-				"Custom Nation";
-			const description = runtime.shareCountryDescInput.value.trim();
-
-			runtime.shareCountryModal.style.display = "none";
-			runtime.loadingStatus.innerText = `Saving ${publicName} to Library...`;
-			runtime.loadingOverlay.style.display = "flex";
-
-			try {
-				// 1. Generate Border Preview
-				let previewUrl = null;
-				if (runtime.influenceLayer?._container) {
-					runtime.influenceLayer._isCapturing = true;
-					runtime.influenceLayer.render();
-					const canvas = runtime.influenceLayer._container;
-					const previewBlob = await new Promise((resolve) =>
-						canvas.toBlob(resolve, "image/jpeg", 0.8),
-					);
-					runtime.influenceLayer._isCapturing = false;
-					runtime.influenceLayer.render();
-					if (previewBlob) {
-						const previewFile = new File([previewBlob], "country_preview.jpg", {
-							type: "image/jpeg",
-						});
-						previewUrl = await websim.upload(previewFile);
-					}
-				}
-
-				// 2. Collect all cells belonging to this country
-				const cells = [];
-				for (let i = 0; i < runtime.worldControlMap.length; i++) {
-					if (runtime.worldControlMap[i] === runtime.editingCountryId) {
-						const y = Math.floor(i / runtime.gridWidth);
-						const x = i % runtime.gridWidth;
-						cells.push([x, y]);
-					}
-				}
-
-				if (cells.length === 0) {
-					showAlert("Country has no territory to share!");
-					runtime.loadingOverlay.style.display = "none";
-					return;
-				}
-
-				// 3. Upload Cells Data as a file to bypass 250KB record limit
-				const cellsBlob = new Blob([JSON.stringify(cells)], {
-					type: "application/json",
-				});
-				const cellsFile = new File([cellsBlob], "country_cells.json", {
-					type: "application/json",
-				});
-				const cellsUrl = await websim.upload(cellsFile);
-
-				// 4. Create Persistent Record
-				await runtime.room.collection("country_library_v1").create({
-					name: publicName,
-					description: description,
-					previewUrl: previewUrl,
-					color: meta.color,
-					flagUrl: meta.flagUrl,
-					gridRes: runtime.CONFIG.GRID_RES,
-					cellsUrl: cellsUrl,
-				});
-
-				runtime.loadingOverlay.style.display = "none";
-				showAlert("Country added to Global Library!");
-			} catch (e) {
-				console.error(e);
-				showAlert("Failed to share country.");
-				runtime.loadingOverlay.style.display = "none";
-			}
-		};
-	}
-
 	function bindEditorSaveBtnClick() {
 		runtime.editorSaveBtn.addEventListener("click", async () => {
 			const presetName = await showPrompt(
@@ -251,7 +35,10 @@ export function createEditorFileControls(runtime) {
 			input.onchange = (e) => {
 				runtime.currentScenarioContext = null;
 				runtime.setLoadingThematic(true);
-				runtime.performPresetLoad(e.target.files[0], "EDITOR");
+				runtime.performPresetLoad(
+					/** @type {HTMLInputElement} */ (e.target).files[0],
+					"EDITOR",
+				);
 			};
 			input.click();
 		});
@@ -408,11 +195,12 @@ export function createEditorFileControls(runtime) {
 					runtime.importCountrySearch.disabled = true;
 				}
 				if (runtime.importCountryCardList) {
-					runtime.importCountryCardList.innerHTML = `
-                <div style="font-size: 12px; color:#777; text-align:center; padding:10px;">
-                    Loading…
-                </div>
-            `;
+					runtime.importCountryCardList.replaceChildren(
+						el("div", {
+							className: "import-country-card-list-div",
+							text: "Loading…",
+						}),
+					);
 				}
 
 				if (val === "file") {
@@ -426,21 +214,18 @@ export function createEditorFileControls(runtime) {
 						runtime.importScenarioFileInput.style.display = "none";
 				}
 
-				// Map built‑in keys to local preset JSONs
+				// Built-in import sources are compiled scenario packages.
 				const keyToUrl = {
-					"builtin:modern_2022": "@2022 world invis.json",
-					"builtin:ww2_1936": "assets/maps/WW2 Peru Update.json",
-					"builtin:ww2_1942": "1942.json",
-					"builtin:ww1_1914": "assets/maps/world_war_1__1914_.json",
-					"builtin:coldwar_1974": "better_cold_war_preset.json",
-					"builtin:coldwar_1948": "1948 (1).json",
-					"builtin:france_states": "France_states_preset (2).json",
-					"builtin:england_states": "England_states_preset.json",
+					"builtin:modern_2022": COMPILED_SCENARIO_URLS.modern2022,
 				};
 				const url = keyToUrl[val];
 				if (!url) {
-					runtime.importScenarioSelect.innerHTML =
-						'<option value="">Unknown source selection</option>';
+					runtime.importScenarioSelect.replaceChildren(
+						el("option", {
+							attrs: { value: "" },
+							text: "Unknown source selection",
+						}),
+					);
 					runtime.importScenarioSelect.disabled = true;
 					return;
 				}
@@ -489,7 +274,7 @@ export function createEditorFileControls(runtime) {
 				input.type = "file";
 				input.accept = ".zip";
 				input.onchange = async (e) => {
-					const file = e.target.files[0];
+					const file = /** @type {HTMLInputElement} */ (e.target).files[0];
 					if (!file) return;
 
 					runtime.loadingStatus.innerText = "Importing countries from ZIP...";
@@ -532,7 +317,7 @@ export function createEditorFileControls(runtime) {
 										data.metadata.color || "rgba(150,150,150,0.5)",
 									),
 									isCustom: true,
-									flagUrl: data.metadata.flagUrl,
+									flagUrl: localizeFlagUrl(data.metadata.flagUrl),
 									role: data.metadata.role || "OFFENSE",
 									overlordId: data.metadata.overlordId,
 									bounds: {
@@ -611,25 +396,7 @@ export function createEditorFileControls(runtime) {
 		}
 	}
 
-	function bindEditorShareBtnClick() {
-		runtime.editorShareBtn.addEventListener("click", () => {
-			if (runtime.countryMetadata.length < 2) {
-				showAlert("Your map must have at least 2 nations to be playable.");
-				return;
-			}
-			runtime.uploadNameInput.value = "";
-			runtime.uploadDescInput.value = "";
-			runtime.uploadDetailsModal.style.display = "flex";
-		});
-	}
 	return {
-		bindEditorUpdateBtnClick,
-		bindShareCountryBtnClick,
-		bindShareFlagBtnClick,
-		bindCancelShareFlagBtnClick,
-		bindConfirmShareFlagBtnClick,
-		bindCancelShareCountryBtnClick,
-		bindConfirmShareCountryBtnClick,
 		bindEditorSaveBtnClick,
 		bindEditorLoadBtnClick,
 		bindEditorSaveMultiBtnClick,
@@ -639,6 +406,5 @@ export function createEditorFileControls(runtime) {
 		bindImportScenarioFileInputChange,
 		bindImportCountryConfirmBtnClick,
 		bindEditorLoadZipBtnClick,
-		bindEditorShareBtnClick,
 	};
 }

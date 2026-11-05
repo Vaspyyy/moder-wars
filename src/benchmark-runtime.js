@@ -1,4 +1,5 @@
 import { showAlert } from "./dialogs.js";
+import { COMPILED_SCENARIO_URLS } from "./scenario-codec.js";
 // Dependencies are supplied by the application; this module does not import it.
 export function createBenchmarkRuntime(runtime) {
 	function restoreBenchmarkSettings() {
@@ -124,17 +125,24 @@ export function createBenchmarkRuntime(runtime) {
 				runtime._benchmarkMetadata?.initialPersonnelBySide || [];
 			const initialFormations =
 				runtime._benchmarkMetadata?.initialFormationCountBySide || [];
+			const sep = " \u00a0|\u00a0 ";
 			const forceSummary = initialPersonnel.length
-				? ` &nbsp;|&nbsp; Personnel: ${initialPersonnel.map((value) => Math.round(value).toLocaleString()).join(" / ")} &nbsp;|&nbsp; Formations: ${initialFormations.join(" / ")}`
+				? `${sep}Personnel: ${initialPersonnel.map((value) => Math.round(value).toLocaleString()).join(" / ")}${sep}Formations: ${initialFormations.join(" / ")}`
 				: runtime._benchmarkUnitsPerSide
-					? ` &nbsp;|&nbsp; Nominal scale/side: ${runtime._benchmarkUnitsPerSide.toLocaleString()}`
+					? `${sep}Nominal scale/side: ${runtime._benchmarkUnitsPerSide.toLocaleString()}`
 					: "";
-			runtime.benchmarkStatsEl.innerHTML =
-				`Frames: ${runtime._perfSamples.length} &nbsp;|&nbsp; Speed: ${runtime.simSpeed}x${forceSummary}<br>` +
-				`Avg FPS: ${avgFps.toFixed(0)} &nbsp;|&nbsp; Min FPS: ${minFps.toFixed(0)} &nbsp;|&nbsp; Max FPS: ${maxFps.toFixed(0)}<br>` +
-				`Avg frame: ${avg.toFixed(1)}ms &nbsp;|&nbsp; P95: ${report.frames.p95.toFixed(1)}ms &nbsp;|&nbsp; P99: ${report.frames.p99.toFixed(1)}ms &nbsp;|&nbsp; Max: ${max.toFixed(1)}ms<br>` +
-				`Main work: ${report.frameStages.mainWork.avg.toFixed(1)}ms &nbsp;|&nbsp; Sim: ${report.frameStages.simulation.avg.toFixed(1)}ms &nbsp;|&nbsp; HUD: ${report.frameStages.hud.avg.toFixed(1)}ms &nbsp;|&nbsp; Render: ${report.frameStages.render.avg.toFixed(1)}ms<br>` +
-				`Tick: ${report.ticks.avgMs.toFixed(1)}ms avg / ${report.ticks.p95Ms.toFixed(1)}ms P95 &nbsp;|&nbsp; Long tasks: ${report.browser.longTasks.count}`;
+			const lines = [
+				`Frames: ${runtime._perfSamples.length}${sep}Speed: ${runtime.simSpeed}x${forceSummary}`,
+				`Avg FPS: ${avgFps.toFixed(0)}${sep}Min FPS: ${minFps.toFixed(0)}${sep}Max FPS: ${maxFps.toFixed(0)}`,
+				`Avg frame: ${avg.toFixed(1)}ms${sep}P95: ${report.frames.p95.toFixed(1)}ms${sep}P99: ${report.frames.p99.toFixed(1)}ms${sep}Max: ${max.toFixed(1)}ms`,
+				`Main work: ${report.frameStages.mainWork.avg.toFixed(1)}ms${sep}Sim: ${report.frameStages.simulation.avg.toFixed(1)}ms${sep}HUD: ${report.frameStages.hud.avg.toFixed(1)}ms${sep}Render: ${report.frameStages.render.avg.toFixed(1)}ms`,
+				`Tick: ${report.ticks.avgMs.toFixed(1)}ms avg / ${report.ticks.p95Ms.toFixed(1)}ms P95${sep}Long tasks: ${report.browser.longTasks.count}`,
+			];
+			runtime.benchmarkStatsEl.replaceChildren(
+				...lines.flatMap((line, i) =>
+					i ? [document.createElement("br"), line] : [line],
+				),
+			);
 		}
 		if (runtime.benchmarkResults)
 			runtime.benchmarkResults.style.display = "flex";
@@ -200,14 +208,10 @@ export function createBenchmarkRuntime(runtime) {
 			runtime.loadingOverlay.style.display = "flex";
 			runtime.mainMenu.style.display = "none";
 			try {
-				const url = "assets/maps/world map 2022.json";
 				await runtime.performPresetLoad(
-					"assets/maps/compiled/world-map-2022-v3.mwsc.gz?rev=a40b8db35255df20",
+					COMPILED_SCENARIO_URLS.modern2022,
 					"CONQUEST",
-					{
-						jsonFallbackUrl: url,
-						prederivedEarth: true,
-					},
+					{ prederivedEarth: true },
 				);
 			} catch (e) {
 				console.error(e);

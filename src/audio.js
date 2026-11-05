@@ -1,3 +1,4 @@
+import { loadStoredCustomTrack } from "./local-files.js";
 import { getCookie, setCookie } from "./preferences.js";
 export let isMuted = false;
 export function setSecretSounds(value) {
@@ -13,26 +14,14 @@ export function stopBackgroundMusic() {
 export const explosionUrl = "assets/audio/explosion-pas-61639.mp3";
 export const clickUrl = "assets/audio/low-button-click-331780.mp3";
 
-// Background music playlist: Replaced with MW ST folder assets
-export const bgMusicUrls = [
-	"/mw st/mw new ost/Stormfront.m4a",
-	"/mw st/mw new ost/All This.m4a",
-	"/mw st/mw new ost/Movement Proposition - Kevin MacLeod (Audio).m4a",
-	"/mw st/mw new ost/Hitman.m4a",
-	"/mw st/mw new ost/Satiate.m4a",
-	"/mw st/mw new ost/Industrial Revolution - Kevin MacLeod.m4a",
-	"/mw st/mw new ost/Red Alert 3 Theme - Soviet March.m4a",
-	"/mw st/mw new ost/Марк Бернес ＂Темная ночь＂ (1943).m4a",
-	"/mw st/mw new ost/Failing Defense.m4a",
-	"/mw st/mw new ost/Kevin MacLeod [Official] - Killers - incompetech.com.m4a",
-];
+// No soundtrack ships with the game. Players can pick a local track in Settings.
+export const bgMusicUrls = [];
 
 export const warStartUrl = "assets/audio/war.wav";
 export const peaceUrl = "assets/audio/peace.wav";
 export const warAmbianceUrl = "assets/audio/modern-war-129016.mp3";
-export const secretWarDeclaredUrl =
-	"super-secret-settings/hoi4-war-declared.mp3";
-export const secretPeaceDealUrl = "super-secret-settings/hoi4-peace-deal.mp3";
+export const secretWarDeclaredUrl = "assets/audio/secret/hoi4-war-declared.mp3";
+export const secretPeaceDealUrl = "assets/audio/secret/hoi4-peace-deal.mp3";
 
 // Initialize Audio Context immediately so it's ready for early decoding
 export const audioCtx = new (
@@ -53,7 +42,9 @@ export let bgMusicSource = null;
 export let bgMusicGain = null;
 // Track index currently playing from bgMusicUrls
 export let currentBgTrackIndex = null;
-export let customTrackUrl = getCookie("mw_custom_track") || null;
+export let customTrackUrl = null;
+/** @type {Promise<void> | null} */
+let customTrackRestore = null;
 export let warAmbianceSource = null;
 export let warAmbianceGain = null;
 
@@ -94,6 +85,10 @@ export async function primeAudio() {
 
 export async function initAudio() {
 	await primeAudio();
+	customTrackRestore ||= loadStoredCustomTrack().then((url) => {
+		customTrackUrl ??= url;
+	});
+	await customTrackRestore;
 
 	if (isAudioLoading) return;
 
@@ -136,6 +131,7 @@ export async function initAudio() {
 			} catch (_e) {}
 		}
 
+		if (!customTrackUrl && !bgMusicUrls.length) return;
 		let url;
 		if (customTrackUrl) {
 			url = customTrackUrl;
@@ -150,6 +146,7 @@ export async function initAudio() {
 			const buf = await load(url);
 			if (!buf) {
 				console.warn(`Force-skipping broken track: ${url}`);
+				if (customTrackUrl || bgMusicUrls.length < 2) return;
 				index = (index + 1) % bgMusicUrls.length;
 				url = customTrackUrl || bgMusicUrls[index];
 				continue;
@@ -177,10 +174,12 @@ export async function initAudio() {
 			const initialVol = savedVol !== "" ? parseFloat(savedVol) : 0.45; // Increased default volume
 			bgMusicGain.gain.setValueAtTime(initialVol, audioCtx.currentTime);
 
-			const slider = document.getElementById("music-volume-slider");
+			const slider = /** @type {HTMLInputElement} */ (
+				document.getElementById("music-volume-slider")
+			);
 			const valLabel = document.getElementById("music-vol-val");
 			if (slider && valLabel) {
-				slider.value = initialVol;
+				slider.value = String(initialVol);
 				valLabel.innerText = `${Math.round(initialVol * 100)}%`;
 			}
 
@@ -371,7 +370,7 @@ document.addEventListener(
 
 		const interactiveSelector =
 			'button, .menu-card, input, select, [role="button"], .side-header';
-		if (e.target.closest(interactiveSelector)) {
+		if (/** @type {Element} */ (e.target).closest(interactiveSelector)) {
 			playClickSound();
 		}
 	},

@@ -315,7 +315,10 @@ try {
 			["WAR_OVER", false, "WAR_OVER", false],
 		]) {
 			Object.assign(visibilityRuntime, {
-				gameState, godModeActive, preGodModeState, isPaused,
+				gameState,
+				godModeActive,
+				preGodModeState,
+				isPaused,
 			});
 			visibilityRuntime.animationFrameId = requestAnimationFrame(
 				visibilityRuntime.updateLoop,

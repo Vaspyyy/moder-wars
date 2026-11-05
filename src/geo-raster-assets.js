@@ -128,7 +128,11 @@ export function combineScenarioEarthRasters(selected, canonical) {
 	};
 }
 
-/** Load a checked, prederived Natural Earth raster for a supported source/grid. */
+/**
+ * Load a checked, prederived Natural Earth raster for a supported source/grid.
+ * @param {number | string} gridResolution
+ * @param {{ baseUrl?: string, fetchImpl?: typeof fetch, mapResolution?: string }} [options]
+ */
 export async function loadPrederivedEarthRaster(
 	gridResolution,
 	{ baseUrl, fetchImpl = fetch, mapResolution = "110m" } = {},

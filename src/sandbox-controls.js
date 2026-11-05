@@ -48,17 +48,10 @@ export function createSandboxControls(runtime) {
 				runtime.editorToolbox.style.display = "flex";
 				runtime.setupPanel.style.display = "none";
 				runtime.statsPanel.style.display = "none";
-				// Allow sharing and saving any current map state from God Mode, including official presets
-				runtime.editorShareBtn.style.display = "block";
+				// Allow saving any current map state from God Mode, including official presets
 				runtime.editorSaveBtn.style.display = "block";
-				runtime.editorHubBtn.style.display = "block";
-				runtime.editorLibraryBtn.style.display = "block";
-				runtime.shareFlagBtn.style.display = "block";
 				runtime.editorExitBtn.style.display = "none";
 				runtime.editorTestBtn.style.display = "none";
-				runtime.editorUpdateBtn.style.display = runtime.activeScenarioId
-					? "block"
-					: "none";
 				runtime.editorUnclaimBtn.style.display = "block";
 
 				if (runtime.preGodModeState === "SIMULATING") {
@@ -115,7 +108,6 @@ export function createSandboxControls(runtime) {
 				runtime.godBombBtn.innerText = "GOD BOMB: OFF";
 				runtime.godBombBtn.classList.remove("active");
 				runtime.countryInspector.style.display = "none";
-				runtime.shareFlagBtn.style.display = "none";
 				runtime.map.getContainer().classList.remove("painting-cursor");
 
 				// Make sure the alliance view checkbox + label are visible again when returning to normal play

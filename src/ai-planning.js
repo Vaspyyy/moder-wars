@@ -184,7 +184,7 @@ export function createAiPlanner(context) {
 	) {
 		const gridWidth = validatedPlanGridWidth(startIdx, targetIdx);
 		if (gridWidth === 0) return { reachable: false };
-		if (!canTraverseLandForPlan(startIdx, sideIdx, targetIdx)) {
+		if (!canTraverseLandForPlan(startIdx, sideIdx)) {
 			const startRow = Math.floor(startIdx / gridWidth);
 			const startCol = startIdx % gridWidth;
 			let replacement = -1;
@@ -201,7 +201,7 @@ export function createAiPlanner(context) {
 					)
 						continue;
 					const idx = row * gridWidth + col;
-					if (!canTraverseLandForPlan(idx, sideIdx, targetIdx)) continue;
+					if (!canTraverseLandForPlan(idx, sideIdx)) continue;
 					const dSq = dr * dr + dc * dc;
 					if (dSq < replacementDist) {
 						replacementDist = dSq;
@@ -271,7 +271,7 @@ export function createAiPlanner(context) {
 					seen[ni] === generation
 				)
 					continue;
-				if (!canTraverseLandForPlan(ni, sideIdx, targetIdx)) continue;
+				if (!canTraverseLandForPlan(ni, sideIdx)) continue;
 				seen[ni] = generation;
 				parent[ni] = cur;
 				if (tail < queue.length) queue[tail++] = ni;
