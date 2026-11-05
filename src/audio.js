@@ -20,9 +20,8 @@ export const bgMusicUrls = [];
 export const warStartUrl = "assets/audio/war.wav";
 export const peaceUrl = "assets/audio/peace.wav";
 export const warAmbianceUrl = "assets/audio/modern-war-129016.mp3";
-export const secretWarDeclaredUrl =
-	"super-secret-settings/hoi4-war-declared.mp3";
-export const secretPeaceDealUrl = "super-secret-settings/hoi4-peace-deal.mp3";
+export const secretWarDeclaredUrl = "assets/audio/secret/hoi4-war-declared.mp3";
+export const secretPeaceDealUrl = "assets/audio/secret/hoi4-peace-deal.mp3";
 
 // Initialize Audio Context immediately so it's ready for early decoding
 export const audioCtx = new (

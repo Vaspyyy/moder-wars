@@ -40,6 +40,13 @@ for (const legacy of [
 	"assets/maps/WW2 Peru Update.json",
 ])
 	assert.ok(!existsSync(new URL(legacy, root)), `${legacy} must not ship`);
+// Every audio file the game requests must be in the build output.
+const audioSource = readFileSync(
+	new URL("../src/audio.js", import.meta.url),
+	"utf8",
+);
+for (const [, path] of audioSource.matchAll(/"(assets\/audio\/[^"]+)"/g))
+	assert.ok(existsSync(new URL(path, root)), `${path} is missing from dist`);
 assert.ok(
 	existsSync(
 		new URL(
