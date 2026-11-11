@@ -1,6 +1,6 @@
 // Service Worker — versioned offline shell plus persistent runtime data cache
 
-const CACHE_VERSION = "mw-v0.28.2";
+const CACHE_VERSION = "mw-v0.28.3";
 const APP_SHELL_PREFIX = "mw-app-shell-";
 const RUNTIME_PREFIX = "mw-runtime-";
 const LEGACY_CACHE_PREFIX = "mw-cache-";
@@ -31,7 +31,6 @@ const APP_SHELL_PATHS = [
 	"src/conflict-reset.js",
 	"src/conflict-resolution.js",
 	"src/conflict-setup.js",
-	"src/constants.js",
 	"src/country-actions.js",
 	"src/country-diplomacy.js",
 	"src/country-export.js",

@@ -1,4 +1,3 @@
-import { SCENARIO_MENU_BGS } from "./constants.js";
 import { showAlert, showConfirm } from "./dialogs.js";
 import { clearStoredCustomTrack, storeCustomTrack } from "./local-files.js";
 // Controls receive live state and commands; they do not import the application.
@@ -14,9 +13,6 @@ export function createMenuControls(runtime) {
 			if (selectedCard.tagName === "BUTTON")
 				selectedCard.setAttribute("aria-pressed", "true");
 		}
-		const bgUrl = SCENARIO_MENU_BGS[cardId] || "assets/images/title-map.svg";
-		if (runtime.mainMenu)
-			runtime.mainMenu.style.backgroundImage = `url('${bgUrl}')`;
 		if (runtime.enterScenarioBtn) {
 			runtime.enterScenarioBtn.style.display = "block";
 			runtime.queuedScenarioAction = action;

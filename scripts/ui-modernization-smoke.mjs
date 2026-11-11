@@ -118,8 +118,12 @@ assert.equal(
 	"v0.27.99",
 	"footer follows the authoritative title version without a third version constant",
 );
-const constants = readFileSync(
-	new URL("../src/constants.js", import.meta.url),
+const menuControls = readFileSync(
+	new URL("../src/menu-controls.js", import.meta.url),
+	"utf8",
+);
+const styles = readFileSync(
+	new URL("../styles/style.css", import.meta.url),
 	"utf8",
 );
 const worker = readFileSync(
@@ -130,9 +134,11 @@ const backdrop = readFileSync(
 	new URL("../assets/images/title-map.svg", import.meta.url),
 	"utf8",
 );
-assert.ok(
-	constants.includes('"scroller-choice-modern": "assets/images/title-map.svg"'),
-);
+// The stylesheet owns the title backdrop. Setting it again from script loads a
+// second copy of the map in the built site and makes opening the menu stutter.
+assert.ok(styles.includes('url("../assets/images/title-map.svg")'));
+assert.doesNotMatch(menuControls, /backgroundImage/);
+assert.doesNotMatch(styles, /transition:[^;]*background-image/);
 assert.ok(
 	worker.includes('"assets/images/title-map.svg"'),
 	"dedicated background is available in the offline shell",
