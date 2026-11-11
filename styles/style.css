@@ -421,7 +421,6 @@ body.use-system-font .scroller-card-name {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	transition: background-image 0.5s ease;
 }
 
 .menu-v2-overlay {

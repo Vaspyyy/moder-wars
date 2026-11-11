@@ -51,7 +51,6 @@ export default defineConfig({
 				const shell = [
 					"index.html",
 					...files,
-					"assets/images/title-map.svg",
 					"assets/atlas/coast-110m.bin.gz",
 				];
 				let worker = readFileSync(
