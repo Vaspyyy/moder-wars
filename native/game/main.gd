@@ -7,7 +7,8 @@ extends Node2D
 ##   --scenario=<name>        package in assets/maps/compiled (default world-map-2026-v3)
 ##   --view=<lng>,<lat>,<zoom> start the camera here
 ##   --screenshot=<path>      save one frame as PNG and quit (for headless checks)
-##   --probe=<lng>,<lat>;...  print the country under each point and quit
+##   --probe=<lng>,<lat>;...  print the country and region under each point and quit
+##   --hover=<lng>,<lat>      show the hover label for this point (for screenshots)
 
 const MAX_LAT := 85.0511
 const ZOOM_MIN := 0.25
@@ -15,12 +16,14 @@ const ZOOM_MAX := 40.0
 
 var scenario := MwScenario.new()
 var owners: Image
+var regions: Image
 var map_size := Vector2.ZERO
 var map_rect := ColorRect.new()
 var camera := Camera2D.new()
 var info := Label.new()
 var credit := Label.new()
 var hovered_id := -1
+var hovered_region := -1
 var dragging := false
 
 
@@ -41,6 +44,14 @@ func _ready() -> void:
 		scenario.grid_width(), scenario.grid_height()])
 
 	owners = scenario.owner_image()
+	started = Time.get_ticks_msec()
+	var regions_error := scenario.load_regions(ProjectSettings.globalize_path("res://").path_join(
+		"../../assets/geodata/admin1/regions.json.gz"))
+	if regions_error == "":
+		regions = scenario.region_image()
+		print("Built %d regions in %d ms" % [scenario.region_count(), Time.get_ticks_msec() - started])
+	else:
+		push_warning("Regions not loaded: " + regions_error)
 	_build_map()
 	_build_ui()
 
@@ -51,10 +62,16 @@ func _ready() -> void:
 	if args.has("probe"):
 		for point in String(args["probe"]).split(";"):
 			var lng_lat := point.split(",")
-			var id := _country_at(_world_from_lng_lat(float(lng_lat[0]), float(lng_lat[1])))
-			print("probe %s -> %d %s" % [point, id, scenario.country_name(id)])
+			var world := _world_from_lng_lat(float(lng_lat[0]), float(lng_lat[1]))
+			var id := _country_at(world)
+			print("probe %s -> %d %s | %s" % [point, id, scenario.country_name(id),
+				scenario.region_name(_region_at(world))])
 		get_tree().quit()
-	elif args.has("screenshot"):
+		return
+	if args.has("hover"):
+		var point: PackedStringArray = String(args["hover"]).split(",")
+		_hover_world(_world_from_lng_lat(float(point[0]), float(point[1])))
+	if args.has("screenshot"):
 		set_process_unhandled_input(false) # keep the picture repeatable
 		_save_screenshot(args["screenshot"])
 
@@ -68,6 +85,9 @@ func _build_map() -> void:
 	material.set_shader_parameter("owners", ImageTexture.create_from_image(owners))
 	material.set_shader_parameter("palette", ImageTexture.create_from_image(scenario.palette_image()))
 	material.set_shader_parameter("max_lat", MAX_LAT)
+	if regions:
+		material.set_shader_parameter("regions", ImageTexture.create_from_image(regions))
+		material.set_shader_parameter("has_regions", true)
 	map_rect.material = material
 	map_rect.size = map_size
 	map_rect.position = -map_size / 2
@@ -144,28 +164,61 @@ func _clamp_camera() -> void:
 
 
 func _update_hover(screen_point: Vector2) -> void:
-	var world := get_canvas_transform().affine_inverse() * screen_point
+	_hover_world(get_canvas_transform().affine_inverse() * screen_point)
+
+
+## Highlight the region (or country) under a world position and label it:
+## "Donetsk Oblast, Ukraine (held by Russia)".
+func _hover_world(world: Vector2) -> void:
 	var id := _country_at(world)
-	if id == hovered_id:
+	var region := _region_at(world)
+	if id == hovered_id and region == hovered_region:
 		return
 	hovered_id = id
-	(map_rect.material as ShaderMaterial).set_shader_parameter("hovered_id", id)
-	var country := scenario.country_name(id) if id > 0 else ""
-	info.text = scenario.scenario_name() + ("  ·  " + country if country != "" else "")
+	hovered_region = region
+	var material := map_rect.material as ShaderMaterial
+	material.set_shader_parameter("hovered_id", id)
+	material.set_shader_parameter("hovered_region", region)
+	var text := scenario.scenario_name()
+	if region > 0:
+		var home := scenario.region_home(region)
+		text += "  ·  %s, %s" % [scenario.region_name(region), scenario.country_name(home)]
+		if id > 0 and id != home:
+			text += " (held by %s)" % scenario.country_name(id)
+	elif id > 0:
+		text += "  ·  " + scenario.country_name(id)
+	info.text = text
 
 
-## Country id under a world position, or -1 off the map.
-func _country_at(world: Vector2) -> int:
+## Pixel of the cell images under a world position, or (-1, -1) off the map.
+func _pixel_at(world: Vector2) -> Vector2i:
 	var uv := (world + map_size / 2) / map_size
 	if uv.x < 0.0 or uv.x >= 1.0 or uv.y < 0.0 or uv.y >= 1.0:
-		return -1
+		return Vector2i(-1, -1)
 	var merc := _mercator_y(MAX_LAT) * (1.0 - 2.0 * uv.y)
 	var lat := rad_to_deg(atan(sinh(merc)))
 	var x := int(uv.x * owners.get_width())
 	var y := clampi(int((90.0 - lat) / 180.0 * owners.get_height()), 0, owners.get_height() - 1)
-	var pixel := owners.get_pixel(x, y)
+	return Vector2i(x, y)
+
+
+## Controlling country id under a world position, or -1 for water or off the map.
+func _country_at(world: Vector2) -> int:
+	var at := _pixel_at(world)
+	if at.x < 0:
+		return -1
+	var pixel := owners.get_pixelv(at)
 	if pixel.b < 0.5:
 		return -1
+	return roundi(pixel.r * 255.0) + roundi(pixel.g * 255.0) * 256
+
+
+## Region number under a world position, or 0.
+func _region_at(world: Vector2) -> int:
+	var at := _pixel_at(world)
+	if at.x < 0 or not regions:
+		return 0
+	var pixel := regions.get_pixelv(at)
 	return roundi(pixel.r * 255.0) + roundi(pixel.g * 255.0) * 256
 
 

@@ -7,7 +7,8 @@
 use godot::classes::image::Format;
 use godot::classes::{IRefCounted, Image, RefCounted};
 use godot::prelude::*;
-use mw_sim::scenario::{self, Scenario};
+use mw_sim::regions::{self, Region, Regions};
+use mw_sim::scenario::{self, Grid, Scenario};
 
 struct ModernWarsExtension;
 
@@ -19,6 +20,7 @@ unsafe impl ExtensionLibrary for ModernWarsExtension {}
 #[class(base = RefCounted)]
 pub struct MwScenario {
     scenario: Option<Scenario>,
+    regions: Option<Regions>,
     base: Base<RefCounted>,
 }
 
@@ -27,6 +29,7 @@ impl IRefCounted for MwScenario {
     fn init(base: Base<RefCounted>) -> Self {
         Self {
             scenario: None,
+            regions: None,
             base,
         }
     }
@@ -45,10 +48,68 @@ impl MwScenario {
         match result {
             Ok(scenario) => {
                 self.scenario = Some(scenario);
+                self.regions = None;
                 GString::new()
             }
             Err(message) => GString::from(&message),
         }
+    }
+
+    /// Lay the admin-1 region file (`regions.json.gz`, absolute path) over the
+    /// loaded scenario. Returns an empty string on success, or the error.
+    #[func]
+    fn load_regions(&mut self, path: GString) -> GString {
+        let Some(scenario) = self.scenario.as_ref() else {
+            return GString::from("load a scenario first");
+        };
+        let path = path.to_string();
+        let result = std::fs::read(&path)
+            .map_err(|e| format!("cannot read {path}: {e}"))
+            .and_then(|bytes| regions::build(&bytes, scenario).map_err(|e| e.to_string()));
+        match result {
+            Ok(regions) => {
+                self.regions = Some(regions);
+                GString::new()
+            }
+            Err(message) => GString::from(&message),
+        }
+    }
+
+    /// One pixel per cell, row 0 = north. R and G hold the region number
+    /// (index + 1; 0 = no region) as low and high byte.
+    #[func]
+    fn region_image(&self) -> Option<Gd<Image>> {
+        let (s, r) = (self.scenario.as_ref()?, self.regions.as_ref()?);
+        grid_image(&s.grid, Format::RG8, |cell| {
+            r.cell_region[cell].to_le_bytes()
+        })
+    }
+
+    /// Display name of region number `value` (as in `region_image`).
+    #[func]
+    fn region_name(&self, value: i32) -> GString {
+        self.region(value)
+            .map(|r| {
+                GString::from(if r.names.en.is_empty() {
+                    &r.id
+                } else {
+                    &r.names.en
+                })
+            })
+            .unwrap_or_default()
+    }
+
+    /// The country that owns region number `value` by law (0 if none).
+    #[func]
+    fn region_home(&self, value: i32) -> i32 {
+        self.region(value).map_or(0, |r| i32::from(r.home))
+    }
+
+    #[func]
+    fn region_count(&self) -> i32 {
+        self.regions
+            .as_ref()
+            .map_or(0, |r| r.list.iter().filter(|r| r.cells > 0).count() as i32)
     }
 
     #[func]
@@ -83,25 +144,10 @@ impl MwScenario {
     #[func]
     fn owner_image(&self) -> Option<Gd<Image>> {
         let s = self.scenario.as_ref()?;
-        let (width, height) = (s.grid.width as usize, s.grid.height as usize);
-        let mut data = vec![0u8; width * height * 4];
-        for y in 0..height {
-            // The grid stores row 0 at latitude -90; images start at the top.
-            let source = (height - 1 - y) * width;
-            let target = y * width * 4;
-            for x in 0..width {
-                let [lo, hi] = s.control[source + x].to_le_bytes();
-                let px = &mut data[target + x * 4..target + x * 4 + 4];
-                px.copy_from_slice(&[lo, hi, if s.land[source + x] != 0 { 255 } else { 0 }, 255]);
-            }
-        }
-        Image::create_from_data(
-            width as i32,
-            height as i32,
-            false,
-            Format::RGBA8,
-            &PackedByteArray::from(data),
-        )
+        grid_image(&s.grid, Format::RGBA8, |cell| {
+            let [lo, hi] = s.control[cell].to_le_bytes();
+            [lo, hi, if s.land[cell] != 0 { 255 } else { 0 }, 255]
+        })
     }
 
     /// Country colors by id: pixel `id` holds that country's color.
@@ -155,6 +201,36 @@ impl MwScenario {
     fn city_count(&self) -> i32 {
         self.scenario.as_ref().map_or(0, |s| s.cities.len() as i32)
     }
+}
+
+impl MwScenario {
+    fn region(&self, value: i32) -> Option<&Region> {
+        let index = usize::try_from(value).ok()?.checked_sub(1)?;
+        self.regions.as_ref()?.list.get(index)
+    }
+}
+
+/// An image with one pixel per grid cell. The grid stores row 0 at latitude
+/// -90; images start at the top, so rows are flipped.
+fn grid_image<const N: usize>(
+    grid: &Grid,
+    format: Format,
+    pixel: impl Fn(usize) -> [u8; N],
+) -> Option<Gd<Image>> {
+    let (width, height) = (grid.width as usize, grid.height as usize);
+    let mut data = Vec::with_capacity(width * height * N);
+    for y in (0..height).rev() {
+        for x in 0..width {
+            data.extend_from_slice(&pixel(y * width + x));
+        }
+    }
+    Image::create_from_data(
+        width as i32,
+        height as i32,
+        false,
+        format,
+        &PackedByteArray::from(data),
+    )
 }
 
 /// Parse `#rgb`, `#rrggbb`, `rgb()`, `rgba()`, `hsl()` and `hsla()`.

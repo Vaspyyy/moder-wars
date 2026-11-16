@@ -38,8 +38,10 @@ The game takes options after `--`:
 
 ```sh
 godot-beta --path game -- --scenario=ukraine-2023-v3 --view=34,48.5,9
-godot-beta --headless --path game -- --probe="30.52,50.45;37.62,55.75"   # country under each point
+godot-beta --headless --path game -- --probe="30.52,50.45;37.62,55.75"   # country and region under each point
 ```
+
+`--hover=<lng>,<lat>` shows the hover label and highlight for a point, for screenshots.
 
 Headless screenshot (no window, no sound; safe while someone plays on the same machine):
 
@@ -63,4 +65,6 @@ Known issue: with the extension loaded, Godot's editor and its `--import` step a
 
 ## Data
 
-Scenario packages are read straight from `../assets/maps/compiled/*.mwsc.gz` (MWSC v3, see `sim/src/scenario.rs`). The credit lines in the scenario data (DeepStateMap, OpenStreetMap/Overture) are license requirements and must stay visible on screen.
+Scenario packages are read straight from `../assets/maps/compiled/*.mwsc.gz` (MWSC v3, see `sim/src/scenario/`). The credit lines in the scenario data (DeepStateMap, OpenStreetMap/Overture) are license requirements and must stay visible on screen.
+
+Regions (states, provinces, oblasts) come from Natural Earth admin-1, `../assets/geodata/admin1/regions.json.gz` (public domain, see its README). `sim/src/regions.rs` lays them over the cell grid when a scenario loads (about 0.15 s): every owned land cell gets exactly one region, and a region never crosses a de jure border. Military control does not change regions; a region can be partly occupied.
