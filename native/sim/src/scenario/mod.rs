@@ -117,6 +117,9 @@ pub struct SovereigntyOverride {
 /// A decoded scenario. Every per-cell layer has `grid.len()` entries.
 #[derive(Debug, Clone)]
 pub struct Scenario {
+    /// FNV-1a hash of the decompressed package. Saves store it so they only
+    /// load with the scenario they were made on.
+    pub fingerprint: u64,
     pub header: Header,
     pub run_count: usize,
     pub info: ScenarioInfo,
@@ -224,6 +227,7 @@ pub fn decode(bytes: &[u8]) -> Result<Scenario, DecodeError> {
     };
 
     Ok(Scenario {
+        fingerprint: fnv1a64(bytes),
         header,
         run_count,
         info,
@@ -236,6 +240,12 @@ pub fn decode(bytes: &[u8]) -> Result<Scenario, DecodeError> {
         land,
         biome,
         sovereignty_writes,
+    })
+}
+
+fn fnv1a64(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, &byte| {
+        (hash ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3)
     })
 }
 
