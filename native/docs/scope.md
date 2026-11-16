@@ -1,8 +1,8 @@
 # v1 scope
 
-**Status: on hold.** The owner wants to discuss turning the native game from an AI-vs-AI sandbox into a player-led grand strategy game. That decision comes first and may rewrite this list. Until then, the verdicts below are proposals for the sandbox version.
+**Status: reference.** The native game is player-led now, and its first playable is defined in [design.md](design.md). This file stays as the inventory of what the browser game offered. The verdicts were written for the old AI-vs-AI sandbox idea; read them as hints when a feature comes up, not as the plan.
 
-v1 is the smallest version that is fun to play: pick a scenario, pick one or more countries, a war happens on the real map with AI-controlled armies, the player watches and steers, frontlines move, and wars end through peace or surrender.
+The verdicts assumed this v1: pick a scenario, pick one or more countries, a war happens on the real map with AI-controlled armies, the player watches and steers, frontlines move, and wars end through peace or surrender.
 
 - **KEEP**: in v1.
 - **LATER**: worth porting after v1 is playable.
