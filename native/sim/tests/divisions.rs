@@ -375,3 +375,23 @@ fn a_division_holds_the_land_it_stands_on() {
         "the land between them stays contested"
     );
 }
+
+#[test]
+fn a_division_can_cross_all_of_russia() {
+    // Khabarovsk to Belgorod, some 7,000 km over Russian land only: the
+    // straight line runs through Mongolia and Kazakhstan, so the route
+    // bends far north of it. It is found, and quickly.
+    let s = common::world_2026();
+    let russia = country(s, "Russia");
+    let mut world = World::new(s, 1);
+    let division = world
+        .spawn_division(russia, cell(s, 135.1, 48.5), 10_000)
+        .unwrap();
+    move_to(&mut world, russia, division, cell(s, 36.6, 50.6));
+    let started = std::time::Instant::now();
+    let events = world.step();
+    let elapsed = started.elapsed();
+    assert!(rejections(&events).is_empty(), "{events:?}");
+    assert!(world.division(division).unwrap().is_moving());
+    assert!(elapsed.as_secs_f64() < 0.5, "finding it took {elapsed:?}");
+}
