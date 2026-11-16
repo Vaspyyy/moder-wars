@@ -13,6 +13,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::army::{ArmyGroup, ArmyGroupId, PLAN_EVERY};
+use crate::diplomacy::PeaceOffer;
 use crate::division::{Division, DivisionId, Loss, SpawnError};
 use crate::economy::{Budget, Economy, SERVE_PER_MILLE};
 use crate::map::{Cell, MapData};
@@ -79,6 +80,15 @@ pub enum Command {
     SetMobilization {
         level: u8,
     },
+    /// Offer peace to a country this one is at war with.
+    OfferPeace {
+        to: CountryId,
+    },
+    /// Accept or refuse a peace offer from `from`.
+    AnswerPeace {
+        from: CountryId,
+        accept: bool,
+    },
 }
 
 /// A command from one country, to apply at the start of `tick`.
@@ -130,6 +140,23 @@ pub enum Event {
         division: DivisionId,
         country: CountryId,
     },
+    PeaceOffered {
+        from: CountryId,
+        to: CountryId,
+    },
+    /// `to` accepted the peace `from` offered; their war is over.
+    PeaceMade {
+        from: CountryId,
+        to: CountryId,
+    },
+    PeaceRefused {
+        from: CountryId,
+        to: CountryId,
+    },
+    /// The country gave up: its wars are over and its divisions surrendered.
+    Capitulated {
+        country: CountryId,
+    },
 }
 
 /// Why an order had no effect.
@@ -153,6 +180,12 @@ pub enum Rejection {
     BadBudget,
     /// Mobilization goes from 0 to 3.
     BadMobilization,
+    /// Peace can only be offered to an enemy.
+    NotAtWar,
+    /// There is no open peace offer from that country.
+    NoOffer,
+    /// A peace offer to that country is already open.
+    AlreadyOffered,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -179,7 +212,7 @@ pub struct World {
     /// Sorted by id.
     pub(crate) countries: Vec<CountryState>,
     /// Pairs at war, stored as (lower id, higher id).
-    wars: BTreeSet<(CountryId, CountryId)>,
+    pub(crate) wars: BTreeSet<(CountryId, CountryId)>,
     /// Military control per grid cell (0 = nobody).
     pub(crate) control: Vec<u16>,
     /// Sorted by id.
@@ -188,6 +221,8 @@ pub struct World {
     /// Sorted by id.
     pub(crate) groups: Vec<ArmyGroup>,
     next_group: u32,
+    /// Open peace offers, sorted by (from, to).
+    pub(crate) offers: Vec<PeaceOffer>,
     /// Orders not applied yet, sorted by (tick, country, seq).
     pending: Vec<Queued>,
     next_seq: u64,
@@ -234,6 +269,7 @@ impl World {
             next_division: 1,
             groups: Vec::new(),
             next_group: 1,
+            offers: Vec::new(),
             pending: Vec::new(),
             next_seq: 0,
             map: Arc::new(MapData::new(scenario)),
@@ -308,6 +344,11 @@ impl World {
             arrow: Vec::new(),
         });
         Ok(id)
+    }
+
+    /// Open peace offers, sorted by (from, to).
+    pub fn peace_offers(&self) -> &[PeaceOffer] {
+        &self.offers
     }
 
     pub fn economy(&self, country: CountryId) -> Option<&Economy> {
@@ -393,6 +434,8 @@ impl World {
             self.upkeep(&mut events);
         }
         if self.tick.is_multiple_of(24) {
+            self.expire_offers();
+            self.check_capitulation(&mut events);
             self.run_economy(&mut events);
         }
         self.tick += 1;
@@ -495,6 +538,10 @@ impl World {
                     Ok(())
                 }
             },
+            Command::OfferPeace { to } => self.offer_peace(country, *to, events),
+            Command::AnswerPeace { from, accept } => {
+                self.answer_peace(*from, country, *accept, events)
+            }
             Command::DeclareWar { .. } | Command::MoveDivision { .. } => {
                 self.apply_basic(order, events);
                 return false;

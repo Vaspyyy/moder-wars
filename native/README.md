@@ -42,6 +42,9 @@ That puts 24 German and 12 French divisions on their border, each side as one ar
 | right-click | send the selected divisions there directly (takes them out of their group) |
 | B | cycle the selected division's country's budget: peace, war, all-out |
 | M | cycle its mobilization: peacetime, partial, general, total |
+| W | the selected division's country declares war on the country under the mouse |
+| P | the selected division's country offers peace to all its enemies |
+| Y or N | accept or refuse the newest peace offer, for the country it was made to |
 | Esc | stop drawing, or clear the selection |
 | drag, WASD or arrows | pan |
 | wheel, + or - | zoom |

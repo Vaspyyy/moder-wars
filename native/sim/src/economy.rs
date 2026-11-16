@@ -59,6 +59,10 @@ pub struct Economy {
     pub equipment_k: i64,
     /// Soldiers ever put into divisions; losses do not come back.
     pub drafted: u64,
+    /// What the country's own land (by law) produces, and the part of it
+    /// the country still holds; thousands of dollars a day.
+    pub home_total_k: i64,
+    pub home_k: i64,
 }
 
 impl Economy {
@@ -71,6 +75,8 @@ impl Economy {
             recruit_fund_k: 0,
             equipment_k: 0,
             drafted: 0,
+            home_total_k: 0,
+            home_k: 0,
         }
     }
 
@@ -102,17 +108,30 @@ impl World {
         earned as i64
     }
 
-    /// Every country's output from the land it holds, counted from scratch.
+    /// Every country's output from the land it holds, and from its own
+    /// land, counted from scratch.
     pub(crate) fn count_output(&mut self) {
-        let mut output = vec![0i64; self.countries.len()];
+        let count = self.countries.len();
+        let (mut output, mut home_total, mut home) =
+            (vec![0i64; count], vec![0i64; count], vec![0i64; count]);
         for cell in 0..self.map.len() as Cell {
             let holder = self.control[cell as usize];
             if let Some(index) = self.index_of(holder) {
                 output[index] += self.earns_k(holder, cell);
             }
+            let owner = self.map.de_jure(cell);
+            if let Some(index) = self.index_of(owner) {
+                let value = self.map.value_k(cell) as i64;
+                home_total[index] += value;
+                if holder == owner {
+                    home[index] += value;
+                }
+            }
         }
-        for (country, output) in self.countries.iter_mut().zip(output) {
-            country.economy.output_k = output;
+        for (i, country) in self.countries.iter_mut().enumerate() {
+            country.economy.output_k = output[i];
+            country.economy.home_total_k = home_total[i];
+            country.economy.home_k = home[i];
         }
     }
 
@@ -123,11 +142,21 @@ impl World {
             return;
         }
         let (lost, gained) = (self.earns_k(from, cell), self.earns_k(to, cell));
+        let owner = self.map.de_jure(cell);
+        let value = self.map.value_k(cell) as i64;
         if let Some(index) = self.index_of(from) {
-            self.countries[index].economy.output_k -= lost;
+            let economy = &mut self.countries[index].economy;
+            economy.output_k -= lost;
+            if owner == from {
+                economy.home_k -= value;
+            }
         }
         if let Some(index) = self.index_of(to) {
-            self.countries[index].economy.output_k += gained;
+            let economy = &mut self.countries[index].economy;
+            economy.output_k += gained;
+            if owner == to {
+                economy.home_k += value;
+            }
         }
         self.control[cell as usize] = to;
     }

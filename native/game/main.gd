@@ -14,6 +14,10 @@ extends Node2D
 ##
 ## Economy (stand-in controls): with a division selected, B cycles its
 ## country's budget (peace, war, all-out) and M its mobilization level.
+## War and peace (stand-in controls): W makes the selected division's country
+## declare war on the country under the mouse, P makes it offer peace to all
+## its enemies, and Y or N accepts or refuses the newest open peace offer on
+## behalf of the country it was made to.
 ##
 ## Command-line options (after `--`):
 ##   --scenario=<name>        package in assets/maps/compiled (default world-map-2026-v3)
@@ -338,7 +342,8 @@ func _show_help() -> void:
 			help.text = "Drawing an arrow: drag from the front into enemy land  ·  Esc cancels"
 		_:
 			help.text = ("Space pause  ·  1-5 speed  ·  click select  ·  right-click move  ·  Esc clear\n"
-				+ "G group  ·  F front  ·  R arrow  ·  X drop arrow  ·  B budget  ·  M mobilize")
+				+ "G group  ·  F front  ·  R arrow  ·  X drop arrow  ·  B budget  ·  M mobilize  ·  "
+				+ "W war  ·  P peace  ·  Y/N answer")
 
 
 ## Click: select a division, or its whole army group. Shift-click adds or
@@ -487,6 +492,23 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif key == KEY_M and _selected_country() != 0:
 			var country := _selected_country()
 			sim.set_mobilization(country, (int(sim.economy(country)["mobilization"]) + 1) % 4)
+			_refresh_sim()
+		elif key == KEY_W and _selected_country() != 0 and hovered_id > 0:
+			sim.declare_war(_selected_country(), hovered_id)
+			_refresh_sim()
+		elif key == KEY_P and _selected_country() != 0:
+			if sim.offer_peace(_selected_country()) == 0:
+				_add_feed("%s is at war with nobody" % scenario.country_name(_selected_country()))
+			_refresh_sim()
+		elif key == KEY_Y or key == KEY_N:
+			var newest: Dictionary = {}
+			for offer in sim.peace_offers():
+				if newest.is_empty() or int(offer["tick"]) >= int(newest["tick"]):
+					newest = offer
+			if newest.is_empty():
+				_add_feed("No open peace offers")
+			else:
+				sim.answer_peace(int(newest["from"]), int(newest["to"]), key == KEY_Y)
 			_refresh_sim()
 		elif key == KEY_X and markers.selected_group != 0:
 			sim.draw_arrow(markers.selected_group, PackedVector2Array())

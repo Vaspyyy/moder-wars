@@ -13,8 +13,8 @@ use crate::scenario::Scenario;
 use crate::world::World;
 
 const MAGIC: &[u8; 6] = b"MWSAVE";
-/// 2: divisions. 3: army groups. 4: economy.
-const VERSION: u16 = 4;
+/// 2: divisions. 3: army groups. 4: economy. 5: peace offers.
+const VERSION: u16 = 5;
 
 #[derive(Debug)]
 pub enum SaveError {
