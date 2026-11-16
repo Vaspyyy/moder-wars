@@ -1,0 +1,15 @@
+[package]
+name = "mw-godot"
+version = "0.1.0"
+description = "Thin Godot bridge: hands mw-sim data to the Godot front end."
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# Built against the Godot 4.7 API; extensions are forward compatible, so the
+# library also loads in Godot 4.8.
+godot = { version = "0.5.5", features = ["api-4-7", "lazy-function-tables"] }
+mw-sim = { path = "../sim" }

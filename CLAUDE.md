@@ -23,6 +23,10 @@ There is no test runner. "Tests" are the standalone `scripts/*-smoke.mjs` files,
 
 Asset maintenance scripts (only run after changing their source data): `scripts/prepare-atlas-coast.mjs 110m|50m|10m`, `scripts/build-title-backdrop.mjs`, `scripts/build-scenario-binaries.mjs`, `scripts/build-geo-rasters.mjs`, `scripts/build-flags.mjs`. The Modern World 2026 and Ukraine 2023 packages come from `scripts/build-modern-2026-scenario.mjs` and `scripts/build-ukraine-scenario.mjs` (both called by `build-scenario-binaries.mjs`), and the admin-1 overlay from `scripts/prepare-admin-regions.mjs`. These rebuilds need several GB of memory. `modern-2026-smoke.mjs` and `ukraine-scenario-smoke.mjs` check the committed packages by default and only verify that they reproduce from source with `MW_HEAVY_SMOKES=1`.
 
+## Native rewrite
+
+`native/` holds the native PC rewrite: `native/sim` (pure Rust simulation, `cargo test`), `native/godot` (thin godot-rust bridge) and `native/game` (Godot 4.8 project, run with `godot-beta`). Read `native/README.md` and `native/docs/plan.md` before working there. The JavaScript game is the reference, not the spec: port behavior test-first, never its structure or its smoke tests. `native/fixtures/golden/` comes from `node scripts/export-native-golden.mjs`; rerun it when the scenario packages or the decoder change (CI checks it with `--check`).
+
 ## Release and caching rules
 
 - The game version lives in places that must match: `<title>` in `index.html`, `CACHE_VERSION` in `workers/service-worker.js`, and `version` in `package.json` and `package-lock.json`. Bump them together when releasing.
