@@ -8,7 +8,7 @@ use mw_sim::division::{DivisionId, Loss};
 use mw_sim::sandbox::{self, SandboxError};
 use mw_sim::scenario::Scenario;
 use mw_sim::time::Pacer;
-use mw_sim::world::{Command, Event, Order, Rejection, World};
+use mw_sim::world::{Command, Controller, Event, Order, Rejection, World};
 
 use crate::MwScenario;
 
@@ -398,6 +398,30 @@ impl MwWorld {
                 .apply_now()
                 .iter()
                 .any(|e| matches!(e, Event::Rejected { .. }))
+    }
+
+    /// Hand a country to the AI (`on`) or take it back (it becomes passive:
+    /// only orders given here move it). Returns false for an unknown country.
+    #[func]
+    fn set_ai(&mut self, country: i32, on: bool) -> bool {
+        let (Some(world), Ok(country)) = (self.world.as_mut(), u16::try_from(country)) else {
+            return false;
+        };
+        let controller = if on {
+            Controller::Ai
+        } else {
+            Controller::Passive
+        };
+        world.set_controller(country, controller).is_ok()
+    }
+
+    #[func]
+    fn is_ai(&self, country: i32) -> bool {
+        self.world
+            .as_ref()
+            .zip(u16::try_from(country).ok())
+            .and_then(|(w, c)| w.country(c))
+            .is_some_and(|c| c.controller == Controller::Ai)
     }
 
     /// `attacker` declares war on `target`. Returns whether it was taken.

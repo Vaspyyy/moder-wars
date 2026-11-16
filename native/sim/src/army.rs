@@ -34,8 +34,21 @@ const SNAP_M: f64 = 60_000.0;
 const FOLLOW_M: f64 = 30_000.0;
 /// Spacing of the points that make up a front.
 const STEP_M: f64 = 10_000.0;
-/// Search budget (cells) for a route behind the lines before trying any route.
-const BEHIND_THE_LINES_SEARCH: usize = 50_000;
+/// Search budget for a route behind the lines before trying any route:
+/// a base number of cells plus some per 5 km of straight distance. A route
+/// that exists is found well inside it; a hopeless one gives up early.
+const BEHIND_THE_LINES_BASE: usize = 1_000;
+const BEHIND_THE_LINES_PER_5_KM: usize = 20;
+/// The same for any route, when there is none behind the lines.
+const ANY_ROUTE_BASE: usize = 20_000;
+const ANY_ROUTE_PER_5_KM: usize = 200;
+/// A marching division keeps its route while its new target is within a
+/// quarter of the way left (at least this far) of the old one; it re-aims
+/// when it gets closer.
+const REROUTE_SLACK_M: u64 = 15_000;
+/// A division walking to its place (not attacking) keeps its route while
+/// the place moves no further than about one cell; it re-aims on arrival.
+const PLACE_SLACK_M: u64 = 12_000;
 /// Width of front each attacking division takes near an arrow, and the
 /// least half-width of that stretch.
 const ATTACK_WIDTH_M: f64 = 12_000.0;
@@ -361,7 +374,8 @@ impl World {
     /// Route a division to `to`, or stop it there: over its own land when
     /// it can, so the only steps into enemy land are the attacks chosen in
     /// `target`. Keeps the progress made towards the next cell when the new
-    /// route starts the same way.
+    /// route starts the same way. A target found out of reach is not looked
+    /// for again until the target changes.
     fn send(&mut self, division: usize, to: Cell) {
         let d = &self.divisions[division];
         if d.cell == to {
@@ -370,8 +384,17 @@ impl World {
             d.progress_m = 0;
             return;
         }
-        if d.target() == Some(to) {
+        if d.blocked == Some(to) {
             return;
+        }
+        if let Some(old) = d.target() {
+            let moved = self.map.estimate_m(old, to);
+            let left = self.map.estimate_m(d.cell, to);
+            let far = left >= 2 * REROUTE_SLACK_M && moved <= REROUTE_SLACK_M.max(left / 4);
+            let to_place = self.held(to, d.country);
+            if old == to || far || (to_place && moved <= PLACE_SLACK_M) {
+                return;
+            }
         }
         let country = d.country;
         let reachable = self.held(to, country) || self.map.sides(to).any(|c| self.held(c, country));
@@ -382,13 +405,23 @@ impl World {
                     d.cell,
                     to,
                     |c| c == to || self.held(c, country),
-                    BEHIND_THE_LINES_SEARCH,
+                    BEHIND_THE_LINES_BASE
+                        + BEHIND_THE_LINES_PER_5_KM
+                            * (self.map.estimate_m(d.cell, to) / 5_000) as usize,
                 )
             })
             .flatten();
-        let Some(route) = behind_the_lines
-            .or_else(|| path::find(&self.map, d.cell, to, |c| self.passable(country, c)))
-        else {
+        let Some(route) = behind_the_lines.or_else(|| {
+            path::find_within(
+                &self.map,
+                d.cell,
+                to,
+                |c| self.passable(country, c),
+                ANY_ROUTE_BASE
+                    + ANY_ROUTE_PER_5_KM * (self.map.estimate_m(d.cell, to) / 5_000) as usize,
+            )
+        }) else {
+            self.divisions[division].blocked = Some(to);
             return;
         };
         let d = &mut self.divisions[division];
@@ -396,5 +429,6 @@ impl World {
             d.progress_m = 0;
         }
         d.path = route;
+        d.blocked = None;
     }
 }

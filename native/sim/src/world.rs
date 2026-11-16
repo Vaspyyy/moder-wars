@@ -239,7 +239,8 @@ const DEFAULT_START: Date = Date {
 };
 
 impl World {
-    /// A fresh game on `scenario`. Every country starts on the AI.
+    /// A fresh game on `scenario`. Every country starts passive; whoever
+    /// starts the game hands countries to the player and the AI.
     pub fn new(scenario: &Scenario, seed: u64) -> World {
         let mut countries: Vec<CountryState> = scenario
             .countries
@@ -247,7 +248,7 @@ impl World {
             .flatten()
             .map(|c| CountryState {
                 id: c.id,
-                controller: Controller::Ai,
+                controller: Controller::Passive,
                 economy: Economy::new(c.pop.unwrap_or(0.0).max(0.0) as u64),
             })
             .collect();
@@ -415,12 +416,14 @@ impl World {
         Ok(())
     }
 
-    /// Run one tick: apply the orders due now, re-plan army groups (every
-    /// few hours, and after group orders), fight, march, take ground, check
-    /// supply (once a day), then advance time.
+    /// Run one tick: apply the orders due now, let the AI countries whose
+    /// hour it is think, re-plan army groups (every few hours, and after
+    /// group orders), fight, march, take ground, check supply (once a day),
+    /// pay out the economy (once a day), then advance time.
     pub fn step(&mut self) -> Vec<Event> {
         let mut events = Vec::new();
-        let replan = self.apply_due(&mut events);
+        let mut replan = self.apply_due(&mut events);
+        replan |= self.run_ai(&mut events);
         if replan || self.tick.is_multiple_of(PLAN_EVERY) {
             self.plan_groups(&mut events);
         }
@@ -454,7 +457,7 @@ impl World {
     }
 
     /// Apply the due orders in order. Returns whether a group needs a plan.
-    fn apply_due(&mut self, events: &mut Vec<Event>) -> bool {
+    pub(crate) fn apply_due(&mut self, events: &mut Vec<Event>) -> bool {
         let due = self.pending.partition_point(|q| q.order.tick <= self.tick);
         let orders: Vec<Queued> = self.pending.drain(..due).collect();
         let mut replan = false;

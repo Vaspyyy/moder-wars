@@ -14,6 +14,8 @@ extends Node2D
 ##
 ## Economy (stand-in controls): with a division selected, B cycles its
 ## country's budget (peace, war, all-out) and M its mobilization level.
+## AI: I hands the selected division's country to the AI or takes it back
+## (with --ai both sides of the sandbox war start on the AI).
 ## War and peace (stand-in controls): W makes the selected division's country
 ## declare war on the country under the mouse, P makes it offer peace to all
 ## its enemies, and Y or N accepts or refuses the newest open peace offer on
@@ -28,6 +30,7 @@ extends Node2D
 ##   --seed=<n>               simulation seed (default 1)
 ##   --speed=<1-5>            starting speed
 ##   --play                   start running (the game starts paused)
+##   --ai                     hand both sides of the --war sandbox to the AI
 ##   --run=<hours>            run the simulation this long before showing it
 ##   --select=<id>,...        select these divisions, or their army groups (for screenshots)
 ##   --screenshot=<path>      save one frame as PNG and quit (for headless checks)
@@ -193,8 +196,8 @@ func _build_ui() -> void:
 	details.position = Vector2(16, screen.y - 58)
 	help.add_theme_font_size_override("font_size", 14)
 	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	help.position = Vector2(screen.x - 716, screen.y - 50)
-	help.size = Vector2(700, 40)
+	help.position = Vector2(screen.x - 816, screen.y - 50)
+	help.size = Vector2(800, 40)
 	_show_help()
 
 
@@ -214,6 +217,9 @@ func _start_sim(args: Dictionary) -> void:
 				int(war[2]) if war.size() > 2 else 24, int(war[3]) if war.size() > 3 else 12)
 			if error != "":
 				push_error("--war: " + error)
+			elif args.has("ai"):
+				for side in sides:
+					sim.set_ai(side, true)
 		elif sides.size() < 2:
 			push_error("--war needs two countries: --war=<attacker>,<defender>")
 	if args.has("speed"):
@@ -309,8 +315,9 @@ func _show_details() -> void:
 		for i in BUDGETS.size():
 			if BUDGETS[i][0] == int(e["recruiting"]) and BUDGETS[i][1] == int(e["equipment"]):
 				budget = BUDGET_NAMES[i]
-		lines.append("%s  ·  income $%.2f bn a day  ·  %s  ·  %s  ·  %s men to draft" % [
-			scenario.country_name(country), float(e["income_k"]) / 1e6, budget,
+		lines.append("%s%s  ·  income $%.2f bn a day  ·  %s  ·  %s  ·  %s men to draft" % [
+			scenario.country_name(country), " (AI)" if sim.is_ai(country) else "",
+			float(e["income_k"]) / 1e6, budget,
 			MOBILIZATION_NAMES[int(e["mobilization"])], _thousands(int(e["manpower"]))])
 	details.text = "\n".join(lines)
 	details.position.y = get_viewport_rect().size.y - 36 - 22 * lines.size()
@@ -341,9 +348,9 @@ func _show_help() -> void:
 		"arrow":
 			help.text = "Drawing an arrow: drag from the front into enemy land  ·  Esc cancels"
 		_:
-			help.text = ("Space pause  ·  1-5 speed  ·  click select  ·  right-click move  ·  Esc clear\n"
-				+ "G group  ·  F front  ·  R arrow  ·  X drop arrow  ·  B budget  ·  M mobilize  ·  "
-				+ "W war  ·  P peace  ·  Y/N answer")
+			help.text = ("Space pause  ·  1-5 speed  ·  click select  ·  right-click move  ·  "
+				+ "G group  ·  F front  ·  R arrow  ·  X drop arrow\n"
+				+ "B budget  ·  M mobilize  ·  W war  ·  P peace  ·  Y/N answer  ·  I AI on/off  ·  Esc clear")
 
 
 ## Click: select a division, or its whole army group. Shift-click adds or
@@ -492,6 +499,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif key == KEY_M and _selected_country() != 0:
 			var country := _selected_country()
 			sim.set_mobilization(country, (int(sim.economy(country)["mobilization"]) + 1) % 4)
+			_refresh_sim()
+		elif key == KEY_I and _selected_country() != 0:
+			var country := _selected_country()
+			var on := not sim.is_ai(country)
+			sim.set_ai(country, on)
+			_add_feed(("%s is now run by the AI" if on else "%s takes orders from you again")
+				% scenario.country_name(country))
 			_refresh_sim()
 		elif key == KEY_W and _selected_country() != 0 and hovered_id > 0:
 			sim.declare_war(_selected_country(), hovered_id)

@@ -1,5 +1,6 @@
 //! Modern Wars simulation: a pure library with no engine and no window.
 
+pub mod ai;
 pub mod army;
 mod combat;
 mod control;

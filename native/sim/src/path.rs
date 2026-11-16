@@ -3,6 +3,7 @@
 
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap};
+use std::hash::{BuildHasherDefault, Hasher};
 
 use crate::map::{Cell, MapData};
 
@@ -35,8 +36,16 @@ pub(crate) fn find_within(
     if !open(to) {
         return None;
     }
+    // A neighbour is one step away (a diagonal one only between open cells).
+    if let Some(step) = map.steps(from).find(|s| s.to == to)
+        && step
+            .sides
+            .is_none_or(|sides| sides.iter().all(|&c| open(c)))
+    {
+        return Some(vec![to]);
+    }
     // cell -> (metres from the start, previous cell)
-    let mut best: HashMap<Cell, (u64, Cell)> = HashMap::new();
+    let mut best: CellMap<(u64, Cell)> = CellMap::with_capacity_and_hasher(256, Default::default());
     let mut queue = BinaryHeap::new();
     best.insert(from, (0, from));
     queue.push(Reverse((map.estimate_m(from, to), 0u64, from)));
@@ -106,3 +115,26 @@ mod tests {
         assert_eq!(find(&map, 1, 6, open), Some(vec![6]));
     }
 }
+
+/// A quick hash for cell numbers. The table is only looked up, never walked
+/// in order, so the hash cannot change a route.
+#[derive(Default)]
+struct CellHasher(u64);
+
+impl Hasher for CellHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.0 = (self.0.rotate_left(8) ^ u64::from(byte)).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        }
+    }
+
+    fn write_u32(&mut self, n: u32) {
+        self.0 = u64::from(n).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    }
+}
+
+type CellMap<V> = HashMap<Cell, V, BuildHasherDefault<CellHasher>>;
