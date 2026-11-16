@@ -21,6 +21,24 @@ use crate::map::Cell;
 use crate::regions::Regions;
 use crate::world::{CountryId, Event, World};
 
+/// A region a peace hands over by law: its index in the region list, its
+/// owner by law before and after.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Cession {
+    pub region: usize,
+    pub from: CountryId,
+    pub to: CountryId,
+}
+
+/// What a peace settles: who gets the two sides' cells in each region of
+/// theirs that the other side holds part of, and the regions that change
+/// owner by law.
+#[derive(Default)]
+struct Settlement {
+    settled: BTreeMap<usize, CountryId>,
+    ceded: Vec<Cession>,
+}
+
 /// The parts of the region map the simulation needs.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct RegionMap {
@@ -110,11 +128,15 @@ impl World {
             .unwrap_or(map.home[region])
     }
 
-    /// Settle the land between two countries that just made peace.
-    pub(crate) fn settle_regions(&mut self, a: CountryId, b: CountryId, events: &mut Vec<Event>) {
-        let Some(map) = self.regions.clone() else {
-            return;
-        };
+    /// The regions a peace between `a` and `b` would hand over by law, in
+    /// region order (empty without regions). Reading them changes nothing.
+    pub fn peace_terms(&self, a: CountryId, b: CountryId) -> Vec<Cession> {
+        self.settlement(a, b).map(|s| s.ceded).unwrap_or_default()
+    }
+
+    /// What a peace between `a` and `b` settles, or None without regions.
+    fn settlement(&self, a: CountryId, b: CountryId) -> Option<Settlement> {
+        let map = self.regions.as_deref()?;
         let (a, b) = (a.min(b), a.max(b));
         // Cells of each region held by a and by b.
         let mut held: BTreeMap<usize, [u32; 2]> = BTreeMap::new();
@@ -128,11 +150,9 @@ impl World {
                 held.entry(region).or_default()[side] += 1;
             }
         }
-        // Who gets the cells the two hold of each region of theirs.
-        let mut settled: BTreeMap<usize, CountryId> = BTreeMap::new();
-        let mut handed: BTreeMap<(CountryId, CountryId), u32> = BTreeMap::new();
+        let mut settlement = Settlement::default();
         for (&region, &[on_a, on_b]) in &held {
-            let owner = self.region_owner(&map, region);
+            let owner = self.region_owner(map, region);
             let (other, on_other) = match owner {
                 o if o == a => (b, on_b),
                 o if o == b => (a, on_a),
@@ -140,21 +160,38 @@ impl World {
                 _ => continue,
             };
             if u64::from(on_other) * 2 > u64::from(map.cells[region]) {
-                if other == map.home[region] {
-                    self.ceded.remove(&(region as u16));
-                } else {
-                    self.ceded.insert(region as u16, other);
-                }
-                *handed.entry((owner, other)).or_default() += 1;
-                settled.insert(region, other);
+                settlement.ceded.push(Cession {
+                    region,
+                    from: owner,
+                    to: other,
+                });
+                settlement.settled.insert(region, other);
             } else {
-                settled.insert(region, owner);
+                settlement.settled.insert(region, owner);
             }
+        }
+        Some(settlement)
+    }
+
+    /// Settle the land between two countries that just made peace.
+    pub(crate) fn settle_regions(&mut self, a: CountryId, b: CountryId, events: &mut Vec<Event>) {
+        let Some(settlement) = self.settlement(a, b) else {
+            return;
+        };
+        let map = self.regions.clone().expect("a settlement needs regions");
+        let mut handed: BTreeMap<(CountryId, CountryId), u32> = BTreeMap::new();
+        for cession in &settlement.ceded {
+            if cession.to == map.home[cession.region] {
+                self.ceded.remove(&(cession.region as u16));
+            } else {
+                self.ceded.insert(cession.region as u16, cession.to);
+            }
+            *handed.entry((cession.from, cession.to)).or_default() += 1;
         }
         for cell in 0..self.control.len() as Cell {
             let holder = self.control[cell as usize];
             if (holder == a || holder == b)
-                && let Some(&to) = map.region(cell).and_then(|r| settled.get(&r))
+                && let Some(&to) = map.region(cell).and_then(|r| settlement.settled.get(&r))
                 && holder != to
             {
                 self.set_control(cell, to);

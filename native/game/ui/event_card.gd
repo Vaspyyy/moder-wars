@@ -1,10 +1,9 @@
 extends Control
 ## A card in the middle of the screen for a big event (a war declared on
-## the player, a peace offer, a peace made, a capitulation). The game pauses
-## while it is open; closing it lets the game run again if it was running.
-## A peace offer has Refuse and Accept buttons; the rest has Continue.
+## the player, a peace made, a capitulation). The game pauses while it is
+## open; Continue closes it. (Peace offers get the peace window instead.)
 
-signal closed(accepted: bool)
+signal closed
 
 const Style := preload("res://ui/style.gd")
 const WIDTH := 460.0
@@ -27,9 +26,8 @@ func setup() -> void:
 	add_child(card)
 
 
-## `kicker` is the small line above the title, `answer` whether the card
-## asks to accept or refuse.
-func show_event(kicker: String, title: String, body: String, answer: bool) -> void:
+## `kicker` is the small line above the title.
+func show_event(kicker: String, title: String, body: String) -> void:
 	for child in card.get_children():
 		child.queue_free()
 	var column := VBoxContainer.new()
@@ -47,17 +45,9 @@ func show_event(kicker: String, title: String, body: String, answer: bool) -> vo
 	var buttons := HBoxContainer.new()
 	buttons.alignment = BoxContainer.ALIGNMENT_END
 	buttons.add_theme_constant_override("separation", 12)
-	if answer:
-		var refuse := Style.tool_button("Refuse", "N")
-		refuse.pressed.connect(func() -> void: closed.emit(false))
-		buttons.add_child(refuse)
-		var accept := Style.primary_button("Accept peace", 18)
-		accept.pressed.connect(func() -> void: closed.emit(true))
-		buttons.add_child(accept)
-	else:
-		var go_on := Style.primary_button("Continue", 18)
-		go_on.pressed.connect(func() -> void: closed.emit(true))
-		buttons.add_child(go_on)
+	var go_on := Style.primary_button("Continue", 18)
+	go_on.pressed.connect(func() -> void: closed.emit())
+	buttons.add_child(go_on)
 	column.add_child(buttons)
 	card.add_child(column)
 	card.reset_size()

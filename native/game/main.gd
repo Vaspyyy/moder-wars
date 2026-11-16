@@ -75,6 +75,8 @@ const CommandBar := preload("res://ui/command_bar.gd")
 const MapKey := preload("res://ui/map_key.gd")
 const EventCard := preload("res://ui/event_card.gd")
 const EconomyWindow := preload("res://ui/economy.gd")
+const PeaceWindow := preload("res://ui/peace.gd")
+const CountryCard := preload("res://ui/country_card.gd")
 
 var scenario := MwScenario.new()
 var sim := MwWorld.new()
@@ -118,6 +120,12 @@ var reports: PanelContainer = null
 var command_bar: PanelContainer = null
 var event_card: Control = null
 var economy_window: PanelContainer = null
+var peace_window: Control = null
+## The card about a foreign country clicked while leading.
+var country_card: Control = null
+## The other country of the open peace window, and whether it offered.
+var peace_with := 0
+var peace_incoming := true
 ## Big reports waiting for their card, and the one shown.
 var cards: Array = []
 var card_report: Dictionary = {}
@@ -342,6 +350,20 @@ func _lead(id: int, to_capital: bool) -> void:
 		_refresh_sim())
 	economy_window.close_pressed.connect(func() -> void: _show_economy(false))
 	ui_layer.add_child(economy_window)
+	country_card = CountryCard.new()
+	country_card.scenario = scenario
+	country_card.palette = palette
+	country_card.to_screen = func(world: Vector2) -> Vector2: return get_canvas_transform() * world
+	country_card.setup()
+	country_card.visible = not no_hud
+	ui_layer.add_child(country_card)
+	peace_window = PeaceWindow.new()
+	peace_window.scenario = scenario
+	peace_window.palette = palette
+	peace_window.setup()
+	peace_window.visible = false
+	peace_window.answered.connect(_answer_peace)
+	ui_layer.add_child(peace_window)
 	event_card = EventCard.new()
 	event_card.setup()
 	event_card.visible = false
@@ -556,47 +578,137 @@ func _hold() -> void:
 
 ## Open the card for the next big report, pausing the game.
 func _show_next_card() -> void:
-	if event_card.visible or cards.is_empty():
+	if event_card.visible or peace_window.visible or cards.is_empty():
 		return
 	card_report = cards.pop_front()
 	var other := scenario.country_name(int(card_report["other"]))
 	var kind := String(card_report["big"])
-	if not sim.is_paused():
-		sim.toggle_pause()
-		paused_by_card = true
+	_pause_for_card()
 	match kind:
 		"war":
 			event_card.show_event("WAR", "%s declared war on you" % other,
 				"Its divisions will cross the border. Give your army groups fronts along it, "
-				+ "and arrows where you want to strike back.", false)
+				+ "and arrows where you want to strike back.")
 		"peace_offer":
-			event_card.show_event("PEACE OFFER", "%s offers peace" % other,
-				"If you accept, the war ends today. A region either side alone holds more than "
-				+ "half of becomes theirs; everything else goes back.", true)
+			_open_peace(int(card_report["other"]), true)
 		"peace":
 			event_card.show_event("PEACE", "Peace with %s" % other,
-				"The war is over. The reports list the regions that changed hands.", false)
+				"The war is over. The reports list the regions that changed hands.")
 		"capitulated":
 			if int(card_report["other"]) == player:
 				event_card.show_event("DEFEAT", "%s capitulated" % other,
-					"Your country gave up: its wars are over and its divisions laid down their arms.",
-					false)
+					"Your country gave up: its wars are over and its divisions laid down their arms.")
 			else:
 				event_card.show_event("VICTORY", "%s capitulated" % other,
-					"It gave up: the war is over, and the regions you hold most of are yours.", false)
+					"It gave up: the war is over, and the regions you hold most of are yours.")
 
 
-func _close_card(accepted: bool) -> void:
-	if card_report.get("big", "") == "peace_offer":
-		sim.answer_peace(int(card_report["other"]), player, accepted)
+func _close_card() -> void:
 	card_report = {}
 	event_card.visible = false
+	_after_modal()
+
+
+## Pause while a card or the peace window is open, remembering to resume.
+func _pause_for_card() -> void:
+	if not sim.is_paused():
+		sim.toggle_pause()
+		paused_by_card = true
+
+
+## After a card or the peace window closed: the next card, or let the game
+## run again if a card paused it.
+func _after_modal() -> void:
 	_show_next_card()
-	if not event_card.visible and paused_by_card:
+	if not event_card.visible and not peace_window.visible and paused_by_card:
 		paused_by_card = false
 		if sim.is_paused():
 			sim.toggle_pause()
 	_refresh_sim()
+
+
+## Open the peace window with `other`: an offer it made (`incoming`) or one
+## the player is about to make. The regions that would change hands are
+## striped on the map and the camera turns to them.
+func _open_peace(other: int, incoming: bool) -> void:
+	peace_with = other
+	peace_incoming = incoming
+	_pause_for_card()
+	country_card.show_country(0, Vector2.ZERO, {}, "", [], "")
+	var terms := sim.peace_terms(player, other)
+	# One pixel per region number up to the highest one marked; the shader
+	# leaves regions past the edge alone.
+	var width := 1
+	for term in terms:
+		width = maxi(width, int(term["region"]) + 1)
+	var marks := Image.create(width, 1, false, Image.FORMAT_RGBA8)
+	var anchors := PackedVector2Array()
+	for term in terms:
+		var gain := int(term["to"]) == player
+		marks.set_pixel(int(term["region"]), 0, Color(1, 0, 0) if gain else Color(0, 1, 0))
+		var anchor := scenario.region_anchor(int(term["region"]))
+		if not is_nan(anchor.x):
+			anchors.append(_world_from_lng_lat(anchor.x, anchor.y))
+	var material := map_rect.material as ShaderMaterial
+	material.set_shader_parameter("marks", ImageTexture.create_from_image(marks))
+	material.set_shader_parameter("has_marks", true)
+	if anchors.size() > 0:
+		var center := Vector2.ZERO
+		for anchor in anchors:
+			center += anchor
+		center /= anchors.size()
+		# Put them in the middle of the map left of the window.
+		var screen_w := get_viewport_rect().size.x
+		var target_x := (screen_w - PeaceWindow.WIDTH - 16) / 2.0
+		var at := center + Vector2((screen_w / 2.0 - target_x) / camera.zoom.x, 0)
+		create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT) \
+			.tween_property(camera, "position", at, 0.5)
+	for panel in [army_list, reports, command_bar]:
+		panel.visible = false
+	peace_window.show_terms(incoming, player, other, terms, {"player": _side(player), "other": _side(other)})
+
+
+## One side of the peace window's table.
+func _side(country: int) -> Dictionary:
+	var economy: Dictionary = sim.economy(country)
+	var army: Dictionary = sim.army(country)
+	return {"divisions": army["divisions"], "personnel": army["personnel"],
+		"land": float(economy["home_k"]) / maxf(1.0, float(economy["home_total_k"])),
+		"income_k": economy["income_k"], "support": economy["support"]}
+
+
+func _answer_peace(accept: bool) -> void:
+	if peace_incoming:
+		sim.answer_peace(peace_with, player, accept)
+	elif accept:
+		if sim.offer_peace_to(player, peace_with):
+			_note("You offered peace to %s" % scenario.country_name(peace_with))
+	peace_window.visible = false
+	(map_rect.material as ShaderMaterial).set_shader_parameter("has_marks", false)
+	for panel in [army_list, reports]:
+		panel.visible = not no_hud
+	card_report = {}
+	_after_modal()
+
+
+## The card for a foreign country clicked while leading: declare war on it,
+## or offer it peace when at war.
+func _show_country_card(country: int, world: Vector2) -> void:
+	if country <= 0 or country == player:
+		country_card.show_country(0, Vector2.ZERO, {}, "", [], "")
+		return
+	var at_war := sim.enemies(player).has(country)
+	var action: Callable
+	if at_war:
+		action = func() -> void: _open_peace(country, false)
+	else:
+		action = func() -> void:
+			sim.declare_war(player, country)
+			country_card.show_country(0, Vector2.ZERO, {}, "", [], "")
+			_refresh_sim()
+	country_card.show_country(country, world, sim.country_info(country),
+		"At war with you" if at_war else "At peace with you",
+		[["Offer peace" if at_war else "Declare war", true, action]], "Esc closes")
 
 
 ## One quick save slot, in Godot's user data folder.
@@ -707,6 +819,8 @@ func _select_at(screen_point: Vector2, add: bool) -> void:
 		_pick_country(country if country > 0 else 0, world)
 		return
 	var id: int = markers.pick(world, 12.0, player)
+	if country_card != null:
+		_show_country_card(_country_at(world) if id < 0 and not add else 0, world)
 	if add:
 		markers.selected_group = 0
 		if id >= 0:
@@ -817,11 +931,15 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventKey and event.pressed:
 		var key := (event as InputEventKey).keycode
 		if event_card != null and event_card.visible:
-			# A card waits for an answer; the game stays paused.
+			# A card waits to be closed; the game stays paused.
+			if key == KEY_ENTER or key == KEY_KP_ENTER or key == KEY_ESCAPE:
+				_close_card()
+			return
+		if peace_window != null and peace_window.visible:
 			if key == KEY_Y or key == KEY_ENTER or key == KEY_KP_ENTER:
-				_close_card(true)
+				_answer_peace(true)
 			elif key == KEY_N or key == KEY_ESCAPE:
-				_close_card(card_report.get("big", "") != "peace_offer")
+				_answer_peace(false)
 			return
 		if key == KEY_EQUAL or key == KEY_KP_ADD:
 			_zoom_at(1.25, get_viewport_rect().size / 2)
@@ -907,6 +1025,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_hold()
 		elif key == KEY_ESCAPE and economy_window != null and economy_window.visible:
 			_show_economy(false)
+		elif key == KEY_ESCAPE and country_card != null and country_card.card.visible:
+			_show_country_card(0, Vector2.ZERO)
 		elif key == KEY_ESCAPE:
 			if drawing != "":
 				drawing = ""

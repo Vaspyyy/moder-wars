@@ -174,10 +174,11 @@ static func tool_button(text: String, key: String, icon := "") -> ToolButton:
 	var caption := label(text, 15)
 	caption.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(caption)
-	var badge := label(key, 12, MUTED)
-	badge.add_theme_stylebox_override("normal", box(Color.TRANSPARENT, OFF, 3, 5, 1))
-	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(badge)
+	if key != "":
+		var badge := label(key, 12, MUTED)
+		badge.add_theme_stylebox_override("normal", box(Color.TRANSPARENT, OFF, 3, 5, 1))
+		badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(badge)
 	button.add_child(row)
 	return button
 
