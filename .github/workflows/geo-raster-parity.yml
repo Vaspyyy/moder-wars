@@ -1,0 +1,39 @@
+name: Geography raster parity
+# The full 50m/10m re-rasterization takes about 40 s, so the main check skips
+# it. This runs it only when something it depends on changes.
+on:
+  pull_request:
+    paths:
+      - src/geo-raster-core.js
+      - scripts/geo-raster-smoke.mjs
+      - scripts/build-geo-rasters.mjs
+      - assets/geodata/*/cultural/ne_*_admin_0_countries.json
+      - assets/geodata/derived/**
+      - .github/workflows/geo-raster-parity.yml
+  push:
+    branches: [main]
+    paths:
+      - src/geo-raster-core.js
+      - scripts/geo-raster-smoke.mjs
+      - scripts/build-geo-rasters.mjs
+      - assets/geodata/*/cultural/ne_*_admin_0_countries.json
+      - assets/geodata/derived/**
+      - .github/workflows/geo-raster-parity.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: modern-wars-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '26'
+      # The smoke only imports repository modules, so no npm install is needed.
+      - run: node scripts/geo-raster-smoke.mjs
+        env:
+          MW_HEAVY_SMOKES: '1'

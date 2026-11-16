@@ -230,8 +230,13 @@ assert.equal(combinedScenarioRaster.mapResolution, "50m");
 assert.equal(combinedScenarioRaster.deJureMapResolution, "110m");
 assert.equal(combinedScenarioRaster.assetBytes, 30);
 
-// Full cell-for-cell parity at a representative grid for every source dataset.
-for (const sourceResolution of sourceResolutions) {
+// Full cell-for-cell parity at a representative grid. 110m always runs and
+// catches rasterizer changes; re-rasterizing the 50m and 10m sources takes
+// about 40 s, so they only run with MW_HEAVY_SMOKES=1 (CI does that in
+// geo-raster-parity.yml whenever these inputs change).
+const heavy = process.env.MW_HEAVY_SMOKES === "1";
+const paritySourceResolutions = heavy ? sourceResolutions : ["110m"];
+for (const sourceResolution of paritySourceResolutions) {
 	const sourceData = JSON.parse(
 		await readFile(
 			new URL(
@@ -255,4 +260,6 @@ for (const sourceResolution of sourceResolutions) {
 	}
 }
 
-console.log("geo-raster smoke: ok");
+console.log(
+	`geo-raster smoke: ok (parity: ${paritySourceResolutions.join(", ")}${heavy ? "" : "; set MW_HEAVY_SMOKES=1 for 50m and 10m"})`,
+);
