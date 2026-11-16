@@ -59,6 +59,8 @@ node scripts/export-native-golden.mjs --check   # fail if they are stale (CI run
 
 The project targets Godot 4.8 (developed on 4.8 beta3). godot-rust 0.5.5 has no 4.8 API yet, so `mw-godot` is built against the 4.7 API (`api-4-7`); Godot extensions are forward compatible. The `lazy-function-tables` feature is required: without it the extension resolves every engine method at startup and panics on `GDScriptTextDocument::foldingRange`, an editor method whose signature changed in 4.8. Switch to `api-4-8` once godot-rust ships it.
 
+Known issue: with the extension loaded, Godot's editor and its `--import` step abort while shutting down (exit code 134, on Godot 4.7.2 and 4.8 beta3 alike), after they have written everything. The game itself exits cleanly. `play.sh` imports the project when needed and checks the result by `game/.godot/extension_list.cfg` instead of the exit code.
+
 ## Data
 
 Scenario packages are read straight from `../assets/maps/compiled/*.mwsc.gz` (MWSC v3, see `sim/src/scenario.rs`). The credit lines in the scenario data (DeepStateMap, OpenStreetMap/Overture) are license requirements and must stay visible on screen.
