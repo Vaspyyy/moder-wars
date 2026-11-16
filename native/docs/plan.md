@@ -8,10 +8,10 @@ The browser game grew to about 55,000 lines with a 7,000-line `main.js`, simulat
 
 | # | Step | State |
 | --- | --- | --- |
-| 0 | Freeze the JavaScript game: fixes only, no new features | to confirm |
+| 0 | Freeze the JavaScript game: fixes only, no new features | done (2026-11-16) |
 | 1 | Read the real scenario packages in Rust, checked by golden files | done |
 | 2 | First pixels: the political map in Godot 4.8 | done |
-| 3 | Agree on v1 scope ([scope.md](scope.md)) and the rules we want ([rules.md](rules.md) lists what the old game does) | review |
+| 3 | Decide the game's direction (AI-vs-AI sandbox, or player-led grand strategy), then agree on v1 scope ([scope.md](scope.md)) and the rules we want ([rules.md](rules.md) lists what the old game does) | discussing |
 | 4 | Simulation core, test-first: clock, determinism, forces, movement, combat, territory, supply, surrender, peace | next |
 | 5 | Units and frontlines on the map, player controls, menus | |
 | 6 | AI: simple first, judged by scenario tests | |
@@ -36,7 +36,7 @@ These exist because the old code broke all of them.
 4. Modules stay small. When a file passes about 500 lines, split it or simplify it. No manager-of-managers layers, no feature flags for "legacy behavior".
 5. One way to do each thing. No second copy of a rule "for the fast path".
 6. Performance is a test: budgets for tick time live in the test suite, so slowdowns fail loudly.
-7. The map stays clean: flat colors, thin borders. New layers (units, frontlines, labels) are added sparingly and can be turned off.
+7. The map stays clean: flat colors, thin borders. New layers (units, frontlines, labels) are added sparingly and can be turned off. The UX is designed from scratch, never copied from the browser game.
 8. No online features. Credits required by data licenses stay visible.
 
 ## Godot 4.7 and 4.8 features worth using
