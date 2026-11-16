@@ -115,17 +115,36 @@ impl World {
         let count = self.countries.len();
         let (mut output, mut home_total, mut home) =
             (vec![0i64; count], vec![0i64; count], vec![0i64; count]);
-        for cell in 0..self.map.len() as Cell {
-            let holder = self.control[cell as usize];
-            if let Some(index) = self.index_of(holder) {
-                output[index] += self.earns_k(holder, cell);
-            }
-            let owner = self.owner_by_law(cell);
-            if let Some(index) = self.index_of(owner) {
-                let value = self.map.value_k(cell) as i64;
-                home_total[index] += value;
-                if holder == owner {
-                    home[index] += value;
+        // Country id -> index, without a search per cell.
+        let top = self.countries.last().map_or(0, |c| usize::from(c.id));
+        let mut slots = vec![usize::MAX; top + 1];
+        for (index, country) in self.countries.iter().enumerate() {
+            slots[usize::from(country.id)] = index;
+        }
+        let slot = |id: CountryId| {
+            slots
+                .get(usize::from(id))
+                .copied()
+                .filter(|&index| index != usize::MAX && id != 0)
+        };
+        {
+            let law = self.law_of();
+            // The same sums as `earns_k` and `set_control`, in one pass.
+            for (cell, value) in self.map.land_values() {
+                let (holder, owner) = (self.control[cell as usize], law(cell));
+                if let Some(index) = slot(holder) {
+                    let earned = if owner == holder {
+                        value
+                    } else {
+                        value * OCCUPIED_PERCENT / 100
+                    };
+                    output[index] += earned as i64;
+                }
+                if let Some(index) = slot(owner) {
+                    home_total[index] += value as i64;
+                    if holder == owner {
+                        home[index] += value as i64;
+                    }
                 }
             }
         }

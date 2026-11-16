@@ -77,6 +77,31 @@ impl World {
         self.map.de_jure(cell)
     }
 
+    /// `owner_by_law` for counting many cells: a table instead of a lookup
+    /// in `ceded` per cell.
+    pub(crate) fn law_of(&self) -> impl Fn(Cell) -> CountryId + '_ {
+        let table = self
+            .regions
+            .as_deref()
+            .filter(|_| !self.ceded.is_empty())
+            .map(|map| {
+                let mut owners = vec![0; map.home.len()];
+                for (&region, &owner) in &self.ceded {
+                    owners[usize::from(region)] = owner;
+                }
+                (map, owners)
+            });
+        move |cell| {
+            if let Some((map, owners)) = &table
+                && let Some(region) = map.region(cell)
+                && owners[region] != 0
+            {
+                return owners[region];
+            }
+            self.map.de_jure(cell)
+        }
+    }
+
     fn region_owner(&self, map: &RegionMap, region: usize) -> CountryId {
         self.ceded
             .get(&(region as u16))
