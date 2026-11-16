@@ -25,7 +25,7 @@ Asset maintenance scripts (only run after changing their source data): `scripts/
 
 ## Native rewrite
 
-`native/` holds the native PC rewrite: `native/sim` (pure Rust simulation, `cargo test`), `native/godot` (thin godot-rust bridge) and `native/game` (Godot 4.8 project, run with `godot-beta`). Read `native/README.md` and `native/docs/plan.md` before working there. The JavaScript game is the reference, not the spec: port behavior test-first, never its structure or its smoke tests. `native/fixtures/golden/` comes from `node scripts/export-native-golden.mjs`; rerun it when the scenario packages or the decoder change (CI checks it with `--check`).
+The JavaScript game is frozen (since 2026-11-16): fixes only, no new features. `native/` holds the native PC rewrite: `native/sim` (pure Rust simulation, `cargo test`), `native/godot` (thin godot-rust bridge) and `native/game` (Godot 4.8 project, run with `godot-beta`). Read `native/README.md` and `native/docs/plan.md` before working there. The JavaScript game is the reference, not the spec: port behavior test-first, never its structure or its smoke tests. `native/fixtures/golden/` comes from `node scripts/export-native-golden.mjs`; rerun it when the scenario packages or the decoder change (CI checks it with `--check`).
 
 ## Release and caching rules
 
