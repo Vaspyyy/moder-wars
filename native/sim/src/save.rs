@@ -13,7 +13,8 @@ use crate::scenario::Scenario;
 use crate::world::World;
 
 const MAGIC: &[u8; 6] = b"MWSAVE";
-const VERSION: u16 = 1;
+/// 2: divisions.
+const VERSION: u16 = 2;
 
 #[derive(Debug)]
 pub enum SaveError {
@@ -61,7 +62,7 @@ pub fn load(bytes: &[u8], scenario: &Scenario) -> Result<World, SaveError> {
     GzDecoder::new(&bytes[8..])
         .read_to_end(&mut body)
         .map_err(|e| SaveError::Corrupt(e.to_string()))?;
-    let world: World =
+    let mut world: World =
         postcard::from_bytes(&body).map_err(|e| SaveError::Corrupt(e.to_string()))?;
     if world.scenario_fingerprint() != scenario.fingerprint {
         return Err(SaveError::WrongScenario);
@@ -71,5 +72,13 @@ pub fn load(bytes: &[u8], scenario: &Scenario) -> Result<World, SaveError> {
             "control map size does not match the scenario".into(),
         ));
     }
+    if world
+        .divisions()
+        .iter()
+        .any(|d| d.cell as usize >= scenario.grid.len())
+    {
+        return Err(SaveError::Corrupt("a division stands off the map".into()));
+    }
+    world.attach(scenario);
     Ok(world)
 }

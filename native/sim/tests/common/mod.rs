@@ -47,3 +47,55 @@ pub fn regions_ukraine() -> &'static mw_sim::regions::Regions {
     static CELL: OnceLock<mw_sim::regions::Regions> = OnceLock::new();
     CELL.get_or_init(|| regions_for(ukraine_2023()))
 }
+
+/// A country's id by its English name.
+#[allow(dead_code)]
+pub fn country(scenario: &Scenario, name: &str) -> u16 {
+    scenario
+        .countries
+        .iter()
+        .flatten()
+        .find(|c| c.name == name)
+        .unwrap_or_else(|| panic!("no country named {name}"))
+        .id
+}
+
+/// The grid cell at a longitude and latitude.
+#[allow(dead_code)]
+pub fn cell(scenario: &Scenario, lng: f64, lat: f64) -> u32 {
+    scenario
+        .grid
+        .cell_at(lng, lat)
+        .expect("point is on the grid") as u32
+}
+
+/// Walk west from a point held by `east` until the land is held by `west`.
+/// Returns (last cell held by `east`, first cell held by `west`), neighbours
+/// on the same row.
+#[allow(dead_code)]
+pub fn border_west(scenario: &Scenario, lng: f64, lat: f64, east: u16, west: u16) -> (u32, u32) {
+    let mut here = cell(scenario, lng, lat) as usize;
+    assert_eq!(
+        scenario.control[here], east,
+        "start point is not held by {east}"
+    );
+    for _ in 0..200 {
+        let next = here - 1;
+        let held_by = scenario.control[next];
+        if held_by == west && scenario.land[next] != 0 {
+            return (here as u32, next as u32);
+        }
+        assert_eq!(
+            held_by, east,
+            "walked out of {east} into {held_by}, not {west}"
+        );
+        here = next;
+    }
+    panic!("no border within 200 cells");
+}
+
+/// Run `ticks` ticks and collect their events.
+#[allow(dead_code)]
+pub fn run(world: &mut mw_sim::world::World, ticks: u64) -> Vec<mw_sim::world::Event> {
+    (0..ticks).flat_map(|_| world.step()).collect()
+}
