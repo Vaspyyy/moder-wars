@@ -22,7 +22,7 @@ native/play.sh --watch    # same, then follow main: pull, rebuild and restart wh
 
 Other options go to the game, e.g. `native/play.sh --scenario=ukraine-2023-v3 --view=34,48.5,9`. Close the game window or press Ctrl+C to stop. `--watch` checks every 30 seconds, only fast-forwards, and keeps the old game running if a build fails.
 
-The game opens on the world, paused, with every country's real army on its borders. Click a country to see its card (population, economy, forces, borders), then press "Lead" to take it: the camera moves to its capital, the bar along the top shows its date, speed, income, people left to draft, divisions and war support, and the AI runs every other country with the same orders you have. `--lead=Poland` skips the pick screen. While you lead a country, only its divisions take your orders, and the stand-in keys below (B, M, W, P, Y/N, I) act for it.
+The game opens on the world, paused, with every country's real army on its borders. Click a country to see its card (population, economy, forces, borders), then press "Lead" to take it: the camera moves to its capital, the bar along the top shows its date, speed, income, people left to draft, divisions and war support, and the AI runs every other country with the same orders you have. `--lead=Poland` skips the pick screen. While you lead a country, only its divisions take your orders, and the stand-in keys below (B, M, Shift+W, P, Y/N, I) act for it.
 
 To watch divisions fight, start a sandbox war between two neighbours (names as the scenario spells them); `--war` opens the viewer, where any country's divisions take orders, unless `--lead` is given too:
 
@@ -45,7 +45,7 @@ That puts 24 German and 12 French divisions on their border, each side as one ar
 | right-click | send the selected divisions there directly (takes them out of their group) |
 | B | cycle the budget: peace, war, all-out (your country, or in the viewer the selected division's) |
 | M | cycle its mobilization: peacetime, partial, general, total |
-| W | declare war on the country under the mouse |
+| Shift+W | declare war on the country under the mouse (W alone pans) |
 | P | offer peace to all enemies |
 | Y or N | accept or refuse the newest peace offer (made to you, or in the viewer to anyone) |
 | I | hand the country to the AI, or take it back |
