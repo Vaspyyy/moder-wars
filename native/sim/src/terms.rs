@@ -2,13 +2,14 @@
 //!
 //! Fronts move cell by cell, but a peace settles whole regions (admin-1
 //! states, provinces and oblasts, see `regions.rs`). When two countries make
-//! peace, each region partly held by both goes whole to the side that holds
-//! more of its cells, so scattered pockets go back and the new border runs
-//! along region lines. A region that one side owns by law and the other
-//! side now holds more than half of becomes the holder's by law: it pays
-//! its new owner in full instead of the occupier's half. Divisions left on
-//! the other side's land go home to the nearest land their country holds.
-//! Land held by anyone else is not part of the peace.
+//! peace, a region that one side owns by law and the other side alone holds
+//! more than half of becomes the holder's by law, whole: the cells the
+//! owner still held there go to it too, and it pays its new owner in full
+//! instead of the occupier's half. Whatever else either side holds of the
+//! other's regions goes back, so scattered pockets disappear and the new
+//! border runs along region lines. Divisions left on the other side's land
+//! go home to the nearest land their country holds. Regions of other
+//! countries, and land held by anyone else, are not part of the peace.
 //!
 //! Without regions (`World::use_regions` never called) peace keeps every
 //! cell each side holds.
@@ -127,39 +128,36 @@ impl World {
                 held.entry(region).or_default()[side] += 1;
             }
         }
-        let mut split: BTreeMap<usize, CountryId> = BTreeMap::new();
+        // Who gets the cells the two hold of each region of theirs.
+        let mut settled: BTreeMap<usize, CountryId> = BTreeMap::new();
         let mut handed: BTreeMap<(CountryId, CountryId), u32> = BTreeMap::new();
         for (&region, &[on_a, on_b]) in &held {
             let owner = self.region_owner(&map, region);
-            let winner = match on_a.cmp(&on_b) {
-                std::cmp::Ordering::Greater => a,
-                std::cmp::Ordering::Less => b,
-                // A tie stays with the owner by law, if it is one of the two.
-                std::cmp::Ordering::Equal if owner == b => b,
-                std::cmp::Ordering::Equal => a,
+            let (other, on_other) = match owner {
+                o if o == a => (b, on_b),
+                o if o == b => (a, on_a),
+                // Another country's region: not part of this peace.
+                _ => continue,
             };
-            if on_a > 0 && on_b > 0 {
-                split.insert(region, winner);
-            }
-            let holds_most = u64::from(on_a + on_b) * 2 > u64::from(map.cells[region]);
-            if (owner == a || owner == b) && owner != winner && holds_most {
-                if winner == map.home[region] {
+            if u64::from(on_other) * 2 > u64::from(map.cells[region]) {
+                if other == map.home[region] {
                     self.ceded.remove(&(region as u16));
                 } else {
-                    self.ceded.insert(region as u16, winner);
+                    self.ceded.insert(region as u16, other);
                 }
-                *handed.entry((owner, winner)).or_default() += 1;
+                *handed.entry((owner, other)).or_default() += 1;
+                settled.insert(region, other);
+            } else {
+                settled.insert(region, owner);
             }
         }
-        if !split.is_empty() {
-            for cell in 0..self.control.len() as Cell {
-                let holder = self.control[cell as usize];
-                if (holder == a || holder == b)
-                    && let Some(&winner) = map.region(cell).and_then(|r| split.get(&r))
-                    && holder != winner
-                {
-                    self.set_control(cell, winner);
-                }
+        for cell in 0..self.control.len() as Cell {
+            let holder = self.control[cell as usize];
+            if (holder == a || holder == b)
+                && let Some(&to) = map.region(cell).and_then(|r| settled.get(&r))
+                && holder != to
+            {
+                self.set_control(cell, to);
             }
         }
         if !handed.is_empty() {

@@ -1,8 +1,9 @@
-//! Peace terms in regions. At peace, each region partly held by both sides
-//! goes whole to the side holding more of it; a region the other side holds
-//! more than half of becomes theirs by law and pays them in full. Divisions
-//! left on the other side's land go home. Land held by anyone else is not
-//! part of the peace.
+//! Peace terms in regions. At peace, a region one side owns by law and the
+//! other side alone holds more than half of becomes theirs by law, whole,
+//! and pays them in full; whatever else either side holds of the other's
+//! regions goes back. A third country's region both hold parts of goes
+//! whole to the one holding more of it. Divisions left on the other side's
+//! land go home. Land held by anyone else is not part of the peace.
 
 mod common;
 
@@ -227,9 +228,37 @@ fn pockets_go_back_and_the_troops_come_home() {
 }
 
 #[test]
-fn a_region_needs_more_than_half_of_it_held_to_change_hands() {
-    // Russia, also at war with Ukraine, holds half of Kyiv; Poland holds
-    // more of the rest than Ukraine does.
+fn half_of_a_region_is_not_enough() {
+    let s = common::world_2026();
+    let (poland, ukraine) = (country(s, "Poland"), country(s, "Ukraine"));
+    let mut world = World::new(s, 1);
+    world.use_regions(common::regions_2026());
+    order(&mut world, poland, Command::DeclareWar { target: ukraine });
+    world.step();
+    world
+        .spawn_division(poland, cell(s, 30.35, 50.45), 10_000)
+        .unwrap();
+    run(&mut world, 2);
+    let city = cells_of(region("UKR-4826"));
+    assert_eq!((held_by(&world, &city, poland), city.len()), (10, 20));
+    let events = make_peace(&mut world, ukraine, poland);
+    assert!(
+        !events
+            .iter()
+            .any(|e| matches!(e, Event::RegionsCeded { .. }))
+    );
+    assert_eq!(
+        held_by(&world, &city, ukraine),
+        city.len(),
+        "it all goes back"
+    );
+}
+
+#[test]
+fn a_region_needs_more_than_half_of_it_held_by_the_winner_alone() {
+    // Russia, also at war with Ukraine, holds 6 of Kyiv's 20 cells, Poland
+    // 8 and Ukraine 6: the two at peace hold most of it together, but
+    // Poland alone does not.
     let s = common::world_2026();
     let (poland, ukraine, russia) = (
         country(s, "Poland"),
@@ -242,46 +271,41 @@ fn a_region_needs_more_than_half_of_it_held_to_change_hands() {
     order(&mut world, russia, Command::DeclareWar { target: ukraine });
     world.step();
     world
-        .spawn_division(russia, cell(s, 30.52, 50.42), 10_000)
+        .spawn_division(russia, cell(s, 30.30, 50.30), 10_000)
         .unwrap();
     world
-        .spawn_division(poland, cell(s, 30.45, 50.52), 10_000)
+        .spawn_division(poland, cell(s, 30.48, 50.55), 10_000)
         .unwrap();
     run(&mut world, 2);
     let city = cells_of(region("UKR-4826"));
-    let (polish, russian) = (
+    let (polish, ukrainian, russian) = (
         held_by(&world, &city, poland),
+        held_by(&world, &city, ukraine),
         held_by(&world, &city, russia),
     );
-    let ukrainian = held_by(&world, &city, ukraine);
-    assert!(
-        polish > ukrainian && ukrainian > 0,
-        "Poland {polish}, Ukraine {ukrainian}"
-    );
-    assert!(
-        russian * 2 >= city.len(),
-        "Russia holds {russian} of {}",
-        city.len()
-    );
+    assert_eq!((polish, ukrainian, russian, city.len()), (8, 6, 6, 20));
 
     let events = make_peace(&mut world, ukraine, poland);
     assert!(
         !events
             .iter()
             .any(|e| matches!(e, Event::RegionsCeded { .. })),
-        "nobody in this peace holds most of Kyiv"
+        "Poland does not hold most of Kyiv"
     );
     assert!(city.iter().all(|&c| world.owner_by_law(c) == ukraine));
     assert_eq!(
         held_by(&world, &city, poland),
-        polish + ukrainian,
-        "the part held by the two goes to the one holding more of it"
+        0,
+        "Poland gives its part back"
     );
-    assert_eq!(
-        held_by(&world, &city, russia),
-        russian,
-        "Russia's part stays"
+    // Russia, still at war, keeps its part and may have taken a little
+    // more while the peace was offered and answered.
+    let now_russian = held_by(&world, &city, russia);
+    assert!(
+        (russian..russian + 3).contains(&now_russian),
+        "{now_russian}"
     );
+    assert_eq!(held_by(&world, &city, ukraine) + now_russian, city.len());
     assert!(world.at_war(russia, ukraine));
 }
 
