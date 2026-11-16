@@ -5,6 +5,7 @@ use godot::classes::IRefCounted;
 use godot::prelude::*;
 use mw_sim::army::ArmyGroupId;
 use mw_sim::division::{DivisionId, Loss};
+use mw_sim::forces;
 use mw_sim::sandbox::{self, SandboxError};
 use mw_sim::scenario::Scenario;
 use mw_sim::time::Pacer;
@@ -398,6 +399,31 @@ impl MwWorld {
                 .apply_now()
                 .iter()
                 .any(|e| matches!(e, Event::Rejected { .. }))
+    }
+
+    /// Give every country its real starting army from the World Bank force
+    /// snapshot (`world-bank.json.gz`, absolute path). Returns an empty
+    /// string or the error.
+    #[func]
+    fn deploy_forces(&mut self, path: GString) -> GString {
+        let path = path.to_string();
+        let (Some(world), Some(scenario)) = (self.world.as_mut(), self.scenario.as_ref()) else {
+            return GString::from("no game started");
+        };
+        let bound = scenario.bind();
+        let Some(s) = bound.scenario.as_ref() else {
+            return GString::from("no scenario");
+        };
+        let personnel = std::fs::read(&path)
+            .map_err(|e| format!("cannot read {path}: {e}"))
+            .and_then(|bytes| forces::read_personnel(&bytes, s).map_err(|e| e.to_string()));
+        match personnel {
+            Ok(personnel) => {
+                world.deploy_forces(&personnel);
+                GString::new()
+            }
+            Err(message) => GString::from(&message),
+        }
     }
 
     /// Hand a country to the AI (`on`) or take it back (it becomes passive:

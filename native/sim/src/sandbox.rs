@@ -4,7 +4,7 @@
 
 use crate::army::ArmyGroupId;
 use crate::division::DivisionId;
-use crate::front::chain;
+use crate::front::{chain, spread};
 use crate::map::{Cell, MapData};
 use crate::world::{Command, CountryId, Order, World};
 
@@ -115,36 +115,6 @@ pub fn border_war(
         attack,
         defence,
     })
-}
-
-/// Up to `count` cells of `line`, spread as evenly as possible: each next
-/// pick is the cell farthest from all cells picked so far.
-fn spread(map: &MapData, line: &[Cell], count: usize) -> Vec<Cell> {
-    let Some(&first) = line.first() else {
-        return Vec::new();
-    };
-    // Start at one end: the cell farthest from an arbitrary one.
-    let farthest = |from: &dyn Fn(Cell) -> u64| {
-        line.iter()
-            .copied()
-            .max_by_key(|&cell| (from(cell), std::cmp::Reverse(cell)))
-    };
-    let start = farthest(&|cell| map.estimate_m(first, cell)).unwrap_or(first);
-    let mut picked = vec![start];
-    let mut nearest: Vec<u64> = line.iter().map(|&c| map.estimate_m(start, c)).collect();
-    while picked.len() < count.min(line.len()) {
-        let (at, _) = nearest
-            .iter()
-            .enumerate()
-            .max_by_key(|&(i, &d)| (d, std::cmp::Reverse(line[i])))
-            .expect("line is not empty");
-        let next = line[at];
-        picked.push(next);
-        for (d, &cell) in nearest.iter_mut().zip(line) {
-            *d = (*d).min(map.estimate_m(next, cell));
-        }
-    }
-    picked
 }
 
 /// A cell about `ADVANCE_M` from `from`, straight away from the attacker's

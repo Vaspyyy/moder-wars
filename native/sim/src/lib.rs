@@ -7,6 +7,7 @@ mod control;
 pub mod diplomacy;
 pub mod division;
 pub mod economy;
+pub mod forces;
 mod front;
 pub mod map;
 mod movement;
