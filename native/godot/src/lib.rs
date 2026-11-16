@@ -10,6 +10,8 @@ use godot::prelude::*;
 use mw_sim::regions::{self, Region, Regions};
 use mw_sim::scenario::{self, Grid, Scenario};
 
+mod world;
+
 struct ModernWarsExtension;
 
 #[gdextension]
@@ -188,6 +190,16 @@ impl MwScenario {
             .and_then(|s| s.countries.iter().flatten().find(|c| i32::from(c.id) == id))
             .map(|c| GString::from(&c.name))
             .unwrap_or_default()
+    }
+
+    /// A country's id by its English name, or 0 if there is none.
+    #[func]
+    fn country_id(&self, name: GString) -> i32 {
+        let name = name.to_string();
+        self.scenario
+            .as_ref()
+            .and_then(|s| s.countries.iter().flatten().find(|c| c.name == name))
+            .map_or(0, |c| i32::from(c.id))
     }
 
     #[func]

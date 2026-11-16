@@ -122,12 +122,14 @@ impl MapData {
         &self.cities
     }
 
-    fn xy(&self, cell: Cell) -> (i64, i64) {
+    /// Column and row of a cell.
+    pub fn xy(&self, cell: Cell) -> (i64, i64) {
         let width = i64::from(self.grid.width);
         (i64::from(cell) % width, i64::from(cell) / width)
     }
 
-    fn cell(&self, x: i64, y: i64) -> Option<Cell> {
+    /// The cell at a column and row; columns wrap, rows off the grid give `None`.
+    pub fn cell(&self, x: i64, y: i64) -> Option<Cell> {
         let (width, height) = (i64::from(self.grid.width), i64::from(self.grid.height));
         (0..height)
             .contains(&y)
@@ -178,6 +180,11 @@ impl MapData {
             };
             Some(Step { to, sides })
         })
+    }
+
+    /// Width (west to east) and height of a cell on row `y`, in metres.
+    pub fn cell_size_m(&self, y: i64) -> (u32, u32) {
+        (self.ew_m[y as usize], self.ns_m)
     }
 
     /// Metres between neighbouring cells.

@@ -302,3 +302,52 @@ fn a_thousand_divisions_at_war_tick_quickly() {
     // Generous: guards against accidental slowness, not a benchmark.
     assert!(elapsed.as_secs_f64() < 3.0, "48 hours took {elapsed:?}");
 }
+
+#[test]
+fn cell_centres_and_points_agree() {
+    let grid = common::world_2026().grid;
+    assert_eq!(grid.center(0), (-179.95, -89.95));
+    for (lng, lat) in [
+        (21.01, 52.23),
+        (-58.38, -34.6),
+        (179.97, 0.02),
+        (-180.0, 85.0),
+    ] {
+        let cell = grid.cell_at(lng, lat).unwrap();
+        let (x, y) = grid.center(cell);
+        assert!((x - lng).abs() <= 0.05 + 1e-9 && (y - lat).abs() <= 0.05 + 1e-9);
+        assert_eq!(grid.cell_at(x, y), Some(cell));
+    }
+}
+
+#[test]
+fn a_marching_division_is_shown_moving_smoothly_between_cells() {
+    let s = common::world_2026();
+    let poland = country(s, "Poland");
+    let mut world = World::new(s, 1);
+    let start = cell(s, 21.01, 52.23);
+    let d = world.spawn_division(poland, start, 10_000).unwrap();
+    assert_eq!(
+        world.location(world.division(d).unwrap()),
+        s.grid.center(start as usize)
+    );
+    move_to(&mut world, poland, d, start + 15); // due east, still in Poland
+    let mut last = world.location(world.division(d).unwrap());
+    for _ in 0..12 {
+        world.step();
+        let division = world.division(d).unwrap();
+        let (lng, lat) = world.location(division);
+        assert!(
+            lng > last.0,
+            "moved east every hour: {lng} after {}",
+            last.0
+        );
+        assert!((lat - last.1).abs() < 1e-9, "stayed on the row");
+        let (cell_lng, _) = s.grid.center(division.cell as usize);
+        assert!(
+            (cell_lng..cell_lng + 0.1).contains(&lng),
+            "between its cell and the next"
+        );
+        last = (lng, lat);
+    }
+}
