@@ -49,6 +49,17 @@ impl Grid {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    /// The cell containing a point. Longitude wraps; latitudes off the grid give `None`.
+    pub fn cell_at(&self, lng: f64, lat: f64) -> Option<usize> {
+        let lng = (lng + 180.0).rem_euclid(360.0);
+        let x = ((lng / self.res_deg) as usize).min(self.width as usize - 1);
+        let y = (lat + 90.0) / self.res_deg;
+        if !(0.0..f64::from(self.height)).contains(&y) {
+            return None;
+        }
+        Some(y as usize * self.width as usize + x)
+    }
 }
 
 #[derive(Debug, Clone)]

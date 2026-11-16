@@ -12,3 +12,8 @@ opt-level = 1
 
 [profile.dev.package."*"]
 opt-level = 3
+
+# The simulation is small to compile but does the heavy lifting at startup
+# (decoding the map, building regions), so optimize it in debug builds too.
+[profile.dev.package.mw-sim]
+opt-level = 3
