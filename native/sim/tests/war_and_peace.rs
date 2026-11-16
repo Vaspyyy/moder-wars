@@ -1,6 +1,7 @@
 //! War and peace. A country at war can offer peace; the other side accepts
 //! or refuses, and an unanswered offer runs out after two weeks. Each pair
-//! of countries makes peace on its own, and both keep the land they hold.
+//! of countries makes peace on its own; without a region map both keep the
+//! land they hold (`peace_terms.rs` covers peace in regions).
 //! A country that has lost its capital and holds less than half of its own
 //! land (by what it produces) capitulates: all its wars end and its
 //! divisions lay down their arms.
@@ -329,7 +330,7 @@ fn peace_offers_survive_a_save() {
     } = war();
     order(&mut world, ukraine, Command::OfferPeace { to: poland });
     world.step();
-    let mut loaded = save::load(&save::save(&world), s).unwrap();
+    let mut loaded = save::load(&save::save(&world), s, None).unwrap();
     assert!(loaded == world);
     order(
         &mut loaded,

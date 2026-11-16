@@ -1,6 +1,8 @@
 //! Save games: `MWSAVE`, a little-endian format version, then the gzipped
 //! world state (postcard encoding). The scenario itself is not stored; a save
 //! remembers the scenario's fingerprint and only loads with that scenario.
+//! Likewise a game that settles peace terms in regions only loads with the
+//! same region map.
 
 use std::fmt;
 use std::io::{Read, Write};
@@ -9,13 +11,14 @@ use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 
+use crate::regions::Regions;
 use crate::scenario::Scenario;
 use crate::world::World;
 
 const MAGIC: &[u8; 6] = b"MWSAVE";
 /// 2: divisions. 3: army groups. 4: economy. 5: peace offers. 6: the AI
-/// (divisions remember a target out of reach).
-const VERSION: u16 = 6;
+/// (divisions remember a target out of reach). 7: peace terms in regions.
+const VERSION: u16 = 7;
 
 #[derive(Debug)]
 pub enum SaveError {
@@ -23,6 +26,10 @@ pub enum SaveError {
     UnsupportedVersion(u16),
     /// The save belongs to a different scenario (or a changed scenario file).
     WrongScenario,
+    /// The game settles peace in regions, and no region map was given.
+    NeedsRegions,
+    /// The region map is not the one the game was saved with.
+    WrongRegions,
     Corrupt(String),
 }
 
@@ -32,6 +39,8 @@ impl fmt::Display for SaveError {
             Self::NotASave => write!(f, "not a Modern Wars save"),
             Self::UnsupportedVersion(v) => write!(f, "save format version {v} is not supported"),
             Self::WrongScenario => write!(f, "the save belongs to a different scenario"),
+            Self::NeedsRegions => write!(f, "the save needs the region map it was made with"),
+            Self::WrongRegions => write!(f, "the save was made with a different region map"),
             Self::Corrupt(why) => write!(f, "the save is damaged: {why}"),
         }
     }
@@ -51,7 +60,13 @@ pub fn save(world: &World) -> Vec<u8> {
     gzip.finish().expect("writing to memory cannot fail")
 }
 
-pub fn load(bytes: &[u8], scenario: &Scenario) -> Result<World, SaveError> {
+/// Load a save made on `scenario`. `regions` is needed when the game settles
+/// peace terms in regions, and ignored otherwise.
+pub fn load(
+    bytes: &[u8],
+    scenario: &Scenario,
+    regions: Option<&Regions>,
+) -> Result<World, SaveError> {
     if bytes.len() < MAGIC.len() + 2 || &bytes[..MAGIC.len()] != MAGIC {
         return Err(SaveError::NotASave);
     }
@@ -91,5 +106,25 @@ pub fn load(bytes: &[u8], scenario: &Scenario) -> Result<World, SaveError> {
         ));
     }
     world.attach(scenario);
+    if let Some(fingerprint) = world.regions_fingerprint {
+        let regions = regions.ok_or(SaveError::NeedsRegions)?;
+        if regions.fingerprint() != fingerprint {
+            return Err(SaveError::WrongRegions);
+        }
+        if world
+            .ceded
+            .keys()
+            .any(|&region| usize::from(region) >= regions.list.len())
+        {
+            return Err(SaveError::Corrupt(
+                "a handed-over region does not exist".into(),
+            ));
+        }
+        world.attach_regions(regions);
+    } else if !world.ceded.is_empty() {
+        return Err(SaveError::Corrupt(
+            "regions were handed over without a region map".into(),
+        ));
+    }
     Ok(world)
 }

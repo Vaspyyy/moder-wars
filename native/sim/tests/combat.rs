@@ -297,7 +297,7 @@ fn a_battle_replays_exactly_and_survives_a_save() {
 
     let (mut interrupted, _, _) = battle(7, 3, 1, f.defended, f.staging);
     run(&mut interrupted, 30);
-    let mut resumed = save::load(&save::save(&interrupted), s).unwrap();
+    let mut resumed = save::load(&save::save(&interrupted), s, None).unwrap();
     run(&mut resumed, 60);
     assert!(resumed == straight, "saving mid-battle changed the outcome");
 

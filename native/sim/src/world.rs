@@ -7,7 +7,7 @@
 //! was faster. Same seed + same orders = same world, which makes replays,
 //! saves and AI testing straightforward.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -20,6 +20,7 @@ use crate::map::{Cell, MapData};
 use crate::path;
 use crate::rng::Rng;
 use crate::scenario::Scenario;
+use crate::terms::RegionMap;
 use crate::time::{Date, GameTime, time_at};
 
 pub type CountryId = u16;
@@ -157,6 +158,12 @@ pub enum Event {
     Capitulated {
         country: CountryId,
     },
+    /// A peace handed `regions` regions that `from` owned by law to `to`.
+    RegionsCeded {
+        from: CountryId,
+        to: CountryId,
+        regions: u32,
+    },
 }
 
 /// Why an order had no effect.
@@ -226,9 +233,17 @@ pub struct World {
     /// Orders not applied yet, sorted by (tick, country, seq).
     pending: Vec<Queued>,
     next_seq: u64,
+    /// Regions a peace handed to a new owner by law: region index -> owner.
+    pub(crate) ceded: BTreeMap<u16, CountryId>,
+    /// Set when peace terms count regions; a save only loads with the same
+    /// region map.
+    pub(crate) regions_fingerprint: Option<u64>,
     /// The fixed map, rebuilt from the scenario when a save loads.
     #[serde(skip)]
     pub(crate) map: Arc<MapData>,
+    /// The region map, given again when a save loads.
+    #[serde(skip)]
+    pub(crate) regions: Option<Arc<RegionMap>>,
 }
 
 /// Used when a scenario has no start date.
@@ -273,7 +288,10 @@ impl World {
             offers: Vec::new(),
             pending: Vec::new(),
             next_seq: 0,
+            ceded: BTreeMap::new(),
+            regions_fingerprint: None,
             map: Arc::new(MapData::new(scenario)),
+            regions: None,
         };
         world.count_output();
         world

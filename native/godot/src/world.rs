@@ -60,13 +60,18 @@ impl MwWorld {
     const MOVING: i32 = MOVING as i32;
 
     /// Start a new game on a loaded scenario. Returns false if it has none.
+    /// With the scenario's regions loaded, peace terms count whole regions.
     #[func]
     fn start(&mut self, scenario: Gd<MwScenario>, seed: i64) -> bool {
         let started = {
             let bound = scenario.bind();
             bound.scenario.as_ref().map(|s| {
                 self.shown = s.control.clone();
-                World::new(s, seed as u64)
+                let mut world = World::new(s, seed as u64);
+                if let Some(regions) = bound.regions.as_ref() {
+                    world.use_regions(regions);
+                }
+                world
             })
         };
         self.world = started;
@@ -694,6 +699,13 @@ fn describe(scenario: &Scenario, world: &World, event: &Event) -> Option<String>
             format!("{} refused peace with {}", name(*to), name(*from))
         }
         Event::Capitulated { country } => format!("{} capitulated", name(*country)),
+        Event::RegionsCeded { from, to, regions } => format!(
+            "{} ceded {} {} to {}",
+            name(*from),
+            regions,
+            if *regions == 1 { "region" } else { "regions" },
+            name(*to)
+        ),
         Event::DivisionRetreated { division, .. } => {
             format!("{} fell back", division_name(*division))
         }

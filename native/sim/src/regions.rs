@@ -69,6 +69,25 @@ impl Regions {
     pub fn region_of_cell(&self, cell: usize) -> Option<&Region> {
         self.index_of_cell(cell).map(|index| &self.list[index])
     }
+
+    /// FNV-1a over the region ids and the cell map: two region maps with
+    /// the same fingerprint settle peace terms the same way.
+    pub fn fingerprint(&self) -> u64 {
+        let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+        let mut eat = |byte: u8| {
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(0x0100_0000_01b3);
+        };
+        for region in &self.list {
+            region.id.bytes().for_each(&mut eat);
+            eat(0);
+            region.home.to_le_bytes().into_iter().for_each(&mut eat);
+        }
+        for value in &self.cell_region {
+            value.to_le_bytes().into_iter().for_each(&mut eat);
+        }
+        hash
+    }
 }
 
 #[derive(Debug)]

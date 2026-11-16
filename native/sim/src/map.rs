@@ -175,6 +175,26 @@ impl MapData {
         self.de_jure.get(cell as usize).copied().unwrap_or(0)
     }
 
+    /// Every land cell that produces anything, with what it produces (as
+    /// `value_k`), in cell order: one pass instead of a lookup per cell.
+    pub fn land_values(&self) -> impl Iterator<Item = (Cell, u64)> + '_ {
+        let mut cities = self.cities.iter().peekable();
+        (0..self.land.len() as Cell).filter_map(move |cell| {
+            let mut from_cities = 0;
+            while let Some(city) = cities.next_if(|c| c.cell <= cell) {
+                if city.cell == cell {
+                    from_cities += u64::from(city.value_k);
+                }
+            }
+            if !self.land[cell as usize] {
+                return None;
+            }
+            let owner = usize::from(self.de_jure[cell as usize]);
+            let value = u64::from(self.land_value_k.get(owner).copied().unwrap_or(0)) + from_cities;
+            (value > 0).then_some((cell, value))
+        })
+    }
+
     /// What `cell` produces for its owner by law, thousands of dollars a day.
     pub fn value_k(&self, cell: Cell) -> u64 {
         if !self.is_land(cell) {

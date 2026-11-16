@@ -189,7 +189,7 @@ fn save_and_load_round_trip() {
     scripted(&mut world, 50);
     world.submit(declare(80, RUSSIA, POLAND)).unwrap(); // still pending
     let bytes = save::save(&world);
-    let loaded = save::load(&bytes, common::world_2026()).expect("load");
+    let loaded = save::load(&bytes, common::world_2026(), None).expect("load");
     assert!(loaded == world, "loaded world differs");
 }
 
@@ -202,7 +202,7 @@ fn saving_and_continuing_matches_never_stopping() {
     scripted(&mut first, 120);
     let bytes = save::save(&first);
     drop(first);
-    let mut resumed = save::load(&bytes, common::world_2026()).expect("load");
+    let mut resumed = save::load(&bytes, common::world_2026(), None).expect("load");
     scripted(&mut resumed, 300);
 
     assert!(
@@ -215,14 +215,14 @@ fn saving_and_continuing_matches_never_stopping() {
 fn a_save_only_loads_with_its_own_scenario() {
     let bytes = save::save(&world());
     assert!(matches!(
-        save::load(&bytes, common::ukraine_2023()),
+        save::load(&bytes, common::ukraine_2023(), None),
         Err(save::SaveError::WrongScenario)
     ));
     assert!(matches!(
-        save::load(b"not a save", common::world_2026()),
+        save::load(b"not a save", common::world_2026(), None),
         Err(save::SaveError::NotASave)
     ));
-    assert!(save::load(&bytes[..bytes.len() / 2], common::world_2026()).is_err());
+    assert!(save::load(&bytes[..bytes.len() / 2], common::world_2026(), None).is_err());
 }
 
 #[test]
@@ -230,7 +230,7 @@ fn saves_are_small_and_quick() {
     let world = world();
     let started = std::time::Instant::now();
     let bytes = save::save(&world);
-    let loaded = save::load(&bytes, common::world_2026()).unwrap();
+    let loaded = save::load(&bytes, common::world_2026(), None).unwrap();
     let elapsed = started.elapsed();
     assert!(loaded == world);
     eprintln!("save: {} KB, save + load {elapsed:?}", bytes.len() / 1024);

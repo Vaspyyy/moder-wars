@@ -287,7 +287,7 @@ fn ai_wars_replay_exactly_and_survive_a_save() {
         match save_after {
             Some(hours) => {
                 run(&mut world, hours);
-                let mut resumed = save::load(&save::save(&world), s).unwrap();
+                let mut resumed = save::load(&save::save(&world), s, None).unwrap();
                 run(&mut resumed, 20 * 24 - hours);
                 resumed
             }

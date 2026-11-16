@@ -2,12 +2,13 @@
 //!
 //! A country at war can offer peace to an enemy; the enemy accepts or
 //! refuses, and an offer nobody answers runs out after `OFFER_DAYS`. Each
-//! pair of countries makes peace on its own. Peace keeps the land each side
-//! holds (handing over whole regions by law comes with region-based terms).
+//! pair of countries makes peace on its own, and the land between them is
+//! settled in whole regions (`terms.rs`).
 //!
 //! Once a day, a country at war that has lost its capital and holds less
 //! than half of its own land (by what that land produces) capitulates: all
-//! its wars end and its divisions lay down their arms.
+//! its wars end, settled the same way, and its divisions lay down their
+//! arms.
 
 use serde::{Deserialize, Serialize};
 
@@ -61,19 +62,21 @@ impl World {
             .map_err(|_| Rejection::NoOffer)?;
         self.offers.remove(at);
         if accept {
-            self.end_war(from, to);
             events.push(Event::PeaceMade { from, to });
+            self.end_war(from, to, events);
         } else {
             events.push(Event::PeaceRefused { from, to });
         }
         Ok(())
     }
 
-    /// End the war between two countries and drop offers between them.
-    fn end_war(&mut self, a: CountryId, b: CountryId) {
+    /// End the war between two countries, drop offers between them and
+    /// settle the land.
+    fn end_war(&mut self, a: CountryId, b: CountryId, events: &mut Vec<Event>) {
         self.wars.remove(&(a.min(b), a.max(b)));
         self.offers
             .retain(|o| !((o.from == a && o.to == b) || (o.from == b && o.to == a)));
+        self.settle_regions(a, b, events);
     }
 
     /// Drop offers older than `OFFER_DAYS`.
@@ -121,11 +124,11 @@ impl World {
                 _ => None,
             })
             .collect();
+        events.push(Event::Capitulated { country });
         for enemy in enemies {
-            self.end_war(country, enemy);
+            self.end_war(country, enemy, events);
         }
         self.offers.retain(|o| o.from != country && o.to != country);
-        events.push(Event::Capitulated { country });
         let surrendering: Vec<usize> = (0..self.divisions.len())
             .filter(|&i| self.divisions[i].country == country)
             .collect();
