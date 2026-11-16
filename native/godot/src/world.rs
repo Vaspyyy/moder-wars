@@ -341,6 +341,65 @@ impl MwWorld {
         })
     }
 
+    /// A country's economy as a dictionary: `income_k` (thousands of
+    /// dollars a day after mobilization), `recruiting` and `equipment`
+    /// (budget percent), `mobilization` (0 to 3), `manpower`,
+    /// `recruit_fund_k`, `equipment_k`. Empty for an unknown country.
+    #[func]
+    fn economy(&self, country: i32) -> VarDictionary {
+        let mut entry = VarDictionary::new();
+        let Some(e) = self
+            .world
+            .as_ref()
+            .and_then(|w| w.economy(u16::try_from(country).ok()?))
+        else {
+            return entry;
+        };
+        entry.set("income_k", e.income_k());
+        entry.set("recruiting", i64::from(e.budget.recruiting));
+        entry.set("equipment", i64::from(e.budget.equipment));
+        entry.set("mobilization", i64::from(e.mobilization));
+        entry.set("manpower", e.manpower() as i64);
+        entry.set("recruit_fund_k", e.recruit_fund_k);
+        entry.set("equipment_k", e.equipment_k);
+        entry
+    }
+
+    /// Set a country's budget shares (percent). Returns whether it was taken.
+    #[func]
+    fn set_budget(&mut self, country: i32, recruiting: i32, equipment: i32) -> bool {
+        let (Ok(country), Ok(recruiting), Ok(equipment)) = (
+            u16::try_from(country),
+            u8::try_from(recruiting),
+            u8::try_from(equipment),
+        ) else {
+            return false;
+        };
+        self.order(
+            country,
+            Command::SetBudget {
+                recruiting,
+                equipment,
+            },
+        ) && !self
+            .apply_now()
+            .iter()
+            .any(|e| matches!(e, Event::Rejected { .. }))
+    }
+
+    /// Set a country's mobilization level (0 to 3). Returns whether it was taken.
+    #[func]
+    fn set_mobilization(&mut self, country: i32, level: i32) -> bool {
+        let (Ok(country), Ok(level)) = (u16::try_from(country), u8::try_from(level)) else {
+            return false;
+        };
+        self.order(country, Command::SetMobilization { level })
+            && !self
+                .apply_now()
+                .iter()
+                .any(|e| matches!(e, Event::Rejected { .. }))
+    }
+
     /// Every army group as a dictionary: `id`, `country`, `divisions`
     /// (ids), and `front` and `arrow` as (longitude, latitude) points.
     #[func]
@@ -497,6 +556,9 @@ fn describe(scenario: &Scenario, world: &World, event: &Event) -> Option<String>
             format!("{} formed army group {}", name(*country), group.0)
         }
         Event::ArrowReached { group } => format!("Army group {} reached its objective", group.0),
+        Event::DivisionRecruited { division, country } => {
+            format!("{} raised division {}", name(*country), division.0)
+        }
         Event::DivisionRetreated { division, .. } => {
             format!("{} fell back", division_name(*division))
         }

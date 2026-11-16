@@ -40,11 +40,15 @@ That puts 24 German and 12 French divisions on their border, each side as one ar
 | R, then drag | draw the selected group's arrow into enemy land |
 | X | take the selected group's arrow away |
 | right-click | send the selected divisions there directly (takes them out of their group) |
+| B | cycle the selected division's country's budget: peace, war, all-out |
+| M | cycle its mobilization: peacetime, partial, general, total |
 | Esc | stop drawing, or clear the selection |
 | drag, WASD or arrows | pan |
 | wheel, + or - | zoom |
 
 A marker is a box in the country's colour with a bar for the soldiers left. An orange frame means it is fighting, a red corner means it is cut off from supply. A front is a thick line in the group's colour (gold when selected), an arrow is orange.
+
+The line above the credit shows the selected country's income, budget, mobilization and the men it can still draft. With a recruiting budget, new divisions appear at the capital once a day (a number shows how many stand together).
 
 How a group behaves (details in `sim/src/army.rs`): without an arrow it spreads evenly along its front and holds. With an arrow it gathers on the stretch of front near the arrow and attacks cell by cell in the arrow's direction, the front bulging forward with it, until the arrow's tip is taken; then it holds again. The drawing controls are a stand-in until the real interface is designed.
 

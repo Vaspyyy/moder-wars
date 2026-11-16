@@ -12,6 +12,9 @@ extends Node2D
 ## takes them out of their group. Esc cancels drawing, then clears the
 ## selection. Orders take effect at once, even while paused.
 ##
+## Economy (stand-in controls): with a division selected, B cycles its
+## country's budget (peace, war, all-out) and M its mobilization level.
+##
 ## Command-line options (after `--`):
 ##   --scenario=<name>        package in assets/maps/compiled (default world-map-2026-v3)
 ##   --view=<lng>,<lat>,<zoom> start the camera here
@@ -35,6 +38,11 @@ const CLICK_SLOP := 5.0
 const FEED_LINES := 6
 ## Seconds between uploads of the control map to the GPU while it changes.
 const CONTROL_UPLOAD_EVERY := 0.15
+## Budget presets for B: [recruiting %, equipment %] and their names.
+const BUDGETS := [[0, 10], [25, 15], [50, 20]]
+const BUDGET_NAMES := ["peace budget", "war budget", "all-out budget"]
+const MOBILIZATION_NAMES := ["peacetime", "partial mobilization", "general mobilization",
+	"total mobilization"]
 
 var scenario := MwScenario.new()
 var sim := MwWorld.new()
@@ -181,8 +189,8 @@ func _build_ui() -> void:
 	details.position = Vector2(16, screen.y - 58)
 	help.add_theme_font_size_override("font_size", 14)
 	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	help.position = Vector2(screen.x - 716, screen.y - 30)
-	help.size = Vector2(700, 20)
+	help.position = Vector2(screen.x - 716, screen.y - 50)
+	help.size = Vector2(700, 40)
 	_show_help()
 
 
@@ -289,9 +297,37 @@ func _show_details() -> void:
 			scenario.country_name(int(data[i + 1])), int(data[i]),
 			roundi(data[i + 4] * 100.0), roundi(data[i + 5] * 100.0), state])
 	if lines.size() > 1:
-		details.text = "%d divisions selected" % lines.size()
-	else:
-		details.text = "\n".join(lines)
+		lines = PackedStringArray(["%d divisions selected" % lines.size()])
+	var country := _selected_country()
+	if country != 0:
+		var e: Dictionary = sim.economy(country)
+		var budget := "%d%% recruiting, %d%% equipment" % [e["recruiting"], e["equipment"]]
+		for i in BUDGETS.size():
+			if BUDGETS[i][0] == int(e["recruiting"]) and BUDGETS[i][1] == int(e["equipment"]):
+				budget = BUDGET_NAMES[i]
+		lines.append("%s  ·  income $%.2f bn a day  ·  %s  ·  %s  ·  %s men to draft" % [
+			scenario.country_name(country), float(e["income_k"]) / 1e6, budget,
+			MOBILIZATION_NAMES[int(e["mobilization"])], _thousands(int(e["manpower"]))])
+	details.text = "\n".join(lines)
+	details.position.y = get_viewport_rect().size.y - 36 - 22 * lines.size()
+
+
+## The country of the first selected division, or 0.
+func _selected_country() -> int:
+	var stride := MwWorld.DIVISION_STRIDE
+	for i in range(0, markers.data.size(), stride):
+		if markers.selected.has(int(markers.data[i])):
+			return int(markers.data[i + 1])
+	return 0
+
+
+func _thousands(value: int) -> String:
+	var text := str(value)
+	var out := ""
+	while text.length() > 3:
+		out = "," + text.right(3) + out
+		text = text.left(text.length() - 3)
+	return text + out
 
 
 func _show_help() -> void:
@@ -301,8 +337,8 @@ func _show_help() -> void:
 		"arrow":
 			help.text = "Drawing an arrow: drag from the front into enemy land  ·  Esc cancels"
 		_:
-			help.text = ("Space pause  ·  1-5 speed  ·  click select  ·  G group  ·  F front  ·  "
-				+ "R arrow  ·  X no arrow  ·  right-click move  ·  Esc clear")
+			help.text = ("Space pause  ·  1-5 speed  ·  click select  ·  right-click move  ·  Esc clear\n"
+				+ "G group  ·  F front  ·  R arrow  ·  X drop arrow  ·  B budget  ·  M mobilize")
 
 
 ## Click: select a division, or its whole army group. Shift-click adds or
@@ -439,6 +475,19 @@ func _unhandled_input(event: InputEvent) -> void:
 			_start_drawing("front")
 		elif key == KEY_R:
 			_start_drawing("arrow")
+		elif key == KEY_B and _selected_country() != 0:
+			var country := _selected_country()
+			var now: Dictionary = sim.economy(country)
+			var next := 0
+			for i in BUDGETS.size():
+				if BUDGETS[i][0] == int(now["recruiting"]) and BUDGETS[i][1] == int(now["equipment"]):
+					next = (i + 1) % BUDGETS.size()
+			sim.set_budget(country, BUDGETS[next][0], BUDGETS[next][1])
+			_refresh_sim()
+		elif key == KEY_M and _selected_country() != 0:
+			var country := _selected_country()
+			sim.set_mobilization(country, (int(sim.economy(country)["mobilization"]) + 1) % 4)
+			_refresh_sim()
 		elif key == KEY_X and markers.selected_group != 0:
 			sim.draw_arrow(markers.selected_group, PackedVector2Array())
 			_refresh_sim()

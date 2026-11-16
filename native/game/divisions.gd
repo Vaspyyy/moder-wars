@@ -2,8 +2,8 @@ extends Node2D
 ## Division markers and army group lines drawn over the map.
 ##
 ## A division is a small box in its country's colour with a strength bar
-## under it. Fighting divisions get an orange frame, cut-off ones a red
-## corner. Selected divisions are framed in white and show their route.
+## under it, and a number when several stand together. Fighting divisions
+## get an orange frame, cut-off ones a red corner. Selected divisions are framed in white and show their route.
 ## An army group's front is a thick line in its country's colour (white when
 ## the group is selected, gold); its arrow is drawn in orange with a head at
 ## the tip. Sizes are in screen pixels, so everything looks the same at any zoom.
@@ -120,6 +120,11 @@ func _draw_arrow(line: PackedVector2Array, color: Color) -> void:
 func _draw_markers() -> void:
 	var stride := MwWorld.DIVISION_STRIDE
 	var size := Vector2(WIDTH, HEIGHT) * pixel
+	# Divisions standing together are drawn once, with how many there are.
+	var stacks := {}
+	for id in positions:
+		var at: Vector2 = positions[id]
+		stacks[at] = stacks.get(at, 0) + 1
 	for i in range(0, data.size(), stride):
 		var id := int(data[i])
 		var at: Vector2 = positions[id]
@@ -139,3 +144,12 @@ func _draw_markers() -> void:
 		draw_rect(bar.grow(0.75 * pixel), OUTLINE)
 		draw_rect(Rect2(bar.position, Vector2(bar.size.x * clampf(data[i + 4], 0, 1), bar.size.y)),
 			Color(0.85, 0.9, 0.8))
+		var count: int = stacks.get(at, 1)
+		if count > 1:
+			stacks[at] = 1 # label each stack once
+			var font := ThemeDB.fallback_font
+			var text_at := at + Vector2(size.x / 2 + 2.0 * pixel, size.y / 2)
+			draw_set_transform(text_at, 0.0, Vector2(pixel, pixel))
+			draw_string_outline(font, Vector2.ZERO, str(count), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, 4, OUTLINE)
+			draw_string(font, Vector2.ZERO, str(count), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, SELECTED)
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
