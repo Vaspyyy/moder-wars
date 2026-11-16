@@ -122,6 +122,33 @@ impl MwScenario {
             .unwrap_or_default()
     }
 
+    /// The scenario's start date as written in the package, e.g.
+    /// "2026-10-21", or empty.
+    #[func]
+    fn start_date(&self) -> GString {
+        self.scenario
+            .as_ref()
+            .and_then(|s| s.info.start_date.as_deref())
+            .map(GString::from)
+            .unwrap_or_default()
+    }
+
+    /// Where a country's capital is, as (longitude, latitude); NAN for a
+    /// country without one.
+    #[func]
+    fn country_capital(&self, id: i32) -> Vector2 {
+        self.scenario
+            .as_ref()
+            .and_then(|s| {
+                s.cities
+                    .iter()
+                    .find(|c| i32::from(c.owner_id) == id && c.is_capital)
+            })
+            .map_or(Vector2::new(f32::NAN, f32::NAN), |c| {
+                Vector2::new(c.lng as f32, c.lat as f32)
+            })
+    }
+
     #[func]
     fn attribution(&self) -> GString {
         self.scenario

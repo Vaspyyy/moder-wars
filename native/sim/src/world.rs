@@ -411,6 +411,42 @@ impl World {
         self.wars.contains(&pair(a, b))
     }
 
+    /// The countries at war with `country`, in id order.
+    pub fn enemies(&self, country: CountryId) -> Vec<CountryId> {
+        let mut enemies: Vec<CountryId> = self
+            .wars
+            .iter()
+            .filter_map(|&(a, b)| match country {
+                c if c == a => Some(b),
+                c if c == b => Some(a),
+                _ => None,
+            })
+            .collect();
+        enemies.sort_unstable();
+        enemies
+    }
+
+    /// The countries holding land next to land `country` holds, with the
+    /// length of each shared border in cell sides, longest first (ties in
+    /// id order). Only land is ever held, so held cells are land.
+    pub fn neighbors(&self, country: CountryId) -> Vec<(CountryId, u32)> {
+        let mut shared: BTreeMap<CountryId, u32> = BTreeMap::new();
+        for (cell, &holder) in self.control.iter().enumerate() {
+            if holder != country {
+                continue;
+            }
+            for next in self.map.sides(cell as Cell) {
+                let other = self.control[next as usize];
+                if other != 0 && other != country {
+                    *shared.entry(other).or_default() += 1;
+                }
+            }
+        }
+        let mut neighbors: Vec<(CountryId, u32)> = shared.into_iter().collect();
+        neighbors.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        neighbors
+    }
+
     pub fn set_controller(
         &mut self,
         id: CountryId,

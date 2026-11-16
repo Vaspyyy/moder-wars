@@ -18,6 +18,8 @@ uniform vec4 coast_color : source_color = vec4(0.62, 0.72, 0.80, 1.0);
 uniform float max_lat = 85.0511;
 uniform int hovered_id = -1;
 uniform int hovered_region = -1;
+// The country chosen on the pick screen, drawn a little lighter.
+uniform int selected_id = -1;
 
 // Cell coordinates (fractional) for a quad UV.
 vec2 cell_coords(vec2 uv, vec2 size) {
@@ -66,6 +68,9 @@ void fragment() {
 		color = unclaimed_color;
 	} else {
 		color = texelFetch(palette, ivec2(c.x, 0), 0);
+		if (c.x == selected_id) {
+			color.rgb = mix(color.rgb, vec3(1.0), 0.14);
+		}
 		bool hovered = has_regions ? (c.z > 0 && c.z == hovered_region) : (c.x == hovered_id);
 		if (hovered) {
 			color.rgb = mix(color.rgb, vec3(1.0), 0.22);

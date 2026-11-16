@@ -1,10 +1,14 @@
 extends Node2D
-## First native screen: loads a real scenario through the Rust extension,
-## draws the political map with a shader and runs the simulation on it.
+## The game: loads a real scenario through the Rust extension, draws the
+## political map with a shader and runs the simulation on it. It opens on
+## the pick screen (every country with its real army, paused): click a
+## country, then "Lead" it; the AI runs every other country. --war without
+## --lead opens the viewer instead, where any country's divisions take orders.
 ## Pan by dragging with any mouse button or with WASD/arrows, zoom with the
 ## wheel or +/-. Space pauses and resumes, 1-5 set the speed.
 ##
-## Armies: click a division to select it, or its whole army group if it is in
+## Armies: click a division to select it (only your own while you lead a
+## country), or its whole army group if it is in
 ## one (Shift-click adds or removes single divisions). G makes the selection an
 ## army group. F then a left-drag draws the selected group's front along a
 ## border; R then a left-drag draws its arrow into enemy land; X removes the
@@ -12,17 +16,20 @@ extends Node2D
 ## takes them out of their group. Esc cancels drawing, then clears the
 ## selection. Orders take effect at once, even while paused.
 ##
-## Economy (stand-in controls): with a division selected, B cycles its
-## country's budget (peace, war, all-out) and M its mobilization level.
-## AI: I hands the selected division's country to the AI or takes it back
-## (with --ai both sides of the sandbox war start on the AI).
-## War and peace (stand-in controls): W makes the selected division's country
-## declare war on the country under the mouse, P makes it offer peace to all
-## its enemies, and Y or N accepts or refuses the newest open peace offer on
-## behalf of the country it was made to.
+## The stand-in controls below act for the country you lead, or in the viewer
+## for the selected division's country.
+## Economy (stand-in controls): B cycles the budget (peace, war, all-out) and
+## M the mobilization level.
+## AI: I hands the country to the AI or takes it back (with --ai both sides
+## of the sandbox war start on the AI).
+## War and peace (stand-in controls): W declares war on the country under the
+## mouse, P offers peace to all enemies, and Y or N accepts or refuses the
+## newest open peace offer (made to you while you lead a country).
 ##
 ## Command-line options (after `--`):
 ##   --scenario=<name>        package in assets/maps/compiled (default world-map-2026-v3)
+##   --lead=<country>         skip the pick screen and lead this country
+##   --pick=<country>         on the pick screen, show this country's card (for screenshots)
 ##   --view=<lng>,<lat>,<zoom> start the camera here
 ##   --war=<attacker>,<defender>[,<attackers>,<defenders>]
 ##                            sandbox war along their border, with that many
@@ -31,8 +38,9 @@ extends Node2D
 ##   --speed=<1-5>            starting speed
 ##   --play                   start running (the game starts paused)
 ##   --ai                     hand both sides of the --war sandbox to the AI
-##   --forces                 every country starts with its real army (World Bank
-##                            data); --war then only declares the war
+##   --forces                 with --war: every country starts with its real army
+##                            (World Bank data, always on without --war) and --war
+##                            only declares the war
 ##   --run=<hours>            run the simulation this long before showing it
 ##   --select=<id>,...        select these divisions, or their army groups (for screenshots)
 ##   --screenshot=<path>      save one frame as PNG and quit (for headless checks)
@@ -53,6 +61,11 @@ const BUDGETS := [[0, 10], [25, 15], [50, 20]]
 const BUDGET_NAMES := ["peace budget", "war budget", "all-out budget"]
 const MOBILIZATION_NAMES := ["peacetime", "partial mobilization", "general mobilization",
 	"total mobilization"]
+## How far the camera zooms in on the capital when the player takes a country.
+const LEAD_ZOOM := 5.0
+const Style := preload("res://ui/style.gd")
+const PickScreen := preload("res://ui/pick.gd")
+const TopBar := preload("res://ui/top_bar.gd")
 
 var scenario := MwScenario.new()
 var sim := MwWorld.new()
@@ -82,6 +95,14 @@ var stroke_points := PackedVector2Array()
 var hovered_id := -1
 var hovered_region := -1
 var dragging := false
+var ui_layer := CanvasLayer.new()
+var no_hud := false
+## The country the player leads, or 0 (pick screen or viewer).
+var player := 0
+## The pick screen while it is open.
+var pick: Control = null
+## The bar along the top while the player leads a country.
+var top_bar: PanelContainer = null
 
 
 func _ready() -> void:
@@ -116,6 +137,21 @@ func _ready() -> void:
 	var view: PackedStringArray = String(args.get("view", "15,30,1.2")).split(",")
 	camera.position = _world_from_lng_lat(float(view[0]), float(view[1]))
 	camera.zoom = Vector2.ONE * float(view[2]) * get_viewport_rect().size.x / map_size.x
+	if args.has("lead"):
+		var id := scenario.country_id(args["lead"])
+		if id == 0:
+			push_error("--lead: no country named %s" % args["lead"])
+		else:
+			_lead(id, not args.has("view"))
+	elif not args.has("war"):
+		_open_pick()
+		if args.has("pick"):
+			var id := scenario.country_id(args["pick"])
+			var capital := scenario.country_capital(id)
+			if id == 0 or is_nan(capital.x):
+				push_error("--pick: no country with a capital named %s" % args["pick"])
+			else:
+				_pick_country(id, _world_from_lng_lat(capital.x, capital.y))
 
 	if args.has("probe"):
 		for point in String(args["probe"]).split(";"):
@@ -171,25 +207,29 @@ func _build_map() -> void:
 
 
 func _build_ui() -> void:
-	var layer := CanvasLayer.new()
-	add_child(layer)
-	var no_hud := _parse_args().has("no-hud")
-	for label in [info, credit, clock, feed, details, help]:
+	add_child(ui_layer)
+	no_hud = _parse_args().has("no-hud")
+	for label in [info, clock, feed, details, help]:
 		label.add_theme_color_override("font_outline_color", Color.BLACK)
 		label.add_theme_constant_override("outline_size", 6)
-		layer.add_child(label)
-		# --no-hud is for clean pictures, but the data credits stay (license
-		# requirement).
-		label.visible = label == credit or not no_hud
+		ui_layer.add_child(label)
+		label.visible = not no_hud
 	info.position = Vector2(16, 12)
 	info.add_theme_font_size_override("font_size", 22)
 	info.text = scenario.scenario_name()
-	# License requirement: the data credit stays visible.
+	# License requirement: the data credit stays visible on every screen,
+	# even with --no-hud.
 	credit.text = scenario.attribution()
-	credit.add_theme_font_size_override("font_size", 14)
-	credit.anchor_top = 1.0
-	credit.anchor_bottom = 1.0
-	credit.position = Vector2(16, get_viewport_rect().size.y - 30)
+	credit.add_theme_font_override("font", Style.BODY)
+	credit.add_theme_font_size_override("font_size", 12)
+	credit.add_theme_color_override("font_color", Style.CREDIT)
+	credit.add_theme_stylebox_override("normal", Style.box(Color(Style.PANEL, 0.8), Color.TRANSPARENT, 4, 10, 6))
+	credit.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	credit.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	credit.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	credit.offset_right = -24
+	credit.offset_bottom = -20
+	ui_layer.add_child(credit)
 	var screen := get_viewport_rect().size
 	clock.add_theme_font_size_override("font_size", 22)
 	clock.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -203,15 +243,79 @@ func _build_ui() -> void:
 	details.position = Vector2(16, screen.y - 58)
 	help.add_theme_font_size_override("font_size", 14)
 	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	help.position = Vector2(screen.x - 816, screen.y - 50)
+	help.position = Vector2(screen.x - 816, screen.y - 92)
 	help.size = Vector2(800, 40)
 	_show_help()
 
 
-## Start the simulation, with the sandbox war from --war if given.
+## The pick screen: the world, paused, every label but the credits hidden.
+func _open_pick() -> void:
+	pick = PickScreen.new()
+	pick.scenario = scenario
+	pick.palette = palette
+	pick.to_screen = func(world: Vector2) -> Vector2: return get_canvas_transform() * world
+	pick.setup(scenario.start_date())
+	pick.lead_pressed.connect(func(id: int) -> void: _lead(id, true))
+	ui_layer.add_child(pick)
+	ui_layer.move_child(credit, -1)
+	for label in [info, clock, feed, details, help]:
+		label.visible = false
+	pick.visible = not no_hud
+
+
+## Show a country's card on the pick screen (0 hides it).
+func _pick_country(id: int, world: Vector2) -> void:
+	(map_rect.material as ShaderMaterial).set_shader_parameter("selected_id", id)
+	pick.show_country(id, world, sim.country_info(id) if id > 0 else {})
+
+
+## The player takes `id`: the AI runs everyone else, the top bar replaces the
+## pick screen, and (with `to_capital`) the camera moves to the capital.
+func _lead(id: int, to_capital: bool) -> void:
+	if not sim.lead(id):
+		push_error("cannot lead country %d" % id)
+		return
+	player = id
+	if pick != null:
+		pick.queue_free()
+		pick = null
+	(map_rect.material as ShaderMaterial).set_shader_parameter("selected_id", -1)
+	top_bar = TopBar.new()
+	top_bar.scenario = scenario
+	top_bar.palette = palette
+	top_bar.setup()
+	top_bar.pause_pressed.connect(func() -> void:
+		sim.toggle_pause()
+		_refresh_sim())
+	top_bar.speed_pressed.connect(func(speed: int) -> void:
+		sim.set_speed(speed)
+		_refresh_sim())
+	top_bar.visible = not no_hud
+	ui_layer.add_child(top_bar)
+	for label in [info, feed, details, help]:
+		label.visible = not no_hud
+	clock.visible = false
+	info.position.y = 72
+	feed.position.y = 72
+	markers.selected.clear()
+	markers.selected_group = 0
+	var capital := scenario.country_capital(id)
+	if to_capital and not is_nan(capital.x):
+		var zoom := LEAD_ZOOM * get_viewport_rect().size.x / map_size.x
+		var tween := create_tween().set_parallel().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		tween.tween_property(camera, "position", _world_from_lng_lat(capital.x, capital.y), 0.7)
+		tween.tween_property(camera, "zoom", Vector2(zoom, zoom), 0.7)
+		tween.tween_callback(func() -> void:
+			markers.pixel = 1.0 / camera.zoom.x
+			markers.queue_redraw()).set_delay(0.7)
+	_refresh_sim()
+
+
+## Start the simulation, with the sandbox war from --war if given. Every
+## country gets its real army, except in a --war sandbox without --forces.
 func _start_sim(args: Dictionary) -> void:
 	sim.start(scenario, int(args.get("seed", "1")))
-	if args.has("forces"):
+	if args.has("forces") or not args.has("war"):
 		var error := sim.deploy_forces(ProjectSettings.globalize_path("res://").path_join(
 			"../../assets/data/forces/world-bank.json.gz"))
 		if error != "":
@@ -284,6 +388,13 @@ func _refresh_sim() -> void:
 	_show_feed()
 	var state := "Paused" if sim.is_paused() else "Speed %d" % sim.speed()
 	clock.text = "%s   %s" % [sim.time_text(), state]
+	if top_bar != null:
+		var divisions := 0
+		for i in range(0, markers.data.size(), MwWorld.DIVISION_STRIDE):
+			if int(markers.data[i + 1]) == player:
+				divisions += 1
+		top_bar.show_state(player, sim.economy(player), sim.enemies(player), divisions,
+			sim.time_text(), sim.is_paused(), sim.speed())
 	_show_details()
 
 
@@ -333,7 +444,7 @@ func _show_details() -> void:
 			roundi(data[i + 4] * 100.0), roundi(data[i + 5] * 100.0), state])
 	if lines.size() > 1:
 		lines = PackedStringArray(["%d divisions selected" % lines.size()])
-	var country := _selected_country()
+	var country := _acting_country()
 	if country != 0:
 		var e: Dictionary = sim.economy(country)
 		var budget := "%d%% recruiting, %d%% equipment" % [e["recruiting"], e["equipment"]]
@@ -347,6 +458,12 @@ func _show_details() -> void:
 			roundi(int(e["support"]) / 10.0)])
 	details.text = "\n".join(lines)
 	details.position.y = get_viewport_rect().size.y - 36 - 22 * lines.size()
+
+
+## The country the stand-in controls act for: the one the player leads, or
+## in the viewer the selected division's.
+func _acting_country() -> int:
+	return player if player != 0 else _selected_country()
 
 
 ## The country of the first selected division, or 0.
@@ -383,7 +500,11 @@ func _show_help() -> void:
 ## removes one division and leaves group selection.
 func _select_at(screen_point: Vector2, add: bool) -> void:
 	var world := get_canvas_transform().affine_inverse() * screen_point
-	var id: int = markers.pick(world, 12.0)
+	if pick != null:
+		var country := _country_at(world)
+		_pick_country(country if country > 0 else 0, world)
+		return
+	var id: int = markers.pick(world, 12.0, player)
 	if add:
 		markers.selected_group = 0
 		if id >= 0:
@@ -446,7 +567,7 @@ func _finish_drawing() -> void:
 
 
 func _order_at(screen_point: Vector2) -> void:
-	if markers.selected.is_empty():
+	if markers.selected.is_empty() or pick != null:
 		return
 	var world := get_canvas_transform().affine_inverse() * screen_point
 	var lng_lat := _lng_lat_from_world(world)
@@ -497,6 +618,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			_zoom_at(1.25, get_viewport_rect().size / 2)
 		elif key == KEY_MINUS or key == KEY_KP_SUBTRACT:
 			_zoom_at(0.8, get_viewport_rect().size / 2)
+		elif pick != null:
+			# The pick screen only looks at the map; the game has not started.
+			if key == KEY_ESCAPE:
+				_pick_country(0, Vector2.ZERO)
 		elif key == KEY_SPACE:
 			sim.toggle_pause()
 			_refresh_sim()
@@ -513,8 +638,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_start_drawing("front")
 		elif key == KEY_R:
 			_start_drawing("arrow")
-		elif key == KEY_B and _selected_country() != 0:
-			var country := _selected_country()
+		elif key == KEY_B and _acting_country() != 0:
+			var country := _acting_country()
 			var now: Dictionary = sim.economy(country)
 			var next := 0
 			for i in BUDGETS.size():
@@ -522,27 +647,29 @@ func _unhandled_input(event: InputEvent) -> void:
 					next = (i + 1) % BUDGETS.size()
 			sim.set_budget(country, BUDGETS[next][0], BUDGETS[next][1])
 			_refresh_sim()
-		elif key == KEY_M and _selected_country() != 0:
-			var country := _selected_country()
+		elif key == KEY_M and _acting_country() != 0:
+			var country := _acting_country()
 			sim.set_mobilization(country, (int(sim.economy(country)["mobilization"]) + 1) % 4)
 			_refresh_sim()
-		elif key == KEY_I and _selected_country() != 0:
-			var country := _selected_country()
+		elif key == KEY_I and _acting_country() != 0:
+			var country := _acting_country()
 			var on := not sim.is_ai(country)
 			sim.set_ai(country, on)
 			_add_feed(("%s is now run by the AI" if on else "%s takes orders from you again")
 				% scenario.country_name(country))
 			_refresh_sim()
-		elif key == KEY_W and _selected_country() != 0 and hovered_id > 0:
-			sim.declare_war(_selected_country(), hovered_id)
+		elif key == KEY_W and _acting_country() != 0 and hovered_id > 0:
+			sim.declare_war(_acting_country(), hovered_id)
 			_refresh_sim()
-		elif key == KEY_P and _selected_country() != 0:
-			if sim.offer_peace(_selected_country()) == 0:
-				_add_feed("%s is at war with nobody" % scenario.country_name(_selected_country()))
+		elif key == KEY_P and _acting_country() != 0:
+			if sim.offer_peace(_acting_country()) == 0:
+				_add_feed("%s is at war with nobody" % scenario.country_name(_acting_country()))
 			_refresh_sim()
 		elif key == KEY_Y or key == KEY_N:
 			var newest: Dictionary = {}
 			for offer in sim.peace_offers():
+				if player != 0 and int(offer["to"]) != player:
+					continue
 				if newest.is_empty() or int(offer["tick"]) >= int(newest["tick"]):
 					newest = offer
 			if newest.is_empty():

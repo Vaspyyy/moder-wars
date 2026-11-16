@@ -22,7 +22,9 @@ native/play.sh --watch    # same, then follow main: pull, rebuild and restart wh
 
 Other options go to the game, e.g. `native/play.sh --scenario=ukraine-2023-v3 --view=34,48.5,9`. Close the game window or press Ctrl+C to stop. `--watch` checks every 30 seconds, only fast-forwards, and keeps the old game running if a build fails.
 
-To watch divisions fight, start a sandbox war between two neighbours (names as the scenario spells them):
+The game opens on the world, paused, with every country's real army on its borders. Click a country to see its card (population, economy, forces, borders), then press "Lead" to take it: the camera moves to its capital, the bar along the top shows its date, speed, income, people left to draft, divisions and war support, and the AI runs every other country with the same orders you have. `--lead=Poland` skips the pick screen. While you lead a country, only its divisions take your orders, and the stand-in keys below (B, M, W, P, Y/N, I) act for it.
+
+To watch divisions fight, start a sandbox war between two neighbours (names as the scenario spells them); `--war` opens the viewer, where any country's divisions take orders, unless `--lead` is given too:
 
 ```sh
 native/play.sh --war=Germany,France --view=7.5,49.3,14
@@ -32,6 +34,7 @@ That puts 24 German and 12 French divisions on their border, each side as one ar
 
 | Key or mouse | Does |
 | --- | --- |
+| click a country (pick screen) | show its card; Esc hides it |
 | Space | pause and resume |
 | 1 to 5 | speed: 2, 6, 12, 24 or 72 game hours per second |
 | click a division | select it, or its whole army group (Shift-click adds or removes one division) |
@@ -40,12 +43,12 @@ That puts 24 German and 12 French divisions on their border, each side as one ar
 | R, then drag | draw the selected group's arrow into enemy land |
 | X | take the selected group's arrow away |
 | right-click | send the selected divisions there directly (takes them out of their group) |
-| B | cycle the selected division's country's budget: peace, war, all-out |
+| B | cycle the budget: peace, war, all-out (your country, or in the viewer the selected division's) |
 | M | cycle its mobilization: peacetime, partial, general, total |
-| W | the selected division's country declares war on the country under the mouse |
-| P | the selected division's country offers peace to all its enemies |
-| Y or N | accept or refuse the newest peace offer, for the country it was made to |
-| I | hand the selected division's country to the AI, or take it back |
+| W | declare war on the country under the mouse |
+| P | offer peace to all enemies |
+| Y or N | accept or refuse the newest peace offer (made to you, or in the viewer to anyone) |
+| I | hand the country to the AI, or take it back |
 | F5 or F9 | quick save, or load the quick save (one slot, in Godot's user data folder) |
 | Esc | stop drawing, or clear the selection |
 | drag, WASD or arrows | pan |
@@ -85,6 +88,10 @@ Headless screenshot (no window, no sound; safe while someone plays on the same m
 ```sh
 gamescope --backend headless -W 1600 -H 900 -w 1600 -h 900 -- \
   godot-beta --path game --audio-driver Dummy --resolution 1600x900 -- --screenshot=/tmp/map.png
+# the pick screen with Poland's card:
+gamescope --backend headless -W 1600 -H 900 -w 1600 -h 900 -- \
+  godot-beta --path game --audio-driver Dummy --resolution 1600x900 -- \
+  --view=17,51,6 --pick=Poland --screenshot=/tmp/pick.png
 # four days into the sandbox war, one division selected:
 gamescope --backend headless -W 1600 -H 900 -w 1600 -h 900 -- \
   godot-beta --path game --audio-driver Dummy --resolution 1600x900 -- \

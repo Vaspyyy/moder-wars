@@ -1,6 +1,8 @@
 //! The running simulation, exposed to GDScript. Like the rest of the bridge
 //! it only converts: rules live in `mw-sim`.
 
+use std::collections::BTreeMap;
+
 use godot::classes::IRefCounted;
 use godot::prelude::*;
 use mw_sim::army::ArmyGroupId;
@@ -9,7 +11,7 @@ use mw_sim::forces;
 use mw_sim::sandbox::{self, SandboxError};
 use mw_sim::scenario::Scenario;
 use mw_sim::time::Pacer;
-use mw_sim::world::{Command, Controller, Event, Order, Rejection, World};
+use mw_sim::world::{Command, Controller, CountryId, Event, Order, Rejection, World};
 
 use crate::MwScenario;
 
@@ -31,6 +33,8 @@ pub struct MwWorld {
     shown: Vec<u16>,
     /// Event lines not collected by `take_events` yet.
     log: Vec<String>,
+    /// The force figures `deploy_forces` used, for the country card.
+    forces: BTreeMap<CountryId, forces::Observation>,
     base: Base<RefCounted>,
 }
 
@@ -43,6 +47,7 @@ impl IRefCounted for MwWorld {
             pacer: Pacer::default(),
             shown: Vec::new(),
             log: Vec::new(),
+            forces: BTreeMap::new(),
             base,
         }
     }
@@ -78,6 +83,7 @@ impl MwWorld {
         self.scenario = Some(scenario);
         self.pacer = Pacer::default();
         self.log.clear();
+        self.forces.clear();
         self.world.is_some()
     }
 
@@ -422,12 +428,17 @@ impl MwWorld {
         let Some(s) = bound.scenario.as_ref() else {
             return GString::from("no scenario");
         };
-        let personnel = std::fs::read(&path)
+        let observations = std::fs::read(&path)
             .map_err(|e| format!("cannot read {path}: {e}"))
-            .and_then(|bytes| forces::read_personnel(&bytes, s).map_err(|e| e.to_string()));
-        match personnel {
-            Ok(personnel) => {
+            .and_then(|bytes| forces::read_observations(&bytes, s).map_err(|e| e.to_string()));
+        match observations {
+            Ok(observations) => {
+                let personnel = observations
+                    .iter()
+                    .map(|(&c, o)| (c, o.personnel))
+                    .collect();
                 world.deploy_forces(&personnel);
+                self.forces = observations;
                 GString::new()
             }
             Err(message) => GString::from(&message),
@@ -447,6 +458,76 @@ impl MwWorld {
             Controller::Passive
         };
         world.set_controller(country, controller).is_ok()
+    }
+
+    /// The player leads `country`: it takes orders only from here, and the
+    /// AI runs every other country. Returns false for an unknown country.
+    #[func]
+    fn lead(&mut self, country: i32) -> bool {
+        let (Some(world), Ok(player)) = (self.world.as_mut(), u16::try_from(country)) else {
+            return false;
+        };
+        if world.country(player).is_none() {
+            return false;
+        }
+        let ids: Vec<CountryId> = world.countries().iter().map(|c| c.id).collect();
+        for id in ids {
+            let controller = if id == player {
+                Controller::Passive
+            } else {
+                Controller::Ai
+            };
+            world
+                .set_controller(id, controller)
+                .expect("a country of this world");
+        }
+        true
+    }
+
+    /// What the country card shows, as a dictionary: `population`,
+    /// `economy_k` (what its own land produces in a year, thousands of
+    /// dollars), `divisions`, `personnel` and `personnel_year` (its force
+    /// figure, 0 when unknown or not deployed), `neighbors` (country ids,
+    /// longest border first) and `enemies`. Empty for an unknown country.
+    #[func]
+    fn country_info(&self, country: i32) -> VarDictionary {
+        let mut entry = VarDictionary::new();
+        let Some(world) = self.world.as_ref() else {
+            return entry;
+        };
+        let Some(id) = u16::try_from(country)
+            .ok()
+            .filter(|&c| world.country(c).is_some())
+        else {
+            return entry;
+        };
+        let e = world.economy(id).expect("a country of this world");
+        let forces = self.forces.get(&id);
+        let neighbors: PackedInt32Array = world
+            .neighbors(id)
+            .iter()
+            .map(|&(c, _)| i32::from(c))
+            .collect();
+        entry.set("population", e.population as i64);
+        entry.set("economy_k", e.home_total_k * 365);
+        entry.set(
+            "divisions",
+            world.divisions().iter().filter(|d| d.country == id).count() as i64,
+        );
+        entry.set("personnel", forces.map_or(0, |o| i64::from(o.personnel)));
+        entry.set("personnel_year", forces.map_or(0, |o| i64::from(o.year)));
+        entry.set("neighbors", &neighbors);
+        entry.set("enemies", &self.enemies(country));
+        entry
+    }
+
+    /// The countries at war with `country`.
+    #[func]
+    fn enemies(&self, country: i32) -> PackedInt32Array {
+        let (Some(world), Ok(country)) = (self.world.as_ref(), u16::try_from(country)) else {
+            return PackedInt32Array::new();
+        };
+        world.enemies(country).into_iter().map(i32::from).collect()
     }
 
     #[func]
