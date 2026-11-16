@@ -6,7 +6,8 @@
 //! settled in whole regions (`terms.rs`).
 //!
 //! Once a day, a country at war that has lost its capital and holds less
-//! than half of its own land (by what that land produces) capitulates: all
+//! than half of its own land (by what that land produces), or whose war
+//! support has run out (`support.rs`), capitulates: all
 //! its wars end, settled the same way, and its divisions lay down their
 //! arms.
 
@@ -114,7 +115,7 @@ impl World {
         }
     }
 
-    fn capitulate(&mut self, country: CountryId, events: &mut Vec<Event>) {
+    pub(crate) fn capitulate(&mut self, country: CountryId, events: &mut Vec<Event>) {
         let enemies: Vec<CountryId> = self
             .wars
             .iter()

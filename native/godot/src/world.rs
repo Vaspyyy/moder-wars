@@ -348,9 +348,10 @@ impl MwWorld {
     }
 
     /// A country's economy as a dictionary: `income_k` (thousands of
-    /// dollars a day after mobilization), `recruiting` and `equipment`
-    /// (budget percent), `mobilization` (0 to 3), `manpower`,
-    /// `recruit_fund_k`, `equipment_k`. Empty for an unknown country.
+    /// dollars a day after mobilization), `recruiting`, `equipment` and
+    /// `home_front` (budget percent), `mobilization` (0 to 3), `manpower`,
+    /// `recruit_fund_k`, `equipment_k`, `support` (war support, per mille).
+    /// Empty for an unknown country.
     #[func]
     fn economy(&self, country: i32) -> VarDictionary {
         let mut entry = VarDictionary::new();
@@ -364,6 +365,8 @@ impl MwWorld {
         entry.set("income_k", e.income_k());
         entry.set("recruiting", i64::from(e.budget.recruiting));
         entry.set("equipment", i64::from(e.budget.equipment));
+        entry.set("home_front", i64::from(e.home_front()));
+        entry.set("support", i64::from(e.support));
         entry.set("mobilization", i64::from(e.mobilization));
         entry.set("manpower", e.manpower() as i64);
         entry.set("recruit_fund_k", e.recruit_fund_k);
@@ -699,6 +702,9 @@ fn describe(scenario: &Scenario, world: &World, event: &Event) -> Option<String>
             format!("{} refused peace with {}", name(*to), name(*from))
         }
         Event::Capitulated { country } => format!("{} capitulated", name(*country)),
+        Event::SupportCollapsed { country } => {
+            format!("{}'s support for the war collapsed", name(*country))
+        }
         Event::RegionsCeded { from, to, regions } => format!(
             "{} ceded {} {} to {}",
             name(*from),

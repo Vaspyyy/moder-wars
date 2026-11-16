@@ -18,7 +18,8 @@ use crate::world::World;
 const MAGIC: &[u8; 6] = b"MWSAVE";
 /// 2: divisions. 3: army groups. 4: economy. 5: peace offers. 6: the AI
 /// (divisions remember a target out of reach). 7: peace terms in regions.
-const VERSION: u16 = 7;
+/// 8: war support.
+const VERSION: u16 = 8;
 
 #[derive(Debug)]
 pub enum SaveError {

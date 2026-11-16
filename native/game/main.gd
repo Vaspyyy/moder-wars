@@ -335,10 +335,11 @@ func _show_details() -> void:
 		for i in BUDGETS.size():
 			if BUDGETS[i][0] == int(e["recruiting"]) and BUDGETS[i][1] == int(e["equipment"]):
 				budget = BUDGET_NAMES[i]
-		lines.append("%s%s  ·  income $%.2f bn a day  ·  %s  ·  %s  ·  %s men to draft" % [
+		lines.append("%s%s  ·  $%.2f bn a day  ·  %s  ·  %s  ·  %s to draft  ·  %d%% support" % [
 			scenario.country_name(country), " (AI)" if sim.is_ai(country) else "",
 			float(e["income_k"]) / 1e6, budget,
-			MOBILIZATION_NAMES[int(e["mobilization"])], _thousands(int(e["manpower"]))])
+			MOBILIZATION_NAMES[int(e["mobilization"])], _thousands(int(e["manpower"])),
+			roundi(int(e["support"]) / 10.0)])
 	details.text = "\n".join(lines)
 	details.position.y = get_viewport_rect().size.y - 36 - 22 * lines.size()
 

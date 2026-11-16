@@ -9,14 +9,16 @@
 //!
 //! Once a day each country's income (output less what mobilization costs)
 //! goes by its budget into a recruiting fund and an equipment fund; the rest
-//! stays in the civilian economy. The recruiting fund raises divisions at
-//! the country's supply source while manpower lasts; the equipment fund
-//! equips them and repairs worn divisions. Mobilization sets how much of the
-//! population may serve and what that costs in output.
+//! stays with the people (the home front, which keeps up war support). The
+//! recruiting fund raises divisions at the country's supply source while
+//! manpower lasts; the equipment fund equips them and repairs worn
+//! divisions. Mobilization sets how much of the population may serve and
+//! what that costs in output.
 
 use serde::{Deserialize, Serialize};
 
 use crate::map::Cell;
+use crate::support::FULL_SUPPORT;
 use crate::world::{CountryId, Event, World};
 
 /// Soldiers in a recruited division.
@@ -64,6 +66,10 @@ pub struct Economy {
     /// the country still holds; thousands of dollars a day.
     pub home_total_k: i64,
     pub home_k: i64,
+    /// War support, per mille (see `support.rs`).
+    pub support: u16,
+    /// Soldiers lost so far, as war support last counted them.
+    pub(crate) casualties: u64,
 }
 
 impl Economy {
@@ -78,7 +84,14 @@ impl Economy {
             drafted: 0,
             home_total_k: 0,
             home_k: 0,
+            support: FULL_SUPPORT,
+            casualties: 0,
         }
+    }
+
+    /// The share of income left to the people, in percent.
+    pub fn home_front(&self) -> u8 {
+        100 - self.budget.recruiting - self.budget.equipment
     }
 
     /// Thousands of dollars a day after mobilization costs.
