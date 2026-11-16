@@ -44,6 +44,8 @@ export default defineConfig({
 				const files = paths(out).filter(
 					(path) =>
 						/\.(?:js|css)$/.test(path) ||
+						// Fonts the bundled CSS points at (hashed, at the assets root).
+						/^assets\/[^/]+\.woff2$/.test(path) ||
 						/^assets\/(?:coast-110m\.bin-|rivers-50m\.bin-|title-map-|2022-)/.test(
 							path,
 						),

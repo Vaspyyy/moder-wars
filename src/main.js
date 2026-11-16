@@ -371,6 +371,7 @@ const applicationRuntime = createLiveContext(
 		importCountryCancelBtn: () => importCountryCancelBtn,
 		importCountryModal: () => importCountryModal,
 		leaderboardBtn: () => leaderboardBtn,
+		mainMenuBtn: () => mainMenuBtn,
 		openLeaderboard: () => openLeaderboard,
 		closeLeaderboardBtn: () => closeLeaderboardBtn,
 		leaderboardOverlay: () => leaderboardOverlay,
@@ -6885,6 +6886,8 @@ inspector_controls.bindEditorCityNewBtnClick();
 inspector_controls.bindEditorCityClearBtnClick();
 
 menu_controls.bindLeaderboardBtnClick();
+
+menu_controls.bindMainMenuBtnClick();
 
 menu_controls.bindCloseLeaderboardBtnClick();
 
