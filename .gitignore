@@ -17,3 +17,7 @@ AI_COMMANDER.md
 
 /node_modules/
 /dist/
+
+# Native rewrite build output
+/native/target/
+/native/game/.godot/

@@ -1,0 +1,14 @@
+[workspace]
+resolver = "3"
+members = ["sim", "godot"]
+
+[workspace.package]
+edition = "2024"
+publish = false
+
+# Tests decode real 6.5-million-cell maps; unoptimized code makes that slow.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
