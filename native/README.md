@@ -24,6 +24,8 @@ Other options go to the game, e.g. `native/play.sh --scenario=ukraine-2023-v3 --
 
 The game opens on the world, paused, with every country's real army on its borders. Click a country to see its card (population, economy, forces, borders), then press "Lead" to take it: the camera moves to its capital, the bar along the top shows its date, speed, income, people left to draft, divisions and war support, and the AI runs every other country with the same orders you have. `--lead=Poland` skips the pick screen. While you lead a country, only its divisions take your orders, and the stand-in keys below (B, M, W, P, Y/N, I) act for it.
 
+While you lead a country, your army groups are listed on the left (click one to select it and look at it), the reports on the right tell what happened to you and your enemies (wars and peace anywhere too), and with divisions selected a bar at the bottom offers Draw front (F), Draw arrow (R) and Hold (X). Big events pause the game and open a card: a war declared on you, a peace offer (Accept or Refuse, or Y and N), a peace you made, a capitulation. Closing the last card lets the game run again if it was running. The key in the bottom right corner explains the marks on the map; the corner on the left names the region under the mouse.
+
 To watch divisions fight, start a sandbox war between two neighbours (names as the scenario spells them); `--war` opens the viewer, where any country's divisions take orders, unless `--lead` is given too:
 
 ```sh

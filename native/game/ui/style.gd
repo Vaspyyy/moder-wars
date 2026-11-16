@@ -141,3 +141,97 @@ static func list_and(names: PackedStringArray) -> String:
 	if names.size() <= 1:
 		return "".join(names)
 	return ", ".join(names.slice(0, names.size() - 1)) + " and " + names[-1]
+
+
+## "1st", "2nd", "3rd", "11th", "22nd".
+static func ordinal(n: int) -> String:
+	var suffix := "th"
+	if n % 100 < 11 or n % 100 > 13:
+		suffix = ["th", "st", "nd", "rd", "th", "th", "th", "th", "th", "th"][n % 10]
+	return "%d%s" % [n, suffix]
+
+
+## A dark button with an optional line icon ("front" or "arrow") and a key
+## shown in a small box, as in the command bar.
+static func tool_button(text: String, key: String, icon := "") -> ToolButton:
+	var button := ToolButton.new()
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if icon != "":
+		var drawn := LineIcon.new()
+		drawn.kind = icon
+		drawn.custom_minimum_size = Vector2(20, 12)
+		drawn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(drawn)
+	var caption := label(text, 15)
+	caption.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(caption)
+	var badge := label(key, 12, MUTED)
+	badge.add_theme_stylebox_override("normal", box(Color.TRANSPARENT, OFF, 3, 5, 1))
+	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(badge)
+	button.add_child(row)
+	return button
+
+
+## A panel that acts as a button: it grows to fit what it holds (a Button
+## does not), lightens under the mouse and sends `pressed` on a left click.
+class ToolButton extends PanelContainer:
+	signal pressed
+
+	var disabled := false:
+		set(value):
+			disabled = value
+			modulate.a = 0.45 if value else 1.0
+			mouse_default_cursor_shape = CURSOR_ARROW if value else CURSOR_POINTING_HAND
+	var _hover := false
+
+	func _init() -> void:
+		custom_minimum_size.y = 44
+		mouse_default_cursor_shape = CURSOR_POINTING_HAND
+		mouse_entered.connect(func() -> void:
+			_hover = true
+			_restyle())
+		mouse_exited.connect(func() -> void:
+			_hover = false
+			_restyle())
+		_restyle()
+
+	func _restyle() -> void:
+		# Inner classes cannot call the outer `box`, so the box is made here.
+		var style := StyleBoxFlat.new()
+		style.bg_color = BUTTON_HOVER if _hover and not disabled else Color("161f2c")
+		style.border_color = LINE_STRONG
+		style.set_border_width_all(1)
+		style.set_corner_radius_all(6)
+		style.content_margin_left = 14
+		style.content_margin_right = 14
+		add_theme_stylebox_override("panel", style)
+
+	func _gui_input(event: InputEvent) -> void:
+		var click := event as InputEventMouseButton
+		if click and click.pressed and click.button_index == MOUSE_BUTTON_LEFT:
+			accept_event()
+			if not disabled:
+				pressed.emit()
+
+
+## Small line pictures: "front" (a gold zigzag), "arrow" (an orange arrow).
+class LineIcon extends Control:
+	var kind := "front"
+	var color := Color.TRANSPARENT
+
+	func _draw() -> void:
+		var w := size.x
+		var h := size.y
+		if kind == "arrow":
+			var tint := color if color.a > 0.0 else Color("ff7a2f")
+			draw_line(Vector2(1, h / 2), Vector2(w - 3, h / 2), tint, 2.4, true)
+			draw_polyline(PackedVector2Array([Vector2(w - 8, 1), Vector2(w - 2, h / 2),
+				Vector2(w - 8, h - 1)]), tint, 2.4, true)
+		else:
+			var tint := color if color.a > 0.0 else Color("f2b544")
+			draw_polyline(PackedVector2Array([Vector2(1, h * 0.75), Vector2(w * 0.25, h * 0.25),
+				Vector2(w * 0.45, h * 0.67), Vector2(w * 0.65, h * 0.17), Vector2(w - 1, h * 0.75)]),
+				tint, 2.4, true)

@@ -95,7 +95,7 @@ Built in slices, each its own PR:
 | Slice | What |
 | --- | --- |
 | 5a | Pick a country: the paused world with every real army, a country card, "Lead"; the top bar (country and wars, date, pause and speeds, income, people left to draft, divisions, war support). Built. |
-| 5b | Command the war: the army group list, the command bar (draw front, draw arrow, hold), the map key, the reports feed with big-event cards. |
+| 5b | Command the war: the army group list, the command bar (draw front, draw arrow, hold), the map key, the reports feed with big-event cards. Built. |
 | 5c | The budget and mobilization window, opened from income and people left to draft in the top bar. |
 | 5d | The peace window (the comparison table, the regions both ways, lit on the map) and declaring war from a country's card. |
 
