@@ -1,6 +1,6 @@
 # Modern Wars, native
 
-The native PC rewrite of Modern Wars: a pure Rust simulation and a Godot 4.8 front end. The browser game in the repository root is the reference this rewrite is checked against. It is not a spec: rules are ported because we want them, not because the old code has them. See [docs/plan.md](docs/plan.md) for the steps and the rules of the road.
+The native PC rewrite of Modern Wars: a player-led grand strategy game in real time with pause, built as a pure Rust simulation and a Godot 4.8 front end. The browser game in the repository root is the reference this rewrite is checked against. It is not a spec: rules are ported because we want them, not because the old code has them. See [docs/design.md](docs/design.md) for what the game is and the build order, and [docs/plan.md](docs/plan.md) for how we test and the rules of the road.
 
 ```
 native/
@@ -8,7 +8,7 @@ native/
   godot/      mw-godot: thin GDExtension that hands mw-sim data to Godot.
   game/       The Godot 4.8 project (GDScript UI, shaders, scenes).
   fixtures/   Golden files exported from the JavaScript game.
-  docs/       Plan, v1 scope, and the old game's rules as reference.
+  docs/       Design, plan, and the old game's features and rules as reference.
 ```
 
 ## Commands

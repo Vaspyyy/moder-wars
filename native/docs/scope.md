@@ -1,8 +1,8 @@
 # v1 scope
 
-**Status: draft, waiting for the owner's review.** Verdicts below are proposals. Change any row by editing it; this file is the source of truth for what v1 contains.
+**Status: reference.** The native game is player-led now, and its first playable is defined in [design.md](design.md). This file stays as the inventory of what the browser game offered. The verdicts were written for the old AI-vs-AI sandbox idea; read them as hints when a feature comes up, not as the plan.
 
-v1 is the smallest version that is fun to play: pick a scenario, pick one or more countries, a war happens on the real map with AI-controlled armies, the player watches and steers, frontlines move, and wars end through peace or surrender.
+The verdicts assumed this v1: pick a scenario, pick one or more countries, a war happens on the real map with AI-controlled armies, the player watches and steers, frontlines move, and wars end through peace or surrender.
 
 - **KEEP**: in v1.
 - **LATER**: worth porting after v1 is playable.
@@ -13,9 +13,11 @@ The inventory lists what the browser game (version 0.28.3, commit `0ab5744`) off
 
 ## Decided so far
 
+- **The whole UX is designed from scratch** (owner, 2026-11-16). The old title screen, menus and panels show *what* players needed, never *how* it should look or flow. "KEEP" on a UI row means the need stays, not the design.
+- **Naval invasions (E22) are LATER.** A prototype without them is fine, even though island countries cannot be attacked yet.
 - **Scenario data (B5):** the native game reads the existing MWSC v3 packages directly (`sim/src/scenario/`), proven by golden tests.
 - **Mountains (A18, C7, E6, E8):** the browser game's simulation never had mountains on Earth maps. Its terrain scan is skipped for grids over 600,000 cells (`src/geography-loader.js:231`), and the shipped scenarios carry no mountain data, so every mountain rule was dormant. Native terrain needs new data and is a design decision, not a port.
-- **Secret sounds (I7):** cut for good. The files are named after another commercial game.
+- **Secret sounds (I7) stay** (owner's decision; the owner takes responsibility for the files).
 
 ## Notes that affect verdicts
 
@@ -134,7 +136,7 @@ The inventory lists what the browser game (version 0.28.3, commit `0ab5744`) off
 | E19 | Country capitulation | A country whose units and held territory fall below thresholds capitulates and is annexed; its land is split among attackers | surrender.js:1-166, conflict-resolution.js:4-374, simulation-tick.js:1484-1522 | 540 | KEEP | The other way wars end |
 | E20 | Full capitulation / global end | A side holding ≥99.9% (or ≤0.1%) ends the war; evaluateGlobalConflict ends it when no hostile pairs remain; all units gone means white peace | simulation-tick.js:1526-1590, 1653-1656, surrender.js:129-140 | 80 | KEEP | War end |
 | E21 | Fixed logical clock | Simulation advances on fixed ticks independent of frame rate; catch-up capped at 60 ticks; speed changes clear backlog | simulation-clock.js:1-126, simulation-phase-wheel.js, simulation-jobs.js | 830 | KEEP | Port the idea to Rust; determinism helps testing |
-| E22 | Naval invasions and supply | AI gathers troops at a staging point, ships them across water (faster naval speed), landing debuff for 300 ticks, periodic supply runs | ground-movement.js:160-260, ai-proposals.js, ai-plan-execution.js, config.js:59-66 | 600 | LATER (?) | Big subsystem; but without it island countries (UK, Japan, Taiwan) cannot be attacked, which limits Modern 2026 matchups |
+| E22 | Naval invasions and supply | AI gathers troops at a staging point, ships them across water (faster naval speed), landing debuff for 300 ticks, periodic supply runs | ground-movement.js:160-260, ai-proposals.js, ai-plan-execution.js, config.js:59-66 | 600 | LATER | Big subsystem; without it island countries (UK, Japan, Taiwan) cannot be attacked. Owner: fine for a prototype |
 | E23 | Transport to the front | Units stranded >3° behind the front get a fast "railway" move to it | ai-proposals.js:1274-1330, ai-plan-execution.js:299-371 | 150 | KEEP | Otherwise big countries lose because troops spawn far from the front |
 | E24 | Coastal defense and neutral garrisons | AI keeps troops on threatened coasts and neutral borders | ai-proposals.js:953+, ai-planning.js:476-690, ai-plan-execution.js:285-375, 614 | 300 | LATER | Mostly matters with naval invasions |
 | E25 | Long-range missiles | 2-8 random silo bases per side; ~1% chance per tick to fire at a random enemy unit; 1942 date gate | war-start.js:830-850, simulation-tick.js:1690-1765, simulation-world.js:691-707 | 150 | LATER | Random decorative damage, not strategy |
@@ -213,7 +215,7 @@ All editor features are reachable today only via God mode (note 1).
 | I4 | Explosion sound | On missile impacts | audio.js:288-313, simulation-tick.js:1696 | 25 | LATER | Follows E25 |
 | I5 | Background music | Music system with volume, but no track ships (audio.js:17-18) | audio.js:86-250 | 170 | KEEP (?) | Slot is worth keeping; needs a licensed or generated track |
 | I6 | Custom soundtrack | Pick a local audio file; stored in Cache Storage | menu-controls.js:428-467, local-files.js:41-79 | 90 | LATER | Native: a music folder would do |
-| I7 | Secret sounds | Replaces stingers with files named after another commercial game; on by default (see "Decided so far") | audio.js:23-40, 226-240, menu-controls.js:327-338 | 40 | CUT | Do not ship third-party game audio |
+| I7 | Secret sounds | Replaces the war and peace stingers with two alternative clips; on by default (see "Decided so far") | audio.js:23-40, 226-240, menu-controls.js:327-338 | 40 | KEEP | Owner's decision |
 | I8 | Volume and mute | Music volume slider, mute toggle, remembered | audio.js:380-416, index.html:124-128 | 40 | KEEP | |
 
 ## 10. Save/load, import/export
@@ -283,7 +285,7 @@ Not player-facing, but useful to carry over: the Node asset build scripts (`scri
 | 13. Web platform plumbing | 10 | 0 | 0 | 10 |
 | **Total** | **164** | **83** | **54** | **27** |
 
-(?) items counted under their proposed verdict: A8, A13, A21, B2, B3, B5, D4, E8, E17 note, E22, F5, F10, F18, H3, H5, I5.
+(?) items counted under their proposed verdict: A8, A13, A21, B2, B3, B5, D4, E8, E17 note, F5, F10, F18, H3, H5, I5. Since the counts: I7 moved from CUT to KEEP.
 
 **The 5 features that matter most for fun:**
 
