@@ -2,9 +2,15 @@ extends Node2D
 ## First native screen: loads a real scenario through the Rust extension,
 ## draws the political map with a shader and runs the simulation on it.
 ## Pan by dragging with any mouse button or with WASD/arrows, zoom with the
-## wheel or +/-. Space pauses and resumes, 1-5 set the speed. Click a division
-## to select it (Shift-click adds), right-click to send the selection there,
-## Esc clears the selection.
+## wheel or +/-. Space pauses and resumes, 1-5 set the speed.
+##
+## Armies: click a division to select it, or its whole army group if it is in
+## one (Shift-click adds or removes single divisions). G makes the selection an
+## army group. F then a left-drag draws the selected group's front along a
+## border; R then a left-drag draws its arrow into enemy land; X removes the
+## arrow. Right-click sends the selected divisions somewhere directly, which
+## takes them out of their group. Esc cancels drawing, then clears the
+## selection. Orders take effect at once, even while paused.
 ##
 ## Command-line options (after `--`):
 ##   --scenario=<name>        package in assets/maps/compiled (default world-map-2026-v3)
@@ -16,7 +22,7 @@ extends Node2D
 ##   --speed=<1-5>            starting speed
 ##   --play                   start running (the game starts paused)
 ##   --run=<hours>            run the simulation this long before showing it
-##   --select=<id>,...        select these divisions (for screenshots)
+##   --select=<id>,...        select these divisions, or their army groups (for screenshots)
 ##   --screenshot=<path>      save one frame as PNG and quit (for headless checks)
 ##   --probe=<lng>,<lat>;...  print the country and region under each point and quit
 ##   --hover=<lng>,<lat>      show the hover label for this point (for screenshots)
@@ -46,10 +52,15 @@ var feed := Label.new()
 var details := Label.new()
 var help := Label.new()
 var markers := preload("res://divisions.gd").new()
-var feed_lines: PackedStringArray = []
+## Recent event lines as [text, times]; repeats in a row are counted.
+var feed_lines: Array = []
 var control_dirty := false
 var since_upload := 0.0
 var press_at := Vector2.ZERO
+## "front" or "arrow" while waiting for or drawing a line, else "".
+var drawing := ""
+## The line being drawn, as (longitude, latitude) points.
+var stroke_points := PackedVector2Array()
 var hovered_id := -1
 var hovered_region := -1
 var dragging := false
@@ -100,10 +111,15 @@ func _ready() -> void:
 	if args.has("hover"):
 		var point: PackedStringArray = String(args["hover"]).split(",")
 		_hover_world(_world_from_lng_lat(float(point[0]), float(point[1])))
+	_refresh_sim()
 	if args.has("select"):
 		for id in String(args["select"]).split(","):
-			markers.selected[int(id)] = true
-	_refresh_sim()
+			var group: int = markers.group_of(int(id))
+			if group != 0:
+				_select_group(group)
+			else:
+				markers.selected[int(id)] = true
+		_refresh_sim()
 	_upload_control()
 	if args.has("screenshot"):
 		set_process_unhandled_input(false) # keep the picture repeatable
@@ -167,7 +183,7 @@ func _build_ui() -> void:
 	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	help.position = Vector2(screen.x - 716, screen.y - 30)
 	help.size = Vector2(700, 20)
-	help.text = "Space pause  ·  1-5 speed  ·  click select  ·  right-click move  ·  Esc clear"
+	_show_help()
 
 
 ## Start the simulation, with the sandbox war from --war if given.
@@ -210,6 +226,14 @@ func _refresh_sim() -> void:
 			for point in route:
 				points.append(_world_from_lng_lat(point.x, point.y))
 			markers.routes[id] = points
+	markers.groups.clear()
+	for group in sim.groups():
+		for key in ["front", "arrow"]:
+			var points := PackedVector2Array()
+			for point in PackedVector2Array(group[key]):
+				points.append(_world_from_lng_lat(point.x, point.y))
+			group[key] = points
+		markers.groups.append(group)
 	var changes := sim.control_changes()
 	for i in range(0, changes.size(), 3):
 		var country := changes[i + 2]
@@ -218,13 +242,27 @@ func _refresh_sim() -> void:
 		control_dirty = true
 		hovered_id = -2 # the label may name a new holder
 	for line in sim.take_events():
-		feed_lines.append(line)
-	if feed_lines.size() > FEED_LINES:
-		feed_lines = feed_lines.slice(feed_lines.size() - FEED_LINES)
-	feed.text = "\n".join(feed_lines)
+		_add_feed(line)
+	_show_feed()
 	var state := "Paused" if sim.is_paused() else "Speed %d" % sim.speed()
 	clock.text = "%s   %s" % [sim.time_text(), state]
 	_show_details()
+
+
+func _add_feed(line: String) -> void:
+	if not feed_lines.is_empty() and feed_lines[-1][0] == line:
+		feed_lines[-1][1] += 1
+	else:
+		feed_lines.append([line, 1])
+	if feed_lines.size() > FEED_LINES:
+		feed_lines = feed_lines.slice(feed_lines.size() - FEED_LINES)
+
+
+func _show_feed() -> void:
+	var lines: PackedStringArray = []
+	for entry in feed_lines:
+		lines.append(entry[0] if entry[1] == 1 else "%s (×%d)" % entry)
+	feed.text = "\n".join(lines)
 
 
 func _upload_control() -> void:
@@ -256,16 +294,80 @@ func _show_details() -> void:
 		details.text = "\n".join(lines)
 
 
+func _show_help() -> void:
+	match drawing:
+		"front":
+			help.text = "Drawing a front: drag along the border with the left mouse button  ·  Esc cancels"
+		"arrow":
+			help.text = "Drawing an arrow: drag from the front into enemy land  ·  Esc cancels"
+		_:
+			help.text = ("Space pause  ·  1-5 speed  ·  click select  ·  G group  ·  F front  ·  "
+				+ "R arrow  ·  X no arrow  ·  right-click move  ·  Esc clear")
+
+
+## Click: select a division, or its whole army group. Shift-click adds or
+## removes one division and leaves group selection.
 func _select_at(screen_point: Vector2, add: bool) -> void:
 	var world := get_canvas_transform().affine_inverse() * screen_point
 	var id: int = markers.pick(world, 12.0)
-	if not add:
-		markers.selected.clear()
-	if id >= 0:
-		if add and markers.selected.has(id):
-			markers.selected.erase(id)
-		else:
+	if add:
+		markers.selected_group = 0
+		if id >= 0:
+			if markers.selected.has(id):
+				markers.selected.erase(id)
+			else:
+				markers.selected[id] = true
+	else:
+		_select_group(markers.group_of(id) if id >= 0 else 0)
+		if id >= 0 and markers.selected_group == 0:
 			markers.selected[id] = true
+	_refresh_sim()
+
+
+## Select every division of a group (0 clears the selection).
+func _select_group(group: int) -> void:
+	markers.selected.clear()
+	markers.selected_group = group
+	for entry in markers.groups:
+		if int(entry["id"]) == group:
+			for division in PackedInt64Array(entry["divisions"]):
+				markers.selected[division] = true
+
+
+## The selected army group, formed from the selection first if needed; 0 if
+## nothing is selected.
+func _group_for_drawing() -> int:
+	if markers.selected_group != 0:
+		return markers.selected_group
+	if markers.selected.is_empty():
+		return 0
+	var group := int(sim.create_group(PackedInt64Array(markers.selected.keys())))
+	_refresh_sim()
+	if group != 0:
+		_select_group(group)
+	return group
+
+
+func _start_drawing(kind: String) -> void:
+	if _group_for_drawing() == 0:
+		_add_feed("Select divisions or an army group first")
+		_refresh_sim()
+		return
+	drawing = kind
+	_show_help()
+
+
+func _finish_drawing() -> void:
+	var group := markers.selected_group
+	if stroke_points.size() > 0 and group != 0:
+		if drawing == "front":
+			sim.set_front(group, stroke_points)
+		else:
+			sim.draw_arrow(group, stroke_points)
+	drawing = ""
+	stroke_points.clear()
+	markers.stroke.clear()
+	_show_help()
 	_refresh_sim()
 
 
@@ -274,11 +376,9 @@ func _order_at(screen_point: Vector2) -> void:
 		return
 	var world := get_canvas_transform().affine_inverse() * screen_point
 	var lng_lat := _lng_lat_from_world(world)
-	var ids := PackedInt64Array(markers.selected.keys())
-	if sim.move_divisions(ids, lng_lat.x, lng_lat.y) > 0:
-		for id in ids:
-			markers.pending[id] = world
-		markers.queue_redraw()
+	sim.move_divisions(PackedInt64Array(markers.selected.keys()), lng_lat.x, lng_lat.y)
+	markers.selected_group = 0
+	_refresh_sim()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -289,6 +389,13 @@ func _unhandled_input(event: InputEvent) -> void:
 				_zoom_at(1.15, button.position)
 			MOUSE_BUTTON_WHEEL_DOWN:
 				_zoom_at(1.0 / 1.15, button.position)
+			MOUSE_BUTTON_LEFT when drawing != "":
+				if button.pressed:
+					stroke_points = PackedVector2Array([_lng_lat_at(button.position)])
+					markers.stroke = PackedVector2Array([_screen_to_world(button.position)])
+					markers.stroke_is_arrow = drawing == "arrow"
+				else:
+					_finish_drawing()
 			MOUSE_BUTTON_LEFT, MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_RIGHT:
 				dragging = button.pressed
 				if button.pressed:
@@ -300,7 +407,13 @@ func _unhandled_input(event: InputEvent) -> void:
 						_order_at(button.position)
 	elif event is InputEventMouseMotion:
 		var motion := event as InputEventMouseMotion
-		if dragging:
+		if drawing != "" and stroke_points.size() > 0:
+			var last: Vector2 = get_canvas_transform() * markers.stroke[markers.stroke.size() - 1]
+			if motion.position.distance_to(last) >= 6.0:
+				stroke_points.append(_lng_lat_at(motion.position))
+				markers.stroke.append(_screen_to_world(motion.position))
+				markers.queue_redraw()
+		elif dragging:
 			camera.position -= motion.relative / camera.zoom
 			_clamp_camera()
 		_update_hover(motion.position)
@@ -316,8 +429,28 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif key >= KEY_1 and key <= KEY_5:
 			sim.set_speed(key - KEY_0)
 			_refresh_sim()
+		elif key == KEY_G and not markers.selected.is_empty():
+			var group := int(sim.create_group(PackedInt64Array(markers.selected.keys())))
+			_refresh_sim()
+			if group != 0:
+				_select_group(group)
+				_refresh_sim()
+		elif key == KEY_F:
+			_start_drawing("front")
+		elif key == KEY_R:
+			_start_drawing("arrow")
+		elif key == KEY_X and markers.selected_group != 0:
+			sim.draw_arrow(markers.selected_group, PackedVector2Array())
+			_refresh_sim()
 		elif key == KEY_ESCAPE:
-			markers.selected.clear()
+			if drawing != "":
+				drawing = ""
+				stroke_points.clear()
+				markers.stroke.clear()
+				_show_help()
+			else:
+				markers.selected.clear()
+				markers.selected_group = 0
 			_refresh_sim()
 
 
@@ -330,7 +463,6 @@ func _process(delta: float) -> void:
 		camera.position += direction.normalized() * 900.0 * delta / camera.zoom.x
 		_clamp_camera()
 	if sim.advance(delta) > 0:
-		markers.pending.clear()
 		_refresh_sim()
 	since_upload += delta
 	if control_dirty and since_upload >= CONTROL_UPLOAD_EVERY:
@@ -417,6 +549,14 @@ func _world_from_lng_lat(lng: float, lat: float) -> Vector2:
 	var u := (lng + 180.0) / 360.0
 	var v := 0.5 - _mercator_y(clampf(lat, -MAX_LAT, MAX_LAT)) / (2.0 * _mercator_y(MAX_LAT))
 	return Vector2(u, v) * map_size - map_size / 2
+
+
+func _screen_to_world(screen_point: Vector2) -> Vector2:
+	return get_canvas_transform().affine_inverse() * screen_point
+
+
+func _lng_lat_at(screen_point: Vector2) -> Vector2:
+	return _lng_lat_from_world(_screen_to_world(screen_point))
 
 
 func _lng_lat_from_world(world: Vector2) -> Vector2:

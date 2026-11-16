@@ -207,6 +207,28 @@ impl MapData {
         (across * across + along * along).sqrt() as u64
     }
 
+    /// Cells along a line through `points`, about `step_m` apart, both ends
+    /// included and repeats dropped.
+    pub fn walk_line(&self, points: &[Cell], step_m: f64) -> Vec<Cell> {
+        let mut cells = Vec::new();
+        for pair in points.windows(2) {
+            let (dx, dy) = self.offset(pair[0], pair[1]);
+            let steps = ((self.estimate_m(pair[0], pair[1]) as f64 / step_m).ceil() as i64).max(1);
+            let (x, y) = self.xy(pair[0]);
+            for i in 0..steps {
+                let share = i as f64 / steps as f64;
+                let at = self.cell(
+                    x + (dx as f64 * share).round() as i64,
+                    y + (dy as f64 * share).round() as i64,
+                );
+                cells.extend(at);
+            }
+        }
+        cells.extend(points.last());
+        cells.dedup();
+        cells
+    }
+
     /// Every land cell within `radius_m` of `centre`, with the squared distance in m².
     pub fn land_within(&self, centre: Cell, radius_m: f64, mut visit: impl FnMut(Cell, u64)) {
         let (cx, cy) = self.xy(centre);

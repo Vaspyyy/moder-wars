@@ -28,19 +28,25 @@ To watch divisions fight, start a sandbox war between two neighbours (names as t
 native/play.sh --war=Germany,France --view=7.5,49.3,14
 ```
 
-That puts 24 German and 12 French divisions on their border and sends the Germans about 150 km into France (`--war=Germany,France,30,20` changes the numbers). The game starts paused.
+That puts 24 German and 12 French divisions on their border, each side as one army group with a front along it, and gives the Germans an arrow about 150 km into France (`--war=Germany,France,30,20` changes the numbers). The game starts paused; orders work while paused.
 
 | Key or mouse | Does |
 | --- | --- |
 | Space | pause and resume |
 | 1 to 5 | speed: 2, 6, 12, 24 or 72 game hours per second |
-| click a division | select it (Shift-click adds or removes) |
-| right-click | send the selected divisions there |
-| Esc | clear the selection |
+| click a division | select it, or its whole army group (Shift-click adds or removes one division) |
+| G | make the selected divisions an army group |
+| F, then drag | draw the selected group's front along a border |
+| R, then drag | draw the selected group's arrow into enemy land |
+| X | take the selected group's arrow away |
+| right-click | send the selected divisions there directly (takes them out of their group) |
+| Esc | stop drawing, or clear the selection |
 | drag, WASD or arrows | pan |
 | wheel, + or - | zoom |
 
-A marker is a box in the country's colour with a bar for the soldiers left. An orange frame means it is fighting, a red corner means it is cut off from supply.
+A marker is a box in the country's colour with a bar for the soldiers left. An orange frame means it is fighting, a red corner means it is cut off from supply. A front is a thick line in the group's colour (gold when selected), an arrow is orange.
+
+How a group behaves (details in `sim/src/army.rs`): without an arrow it spreads evenly along its front and holds. With an arrow it gathers on the stretch of front near the arrow and attacks cell by cell in the arrow's direction, the front bulging forward with it, until the arrow's tip is taken; then it holds again. The drawing controls are a stand-in until the real interface is designed.
 
 ## Commands
 
@@ -61,7 +67,7 @@ godot-beta --path game -- --scenario=ukraine-2023-v3 --view=34,48.5,9
 godot-beta --headless --path game -- --probe="30.52,50.45;37.62,55.75"   # country and region under each point
 ```
 
-`--hover=<lng>,<lat>` shows the hover label and highlight for a point, for screenshots. `--run=<hours>` runs the simulation before the first frame, `--select=<id>,...` selects divisions, `--play` starts unpaused, `--speed=<1-5>` and `--seed=<n>` set the obvious; the full list is at the top of `game/main.gd`.
+`--hover=<lng>,<lat>` shows the hover label and highlight for a point, for screenshots. `--run=<hours>` runs the simulation before the first frame, `--select=<id>,...` selects divisions (or their whole army groups), `--play` starts unpaused, `--speed=<1-5>` and `--seed=<n>` set the obvious; the full list is at the top of `game/main.gd`.
 
 Headless screenshot (no window, no sound; safe while someone plays on the same machine):
 

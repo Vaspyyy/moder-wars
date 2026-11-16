@@ -3,6 +3,7 @@
 
 use godot::classes::IRefCounted;
 use godot::prelude::*;
+use mw_sim::army::ArmyGroupId;
 use mw_sim::division::{DivisionId, Loss};
 use mw_sim::sandbox::{self, SandboxError};
 use mw_sim::scenario::Scenario;
@@ -127,7 +128,7 @@ impl MwWorld {
         };
         for _ in 0..hours.max(0) {
             for event in world.step() {
-                if let Some(line) = describe(s, &event) {
+                if let Some(line) = describe(s, world, &event) {
                     self.log.push(line);
                 }
             }
@@ -253,8 +254,9 @@ impl MwWorld {
     }
 
     /// Order divisions to march to a point. Each order is given by the
-    /// division's own country and applies on the next tick; a target out of
-    /// reach shows up in `take_events`. Returns how many orders were queued.
+    /// division's own country and applies at once, paused or not (a target
+    /// out of reach shows up in `take_events`); it takes the division out
+    /// of its army group. Returns how many orders were given.
     #[func]
     fn move_divisions(&mut self, ids: PackedInt64Array, lng: f64, lat: f64) -> i32 {
         let grid = self.grid();
@@ -284,7 +286,92 @@ impl MwWorld {
                 queued += 1;
             }
         }
+        self.apply_now();
         queued
+    }
+
+    /// Form an army group from divisions of one country. Returns the new
+    /// group's id, or 0 if the order was refused (see `take_events`).
+    #[func]
+    fn create_group(&mut self, ids: PackedInt64Array) -> i64 {
+        let divisions: Vec<DivisionId> = ids
+            .as_slice()
+            .iter()
+            .filter_map(|&id| u32::try_from(id).ok().map(DivisionId))
+            .collect();
+        let Some(world) = self.world.as_ref() else {
+            return 0;
+        };
+        let Some(country) = divisions
+            .first()
+            .and_then(|&d| world.division(d))
+            .map(|d| d.country)
+        else {
+            return 0;
+        };
+        if !self.order(country, Command::CreateArmyGroup { divisions }) {
+            return 0;
+        }
+        self.apply_now()
+            .iter()
+            .find_map(|e| match e {
+                Event::ArmyGroupCreated { group, .. } => Some(i64::from(group.0)),
+                _ => None,
+            })
+            .unwrap_or(0)
+    }
+
+    /// Give a group a front drawn through (longitude, latitude) points.
+    /// Returns whether the group took it (see `take_events` if not).
+    #[func]
+    fn set_front(&mut self, group: i64, points: PackedVector2Array) -> bool {
+        self.group_line(group, &points, |group, line| Command::SetFront {
+            group,
+            line,
+        })
+    }
+
+    /// Give a group an arrow through (longitude, latitude) points, the tip
+    /// last; no points take the arrow away. Returns whether the group took it.
+    #[func]
+    fn draw_arrow(&mut self, group: i64, points: PackedVector2Array) -> bool {
+        self.group_line(group, &points, |group, line| Command::DrawArrow {
+            group,
+            line,
+        })
+    }
+
+    /// Every army group as a dictionary: `id`, `country`, `divisions`
+    /// (ids), and `front` and `arrow` as (longitude, latitude) points.
+    #[func]
+    fn groups(&self) -> Array<VarDictionary> {
+        let (Some(world), Some(grid)) = (self.world.as_ref(), self.grid()) else {
+            return Array::new();
+        };
+        let points = |cells: &[u32]| -> PackedVector2Array {
+            cells
+                .iter()
+                .map(|&c| {
+                    let (lng, lat) = grid.center(c as usize);
+                    Vector2::new(lng as f32, lat as f32)
+                })
+                .collect()
+        };
+        world
+            .army_groups()
+            .iter()
+            .map(|g| {
+                let divisions: PackedInt64Array =
+                    g.divisions.iter().map(|d| i64::from(d.0)).collect();
+                let mut entry = VarDictionary::new();
+                entry.set("id", i64::from(g.id.0));
+                entry.set("country", i64::from(g.country));
+                entry.set("divisions", &divisions);
+                entry.set("front", &points(&g.front));
+                entry.set("arrow", &points(&g.arrow));
+                entry
+            })
+            .collect()
     }
 
     /// What happened since the last call, one line per event.
@@ -298,6 +385,68 @@ impl MwWorld {
 }
 
 impl MwWorld {
+    /// Queue an order for the current tick. Returns false without a game.
+    fn order(&mut self, country: u16, command: Command) -> bool {
+        let Some(world) = self.world.as_mut() else {
+            return false;
+        };
+        let tick = world.tick();
+        world
+            .submit(Order {
+                tick,
+                country,
+                command,
+            })
+            .is_ok()
+    }
+
+    /// Apply queued orders now (see `World::apply_orders`), log what
+    /// happened, and return the events.
+    fn apply_now(&mut self) -> Vec<Event> {
+        let (Some(world), Some(scenario)) = (self.world.as_mut(), self.scenario.as_ref()) else {
+            return Vec::new();
+        };
+        let events = world.apply_orders();
+        let bound = scenario.bind();
+        if let Some(s) = bound.scenario.as_ref() {
+            self.log
+                .extend(events.iter().filter_map(|e| describe(s, world, e)));
+        }
+        events
+    }
+
+    /// Send a group order carrying a line of points, given by the group's
+    /// country, and apply it now. Returns whether it was taken.
+    fn group_line(
+        &mut self,
+        group: i64,
+        points: &PackedVector2Array,
+        command: impl Fn(ArmyGroupId, Vec<u32>) -> Command,
+    ) -> bool {
+        let (Some(world), Some(grid)) = (self.world.as_ref(), self.grid()) else {
+            return false;
+        };
+        let Some(id) = u32::try_from(group).ok().map(ArmyGroupId) else {
+            return false;
+        };
+        let Some(country) = world.army_group(id).map(|g| g.country) else {
+            return false;
+        };
+        let line: Vec<u32> = points
+            .as_slice()
+            .iter()
+            .filter_map(|p| grid.cell_at(f64::from(p.x), f64::from(p.y)))
+            .map(|c| c as u32)
+            .collect();
+        if !self.order(country, command(id, line)) {
+            return false;
+        }
+        !self
+            .apply_now()
+            .iter()
+            .any(|e| matches!(e, Event::Rejected { .. }))
+    }
+
     fn grid(&self) -> Option<mw_sim::scenario::Grid> {
         let scenario = self.scenario.as_ref()?;
         let bound = scenario.bind();
@@ -315,26 +464,42 @@ fn country_name(scenario: &Scenario, id: u16) -> &str {
 }
 
 /// A line for the event feed, or None for events not worth showing.
-fn describe(scenario: &Scenario, event: &Event) -> Option<String> {
+fn describe(scenario: &Scenario, world: &World, event: &Event) -> Option<String> {
     let name = |id| country_name(scenario, id);
+    // "Poland division 12", or "Division 12" once it is gone.
+    let division_name = |id: DivisionId| match world.division(id) {
+        Some(d) => format!("{} division {}", name(d.country), id.0),
+        None => format!("Division {}", id.0),
+    };
     Some(match event {
         Event::WarDeclared { attacker, target } => {
             format!("{} declared war on {}", name(*attacker), name(*target))
         }
-        Event::Rejected {
-            order,
-            reason: Rejection::Unreachable,
-        } => match order.command {
-            Command::MoveDivision { division, .. } => {
-                format!(
-                    "{} division {} cannot get there",
-                    name(order.country),
-                    division.0
-                )
+        Event::Rejected { order, reason } => match (&order.command, reason) {
+            (Command::MoveDivision { division, .. }, Rejection::Unreachable) => format!(
+                "{} division {} cannot get there",
+                name(order.country),
+                division.0
+            ),
+            (Command::DrawArrow { .. }, Rejection::Unreachable) => {
+                "An arrow has to point at land".to_string()
             }
-            Command::DeclareWar { .. } => return None,
+            (_, Rejection::NoFrontHere) => {
+                "A front has to run along a border with another country".to_string()
+            }
+            (_, Rejection::NoFront) => "Draw the army group's front first".to_string(),
+            (_, Rejection::NotYourDivision) => {
+                "An army group takes divisions of one country only".to_string()
+            }
+            _ => return None,
         },
-        Event::DivisionRetreated { division, .. } => format!("Division {} fell back", division.0),
+        Event::ArmyGroupCreated { group, country } => {
+            format!("{} formed army group {}", name(*country), group.0)
+        }
+        Event::ArrowReached { group } => format!("Army group {} reached its objective", group.0),
+        Event::DivisionRetreated { division, .. } => {
+            format!("{} fell back", division_name(*division))
+        }
         Event::DivisionDestroyed {
             division,
             country,
@@ -348,7 +513,9 @@ fn describe(scenario: &Scenario, event: &Event) -> Option<String> {
                 Loss::BrokenUp => "was broken up",
             }
         ),
-        Event::MoveBlocked { division } => format!("Division {} found its way blocked", division.0),
+        Event::MoveBlocked { division } => {
+            format!("{} found its way blocked", division_name(*division))
+        }
         _ => return None,
     })
 }

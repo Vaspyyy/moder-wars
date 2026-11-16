@@ -184,5 +184,10 @@ impl World {
             index += 1;
             !gone[index - 1]
         });
+        for group in &mut self.groups {
+            group
+                .divisions
+                .retain(|&id| self.divisions.binary_search_by_key(&id, |d| d.id).is_ok());
+        }
     }
 }

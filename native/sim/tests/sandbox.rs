@@ -107,8 +107,27 @@ fn in_a_sandbox_war_the_attackers_take_ground() {
     let s = common::world_2026();
     let (germany, france) = (country(s, "Germany"), country(s, "France"));
     let mut world = World::new(s, 1);
-    sandbox::border_war(&mut world, germany, france, 24, 8, 10_000).unwrap();
-    run(&mut world, 5 * 24);
+    let war = sandbox::border_war(&mut world, germany, france, 24, 8, 10_000).unwrap();
+    for day in 0..5 {
+        run(&mut world, 24);
+        // The attackers' front stays on their land and keeps its points (a
+        // point may have been lost since the last plan, a few hours ago).
+        let front = &world.army_group(war.attack).unwrap().front;
+        assert!(
+            front.len() >= 15,
+            "day {day}: front of {} points",
+            front.len()
+        );
+        let lost = front
+            .iter()
+            .filter(|&&c| world.control()[c as usize] != germany)
+            .count();
+        assert!(
+            lost * 10 <= front.len(),
+            "day {day}: {lost} of {} front points lost",
+            front.len()
+        );
+    }
     let taken = s
         .control
         .iter()

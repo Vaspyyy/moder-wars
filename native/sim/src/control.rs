@@ -1,9 +1,10 @@
-//! Taking ground. One rule: a land cell changes hands when a division of a
-//! country at war with its holder is within `CONTROL_RADIUS_M` and no
-//! division hostile to that country is. Contested land stays as it is, so
-//! the front settles between the two armies. The nearest division decides
-//! when several non-hostile countries are close. The same rule liberates:
-//! the owner's division retakes its land once the occupier has left.
+//! Taking ground. A land cell changes hands when a division of a country at
+//! war with its holder is within `CONTROL_RADIUS_M` and no division hostile
+//! to that country is. Contested land stays as it is, so the front settles
+//! between the two armies. The nearest division decides when several
+//! non-hostile countries are close. The same rule liberates: the owner's
+//! division retakes its land once the occupier has left. Whatever the land
+//! around, a division holds the cell it stands on.
 
 use crate::division::CONTROL_RADIUS_M;
 use crate::map::Cell;
@@ -38,6 +39,14 @@ impl World {
             let holder = self.control[cell as usize];
             if holder != nearest && holder != 0 && self.at_war(nearest, holder) {
                 self.control[cell as usize] = nearest;
+            }
+        }
+        // Enemies never share a cell, so this cannot flip a cell back and forth.
+        for index in 0..self.divisions.len() {
+            let (cell, country) = (self.divisions[index].cell, self.divisions[index].country);
+            let holder = self.control[cell as usize];
+            if holder != country && holder != 0 && self.at_war(country, holder) {
+                self.control[cell as usize] = country;
             }
         }
     }

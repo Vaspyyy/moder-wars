@@ -351,3 +351,27 @@ fn a_marching_division_is_shown_moving_smoothly_between_cells() {
         last = (lng, lat);
     }
 }
+
+#[test]
+fn a_division_holds_the_land_it_stands_on() {
+    // A Polish division steps into Ukraine two cells from a Ukrainian one.
+    // The land around stays contested, but the cell under the Polish
+    // division is Polish.
+    let s = common::world_2026();
+    let (poland, ukraine) = (country(s, "Poland"), country(s, "Ukraine"));
+    let (ukrainian_side, polish_side) = common::border_west(s, 24.6, 50.85, ukraine, poland);
+    let mut world = World::new(s, 1);
+    declare_war(&mut world, poland, ukraine);
+    world
+        .spawn_division(ukraine, ukrainian_side + 2, 10_000)
+        .unwrap();
+    let d = world.spawn_division(poland, polish_side, 10_000).unwrap();
+    move_to(&mut world, poland, d, ukrainian_side);
+    hours_to_arrive(&mut world, d, 100).expect("arrives");
+    assert_eq!(world.control()[ukrainian_side as usize], poland);
+    assert_eq!(
+        world.control()[ukrainian_side as usize + 1],
+        ukraine,
+        "the land between them stays contested"
+    );
+}
