@@ -36,7 +36,7 @@ extends Node2D
 ##   --run=<hours>            run the simulation this long before showing it
 ##   --select=<id>,...        select these divisions, or their army groups (for screenshots)
 ##   --screenshot=<path>      save one frame as PNG and quit (for headless checks)
-##   --no-hud                 hide the labels (clean map pictures)
+##   --no-hud                 hide the labels except the data credits (clean map pictures)
 ##   --probe=<lng>,<lat>;...  print the country and region under each point and quit
 ##   --hover=<lng>,<lat>      show the hover label for this point (for screenshots)
 
@@ -172,12 +172,15 @@ func _build_map() -> void:
 
 func _build_ui() -> void:
 	var layer := CanvasLayer.new()
-	layer.visible = not _parse_args().has("no-hud")
 	add_child(layer)
+	var no_hud := _parse_args().has("no-hud")
 	for label in [info, credit, clock, feed, details, help]:
 		label.add_theme_color_override("font_outline_color", Color.BLACK)
 		label.add_theme_constant_override("outline_size", 6)
 		layer.add_child(label)
+		# --no-hud is for clean pictures, but the data credits stay (license
+		# requirement).
+		label.visible = label == credit or not no_hud
 	info.position = Vector2(16, 12)
 	info.add_theme_font_size_override("font_size", 22)
 	info.text = scenario.scenario_name()
