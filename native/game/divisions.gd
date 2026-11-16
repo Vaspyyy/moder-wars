@@ -21,8 +21,10 @@ const SELECTED_FRONT := Color(1.0, 0.82, 0.25)
 
 ## From MwWorld.divisions(), MwWorld.DIVISION_STRIDE numbers per division.
 var data := PackedFloat32Array()
-## World position of each division id in `data`, filled by `update`.
+## World position and country of each division id in `data`, filled by
+## `update`.
 var positions := {}
+var countries := {}
 var selected := {}
 ## id -> route as world points, for selected divisions that are moving.
 var routes := {}
@@ -41,17 +43,22 @@ var to_world: Callable
 func update(new_data: PackedFloat32Array) -> void:
 	data = new_data
 	positions.clear()
+	countries.clear()
 	var stride := MwWorld.DIVISION_STRIDE
 	for i in range(0, data.size(), stride):
 		positions[int(data[i])] = to_world.call(data[i + 2], data[i + 3])
+		countries[int(data[i])] = int(data[i + 1])
 	queue_redraw()
 
 
-## The division nearest to a world point within `radius` screen pixels, or -1.
-func pick(world: Vector2, radius: float) -> int:
+## The division nearest to a world point within `radius` screen pixels, or
+## -1; only `country`'s divisions unless it is 0.
+func pick(world: Vector2, radius: float, country := 0) -> int:
 	var best := -1
 	var best_distance := radius * pixel
 	for id in positions:
+		if country != 0 and countries[id] != country:
+			continue
 		var distance: float = world.distance_to(positions[id])
 		if distance <= best_distance:
 			best = id

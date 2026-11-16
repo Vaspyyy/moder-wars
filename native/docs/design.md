@@ -80,3 +80,23 @@ The genre (real-time-with-pause grand strategy) is the inspiration, not any one 
 | 5 | Front end, designed from scratch | owner approves mockups before big screens are built |
 | 6 | Sound, polish, more content | |
 | 7 | Packaged builds for Linux and Windows | |
+
+## Front end (step 5)
+
+The owner approved the mockups (pick a country, command the war, budget and mobilization, a peace offer) on 2026-11-16 and chose:
+
+- **Army groups:** a list on the left, one row per group with its front, size and strength (not cards on the map).
+- **Budget:** three sliders that always add up to 100% (recruiting, equipment, and the home front that is left).
+- **Reports:** a feed on the right for everything; big events (a war declared on you, a peace offer, a capitulation) also pop up a card and pause the game.
+- **Peace terms:** the regions that would change hands light up on the map behind the peace window, which also lists them by name.
+
+Built in slices, each its own PR:
+
+| Slice | What |
+| --- | --- |
+| 5a | Pick a country: the paused world with every real army, a country card, "Lead"; the top bar (country and wars, date, pause and speeds, income, people left to draft, divisions, war support). Built. |
+| 5b | Command the war: the army group list, the command bar (draw front, draw arrow, hold), the map key, the reports feed with big-event cards. |
+| 5c | The budget and mobilization window, opened from income and people left to draft in the top bar. |
+| 5d | The peace window (the comparison table, the regions both ways, lit on the map) and declaring war from a country's card. |
+
+The look comes from the mockups: dark blue-grey panels over the map, Barlow and Barlow Condensed (SIL Open Font License, `game/fonts/`), gold for what the player acts with, orange for attack arrows, red for war. Shared colors, fonts and boxes are in `game/ui/style.gd`.

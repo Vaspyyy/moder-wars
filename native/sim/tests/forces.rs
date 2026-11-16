@@ -31,6 +31,21 @@ fn km(s: &Scenario, a: u32, b: u32) -> f64 {
 }
 
 #[test]
+fn each_figure_keeps_the_year_it_was_counted() {
+    let s = common::world_2026();
+    let path = common::repo_root().join("assets/data/forces/world-bank.json.gz");
+    let bytes = std::fs::read(&path).unwrap();
+    let observations = forces::read_observations(&bytes, s).unwrap();
+    let poland = observations[&country(s, "Poland")];
+    assert_eq!((poland.personnel, poland.year), (189_000, 2020));
+    let personnel: Personnel = observations
+        .iter()
+        .map(|(&c, o)| (c, o.personnel))
+        .collect();
+    assert_eq!(&personnel, self::personnel());
+}
+
+#[test]
 fn personnel_comes_from_the_latest_observation() {
     let s = common::world_2026();
     let p = personnel();

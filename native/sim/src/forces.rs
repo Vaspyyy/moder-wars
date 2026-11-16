@@ -24,6 +24,13 @@ use crate::world::{CountryId, World};
 /// Active personnel by country, where it is known.
 pub type Personnel = BTreeMap<CountryId, u32>;
 
+/// One country's force figure and the year it was counted.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Observation {
+    pub personnel: u32,
+    pub year: i32,
+}
+
 /// The share of active personnel that serves in land divisions.
 pub const LAND_SHARE_PERCENT: u64 = 60;
 
@@ -53,7 +60,7 @@ struct Snapshot {
 #[derive(Deserialize)]
 struct Responses {
     countries: (IgnoredAny, Vec<WorldBankCountry>),
-    personnel: (IgnoredAny, Vec<Observation>),
+    personnel: (IgnoredAny, Vec<WorldBankObservation>),
 }
 
 #[derive(Deserialize)]
@@ -64,16 +71,28 @@ struct WorldBankCountry {
 }
 
 #[derive(Deserialize)]
-struct Observation {
+struct WorldBankObservation {
     #[serde(rename = "countryiso3code")]
     iso3: String,
     date: String,
     value: Option<f64>,
 }
 
+/// Each scenario country's latest personnel figure up to the scenario's
+/// start year (see `read_observations`).
+pub fn read_personnel(gzipped: &[u8], scenario: &Scenario) -> Result<Personnel, ForcesError> {
+    Ok(read_observations(gzipped, scenario)?
+        .into_iter()
+        .map(|(country, o)| (country, o.personnel))
+        .collect())
+}
+
 /// Each scenario country's latest personnel observation up to the
 /// scenario's start year, matched by two-letter country code.
-pub fn read_personnel(gzipped: &[u8], scenario: &Scenario) -> Result<Personnel, ForcesError> {
+pub fn read_observations(
+    gzipped: &[u8],
+    scenario: &Scenario,
+) -> Result<BTreeMap<CountryId, Observation>, ForcesError> {
     let mut json = String::new();
     flate2::read::GzDecoder::new(gzipped)
         .read_to_string(&mut json)
@@ -115,7 +134,8 @@ pub fn read_personnel(gzipped: &[u8], scenario: &Scenario) -> Result<Personnel, 
         .flatten()
         .filter_map(|c| {
             let iso3 = iso3_of.get(c.iso2.as_deref()?)?;
-            Some((c.id, latest.get(iso3)?.1))
+            let &(year, personnel) = latest.get(iso3)?;
+            Some((c.id, Observation { personnel, year }))
         })
         .collect())
 }
