@@ -406,7 +406,7 @@ fn army_groups_replay_exactly_and_survive_a_save() {
         match hours_before_save {
             Some(hours) => {
                 run(&mut f.world, hours);
-                let mut resumed = save::load(&save::save(&f.world), s).unwrap();
+                let mut resumed = save::load(&save::save(&f.world), s, None).unwrap();
                 run(&mut resumed, 120 - hours);
                 resumed
             }

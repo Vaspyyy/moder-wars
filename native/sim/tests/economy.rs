@@ -330,7 +330,7 @@ fn the_economy_replays_exactly_and_survives_a_save() {
         match save_after {
             Some(hours) => {
                 run(&mut world, hours);
-                let mut resumed = save::load(&save::save(&world), s).unwrap();
+                let mut resumed = save::load(&save::save(&world), s, None).unwrap();
                 run(&mut resumed, 30 * 24 - hours);
                 resumed
             }

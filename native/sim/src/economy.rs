@@ -2,7 +2,8 @@
 //!
 //! Land produces money: each country's GDP is spread over the land it owns
 //! by law (see `map::spread_output`), and whoever holds a cell gets its
-//! output, half of it when the cell is occupied land. Money is counted in
+//! output, half of it when the cell is occupied land. Land keeps what it
+//! produces when a peace hands it to a new owner by law. Money is counted in
 //! thousands of dollars ("k"), in whole numbers, so it adds up the same way
 //! on every machine.
 //!
@@ -100,7 +101,7 @@ impl World {
             return 0;
         }
         let full = self.map.value_k(cell);
-        let earned = if self.map.de_jure(cell) == holder {
+        let earned = if self.owner_by_law(cell) == holder {
             full
         } else {
             full * OCCUPIED_PERCENT / 100
@@ -119,7 +120,7 @@ impl World {
             if let Some(index) = self.index_of(holder) {
                 output[index] += self.earns_k(holder, cell);
             }
-            let owner = self.map.de_jure(cell);
+            let owner = self.owner_by_law(cell);
             if let Some(index) = self.index_of(owner) {
                 let value = self.map.value_k(cell) as i64;
                 home_total[index] += value;
@@ -142,7 +143,7 @@ impl World {
             return;
         }
         let (lost, gained) = (self.earns_k(from, cell), self.earns_k(to, cell));
-        let owner = self.map.de_jure(cell);
+        let owner = self.owner_by_law(cell);
         let value = self.map.value_k(cell) as i64;
         if let Some(index) = self.index_of(from) {
             let economy = &mut self.countries[index].economy;
