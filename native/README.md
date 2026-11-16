@@ -11,6 +11,17 @@ native/
   docs/       Design, plan, and the old game's features and rules as reference.
 ```
 
+## Play it
+
+From the repository root:
+
+```sh
+native/play.sh            # build the Rust extension, then open the game
+native/play.sh --watch    # same, then follow main: pull, rebuild and restart whenever new commits land
+```
+
+Other options go to the game, e.g. `native/play.sh --scenario=ukraine-2023-v3 --view=34,48.5,9`. Close the game window or press Ctrl+C to stop. `--watch` checks every 30 seconds, only fast-forwards, and keeps the old game running if a build fails.
+
 ## Commands
 
 Run from `native/` unless noted.
