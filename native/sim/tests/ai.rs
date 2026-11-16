@@ -338,3 +338,60 @@ fn an_ai_soak_stays_inside_its_time_budget() {
     // game day for 650 divisions).
     assert!(elapsed.as_secs_f64() < 8.0, "60 days took {elapsed:?}");
 }
+
+#[test]
+fn a_war_weary_ai_makes_peace() {
+    // Monaco produces nothing, so it raises no divisions: its war with a
+    // passive France stays quiet and only its war support moves.
+    let s = common::world_2026();
+    let (monaco, france) = (country(s, "Monaco"), country(s, "France"));
+    let support = |world: &World| world.economy(monaco).unwrap().support;
+    let mut world = World::new(s, 1);
+    world.set_controller(monaco, Controller::Ai).unwrap();
+    order(&mut world, france, Command::DeclareWar { target: monaco });
+    run(&mut world, 2 * 24);
+    order(&mut world, france, Command::OfferPeace { to: monaco });
+    assert!(
+        run(&mut world, 2 * 24).contains(&Event::PeaceRefused {
+            from: france,
+            to: monaco
+        }),
+        "full support: Monaco fights on"
+    );
+    while support(&world) >= 400 {
+        let events = run(&mut world, 24);
+        assert!(world.divisions().is_empty(), "the war stays quiet");
+        assert!(
+            !events.contains(&Event::PeaceOffered {
+                from: monaco,
+                to: france
+            }),
+            "asked for peace at {}",
+            support(&world)
+        );
+        assert!(world.tick() < 600 * 24, "support never fell");
+    }
+    let mut asking = world.clone();
+    order(&mut world, france, Command::OfferPeace { to: monaco });
+    assert!(
+        run(&mut world, 2 * 24).contains(&Event::PeaceMade {
+            from: france,
+            to: monaco
+        }),
+        "below 40% Monaco takes peace"
+    );
+    // Each day starts with the support update; Monaco thinks later that
+    // day, so it sees the support as it is after the day.
+    loop {
+        let asked = run(&mut asking, 24).contains(&Event::PeaceOffered {
+            from: monaco,
+            to: france,
+        });
+        let seen = support(&asking);
+        if asked {
+            assert!(seen < 300, "asked at {seen}");
+            break;
+        }
+        assert!(seen >= 300, "below 30% and still not asking");
+    }
+}

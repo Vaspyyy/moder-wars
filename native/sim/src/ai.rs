@@ -11,8 +11,9 @@
 //! - draws an arrow towards an enemy's capital when its group is clearly
 //!   stronger than the enemy divisions near the front, and takes it away
 //!   when it no longer is;
-//! - accepts peace when it is losing and refuses when it is not, and asks
-//!   for peace once it has lost a quarter of its land.
+//! - accepts peace when it is losing or its war support is low, refuses
+//!   otherwise, and asks for peace once it has lost a quarter of its land
+//!   or its war support runs lower still.
 //!
 //! Its orders are queued and applied like anyone's, so a replay of the
 //! player's orders replays the AI too.
@@ -42,6 +43,10 @@ const HARD_PRESSED: f64 = 0.25;
 /// weaker than this share of the enemy.
 const ACCEPT_LOST: f64 = 0.2;
 const ACCEPT_POWER: f64 = 0.7;
+/// War support (per mille) below which it accepts peace, and below which
+/// it asks for it.
+const ACCEPT_SUPPORT: u16 = 400;
+const ASK_SUPPORT: u16 = 300;
 /// The most points the AI draws a front with.
 const FRONT_POINTS: usize = 40;
 /// Looking for a border it does not have is retried this often (days).
@@ -113,7 +118,7 @@ impl World {
         if !at_war {
             return orders;
         }
-        self.think_peace(country, &enemies, lost, &mut orders);
+        self.think_peace(country, &enemies, lost, economy.support, &mut orders);
         self.think_armies(country, &enemies, &mut orders);
         orders
     }
@@ -131,17 +136,20 @@ impl World {
         country: CountryId,
         enemies: &[CountryId],
         lost: f64,
+        support: u16,
         orders: &mut Vec<Command>,
     ) {
         let own = self.power_of(country);
         for offer in self.offers.iter().filter(|o| o.to == country) {
-            let losing = lost >= ACCEPT_LOST || own < ACCEPT_POWER * self.power_of(offer.from);
+            let losing = lost >= ACCEPT_LOST
+                || own < ACCEPT_POWER * self.power_of(offer.from)
+                || support < ACCEPT_SUPPORT;
             orders.push(Command::AnswerPeace {
                 from: offer.from,
                 accept: losing,
             });
         }
-        if lost >= HARD_PRESSED {
+        if lost >= HARD_PRESSED || support < ASK_SUPPORT {
             for &enemy in enemies {
                 let open = self.offers.iter().any(|o| {
                     (o.from == country && o.to == enemy) || (o.from == enemy && o.to == country)

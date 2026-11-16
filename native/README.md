@@ -46,6 +46,7 @@ That puts 24 German and 12 French divisions on their border, each side as one ar
 | P | the selected division's country offers peace to all its enemies |
 | Y or N | accept or refuse the newest peace offer, for the country it was made to |
 | I | hand the selected division's country to the AI, or take it back |
+| F5 or F9 | quick save, or load the quick save (one slot, in Godot's user data folder) |
 | Esc | stop drawing, or clear the selection |
 | drag, WASD or arrows | pan |
 | wheel, + or - | zoom |

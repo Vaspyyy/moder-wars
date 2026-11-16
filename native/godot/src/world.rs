@@ -348,9 +348,10 @@ impl MwWorld {
     }
 
     /// A country's economy as a dictionary: `income_k` (thousands of
-    /// dollars a day after mobilization), `recruiting` and `equipment`
-    /// (budget percent), `mobilization` (0 to 3), `manpower`,
-    /// `recruit_fund_k`, `equipment_k`. Empty for an unknown country.
+    /// dollars a day after mobilization), `recruiting`, `equipment` and
+    /// `home_front` (budget percent), `mobilization` (0 to 3), `manpower`,
+    /// `recruit_fund_k`, `equipment_k`, `support` (war support, per mille).
+    /// Empty for an unknown country.
     #[func]
     fn economy(&self, country: i32) -> VarDictionary {
         let mut entry = VarDictionary::new();
@@ -364,6 +365,8 @@ impl MwWorld {
         entry.set("income_k", e.income_k());
         entry.set("recruiting", i64::from(e.budget.recruiting));
         entry.set("equipment", i64::from(e.budget.equipment));
+        entry.set("home_front", i64::from(e.home_front()));
+        entry.set("support", i64::from(e.support));
         entry.set("mobilization", i64::from(e.mobilization));
         entry.set("manpower", e.manpower() as i64);
         entry.set("recruit_fund_k", e.recruit_fund_k);
@@ -558,6 +561,51 @@ impl MwWorld {
             .collect()
     }
 
+    /// Save the game to `path` (an absolute file path). Returns an empty
+    /// string on success, or the error.
+    #[func]
+    fn save_game(&self, path: GString) -> GString {
+        let Some(world) = self.world.as_ref() else {
+            return GString::from("There is no game to save");
+        };
+        let path = path.to_string();
+        match std::fs::write(&path, mw_sim::save::save(world)) {
+            Ok(()) => GString::new(),
+            Err(e) => GString::from(&format!("Cannot save to {path}: {e}")),
+        }
+    }
+
+    /// Load a game saved on this scenario (and its region map). Returns an
+    /// empty string on success, or the error; after an error the current
+    /// game goes on.
+    #[func]
+    fn load_game(&mut self, path: GString) -> GString {
+        let Some(scenario) = self.scenario.clone() else {
+            return GString::from("Start a game first");
+        };
+        let bound = scenario.bind();
+        let Some(s) = bound.scenario.as_ref() else {
+            return GString::from("Start a game first");
+        };
+        let path = path.to_string();
+        let loaded = std::fs::read(&path)
+            .map_err(|e| format!("Cannot read {path}: {e}"))
+            .and_then(|bytes| {
+                mw_sim::save::load(&bytes, s, bound.regions.as_ref())
+                    .map_err(|e| format!("Cannot load {path}: {e}"))
+            });
+        match loaded {
+            Ok(world) => {
+                // `shown` still holds what the map shows, so the next
+                // `control_changes` repaints whatever differs.
+                self.world = Some(world);
+                self.log.clear();
+                GString::new()
+            }
+            Err(message) => GString::from(&message),
+        }
+    }
+
     /// What happened since the last call, one line per event.
     #[func]
     fn take_events(&mut self) -> PackedStringArray {
@@ -699,6 +747,9 @@ fn describe(scenario: &Scenario, world: &World, event: &Event) -> Option<String>
             format!("{} refused peace with {}", name(*to), name(*from))
         }
         Event::Capitulated { country } => format!("{} capitulated", name(*country)),
+        Event::SupportCollapsed { country } => {
+            format!("{}'s support for the war collapsed", name(*country))
+        }
         Event::RegionsCeded { from, to, regions } => format!(
             "{} ceded {} {} to {}",
             name(*from),

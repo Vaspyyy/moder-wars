@@ -18,6 +18,7 @@ pub mod sandbox;
 pub mod save;
 pub mod scenario;
 mod supply;
+pub mod support;
 mod terms;
 pub mod time;
 pub mod world;

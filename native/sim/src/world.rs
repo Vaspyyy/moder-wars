@@ -158,6 +158,10 @@ pub enum Event {
     Capitulated {
         country: CountryId,
     },
+    /// The country's war support ran out; it capitulates.
+    SupportCollapsed {
+        country: CountryId,
+    },
     /// A peace handed `regions` regions that `from` owned by law to `to`.
     RegionsCeded {
         from: CountryId,
@@ -437,7 +441,8 @@ impl World {
     /// Run one tick: apply the orders due now, let the AI countries whose
     /// hour it is think, re-plan army groups (every few hours, and after
     /// group orders), fight, march, take ground, check supply (once a day),
-    /// pay out the economy (once a day), then advance time.
+    /// pay out the economy and update war support (once a day), then
+    /// advance time.
     pub fn step(&mut self) -> Vec<Event> {
         let mut events = Vec::new();
         let mut replan = self.apply_due(&mut events);
@@ -458,6 +463,7 @@ impl World {
             self.expire_offers();
             self.check_capitulation(&mut events);
             self.run_economy(&mut events);
+            self.run_support(&mut events);
         }
         self.tick += 1;
         events
