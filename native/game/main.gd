@@ -31,9 +31,12 @@ extends Node2D
 ##   --speed=<1-5>            starting speed
 ##   --play                   start running (the game starts paused)
 ##   --ai                     hand both sides of the --war sandbox to the AI
+##   --forces                 every country starts with its real army (World Bank
+##                            data); --war then only declares the war
 ##   --run=<hours>            run the simulation this long before showing it
 ##   --select=<id>,...        select these divisions, or their army groups (for screenshots)
 ##   --screenshot=<path>      save one frame as PNG and quit (for headless checks)
+##   --no-hud                 hide the labels except the data credits (clean map pictures)
 ##   --probe=<lng>,<lat>;...  print the country and region under each point and quit
 ##   --hover=<lng>,<lat>      show the hover label for this point (for screenshots)
 
@@ -170,10 +173,14 @@ func _build_map() -> void:
 func _build_ui() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
+	var no_hud := _parse_args().has("no-hud")
 	for label in [info, credit, clock, feed, details, help]:
 		label.add_theme_color_override("font_outline_color", Color.BLACK)
 		label.add_theme_constant_override("outline_size", 6)
 		layer.add_child(label)
+		# --no-hud is for clean pictures, but the data credits stay (license
+		# requirement).
+		label.visible = label == credit or not no_hud
 	info.position = Vector2(16, 12)
 	info.add_theme_font_size_override("font_size", 22)
 	info.text = scenario.scenario_name()
@@ -204,6 +211,14 @@ func _build_ui() -> void:
 ## Start the simulation, with the sandbox war from --war if given.
 func _start_sim(args: Dictionary) -> void:
 	sim.start(scenario, int(args.get("seed", "1")))
+	if args.has("forces"):
+		var error := sim.deploy_forces(ProjectSettings.globalize_path("res://").path_join(
+			"../../assets/data/forces/world-bank.json.gz"))
+		if error != "":
+			push_error("--forces: " + error)
+		else:
+			# License requirement (CC BY 4.0): the force data credit stays visible.
+			credit.text += "  ·  Forces: World Bank, IISS (CC BY 4.0)"
 	if args.has("war"):
 		var war: PackedStringArray = String(args["war"]).split(",")
 		var sides: Array[int] = []
@@ -213,8 +228,13 @@ func _start_sim(args: Dictionary) -> void:
 				push_error("--war: no country named %s" % side)
 			sides.append(id)
 		if sides.size() == 2 and not sides.has(0):
-			var error := sim.sandbox_war(sides[0], sides[1],
-				int(war[2]) if war.size() > 2 else 24, int(war[3]) if war.size() > 3 else 12)
+			var error := ""
+			if args.has("forces"):
+				if not sim.declare_war(sides[0], sides[1]):
+					error = "could not declare war"
+			else:
+				error = sim.sandbox_war(sides[0], sides[1],
+					int(war[2]) if war.size() > 2 else 24, int(war[3]) if war.size() > 3 else 12)
 			if error != "":
 				push_error("--war: " + error)
 			elif args.has("ai"):

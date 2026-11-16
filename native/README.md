@@ -52,7 +52,7 @@ That puts 24 German and 12 French divisions on their border, each side as one ar
 
 A marker is a box in the country's colour with a bar for the soldiers left. An orange frame means it is fighting, a red corner means it is cut off from supply. A front is a thick line in the group's colour (gold when selected), an arrow is orange.
 
-Add `--ai` to hand both sides to the AI and just watch (`native/play.sh --war=Germany,France --ai --play`). Countries start without a controller and only move when you order them or give them to the AI.
+Add `--ai` to hand both sides to the AI and just watch (`native/play.sh --war=Germany,France --ai --play`). Add `--forces` to give every country its real starting army instead of the sandbox divisions (`native/play.sh --forces --war=Russia,Ukraine --ai --play --view=34,49,7`). Countries start without a controller and only move when you order them or give them to the AI.
 
 The line above the credit shows the selected country's income, budget, mobilization and the men it can still draft. With a recruiting budget, new divisions appear at the capital once a day (a number shows how many stand together).
 
@@ -106,5 +106,7 @@ Known issue: the first import of a fresh project (no `game/.godot` folder yet, s
 ## Data
 
 Scenario packages are read straight from `../assets/maps/compiled/*.mwsc.gz` (MWSC v3, see `sim/src/scenario/`). The credit lines in the scenario data (DeepStateMap, OpenStreetMap/Overture) are license requirements and must stay visible on screen.
+
+Starting armies (`--forces`, `sim/src/forces.rs`) come from `../assets/data/forces/world-bank.json.gz`: active military personnel, IISS figures published by the World Bank (CC BY 4.0, see its README; the credit is shown on screen while it is used). 60% of the latest observation up to the scenario's start counts as land forces, in divisions of 10,000 spread along each country's land borders (over its cities when it has none). Countries without an observation start with none.
 
 Regions (states, provinces, oblasts) come from Natural Earth admin-1, `../assets/geodata/admin1/regions.json.gz` (public domain, see its README). `sim/src/regions.rs` lays them over the cell grid when a scenario loads (about 0.15 s): every owned land cell gets exactly one region, and a region never crosses a de jure border. Military control does not change regions; a region can be partly occupied.
