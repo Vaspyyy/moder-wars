@@ -55,6 +55,10 @@ const ATTACK_WIDTH_M: f64 = 12_000.0;
 const MIN_SECTOR_HALF_M: f64 = 20_000.0;
 /// A division farther than this from its place goes there before attacking.
 const LANE_M: u64 = 40_000;
+/// A division farther than this from every point of its group's front
+/// marches to the nearest one behind the lines, on a route from one search
+/// shared by all such divisions, and keeps it until it gets this close.
+const FAR_M: u64 = 300_000;
 pub(crate) const PLAN_EVERY: u64 = 3;
 
 /// Half the width of the attack sector around an arrow, in metres.
@@ -156,10 +160,59 @@ impl World {
             .collect();
         let sector = self.sector(&group.front, &group.arrow, members.len());
         let places = self.places(&sector, &members);
-        let arrow = group.arrow.clone();
-        for (division, place) in members.into_iter().zip(places) {
+        let (arrow, front) = (group.arrow.clone(), group.front.clone());
+        let far = |world: &World, cell: Cell| {
+            front
+                .iter()
+                .all(|&point| world.map.estimate_m(cell, point) > FAR_M)
+        };
+        let (far_away, near): (Vec<usize>, Vec<(usize, Cell)>) = (
+            members
+                .iter()
+                .copied()
+                .filter(|&d| far(self, self.divisions[d].cell))
+                .collect(),
+            members
+                .iter()
+                .copied()
+                .zip(places)
+                .filter(|&(d, _)| !far(self, self.divisions[d].cell))
+                .collect(),
+        );
+        self.bring_up(own, &front, &far_away);
+        for (division, place) in near {
             let target = self.target(division, place, own, enemy, &arrow);
             self.send(division, target);
+        }
+    }
+
+    /// Routes for divisions far behind the front that have none: to the
+    /// nearest front point over their own land. A division with no way
+    /// there is not looked for again until it moves.
+    fn bring_up(&mut self, own: CountryId, front: &[Cell], far_away: &[usize]) {
+        let waiting: Vec<usize> = far_away
+            .iter()
+            .copied()
+            .filter(|&d| {
+                let division = &self.divisions[d];
+                division.path.is_empty() && division.blocked != Some(division.cell)
+            })
+            .collect();
+        if waiting.is_empty() {
+            return;
+        }
+        let starts: Vec<Cell> = waiting.iter().map(|&d| self.divisions[d].cell).collect();
+        let routes = path::routes_to_nearest(&self.map, front, &starts, |c| self.held(c, own));
+        for (d, route) in waiting.into_iter().zip(routes) {
+            let division = &mut self.divisions[d];
+            match route {
+                Some(route) => {
+                    division.path = route;
+                    division.progress_m = 0;
+                    division.blocked = None;
+                }
+                None => division.blocked = Some(division.cell),
+            }
         }
     }
 

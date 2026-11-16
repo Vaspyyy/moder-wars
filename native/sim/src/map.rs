@@ -49,6 +49,33 @@ pub(crate) struct MapData {
     /// Per country id: what each of its land cells produces, thousands of
     /// dollars a day (cities add their own share on top).
     land_value_k: Vec<u32>,
+    /// Cosine and sine of each row's latitude and each column's longitude,
+    /// for straight-line distances through the Earth.
+    row_trig: Trig,
+    col_trig: Trig,
+}
+
+/// Cosine and sine of an angle, one entry per row or column.
+type Trig = Vec<(f64, f64)>;
+
+/// Cosine and sine of the centre latitude of every row and the centre
+/// longitude of every column.
+fn trig_tables(grid: &Grid) -> (Trig, Trig) {
+    let angle =
+        |index: u32, offset: f64| ((f64::from(index) + 0.5) * grid.res_deg + offset).to_radians();
+    let rows = (0..grid.height)
+        .map(|y| {
+            let lat = angle(y, -90.0);
+            (libm::cos(lat), libm::sin(lat))
+        })
+        .collect();
+    let cols = (0..grid.width)
+        .map(|x| {
+            let lng = angle(x, -180.0);
+            (libm::cos(lng), libm::sin(lng))
+        })
+        .collect();
+    (rows, cols)
 }
 
 impl MapData {
@@ -87,6 +114,7 @@ impl MapData {
         cities.sort_by_key(|c| (c.cell, c.owner));
         let land: Vec<bool> = scenario.land.iter().map(|&l| l != 0).collect();
         let land_value_k = spread_output(scenario, &land, &mut cities);
+        let (row_trig, col_trig) = trig_tables(&grid);
         MapData {
             grid,
             land,
@@ -96,6 +124,8 @@ impl MapData {
             diag_m: diag.into_iter().map(metres).collect(),
             de_jure: scenario.de_jure.clone(),
             land_value_k,
+            row_trig,
+            col_trig,
         }
     }
 
@@ -104,12 +134,14 @@ impl MapData {
     pub fn from_land(width: u32, height: u32, land: &[bool]) -> MapData {
         assert_eq!(land.len(), (width * height) as usize);
         let rows = height as usize;
+        let grid = Grid {
+            width,
+            height,
+            res_deg: 1.0,
+        };
+        let (row_trig, col_trig) = trig_tables(&grid);
         MapData {
-            grid: Grid {
-                width,
-                height,
-                res_deg: 1.0,
-            },
+            grid,
             land: land.to_vec(),
             cities: Vec::new(),
             ns_m: 111_000,
@@ -117,6 +149,8 @@ impl MapData {
             diag_m: vec![157_000; rows.saturating_sub(1)],
             de_jure: vec![0; land.len()],
             land_value_k: Vec::new(),
+            row_trig,
+            col_trig,
         }
     }
 
@@ -233,7 +267,23 @@ impl MapData {
         }
     }
 
-    /// A lower estimate of the travel distance in metres, for path finding.
+    /// The straight line through the Earth between two cell centres, a
+    /// hair shorter: never more than any walk between them, and never
+    /// shrinking by more than a step costs, so route searches that aim with
+    /// it stay small and visit each cell once.
+    pub fn chord_m(&self, from: Cell, to: Cell) -> u64 {
+        let ((x1, y1), (x2, y2)) = (self.xy(from), self.xy(to));
+        let ((cos_lat1, sin_lat1), (cos_lat2, sin_lat2)) =
+            (self.row_trig[y1 as usize], self.row_trig[y2 as usize]);
+        let ((cos_lng1, sin_lng1), (cos_lng2, sin_lng2)) =
+            (self.col_trig[x1 as usize], self.col_trig[x2 as usize]);
+        let cos_dlng = cos_lng1 * cos_lng2 + sin_lng1 * sin_lng2;
+        let dot = cos_lat1 * cos_lat2 * cos_dlng + sin_lat1 * sin_lat2;
+        // Steps are rounded to whole metres; stay under them.
+        (EARTH_RADIUS_M * (2.0 - 2.0 * dot).max(0.0).sqrt() * 0.9999) as u64
+    }
+
+    /// A rough distance in metres between two cells.
     pub fn estimate_m(&self, from: Cell, to: Cell) -> u64 {
         let (dx, dy) = self.offset(from, to);
         let (y1, y2) = (self.xy(from).1 as usize, self.xy(to).1 as usize);

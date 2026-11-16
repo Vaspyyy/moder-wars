@@ -11,7 +11,7 @@ mod common;
 use common::country;
 use mw_sim::forces::{self, Personnel};
 use mw_sim::scenario::Scenario;
-use mw_sim::world::World;
+use mw_sim::world::{Command, Controller, Order, World};
 
 fn personnel() -> &'static Personnel {
     static CELL: std::sync::OnceLock<Personnel> = std::sync::OnceLock::new();
@@ -155,4 +155,47 @@ fn observations_after_the_scenario_start_are_not_used() {
     let path = common::repo_root().join("assets/data/forces/world-bank.json.gz");
     let p = forces::read_personnel(&std::fs::read(path).unwrap(), &earlier).unwrap();
     assert_eq!(p.get(&country(&earlier, "Ukraine")), Some(&311_000));
+}
+
+#[test]
+fn a_war_between_real_armies_runs_smoothly() {
+    // Russia's army stands along all of its borders, most of it in Asia; at
+    // war the AI sends all of it to the Ukrainian front.
+    let s = common::world_2026();
+    let (russia, ukraine) = (country(s, "Russia"), country(s, "Ukraine"));
+    let mut world = World::new(s, 1);
+    world.deploy_forces(personnel());
+    for side in [russia, ukraine] {
+        world.set_controller(side, Controller::Ai).unwrap();
+    }
+    world
+        .submit(Order {
+            tick: 0,
+            country: russia,
+            command: Command::DeclareWar { target: ukraine },
+        })
+        .unwrap();
+    let started = std::time::Instant::now();
+    let mut slowest = std::time::Duration::ZERO;
+    for _ in 0..10 * 24 {
+        let hour = std::time::Instant::now();
+        world.step();
+        slowest = slowest.max(hour.elapsed());
+    }
+    let elapsed = started.elapsed();
+    eprintln!("real armies, 10 days: {elapsed:?}, slowest hour {slowest:?}");
+    let asian = world
+        .divisions()
+        .iter()
+        .filter(|d| d.country == russia && s.grid.center(d.cell as usize).0 > 60.0)
+        .collect::<Vec<_>>();
+    assert!(
+        asian.iter().filter(|d| d.target().is_some()).count() * 2 > asian.len(),
+        "the army in Asia is not on its way"
+    );
+    // Regression guards at several times what it takes now (about 0.3 s,
+    // the worst hour about 75 ms). A route search per far division used to
+    // take over a second per plan.
+    assert!(elapsed.as_secs_f64() < 4.0, "10 days took {elapsed:?}");
+    assert!(slowest.as_secs_f64() < 0.6, "an hour took {slowest:?}");
 }

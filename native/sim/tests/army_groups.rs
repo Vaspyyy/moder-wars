@@ -618,3 +618,45 @@ fn orders_given_while_paused_take_effect_at_once() {
     assert_eq!(world.tick(), 0, "the clock did not move");
     assert!(world.apply_orders().is_empty(), "nothing applies twice");
 }
+
+#[test]
+fn divisions_far_behind_the_lines_march_to_the_front() {
+    // Russian divisions in the Far East and Siberia; their group's front is
+    // on the Ukrainian border, thousands of kilometres west.
+    let s = common::world_2026();
+    let (russia, ukraine) = (country(s, "Russia"), country(s, "Ukraine"));
+    let mut world = World::new(s, 1);
+    order(&mut world, russia, Command::DeclareWar { target: ukraine });
+    let far: Vec<DivisionId> = [(135.1, 48.5), (113.5, 52.0), (82.9, 55.0)]
+        .iter()
+        .map(|&(lng, lat)| {
+            world
+                .spawn_division(russia, cell(s, lng, lat), 10_000)
+                .unwrap()
+        })
+        .collect();
+    let group = create_group(&mut world, russia, far.clone());
+    let line = cells(s, &[(34.0, 51.9), (35.6, 50.4), (38.2, 49.9), (39.8, 48.6)]);
+    order(&mut world, russia, Command::SetFront { group, line });
+    world.step();
+    let front = world.army_group(group).unwrap().front.clone();
+    assert!(!front.is_empty());
+    let to_front = |world: &World, d: DivisionId| {
+        let at = world.division(d).unwrap().cell;
+        front.iter().map(|&p| km(s, at, p)).fold(f64::MAX, f64::min)
+    };
+    let before: Vec<f64> = far.iter().map(|&d| to_front(&world, d)).collect();
+    for &d in &far {
+        let target = world.division(d).unwrap().target();
+        assert!(
+            target.is_some_and(|t| front.contains(&t)),
+            "division {} has no way to the front",
+            d.0
+        );
+    }
+    run(&mut world, 10 * 24);
+    for (&d, start) in far.iter().zip(before) {
+        let now = to_front(&world, d);
+        assert!(now < start - 250.0, "{start:.0} km out, still {now:.0}");
+    }
+}

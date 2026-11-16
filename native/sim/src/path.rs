@@ -48,7 +48,7 @@ pub(crate) fn find_within(
     let mut best: CellMap<(u64, Cell)> = CellMap::with_capacity_and_hasher(256, Default::default());
     let mut queue = BinaryHeap::new();
     best.insert(from, (0, from));
-    queue.push(Reverse((map.estimate_m(from, to), 0u64, from)));
+    queue.push(Reverse((map.chord_m(from, to), 0u64, from)));
     let mut settled = 0;
     while let Some(Reverse((_, walked, cell))) = queue.pop() {
         if cell == to {
@@ -78,11 +78,71 @@ pub(crate) fn find_within(
             let next = walked + u64::from(map.step_m(cell, step.to));
             if best.get(&step.to).is_none_or(|&(known, _)| next < known) {
                 best.insert(step.to, (next, cell));
-                queue.push(Reverse((next + map.estimate_m(step.to, to), next, step.to)));
+                queue.push(Reverse((next + map.chord_m(step.to, to), next, step.to)));
             }
         }
     }
     None
+}
+
+/// Routes from each of `starts` to the nearest of `goals`, over cells that
+/// pass `open`, from one search spreading out from all goals at once. Each
+/// route is like one from `find` (next step last); `None` for a start no
+/// goal can be reached from.
+pub(crate) fn routes_to_nearest(
+    map: &MapData,
+    goals: &[Cell],
+    starts: &[Cell],
+    open: impl Fn(Cell) -> bool,
+) -> Vec<Option<Vec<Cell>>> {
+    // cell -> (metres to the nearest goal, next cell towards it)
+    let mut toward: CellMap<(u64, Cell)> = CellMap::default();
+    let mut queue = BinaryHeap::new();
+    for &goal in goals {
+        if open(goal) && !toward.contains_key(&goal) {
+            toward.insert(goal, (0, goal));
+            queue.push(Reverse((0u64, goal)));
+        }
+    }
+    let mut waiting: CellMap<()> = starts.iter().map(|&s| (s, ())).collect();
+    while let Some(Reverse((metres, cell))) = queue.pop() {
+        if metres > toward[&cell].0 {
+            continue;
+        }
+        if waiting.remove(&cell).is_some() && waiting.is_empty() {
+            break;
+        }
+        for step in map.steps(cell) {
+            if !open(step.to)
+                || step
+                    .sides
+                    .is_some_and(|sides| !sides.into_iter().all(&open))
+            {
+                continue;
+            }
+            let next = metres + u64::from(map.step_m(cell, step.to));
+            if toward.get(&step.to).is_none_or(|&(known, _)| next < known) {
+                toward.insert(step.to, (next, cell));
+                queue.push(Reverse((next, step.to)));
+            }
+        }
+    }
+    starts
+        .iter()
+        .map(|&start| {
+            if waiting.contains_key(&start) || !toward.contains_key(&start) {
+                return None;
+            }
+            let mut walk = Vec::new();
+            let mut at = start;
+            while toward[&at].1 != at {
+                at = toward[&at].1;
+                walk.push(at);
+            }
+            walk.reverse();
+            Some(walk)
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -113,6 +173,23 @@ mod tests {
         // With both sides open, the diagonal is the short way.
         let open = |cell: Cell| map.is_land(cell) || cell == 2 || cell == 5;
         assert_eq!(find(&map, 1, 6, open), Some(vec![6]));
+    }
+
+    /// A 6 x 1 strip, two islands (longitude wraps, so the last cell is
+    /// water too):
+    ///
+    /// ```text
+    /// row 0:  # # . # # .
+    /// ```
+    #[test]
+    fn routes_lead_to_the_nearest_goal_or_nowhere() {
+        let land = [true, true, false, true, true, false];
+        let map = MapData::from_land(6, 1, &land);
+        let open = |cell: Cell| map.is_land(cell);
+        let routes = routes_to_nearest(&map, &[0], &[1, 0, 4], open);
+        assert_eq!(routes, vec![Some(vec![0]), Some(vec![]), None]);
+        let routes = routes_to_nearest(&map, &[0, 4], &[1, 3], open);
+        assert_eq!(routes, vec![Some(vec![0]), Some(vec![4])]);
     }
 }
 
