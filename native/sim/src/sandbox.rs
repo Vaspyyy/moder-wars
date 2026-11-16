@@ -2,6 +2,7 @@
 //! tests. Not game rules: in a real game divisions come from recruitment and
 //! orders from players and the AI.
 
+use crate::army::ArmyGroupId;
 use crate::division::DivisionId;
 use crate::map::{Cell, MapData};
 use crate::world::{Command, CountryId, Order, World};
@@ -15,6 +16,10 @@ const LOOK_AROUND: i64 = 6;
 pub struct BorderWar {
     pub attackers: Vec<DivisionId>,
     pub defenders: Vec<DivisionId>,
+    /// The attackers' group: a front along the border and an arrow across.
+    pub attack: ArmyGroupId,
+    /// The defenders' group, holding a front along the border.
+    pub defence: ArmyGroupId,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -24,9 +29,10 @@ pub enum SandboxError {
     NoBorder,
 }
 
-/// Declare war, line both armies up along the border (spread out, one
-/// division per cell), and send each attacking division about 150 km
-/// straight across into enemy land. The orders apply on the next tick.
+/// Declare war and line both armies up along the border (spread out, one
+/// division per cell), each side as one army group with a front along it.
+/// The attackers get an arrow about 150 km straight across into enemy land
+/// from the middle of the border. The orders apply on the next tick.
 pub fn border_war(
     world: &mut World,
     attacker: CountryId,
@@ -57,28 +63,82 @@ pub fn border_war(
     };
     let attacking = spawn(attacker, &attack_line, attackers);
     let defending = spawn(defender, &defence_line, defenders);
-    let targets: Vec<_> = attacking
-        .iter()
-        .filter_map(|&(division, cell)| Some((division, across(world, &map, cell, defender)?)))
-        .collect();
+    let attackers: Vec<DivisionId> = attacking.into_iter().map(|(id, _)| id).collect();
+    let defenders: Vec<DivisionId> = defending.into_iter().map(|(id, _)| id).collect();
+    let attack = world
+        .create_army_group(attacker, &attackers)
+        .expect("own new divisions");
+    let defence = world
+        .create_army_group(defender, &defenders)
+        .expect("own new divisions");
+    let attack_front = chain(&map, &attack_line);
+    let middle = attack_front[attack_front.len() / 2];
+    let tip = across(world, &map, middle, defender);
     let tick = world.tick();
-    let mut order = |command| {
+    let mut order = |country, command| {
         world
             .submit(Order {
                 tick,
-                country: attacker,
+                country,
                 command,
             })
             .expect("orders for the current tick are accepted");
     };
-    order(Command::DeclareWar { target: defender });
-    for (division, to) in targets {
-        order(Command::MoveDivision { division, to });
+    order(attacker, Command::DeclareWar { target: defender });
+    order(
+        attacker,
+        Command::SetFront {
+            group: attack,
+            line: attack_front,
+        },
+    );
+    if let Some(tip) = tip {
+        order(
+            attacker,
+            Command::DrawArrow {
+                group: attack,
+                line: vec![middle, tip],
+            },
+        );
     }
+    order(
+        defender,
+        Command::SetFront {
+            group: defence,
+            line: chain(&map, &defence_line),
+        },
+    );
     Ok(BorderWar {
-        attackers: attacking.into_iter().map(|(id, _)| id).collect(),
-        defenders: defending.into_iter().map(|(id, _)| id).collect(),
+        attackers,
+        defenders,
+        attack,
+        defence,
     })
+}
+
+/// Border cells in an order that walks along the border: start at one end,
+/// then always go to the nearest cell not visited yet.
+fn chain(map: &MapData, cells: &[Cell]) -> Vec<Cell> {
+    let Some(&first) = cells.first() else {
+        return Vec::new();
+    };
+    let end = cells
+        .iter()
+        .copied()
+        .max_by_key(|&c| (map.estimate_m(first, c), std::cmp::Reverse(c)))
+        .unwrap_or(first);
+    let mut left: Vec<Cell> = cells.iter().copied().filter(|&c| c != end).collect();
+    let mut walk = vec![end];
+    while !left.is_empty() {
+        let here = walk[walk.len() - 1];
+        let (at, _) = left
+            .iter()
+            .enumerate()
+            .min_by_key(|&(_, &c)| (map.estimate_m(here, c), c))
+            .expect("cells left");
+        walk.push(left.swap_remove(at));
+    }
+    walk
 }
 
 /// Up to `count` cells of `line`, spread as evenly as possible: each next

@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
+use crate::army::{ArmyGroup, ArmyGroupId, PLAN_EVERY};
 use crate::division::{Division, DivisionId, Loss, SpawnError};
 use crate::map::{Cell, MapData};
 use crate::path;
@@ -41,10 +42,31 @@ pub enum Command {
         target: CountryId,
     },
     /// Walk to a cell; attack whatever enemy stands in the way. Moving to
-    /// the cell the division stands on stops it.
+    /// the cell the division stands on stops it. A division in an army
+    /// group leaves it: direct orders take over from the group's.
     MoveDivision {
         division: DivisionId,
         to: Cell,
+    },
+    /// A new army group (possibly empty). Divisions leave their old group.
+    CreateArmyGroup {
+        divisions: Vec<DivisionId>,
+    },
+    /// Move divisions into a group, out of their old one.
+    AssignDivisions {
+        group: ArmyGroupId,
+        divisions: Vec<DivisionId>,
+    },
+    /// Give a group a front: a line drawn near a border (see `army`).
+    SetFront {
+        group: ArmyGroupId,
+        line: Vec<Cell>,
+    },
+    /// Give a group an arrow from its front into enemy land, the tip last.
+    /// An empty line takes the arrow away.
+    DrawArrow {
+        group: ArmyGroupId,
+        line: Vec<Cell>,
     },
 }
 
@@ -84,6 +106,14 @@ pub enum Event {
         country: CountryId,
         cause: Loss,
     },
+    ArmyGroupCreated {
+        group: ArmyGroupId,
+        country: CountryId,
+    },
+    /// The group took its arrow's tip; it holds from here.
+    ArrowReached {
+        group: ArmyGroupId,
+    },
 }
 
 /// Why an order had no effect.
@@ -94,8 +124,15 @@ pub enum Rejection {
     AlreadyAtWar,
     UnknownDivision,
     NotYourDivision,
-    /// No land route the division may take (water, or a country it is not at war with).
+    /// No land route the division may take (water, or a country it is not
+    /// at war with), or an arrow pointing at water.
     Unreachable,
+    UnknownArmyGroup,
+    NotYourArmyGroup,
+    /// The drawn front is not near the group's border with any country.
+    NoFrontHere,
+    /// Arrows start from a front; the group has none.
+    NoFront,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -128,6 +165,9 @@ pub struct World {
     /// Sorted by id.
     pub(crate) divisions: Vec<Division>,
     next_division: u32,
+    /// Sorted by id.
+    pub(crate) groups: Vec<ArmyGroup>,
+    next_group: u32,
     /// Orders not applied yet, sorted by (tick, country, seq).
     pending: Vec<Queued>,
     next_seq: u64,
@@ -171,6 +211,8 @@ impl World {
             control: scenario.control.clone(),
             divisions: Vec::new(),
             next_division: 1,
+            groups: Vec::new(),
+            next_group: 1,
             pending: Vec::new(),
             next_seq: 0,
             map: Arc::new(MapData::new(scenario)),
@@ -212,6 +254,42 @@ impl World {
 
     pub fn division(&self, id: DivisionId) -> Option<&Division> {
         self.division_index(id).map(|i| &self.divisions[i])
+    }
+
+    /// Form an army group at once, without an order. For setting up a game
+    /// (and for tests); during play groups come from `CreateArmyGroup`.
+    pub fn create_army_group(
+        &mut self,
+        country: CountryId,
+        divisions: &[DivisionId],
+    ) -> Result<ArmyGroupId, Rejection> {
+        if self.index_of(country).is_none() {
+            return Err(Rejection::UnknownCountry);
+        }
+        self.check_divisions(country, divisions)?;
+        self.leave_groups(divisions);
+        let id = ArmyGroupId(self.next_group);
+        self.next_group += 1;
+        let mut divisions = divisions.to_vec();
+        divisions.sort_unstable();
+        divisions.dedup();
+        self.groups.push(ArmyGroup {
+            id,
+            country,
+            divisions,
+            enemy: None,
+            front: Vec::new(),
+            arrow: Vec::new(),
+        });
+        Ok(id)
+    }
+
+    pub fn army_groups(&self) -> &[ArmyGroup] {
+        &self.groups
+    }
+
+    pub fn army_group(&self, id: ArmyGroupId) -> Option<&ArmyGroup> {
+        self.group_index(id).map(|i| &self.groups[i])
     }
 
     /// The next tick to run; also the number of ticks run so far.
@@ -266,14 +344,14 @@ impl World {
         Ok(())
     }
 
-    /// Run one tick: apply the orders due now, fight, march, take ground,
-    /// check supply (once a day), then advance time.
+    /// Run one tick: apply the orders due now, re-plan army groups (every
+    /// few hours, and after group orders), fight, march, take ground, check
+    /// supply (once a day), then advance time.
     pub fn step(&mut self) -> Vec<Event> {
         let mut events = Vec::new();
-        let due = self.pending.partition_point(|q| q.order.tick <= self.tick);
-        let orders: Vec<Queued> = self.pending.drain(..due).collect();
-        for queued in orders {
-            self.apply(queued.order, &mut events);
+        let replan = self.apply_due(&mut events);
+        if replan || self.tick.is_multiple_of(PLAN_EVERY) {
+            self.plan_groups(&mut events);
         }
         if !self.divisions.is_empty() {
             self.fight(&mut events);
@@ -286,6 +364,28 @@ impl World {
         }
         self.tick += 1;
         events
+    }
+
+    /// Apply the orders due now without running the tick, as `step` does
+    /// first: for a paused game, so orders show their effect at once. Army
+    /// groups given orders re-plan.
+    pub fn apply_orders(&mut self) -> Vec<Event> {
+        let mut events = Vec::new();
+        if self.apply_due(&mut events) {
+            self.plan_groups(&mut events);
+        }
+        events
+    }
+
+    /// Apply the due orders in order. Returns whether a group needs a plan.
+    fn apply_due(&mut self, events: &mut Vec<Event>) -> bool {
+        let due = self.pending.partition_point(|q| q.order.tick <= self.tick);
+        let orders: Vec<Queued> = self.pending.drain(..due).collect();
+        let mut replan = false;
+        for queued in orders {
+            replan |= self.apply(queued.order, events);
+        }
+        replan
     }
 
     /// Countries in at least one war.
@@ -327,7 +427,96 @@ impl World {
         self.scenario_fingerprint
     }
 
-    fn apply(&mut self, order: Order, events: &mut Vec<Event>) {
+    pub(crate) fn group_index(&self, id: ArmyGroupId) -> Option<usize> {
+        self.groups.binary_search_by_key(&id, |g| g.id).ok()
+    }
+
+    /// Apply one order. Returns whether army groups need a new plan.
+    fn apply(&mut self, order: Order, events: &mut Vec<Event>) -> bool {
+        let country = order.country;
+        let result = match &order.command {
+            Command::DeclareWar { .. } | Command::MoveDivision { .. } => {
+                self.apply_basic(order, events);
+                return false;
+            }
+            Command::CreateArmyGroup { divisions } => self
+                .create_army_group(country, divisions)
+                .map(|group| events.push(Event::ArmyGroupCreated { group, country })),
+            Command::AssignDivisions { group, divisions } => self
+                .own_group(country, *group)
+                .and_then(|index| Ok((index, self.check_divisions(country, divisions)?)))
+                .map(|(index, ())| {
+                    self.leave_groups(divisions);
+                    let members = &mut self.groups[index].divisions;
+                    members.extend(divisions);
+                    members.sort_unstable();
+                    members.dedup();
+                }),
+            Command::SetFront { group, line } => {
+                self.own_group(country, *group).and_then(|index| {
+                    let (enemy, front) = self
+                        .snap_front(country, line)
+                        .ok_or(Rejection::NoFrontHere)?;
+                    let group = &mut self.groups[index];
+                    group.enemy = Some(enemy);
+                    group.front = front;
+                    Ok(())
+                })
+            }
+            Command::DrawArrow { group, line } => {
+                self.own_group(country, *group).and_then(|index| {
+                    let mut line = line.clone();
+                    line.dedup();
+                    if !line.is_empty() {
+                        if self.groups[index].front.is_empty() {
+                            return Err(Rejection::NoFront);
+                        }
+                        let on_grid = line.iter().all(|&c| (c as usize) < self.map.len());
+                        if !on_grid || !self.map.is_land(line[line.len() - 1]) {
+                            return Err(Rejection::Unreachable);
+                        }
+                    }
+                    self.groups[index].arrow = line;
+                    Ok(())
+                })
+            }
+        };
+        match result {
+            Ok(()) => true,
+            Err(reason) => {
+                events.push(Event::Rejected { order, reason });
+                false
+            }
+        }
+    }
+
+    /// The index of `country`'s group `id`.
+    fn own_group(&self, country: CountryId, id: ArmyGroupId) -> Result<usize, Rejection> {
+        let index = self.group_index(id).ok_or(Rejection::UnknownArmyGroup)?;
+        if self.groups[index].country != country {
+            return Err(Rejection::NotYourArmyGroup);
+        }
+        Ok(index)
+    }
+
+    fn check_divisions(&self, country: CountryId, ids: &[DivisionId]) -> Result<(), Rejection> {
+        for &id in ids {
+            let index = self.division_index(id).ok_or(Rejection::UnknownDivision)?;
+            if self.divisions[index].country != country {
+                return Err(Rejection::NotYourDivision);
+            }
+        }
+        Ok(())
+    }
+
+    /// Take divisions out of whatever group they are in.
+    fn leave_groups(&mut self, ids: &[DivisionId]) {
+        for group in &mut self.groups {
+            group.divisions.retain(|id| !ids.contains(id));
+        }
+    }
+
+    fn apply_basic(&mut self, order: Order, events: &mut Vec<Event>) {
         match order.command {
             Command::DeclareWar { target } => match self.check_declare_war(order.country, target) {
                 Ok(()) => {
@@ -340,10 +529,12 @@ impl World {
                 Err(reason) => events.push(Event::Rejected { order, reason }),
             },
             Command::MoveDivision { division, to } => {
-                if let Err(reason) = self.plan_move(order.country, division, to) {
-                    events.push(Event::Rejected { order, reason });
+                match self.plan_move(order.country, division, to) {
+                    Ok(()) => self.leave_groups(&[division]),
+                    Err(reason) => events.push(Event::Rejected { order, reason }),
                 }
             }
+            _ => unreachable!("group orders are applied in `apply`"),
         }
     }
 

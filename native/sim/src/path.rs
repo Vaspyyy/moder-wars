@@ -18,6 +18,17 @@ pub(crate) fn find(
     to: Cell,
     open: impl Fn(Cell) -> bool,
 ) -> Option<Vec<Cell>> {
+    find_within(map, from, to, open, MAX_SETTLED)
+}
+
+/// Like `find`, but gives up after settling `max_settled` cells.
+pub(crate) fn find_within(
+    map: &MapData,
+    from: Cell,
+    to: Cell,
+    open: impl Fn(Cell) -> bool,
+    max_settled: usize,
+) -> Option<Vec<Cell>> {
     if from == to {
         return Some(Vec::new());
     }
@@ -44,7 +55,7 @@ pub(crate) fn find(
             continue;
         }
         settled += 1;
-        if settled > MAX_SETTLED {
+        if settled > max_settled {
             return None;
         }
         for step in map.steps(cell) {
