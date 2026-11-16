@@ -29,7 +29,7 @@ The JavaScript game is frozen (since 2026-11-16): fixes only, no new features. `
 
 ## Release and caching rules
 
-- The game version lives in places that must match: `<title>` in `index.html`, `CACHE_VERSION` in `workers/service-worker.js`, and `version` in `package.json` and `package-lock.json`. Bump them together when releasing.
+- The game version lives in places that must match: `<title>` in `index.html`, `CACHE_VERSION` in `workers/service-worker.js`, and `version` in `package.json` and `package-lock.json`. Bump them together, once per PR, only when the PR changes the deployed web build (not for `native/`, docs, `scripts/` or CI).
 - Pushes to main are checked and `dist/` is deployed to GitHub Pages by `.github/workflows/check-and-pages.yml`.
 - Every module in `src/` (and other shell files) must be listed in `APP_SHELL_PATHS` in `workers/service-worker.js`. `module-graph-smoke.mjs` parses that list and fails if a reachable module is missing, so add new files there. The build rewrites the list with the emitted files.
 - The root `service-worker.js` only `importScripts` the real implementation in `workers/` so it can control the whole site scope. The service worker caches aggressively; hard-refresh after source changes.
