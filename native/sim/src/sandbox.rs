@@ -4,6 +4,7 @@
 
 use crate::army::ArmyGroupId;
 use crate::division::DivisionId;
+use crate::front::chain;
 use crate::map::{Cell, MapData};
 use crate::world::{Command, CountryId, Order, World};
 
@@ -114,31 +115,6 @@ pub fn border_war(
         attack,
         defence,
     })
-}
-
-/// Border cells in an order that walks along the border: start at one end,
-/// then always go to the nearest cell not visited yet.
-fn chain(map: &MapData, cells: &[Cell]) -> Vec<Cell> {
-    let Some(&first) = cells.first() else {
-        return Vec::new();
-    };
-    let end = cells
-        .iter()
-        .copied()
-        .max_by_key(|&c| (map.estimate_m(first, c), std::cmp::Reverse(c)))
-        .unwrap_or(first);
-    let mut left: Vec<Cell> = cells.iter().copied().filter(|&c| c != end).collect();
-    let mut walk = vec![end];
-    while !left.is_empty() {
-        let here = walk[walk.len() - 1];
-        let (at, _) = left
-            .iter()
-            .enumerate()
-            .min_by_key(|&(_, &c)| (map.estimate_m(here, c), c))
-            .expect("cells left");
-        walk.push(left.swap_remove(at));
-    }
-    walk
 }
 
 /// Up to `count` cells of `line`, spread as evenly as possible: each next

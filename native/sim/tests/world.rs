@@ -25,7 +25,7 @@ fn declare(tick: u64, country: u16, target: u16) -> Order {
 }
 
 #[test]
-fn a_new_world_starts_at_the_scenario_date_with_every_country_on_ai() {
+fn a_new_world_starts_at_the_scenario_date_with_every_country_passive() {
     let scenario = common::world_2026();
     let world = world();
     assert_eq!(world.tick(), 0);
@@ -39,7 +39,7 @@ fn a_new_world_starts_at_the_scenario_date_with_every_country_on_ai() {
         world
             .countries()
             .iter()
-            .all(|c| c.controller == Controller::Ai)
+            .all(|c| c.controller == Controller::Passive)
     );
     assert_eq!(world.control(), scenario.control.as_slice());
     assert!(!world.at_war(UKRAINE, RUSSIA));

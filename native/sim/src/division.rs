@@ -67,6 +67,8 @@ pub struct Division {
     pub(crate) resting: bool,
     /// Fought this tick.
     pub(crate) in_battle: bool,
+    /// A target its army group sent it to that turned out to be out of reach.
+    pub(crate) blocked: Option<Cell>,
 }
 
 impl Division {
@@ -84,6 +86,7 @@ impl Division {
             progress_m: 0,
             resting: false,
             in_battle: false,
+            blocked: None,
         }
     }
 
