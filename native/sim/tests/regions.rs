@@ -98,13 +98,9 @@ fn a_region_never_crosses_a_border() {
         (common::world_2026(), common::regions_2026()),
         (common::ukraine_2023(), common::regions_ukraine()),
     ] {
-        for cell in 0..scenario.grid.len() {
+        for (cell, &owner) in scenario.de_jure.iter().enumerate() {
             if let Some(region) = regions.region_of_cell(cell) {
-                assert_eq!(
-                    region.home, scenario.de_jure[cell],
-                    "{} at cell {cell}",
-                    region.id
-                );
+                assert_eq!(region.home, owner, "{} at cell {cell}", region.id);
             }
         }
     }
