@@ -31,7 +31,30 @@ build() {
 	(cd "$here" && cargo build --quiet -p mw-godot)
 }
 
+# Godot only loads GDExtensions listed in game/.godot/extension_list.cfg,
+# which its import step writes. A fresh checkout has no .godot folder, so
+# import on the first run and whenever files under game/ changed since.
+import_project() {
+	local game="$here/game" stamp="$here/game/.godot/.play-imported"
+	if [ -f "$game/.godot/extension_list.cfg" ] && [ -f "$stamp" ] &&
+		[ -z "$(find "$game" -path "$game/.godot" -prune -o -newer "$stamp" -print -quit)" ]; then
+		return 0
+	fi
+	echo "Importing the Godot project..."
+	# The editor's import step aborts while shutting down once the Rust
+	# extension is loaded (Godot 4.7.2 and 4.8 beta3 alike), after it has
+	# written everything. Judge it by the extension list, not the exit code,
+	# and skip the core dump.
+	(ulimit -c 0 && "$godot" --headless --path "$game" --import) >"$here/target/godot-import.log" 2>&1 || true
+	if [ ! -f "$game/.godot/extension_list.cfg" ]; then
+		echo "Importing the Godot project failed; see native/target/godot-import.log"
+		return 1
+	fi
+	touch "$stamp"
+}
+
 build
+import_project
 if ((!watch)); then
 	exec "$godot" --path "$here/game" -- "${args[@]}"
 fi
@@ -64,7 +87,7 @@ while true; do
 		continue
 	fi
 	echo "Updated to: $(git -C "$repo" log -1 --format='%h %s')"
-	if build; then
+	if build && import_project; then
 		kill "$game" 2>/dev/null || true
 		wait "$game" 2>/dev/null || true
 		launch
