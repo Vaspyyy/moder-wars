@@ -44,10 +44,11 @@ Tests that come with this, before any game rule:
 ## Proposals (simple first, changed by tests)
 
 - **Time:** one tick is one game hour. Speeds run from about 6 game hours per real second up to "as fast as the CPU allows". The exact numbers belong to the clock module and its tests.
-- **Divisions** have personnel, equipment (0 to 1) and morale (0 to 1, recovers out of combat). Starting personnel comes from the World Bank data the browser game already used.
-- **One combat model:** divisions in contact on a front fight; attacker versus defender, with river and city defense bonuses. Terrain comes later, with real terrain data.
-- **One movement system:** paths over land cells; supply is cut when a division has no land path to its own territory.
-- **Control:** a cell changes hands when the enemy holds it with no defender nearby. One rule, written as a test first.
+- **Divisions** have personnel, equipment (0 to 1) and morale (0 to 1, recovers out of combat). Starting personnel comes from the World Bank data the browser game already used. *Built in 4c (`sim/src/division.rs`, tuning numbers in one place).*
+- **One combat model** (built, `combat.rs`): a division that moves into a cell held by enemy divisions attacks it. Each hour both sides lose morale and soldiers in proportion to the odds; defenders get a bonus, more in cities. A broken defender falls back one cell, away from the attack, or surrenders when it cannot. Rivers and terrain come later, with real data.
+- **One movement system** (built, `movement.rs`, `path.rs`): routes over land cells (eight neighbours, no slipping through corners), costs in real metres, about 36 km a day; land the enemy still holds is half speed. Never water, never a country you are not at war with.
+- **Control** (built, `control.rs`): a cell changes hands when an enemy division is within 20 km and no defender is. Undefended land falls ahead of an advance; contested land stays put, so fronts settle between armies.
+- **Supply** (built, `supply.rs`): once a day, divisions need a land path over their own country's land to its capital (or, once the capital falls, its biggest city left). Cut-off divisions lose equipment, morale and soldiers. Peace makes everyone supplied.
 - **Regions:** each region's output is its country's GDP times its share of population (or of land cells where population is missing). A region is controlled by whoever holds most of its cells, and a region with a capital or a major city is an objective.
 - **Diplomacy in v1:** declaring war, peace offers in both directions, and separate peace. Alliances wait for data on real 2026 alliances.
 

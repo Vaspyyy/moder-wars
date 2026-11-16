@@ -33,7 +33,7 @@ pub use legacy::legacy_province_ids;
 pub use mwsc::{DecodeError, Header};
 
 /// The map grid: equal-angle cells, row 0 at latitude -90, column 0 at longitude -180.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Grid {
     pub width: u32,
     pub height: u32,

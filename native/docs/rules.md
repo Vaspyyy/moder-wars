@@ -14,7 +14,7 @@ The old game often has two or three versions of the same idea running at once. T
 4. **One encirclement idea and one posture idea.** The old game has three of each (sections 6.6, 8.3, 11; and 3, 11).
 5. **Seeded randomness with explicit traits.** The old game draws everything from unseeded `Math.random()` and uses random unit ids as hidden per-unit personality (section 12).
 6. **Results must not depend on game speed or real time.** Old shortcuts switch on at 3x speed and peace deals land after 3.5 seconds of wall-clock time (section 12).
-7. **Distance.** Decide between planar degrees and cos(latitude)-corrected distance, and wrap longitude everywhere (the old code wraps only in some places).
+7. **Distance.** Decide between planar degrees and cos(latitude)-corrected distance, and wrap longitude everywhere (the old code wraps only in some places). *Decided in 4c: real metres (a cell's width shrinks with cos(latitude)), longitude wraps everywhere (`sim/src/map.rs`).*
 8. **War end.** Old peace offers only happen while some side is desperate, and the player never answers them; three peace paths split land differently (section 9).
 9. **War grace.** The intended rule is about 600 ticks of ceasefire after a declaration. The old code computes it from a counter that is reset later, so a second war in one session gets the wrong length, and the grace blocks only proximity combat (`src/war-start.js:147-148` vs `233`).
 10. **Terrain.** Mountain rules exist but never run on Earth maps (no terrain data at the shipped grid size, `src/geography-loader.js:231`). Native terrain is new design, not a port.
