@@ -20,6 +20,8 @@ pub(crate) struct CityCell {
     pub owner: CountryId,
     pub pop: u64,
     pub capital: bool,
+    /// The city's share of its country's output, thousands of dollars a day.
+    pub value_k: u32,
 }
 
 /// One step to a neighbouring cell. A diagonal step also names the two cells
@@ -42,6 +44,11 @@ pub(crate) struct MapData {
     ew_m: Vec<u32>,
     /// Diagonal step between row y and row y + 1, in metres.
     diag_m: Vec<u32>,
+    /// Owner by law of every cell (0 = nobody).
+    de_jure: Vec<CountryId>,
+    /// Per country id: what each of its land cells produces, thousands of
+    /// dollars a day (cities add their own share on top).
+    land_value_k: Vec<u32>,
 }
 
 impl MapData {
@@ -73,17 +80,22 @@ impl MapData {
                     owner: c.owner_id,
                     pop: c.pop.max(0.0) as u64,
                     capital: c.is_capital,
+                    value_k: 0,
                 })
             })
             .collect();
         cities.sort_by_key(|c| (c.cell, c.owner));
+        let land: Vec<bool> = scenario.land.iter().map(|&l| l != 0).collect();
+        let land_value_k = spread_output(scenario, &land, &mut cities);
         MapData {
             grid,
-            land: scenario.land.iter().map(|&l| l != 0).collect(),
+            land,
             cities,
             ns_m: metres(ns),
             ew_m: ew.into_iter().map(metres).collect(),
             diag_m: diag.into_iter().map(metres).collect(),
+            de_jure: scenario.de_jure.clone(),
+            land_value_k,
         }
     }
 
@@ -103,6 +115,8 @@ impl MapData {
             ns_m: 111_000,
             ew_m: vec![111_000; rows],
             diag_m: vec![157_000; rows.saturating_sub(1)],
+            de_jure: vec![0; land.len()],
+            land_value_k: Vec::new(),
         }
     }
 
@@ -120,6 +134,27 @@ impl MapData {
 
     pub fn cities(&self) -> &[CityCell] {
         &self.cities
+    }
+
+    /// The country that owns `cell` by law (0 = nobody).
+    pub fn de_jure(&self, cell: Cell) -> CountryId {
+        self.de_jure.get(cell as usize).copied().unwrap_or(0)
+    }
+
+    /// What `cell` produces for its owner by law, thousands of dollars a day.
+    pub fn value_k(&self, cell: Cell) -> u64 {
+        if !self.is_land(cell) {
+            return 0;
+        }
+        let owner = usize::from(self.de_jure(cell));
+        let land = u64::from(self.land_value_k.get(owner).copied().unwrap_or(0));
+        let start = self.cities.partition_point(|c| c.cell < cell);
+        let cities: u64 = self.cities[start..]
+            .iter()
+            .take_while(|c| c.cell == cell)
+            .map(|c| u64::from(c.value_k))
+            .sum();
+        land + cities
     }
 
     /// Column and row of a cell.
@@ -253,4 +288,59 @@ impl MapData {
             }
         }
     }
+}
+
+/// Spread each country's GDP over its land: half evenly over the land cells
+/// it owns by law, half over its cities by population (all of it over the
+/// land when its cities list no population). Fills in the cities' values and
+/// returns the per-cell land value by country id, thousands of dollars a day.
+fn spread_output(scenario: &Scenario, land: &[bool], cities: &mut [CityCell]) -> Vec<u32> {
+    let countries: Vec<_> = scenario.countries.iter().flatten().collect();
+    let size = countries
+        .iter()
+        .map(|c| usize::from(c.id))
+        .max()
+        .unwrap_or(0)
+        + 1;
+    let mut cells = vec![0u64; size];
+    for (&owner, &is_land) in scenario.de_jure.iter().zip(land) {
+        if is_land && usize::from(owner) < size {
+            cells[usize::from(owner)] += 1;
+        }
+    }
+    let mut city_pop = vec![0u64; size];
+    for city in cities.iter() {
+        if let Some(total) = city_pop.get_mut(usize::from(city.owner)) {
+            *total += city.pop;
+        }
+    }
+    let mut daily_k = vec![0f64; size];
+    for country in &countries {
+        daily_k[usize::from(country.id)] = country.gdp.unwrap_or(0.0).max(0.0) * 1e6 / 365.0;
+    }
+    let city_share = |owner: usize| {
+        if city_pop[owner] == 0 {
+            0.0
+        } else if cells[owner] == 0 {
+            1.0
+        } else {
+            0.5
+        }
+    };
+    for city in cities.iter_mut() {
+        let owner = usize::from(city.owner);
+        if owner < size && city_pop[owner] > 0 {
+            let share = city.pop as f64 / city_pop[owner] as f64;
+            city.value_k = (daily_k[owner] * city_share(owner) * share) as u32;
+        }
+    }
+    (0..size)
+        .map(|owner| {
+            if cells[owner] == 0 {
+                0
+            } else {
+                (daily_k[owner] * (1.0 - city_share(owner)) / cells[owner] as f64) as u32
+            }
+        })
+        .collect()
 }

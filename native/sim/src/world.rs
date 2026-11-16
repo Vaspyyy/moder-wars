@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::army::{ArmyGroup, ArmyGroupId, PLAN_EVERY};
 use crate::division::{Division, DivisionId, Loss, SpawnError};
+use crate::economy::{Budget, Economy, SERVE_PER_MILLE};
 use crate::map::{Cell, MapData};
 use crate::path;
 use crate::rng::Rng;
@@ -34,6 +35,7 @@ pub enum Controller {
 pub struct CountryState {
     pub id: CountryId,
     pub controller: Controller,
+    pub economy: Economy,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -67,6 +69,15 @@ pub enum Command {
     DrawArrow {
         group: ArmyGroupId,
         line: Vec<Cell>,
+    },
+    /// Shares of income, in percent, for recruiting and for equipment.
+    SetBudget {
+        recruiting: u8,
+        equipment: u8,
+    },
+    /// 0 (peacetime) to 3 (total mobilization).
+    SetMobilization {
+        level: u8,
     },
 }
 
@@ -114,6 +125,11 @@ pub enum Event {
     ArrowReached {
         group: ArmyGroupId,
     },
+    /// A new division, raised at the country's supply source.
+    DivisionRecruited {
+        division: DivisionId,
+        country: CountryId,
+    },
 }
 
 /// Why an order had no effect.
@@ -133,6 +149,10 @@ pub enum Rejection {
     NoFrontHere,
     /// Arrows start from a front; the group has none.
     NoFront,
+    /// Budget shares add up to more than 100%.
+    BadBudget,
+    /// Mobilization goes from 0 to 3.
+    BadMobilization,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -157,7 +177,7 @@ pub struct World {
     tick: u64,
     pub(crate) rng: Rng,
     /// Sorted by id.
-    countries: Vec<CountryState>,
+    pub(crate) countries: Vec<CountryState>,
     /// Pairs at war, stored as (lower id, higher id).
     wars: BTreeSet<(CountryId, CountryId)>,
     /// Military control per grid cell (0 = nobody).
@@ -193,10 +213,11 @@ impl World {
             .map(|c| CountryState {
                 id: c.id,
                 controller: Controller::Ai,
+                economy: Economy::new(c.pop.unwrap_or(0.0).max(0.0) as u64),
             })
             .collect();
         countries.sort_by_key(|c| c.id);
-        World {
+        let mut world = World {
             scenario_fingerprint: scenario.fingerprint,
             start: scenario
                 .info
@@ -216,7 +237,9 @@ impl World {
             pending: Vec::new(),
             next_seq: 0,
             map: Arc::new(MapData::new(scenario)),
-        }
+        };
+        world.count_output();
+        world
     }
 
     /// Give a loaded save its map back.
@@ -245,6 +268,9 @@ impl World {
         self.next_division += 1;
         self.divisions
             .push(Division::new(id, country, cell, personnel));
+        let index = self.index_of(country).expect("checked above");
+        let economy = &mut self.countries[index].economy;
+        economy.drafted = economy.drafted.saturating_add(u64::from(personnel));
         Ok(id)
     }
 
@@ -282,6 +308,10 @@ impl World {
             arrow: Vec::new(),
         });
         Ok(id)
+    }
+
+    pub fn economy(&self, country: CountryId) -> Option<&Economy> {
+        self.country(country).map(|c| &c.economy)
     }
 
     pub fn army_groups(&self) -> &[ArmyGroup] {
@@ -362,6 +392,9 @@ impl World {
             }
             self.upkeep(&mut events);
         }
+        if self.tick.is_multiple_of(24) {
+            self.run_economy(&mut events);
+        }
         self.tick += 1;
         events
     }
@@ -435,6 +468,33 @@ impl World {
     fn apply(&mut self, order: Order, events: &mut Vec<Event>) -> bool {
         let country = order.country;
         let result = match &order.command {
+            Command::SetBudget {
+                recruiting,
+                equipment,
+            } => {
+                let total = u16::from(*recruiting) + u16::from(*equipment);
+                match self.index_of(country) {
+                    None => Err(Rejection::UnknownCountry),
+                    Some(_) if total > 100 => Err(Rejection::BadBudget),
+                    Some(index) => {
+                        self.countries[index].economy.budget = Budget {
+                            recruiting: *recruiting,
+                            equipment: *equipment,
+                        };
+                        Ok(())
+                    }
+                }
+            }
+            Command::SetMobilization { level } => match self.index_of(country) {
+                None => Err(Rejection::UnknownCountry),
+                Some(_) if usize::from(*level) >= SERVE_PER_MILLE.len() => {
+                    Err(Rejection::BadMobilization)
+                }
+                Some(index) => {
+                    self.countries[index].economy.mobilization = *level;
+                    Ok(())
+                }
+            },
             Command::DeclareWar { .. } | Command::MoveDivision { .. } => {
                 self.apply_basic(order, events);
                 return false;
@@ -566,7 +626,7 @@ impl World {
         }
     }
 
-    fn index_of(&self, id: CountryId) -> Option<usize> {
+    pub(crate) fn index_of(&self, id: CountryId) -> Option<usize> {
         self.countries.binary_search_by_key(&id, |c| c.id).ok()
     }
 }

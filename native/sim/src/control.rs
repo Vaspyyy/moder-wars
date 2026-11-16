@@ -38,7 +38,7 @@ impl World {
             }
             let holder = self.control[cell as usize];
             if holder != nearest && holder != 0 && self.at_war(nearest, holder) {
-                self.control[cell as usize] = nearest;
+                self.set_control(cell, nearest);
             }
         }
         // Enemies never share a cell, so this cannot flip a cell back and forth.
@@ -46,7 +46,7 @@ impl World {
             let (cell, country) = (self.divisions[index].cell, self.divisions[index].country);
             let holder = self.control[cell as usize];
             if holder != country && holder != 0 && self.at_war(country, holder) {
-                self.control[cell as usize] = country;
+                self.set_control(cell, country);
             }
         }
     }

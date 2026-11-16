@@ -96,12 +96,22 @@ impl World {
 
     pub(crate) fn upkeep(&mut self, events: &mut Vec<Event>) {
         let at_war = self.countries_at_war();
-        for division in &mut self.divisions {
+        for index in 0..self.divisions.len() {
+            let division = &self.divisions[index];
+            let repairable =
+                !division.in_battle && (division.supplied || !at_war.contains(&division.country));
+            let wanted = EQUIPMENT_RECOVERY.min(1.0 - division.equipment);
+            let repaired = if repairable && wanted > 0.0 {
+                self.repair(index, wanted)
+            } else {
+                0.0
+            };
+            let division = &mut self.divisions[index];
             if division.in_battle {
                 division.equipment = (division.equipment - COMBAT_WEAR).max(0.0);
-            } else if division.supplied || !at_war.contains(&division.country) {
+            } else if repairable {
                 division.morale = (division.morale + MORALE_RECOVERY).min(1.0);
-                division.equipment = (division.equipment + EQUIPMENT_RECOVERY).min(1.0);
+                division.equipment = (division.equipment + repaired).min(1.0);
             } else {
                 division.morale = (division.morale - CUT_OFF_MORALE).max(0.0);
                 division.equipment = (division.equipment - CUT_OFF_EQUIPMENT).max(0.0);

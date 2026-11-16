@@ -4,6 +4,7 @@ pub mod army;
 mod combat;
 mod control;
 pub mod division;
+pub mod economy;
 mod front;
 pub mod map;
 mod movement;
