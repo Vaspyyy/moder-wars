@@ -185,6 +185,20 @@ class ToolButton extends PanelContainer:
 			disabled = value
 			modulate.a = 0.45 if value else 1.0
 			mouse_default_cursor_shape = CURSOR_ARROW if value else CURSOR_POINTING_HAND
+	## Drawn with a gold frame (the chosen one of several).
+	var chosen := false:
+		set(value):
+			chosen = value
+			_restyle()
+	## No fill or frame until the mouse is over it.
+	var flat := false:
+		set(value):
+			flat = value
+			_restyle()
+	var padding := Vector2(14, 0):
+		set(value):
+			padding = value
+			_restyle()
 	var _hover := false
 
 	func _init() -> void:
@@ -201,12 +215,18 @@ class ToolButton extends PanelContainer:
 	func _restyle() -> void:
 		# Inner classes cannot call the outer `box`, so the box is made here.
 		var style := StyleBoxFlat.new()
-		style.bg_color = BUTTON_HOVER if _hover and not disabled else Color("161f2c")
-		style.border_color = LINE_STRONG
-		style.set_border_width_all(1)
-		style.set_corner_radius_all(6)
-		style.content_margin_left = 14
-		style.content_margin_right = 14
+		var lit := _hover and not disabled
+		if flat:
+			style.bg_color = BUTTON if lit else Color.TRANSPARENT
+		else:
+			style.bg_color = BUTTON_HOVER if lit else (Color("1e2632") if chosen else Color("161f2c"))
+			style.border_color = GOLD if chosen else LINE_STRONG
+			style.set_border_width_all(1)
+		style.set_corner_radius_all(6 if not flat else 4)
+		style.content_margin_left = padding.x
+		style.content_margin_right = padding.x
+		style.content_margin_top = padding.y
+		style.content_margin_bottom = padding.y
 		add_theme_stylebox_override("panel", style)
 
 	func _gui_input(event: InputEvent) -> void:
@@ -235,3 +255,65 @@ class LineIcon extends Control:
 			draw_polyline(PackedVector2Array([Vector2(1, h * 0.75), Vector2(w * 0.25, h * 0.25),
 				Vector2(w * 0.45, h * 0.67), Vector2(w * 0.65, h * 0.17), Vector2(w - 1, h * 0.75)]),
 				tint, 2.4, true)
+
+
+## A slider from 0 to 100 in the mockup's look: a thin dark track, gold up
+## to the handle, a round gold handle.
+static func slider() -> HSlider:
+	var bar := HSlider.new()
+	bar.min_value = 0
+	bar.max_value = 100
+	bar.step = 1
+	bar.focus_mode = Control.FOCUS_NONE
+	bar.custom_minimum_size.y = 24
+	bar.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	var track := box(LINE, Color.TRANSPARENT, 3)
+	track.content_margin_top = 3
+	track.content_margin_bottom = 3
+	bar.add_theme_stylebox_override("slider", track)
+	var filled := box(GOLD, Color.TRANSPARENT, 3)
+	bar.add_theme_stylebox_override("grabber_area", filled)
+	bar.add_theme_stylebox_override("grabber_area_highlight", box(GOLD_HOVER, Color.TRANSPARENT, 3))
+	var knob := _circle(16, GOLD)
+	bar.add_theme_icon_override("grabber", knob)
+	bar.add_theme_icon_override("grabber_highlight", _circle(16, GOLD_HOVER))
+	return bar
+
+
+static func _circle(diameter: int, color: Color) -> ImageTexture:
+	var image := Image.create(diameter, diameter, false, Image.FORMAT_RGBA8)
+	var center := Vector2(diameter, diameter) / 2.0
+	for y in diameter:
+		for x in diameter:
+			var d := Vector2(x + 0.5, y + 0.5).distance_to(center)
+			var edge := clampf(center.x - d, 0.0, 1.0)
+			image.set_pixel(x, y, Color(color, edge))
+	return ImageTexture.create_from_image(image)
+
+
+## A thin bar showing a share, in `color`.
+static func share_bar(share: float, color: Color) -> Control:
+	var bar := ShareBar.new()
+	bar.share = share
+	bar.color = color
+	bar.custom_minimum_size.y = 6
+	return bar
+
+
+class ShareBar extends Control:
+	var share := 0.0
+	var color := Color.WHITE
+
+	func _init() -> void:
+		mouse_filter = MOUSE_FILTER_IGNORE
+
+	func _draw() -> void:
+		var back := StyleBoxFlat.new()
+		back.bg_color = LINE
+		back.set_corner_radius_all(3)
+		draw_style_box(back, Rect2(Vector2.ZERO, size))
+		if share > 0.0:
+			var front := StyleBoxFlat.new()
+			front.bg_color = color
+			front.set_corner_radius_all(3)
+			draw_style_box(front, Rect2(Vector2.ZERO, Vector2(size.x * clampf(share, 0.0, 1.0), size.y)))
