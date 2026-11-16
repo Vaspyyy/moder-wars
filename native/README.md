@@ -22,6 +22,26 @@ native/play.sh --watch    # same, then follow main: pull, rebuild and restart wh
 
 Other options go to the game, e.g. `native/play.sh --scenario=ukraine-2023-v3 --view=34,48.5,9`. Close the game window or press Ctrl+C to stop. `--watch` checks every 30 seconds, only fast-forwards, and keeps the old game running if a build fails.
 
+To watch divisions fight, start a sandbox war between two neighbours (names as the scenario spells them):
+
+```sh
+native/play.sh --war=Germany,France --view=7.5,49.3,14
+```
+
+That puts 24 German and 12 French divisions on their border and sends the Germans about 150 km into France (`--war=Germany,France,30,20` changes the numbers). The game starts paused.
+
+| Key or mouse | Does |
+| --- | --- |
+| Space | pause and resume |
+| 1 to 5 | speed: 2, 6, 12, 24 or 72 game hours per second |
+| click a division | select it (Shift-click adds or removes) |
+| right-click | send the selected divisions there |
+| Esc | clear the selection |
+| drag, WASD or arrows | pan |
+| wheel, + or - | zoom |
+
+A marker is a box in the country's colour with a bar for the soldiers left. An orange frame means it is fighting, a red corner means it is cut off from supply.
+
 ## Commands
 
 Run from `native/` unless noted.
@@ -41,13 +61,17 @@ godot-beta --path game -- --scenario=ukraine-2023-v3 --view=34,48.5,9
 godot-beta --headless --path game -- --probe="30.52,50.45;37.62,55.75"   # country and region under each point
 ```
 
-`--hover=<lng>,<lat>` shows the hover label and highlight for a point, for screenshots.
+`--hover=<lng>,<lat>` shows the hover label and highlight for a point, for screenshots. `--run=<hours>` runs the simulation before the first frame, `--select=<id>,...` selects divisions, `--play` starts unpaused, `--speed=<1-5>` and `--seed=<n>` set the obvious; the full list is at the top of `game/main.gd`.
 
 Headless screenshot (no window, no sound; safe while someone plays on the same machine):
 
 ```sh
 gamescope --backend headless -W 1600 -H 900 -w 1600 -h 900 -- \
   godot-beta --path game --audio-driver Dummy --resolution 1600x900 -- --screenshot=/tmp/map.png
+# four days into the sandbox war, one division selected:
+gamescope --backend headless -W 1600 -H 900 -w 1600 -h 900 -- \
+  godot-beta --path game --audio-driver Dummy --resolution 1600x900 -- \
+  --war=Germany,France --run=96 --view=7.5,49.3,14 --select=3 --screenshot=/tmp/war.png
 ```
 
 Golden files (run from the repository root, they use the JavaScript code):
@@ -61,7 +85,7 @@ node scripts/export-native-golden.mjs --check   # fail if they are stale (CI run
 
 The project targets Godot 4.8 (developed on 4.8 beta3). godot-rust 0.5.5 has no 4.8 API yet, so `mw-godot` is built against the 4.7 API (`api-4-7`); Godot extensions are forward compatible. The `lazy-function-tables` feature is required: without it the extension resolves every engine method at startup and panics on `GDScriptTextDocument::foldingRange`, an editor method whose signature changed in 4.8. Switch to `api-4-8` once godot-rust ships it.
 
-Known issue: with the extension loaded, Godot's editor and its `--import` step abort while shutting down (exit code 134, on Godot 4.7.2 and 4.8 beta3 alike), after they have written everything. The game itself exits cleanly. `play.sh` imports the project when needed and checks the result by `game/.godot/extension_list.cfg` instead of the exit code.
+Known issue: the first import of a fresh project (no `game/.godot` folder yet, so Godot discovers the extension in the middle of its scan) crashes while shutting down, with exit code 134, after it has written everything. The crash is inside Godot (no Rust code on the stack; seen on 4.7.2 and 4.8 beta3). Later imports, the editor on an imported project and the game itself exit cleanly. `play.sh` imports the project when needed and checks the result by `game/.godot/extension_list.cfg` instead of the exit code.
 
 ## Data
 

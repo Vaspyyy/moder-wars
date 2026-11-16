@@ -3,10 +3,10 @@
 //! land is slower. A cell held by someone else's division blocks the way:
 //! an enemy there is attacked (see `combat`), anyone else is waited for.
 
-use crate::division::{ENEMY_LAND_COST, MARCH_M_PER_HOUR};
+use crate::division::{Division, ENEMY_LAND_COST, MARCH_M_PER_HOUR};
 use crate::map::Cell;
 use crate::path;
-use crate::world::{Event, World};
+use crate::world::{CountryId, Event, World};
 
 impl World {
     pub(crate) fn march(&mut self, events: &mut Vec<Event>) {
@@ -30,13 +30,7 @@ impl World {
                 self.reroute(index, events);
                 continue;
             }
-            let holder = self.control[next as usize];
-            let cost = self.map.step_m(here, next)
-                * if holder != 0 && holder != country {
-                    ENEMY_LAND_COST
-                } else {
-                    1
-                };
+            let cost = self.step_cost(country, here, next);
             let division = &mut self.divisions[index];
             division.progress_m += MARCH_M_PER_HOUR;
             if division.progress_m < cost {
@@ -58,6 +52,30 @@ impl World {
             let to = occupancy.partition_point(|&entry| entry < (next, index));
             occupancy.insert(to, (next, index));
         }
+    }
+
+    /// Metres of marching it takes `country` to step from `from` to `to`.
+    pub(crate) fn step_cost(&self, country: CountryId, from: Cell, to: Cell) -> u32 {
+        let holder = self.control[to as usize];
+        let enemy_land = holder != 0 && holder != country;
+        self.map.step_m(from, to) * if enemy_land { ENEMY_LAND_COST } else { 1 }
+    }
+
+    /// Where a division is drawn, in degrees of longitude and latitude: the
+    /// centre of its cell, moved towards the next cell of its route by the
+    /// share of that step it has marched.
+    pub fn location(&self, division: &Division) -> (f64, f64) {
+        let grid = &self.map.grid;
+        let (lng, lat) = grid.center(division.cell as usize);
+        let Some(next) = division.next_cell() else {
+            return (lng, lat);
+        };
+        let cost = self.step_cost(division.country, division.cell, next);
+        let share = (f64::from(division.progress_m) / f64::from(cost)).min(1.0);
+        let (dx, dy) = self.map.offset(division.cell, next);
+        let lng = lng + dx as f64 * grid.res_deg * share;
+        let lng = if lng >= 180.0 { lng - 360.0 } else { lng };
+        (lng, lat + dy as f64 * grid.res_deg * share)
     }
 
     /// The next cell closed: find another route to the same target or stop.

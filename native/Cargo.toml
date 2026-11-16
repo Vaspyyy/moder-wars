@@ -17,3 +17,7 @@ opt-level = 3
 # (decoding the map, building regions), so optimize it in debug builds too.
 [profile.dev.package.mw-sim]
 opt-level = 3
+
+# The bridge copies whole-map data (6.5 million cells) while the game runs.
+[profile.dev.package.mw-godot]
+opt-level = 3

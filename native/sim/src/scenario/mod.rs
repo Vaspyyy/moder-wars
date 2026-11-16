@@ -60,6 +60,16 @@ impl Grid {
         }
         Some(y as usize * self.width as usize + x)
     }
+
+    /// Longitude and latitude of a cell's centre.
+    pub fn center(&self, cell: usize) -> (f64, f64) {
+        let width = self.width as usize;
+        let (x, y) = ((cell % width) as f64, (cell / width) as f64);
+        (
+            (x + 0.5) * self.res_deg - 180.0,
+            (y + 0.5) * self.res_deg - 90.0,
+        )
+    }
 }
 
 #[derive(Debug, Clone)]

@@ -12,7 +12,7 @@ The browser game grew to about 55,000 lines with a 7,000-line `main.js`, simulat
 | 1 | Read the real scenario packages in Rust, checked by golden files | done |
 | 2 | First pixels: the political map in Godot 4.8 | done |
 | 3 | Decide the direction: a player-led grand strategy game in real time with pause ([design.md](design.md)) | done (2026-11-16) |
-| 4-7 | Simulation foundation, regions, divisions, army groups, economy, war and peace, AI, then the front end and packaging: see the build order in [design.md](design.md) | 4a, 4b and 4c done (2026-11-16); next: 4d |
+| 4-7 | Simulation foundation, regions, divisions, army groups, economy, war and peace, AI, then the front end and packaging: see the build order in [design.md](design.md) | 4a, 4b and 4c done (2026-11-16), divisions visible in the viewer; next: 4d |
 
 The first playable is smaller than today's game on purpose. It must be playable early; missing features come back after that, one at a time, only if they earn their place. [rules.md](rules.md) describes what the old game does, for reference when a rule is ported.
 
