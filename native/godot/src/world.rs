@@ -561,6 +561,51 @@ impl MwWorld {
             .collect()
     }
 
+    /// Save the game to `path` (an absolute file path). Returns an empty
+    /// string on success, or the error.
+    #[func]
+    fn save_game(&self, path: GString) -> GString {
+        let Some(world) = self.world.as_ref() else {
+            return GString::from("There is no game to save");
+        };
+        let path = path.to_string();
+        match std::fs::write(&path, mw_sim::save::save(world)) {
+            Ok(()) => GString::new(),
+            Err(e) => GString::from(&format!("Cannot save to {path}: {e}")),
+        }
+    }
+
+    /// Load a game saved on this scenario (and its region map). Returns an
+    /// empty string on success, or the error; after an error the current
+    /// game goes on.
+    #[func]
+    fn load_game(&mut self, path: GString) -> GString {
+        let Some(scenario) = self.scenario.clone() else {
+            return GString::from("Start a game first");
+        };
+        let bound = scenario.bind();
+        let Some(s) = bound.scenario.as_ref() else {
+            return GString::from("Start a game first");
+        };
+        let path = path.to_string();
+        let loaded = std::fs::read(&path)
+            .map_err(|e| format!("Cannot read {path}: {e}"))
+            .and_then(|bytes| {
+                mw_sim::save::load(&bytes, s, bound.regions.as_ref())
+                    .map_err(|e| format!("Cannot load {path}: {e}"))
+            });
+        match loaded {
+            Ok(world) => {
+                // `shown` still holds what the map shows, so the next
+                // `control_changes` repaints whatever differs.
+                self.world = Some(world);
+                self.log.clear();
+                GString::new()
+            }
+            Err(message) => GString::from(&message),
+        }
+    }
+
     /// What happened since the last call, one line per event.
     #[func]
     fn take_events(&mut self) -> PackedStringArray {

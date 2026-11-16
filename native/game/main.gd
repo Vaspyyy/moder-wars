@@ -287,6 +287,11 @@ func _refresh_sim() -> void:
 	_show_details()
 
 
+## One quick save slot, in Godot's user data folder.
+func _quicksave_path() -> String:
+	return ProjectSettings.globalize_path("user://quicksave.mwsave")
+
+
 func _add_feed(line: String) -> void:
 	if not feed_lines.is_empty() and feed_lines[-1][0] == line:
 		feed_lines[-1][1] += 1
@@ -371,7 +376,7 @@ func _show_help() -> void:
 		_:
 			help.text = ("Space pause  ·  1-5 speed  ·  click select  ·  right-click move  ·  "
 				+ "G group  ·  F front  ·  R arrow  ·  X drop arrow\n"
-				+ "B budget  ·  M mobilize  ·  W war  ·  P peace  ·  Y/N answer  ·  I AI on/off  ·  Esc clear")
+				+ "B budget  ·  M mobilize  ·  W war  ·  P peace  ·  Y/N answer  ·  I AI on/off  ·  F5/F9 save/load  ·  Esc clear")
 
 
 ## Click: select a division, or its whole army group. Shift-click adds or
@@ -544,6 +549,19 @@ func _unhandled_input(event: InputEvent) -> void:
 				_add_feed("No open peace offers")
 			else:
 				sim.answer_peace(int(newest["from"]), int(newest["to"]), key == KEY_Y)
+			_refresh_sim()
+		elif key == KEY_F5:
+			var error := sim.save_game(_quicksave_path())
+			_add_feed(error if error != "" else "Game saved")
+			_refresh_sim()
+		elif key == KEY_F9:
+			var error := sim.load_game(_quicksave_path())
+			if error == "":
+				markers.selected.clear()
+				markers.selected_group = 0
+				_add_feed("Game loaded")
+			else:
+				_add_feed(error)
 			_refresh_sim()
 		elif key == KEY_X and markers.selected_group != 0:
 			sim.draw_arrow(markers.selected_group, PackedVector2Array())
