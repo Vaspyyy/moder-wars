@@ -16,6 +16,10 @@ assert.ok(shell.some((path) => path.includes("war-simulation-worker-")));
 assert.ok(shell.every((path) => !path.startsWith("src/")));
 const html = read("index.html");
 assert.doesNotMatch(html, /leaflet|imagery-select|src\/main\.js|\.ts["']/i);
+// Offline game: no remote fonts or stylesheets, and the bundled ones are cached.
+assert.doesNotMatch(html, /fonts\.googleapis|fonts\.gstatic/);
+assert.doesNotMatch(html, /<link[^>]+href="https?:/);
+assert.ok(shell.some((path) => /^assets\/latin-[\w-]+\.woff2$/.test(path)));
 for (const match of html.matchAll(/(?:src|href)="(\.\/assets\/[^"#]+)"/g))
 	assert.ok(existsSync(new URL(match[1], root)), match[1]);
 const scripts = readdirSync(new URL("assets/", root)).filter((path) =>

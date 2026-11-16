@@ -811,6 +811,17 @@ export function createMenuControls(runtime) {
 		}
 	}
 
+	// A page reload is the complete reset: startup always opens the main menu.
+	function bindMainMenuBtnClick() {
+		runtime.mainMenuBtn?.addEventListener("click", async () => {
+			const leave = await showConfirm(
+				"Leave this game and return to the main menu? The current war is lost.",
+				{ title: "Main menu", okLabel: "Leave", danger: true },
+			);
+			if (leave) location.reload();
+		});
+	}
+
 	function bindCloseLeaderboardBtnClick() {
 		if (runtime.closeLeaderboardBtn) {
 			runtime.closeLeaderboardBtn.addEventListener("click", () => {
@@ -913,6 +924,7 @@ export function createMenuControls(runtime) {
 		bindClearSatBtnClick,
 		bindImportCountryCancelBtnClick,
 		bindLeaderboardBtnClick,
+		bindMainMenuBtnClick,
 		bindCloseLeaderboardBtnClick,
 		bindMinimizeSetupBtnClick,
 		bindMinimizeStatsBtnClick,

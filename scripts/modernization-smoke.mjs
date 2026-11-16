@@ -49,6 +49,7 @@ const checks = [
 	"simulation-speed",
 	"simulation-resize",
 	"speed-selector",
+	"main-menu",
 	"war-desk",
 	"ui-modules",
 	"ai-performance",

@@ -1,6 +1,6 @@
 // Service Worker — versioned offline shell plus persistent runtime data cache
 
-const CACHE_VERSION = "mw-v0.28.6";
+const CACHE_VERSION = "mw-v0.28.7";
 const APP_SHELL_PREFIX = "mw-app-shell-";
 const RUNTIME_PREFIX = "mw-runtime-";
 const LEGACY_CACHE_PREFIX = "mw-cache-";
@@ -118,6 +118,10 @@ const APP_SHELL_PATHS = [
 	"src/war-start.js",
 	"src/worker-asset-url.js",
 	"styles/style.css",
+	"assets/fonts/playfair-display/latin.woff2",
+	"assets/fonts/playfair-display/latin-ext.woff2",
+	"assets/fonts/playfair-display/cyrillic.woff2",
+	"assets/fonts/playfair-display/vietnamese.woff2",
 	"assets/images/title-map.svg",
 	"assets/atlas/coast-110m.bin.gz",
 	"assets/atlas/coast-50m.bin.gz",
