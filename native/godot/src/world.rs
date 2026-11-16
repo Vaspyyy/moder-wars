@@ -400,6 +400,76 @@ impl MwWorld {
                 .any(|e| matches!(e, Event::Rejected { .. }))
     }
 
+    /// `attacker` declares war on `target`. Returns whether it was taken.
+    #[func]
+    fn declare_war(&mut self, attacker: i32, target: i32) -> bool {
+        let (Ok(attacker), Ok(target)) = (u16::try_from(attacker), u16::try_from(target)) else {
+            return false;
+        };
+        self.order(attacker, Command::DeclareWar { target })
+            && !self
+                .apply_now()
+                .iter()
+                .any(|e| matches!(e, Event::Rejected { .. }))
+    }
+
+    /// `country` offers peace to every country it is at war with. Returns
+    /// how many offers it made.
+    #[func]
+    fn offer_peace(&mut self, country: i32) -> i32 {
+        let Ok(country) = u16::try_from(country) else {
+            return 0;
+        };
+        let Some(world) = self.world.as_ref() else {
+            return 0;
+        };
+        let enemies: Vec<u16> = world
+            .countries()
+            .iter()
+            .map(|c| c.id)
+            .filter(|&other| world.at_war(country, other))
+            .collect();
+        for &to in &enemies {
+            self.order(country, Command::OfferPeace { to });
+        }
+        self.apply_now()
+            .iter()
+            .filter(|e| matches!(e, Event::PeaceOffered { .. }))
+            .count() as i32
+    }
+
+    /// Open peace offers as dictionaries: `from`, `to`, `tick` (when made).
+    #[func]
+    fn peace_offers(&self) -> Array<VarDictionary> {
+        let Some(world) = self.world.as_ref() else {
+            return Array::new();
+        };
+        world
+            .peace_offers()
+            .iter()
+            .map(|o| {
+                let mut entry = VarDictionary::new();
+                entry.set("from", i64::from(o.from));
+                entry.set("to", i64::from(o.to));
+                entry.set("tick", o.tick as i64);
+                entry
+            })
+            .collect()
+    }
+
+    /// `to` answers the peace offer from `from`. Returns whether it was taken.
+    #[func]
+    fn answer_peace(&mut self, from: i32, to: i32, accept: bool) -> bool {
+        let (Ok(from), Ok(to)) = (u16::try_from(from), u16::try_from(to)) else {
+            return false;
+        };
+        self.order(to, Command::AnswerPeace { from, accept })
+            && !self
+                .apply_now()
+                .iter()
+                .any(|e| matches!(e, Event::Rejected { .. }))
+    }
+
     /// Every army group as a dictionary: `id`, `country`, `divisions`
     /// (ids), and `front` and `arrow` as (longitude, latitude) points.
     #[func]
@@ -550,6 +620,11 @@ fn describe(scenario: &Scenario, world: &World, event: &Event) -> Option<String>
             (_, Rejection::NotYourDivision) => {
                 "An army group takes divisions of one country only".to_string()
             }
+            (Command::DeclareWar { target }, Rejection::AlreadyAtWar) => format!(
+                "{} is already at war with {}",
+                name(order.country),
+                name(*target)
+            ),
             _ => return None,
         },
         Event::ArmyGroupCreated { group, country } => {
@@ -559,6 +634,16 @@ fn describe(scenario: &Scenario, world: &World, event: &Event) -> Option<String>
         Event::DivisionRecruited { division, country } => {
             format!("{} raised division {}", name(*country), division.0)
         }
+        Event::PeaceOffered { from, to } => {
+            format!("{} offers peace to {}", name(*from), name(*to))
+        }
+        Event::PeaceMade { from, to } => {
+            format!("{} and {} made peace", name(*from), name(*to))
+        }
+        Event::PeaceRefused { from, to } => {
+            format!("{} refused peace with {}", name(*to), name(*from))
+        }
+        Event::Capitulated { country } => format!("{} capitulated", name(*country)),
         Event::DivisionRetreated { division, .. } => {
             format!("{} fell back", division_name(*division))
         }

@@ -1,0 +1,135 @@
+//! War and peace.
+//!
+//! A country at war can offer peace to an enemy; the enemy accepts or
+//! refuses, and an offer nobody answers runs out after `OFFER_DAYS`. Each
+//! pair of countries makes peace on its own. Peace keeps the land each side
+//! holds (handing over whole regions by law comes with region-based terms).
+//!
+//! Once a day, a country at war that has lost its capital and holds less
+//! than half of its own land (by what that land produces) capitulates: all
+//! its wars end and its divisions lay down their arms.
+
+use serde::{Deserialize, Serialize};
+
+use crate::division::Loss;
+use crate::map::Cell;
+use crate::world::{CountryId, Event, Rejection, World};
+
+/// Days an unanswered peace offer stays open.
+pub const OFFER_DAYS: u64 = 14;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PeaceOffer {
+    pub from: CountryId,
+    pub to: CountryId,
+    /// The tick it was made.
+    pub tick: u64,
+}
+
+impl World {
+    pub(crate) fn offer_peace(
+        &mut self,
+        from: CountryId,
+        to: CountryId,
+        events: &mut Vec<Event>,
+    ) -> Result<(), Rejection> {
+        if !self.at_war(from, to) {
+            return Err(Rejection::NotAtWar);
+        }
+        let key = |o: &PeaceOffer| (o.from, o.to);
+        match self.offers.binary_search_by_key(&(from, to), key) {
+            Ok(_) => Err(Rejection::AlreadyOffered),
+            Err(at) => {
+                let tick = self.tick();
+                self.offers.insert(at, PeaceOffer { from, to, tick });
+                events.push(Event::PeaceOffered { from, to });
+                Ok(())
+            }
+        }
+    }
+
+    pub(crate) fn answer_peace(
+        &mut self,
+        from: CountryId,
+        to: CountryId,
+        accept: bool,
+        events: &mut Vec<Event>,
+    ) -> Result<(), Rejection> {
+        let at = self
+            .offers
+            .binary_search_by_key(&(from, to), |o| (o.from, o.to))
+            .map_err(|_| Rejection::NoOffer)?;
+        self.offers.remove(at);
+        if accept {
+            self.end_war(from, to);
+            events.push(Event::PeaceMade { from, to });
+        } else {
+            events.push(Event::PeaceRefused { from, to });
+        }
+        Ok(())
+    }
+
+    /// End the war between two countries and drop offers between them.
+    fn end_war(&mut self, a: CountryId, b: CountryId) {
+        self.wars.remove(&(a.min(b), a.max(b)));
+        self.offers
+            .retain(|o| !((o.from == a && o.to == b) || (o.from == b && o.to == a)));
+    }
+
+    /// Drop offers older than `OFFER_DAYS`.
+    pub(crate) fn expire_offers(&mut self) {
+        let now = self.tick();
+        self.offers
+            .retain(|o| now.saturating_sub(o.tick) < OFFER_DAYS * 24);
+    }
+
+    /// The country's capital: its most populous capital city.
+    pub(crate) fn capital(&self, country: CountryId) -> Option<Cell> {
+        self.map
+            .cities()
+            .iter()
+            .filter(|c| c.owner == country && c.capital)
+            .max_by_key(|c| (c.pop, std::cmp::Reverse(c.cell)))
+            .map(|c| c.cell)
+    }
+
+    /// Countries at war that lost their capital and most of their land
+    /// give up.
+    pub(crate) fn check_capitulation(&mut self, events: &mut Vec<Event>) {
+        for country in self.countries_at_war() {
+            let Some(index) = self.index_of(country) else {
+                continue;
+            };
+            let economy = &self.countries[index].economy;
+            let lost_most = economy.home_k * 2 < economy.home_total_k;
+            let holds_capital = self
+                .capital(country)
+                .is_some_and(|c| self.control[c as usize] == country);
+            if lost_most && !holds_capital {
+                self.capitulate(country, events);
+            }
+        }
+    }
+
+    fn capitulate(&mut self, country: CountryId, events: &mut Vec<Event>) {
+        let enemies: Vec<CountryId> = self
+            .wars
+            .iter()
+            .filter_map(|&(a, b)| match (a == country, b == country) {
+                (true, _) => Some(b),
+                (_, true) => Some(a),
+                _ => None,
+            })
+            .collect();
+        for enemy in enemies {
+            self.end_war(country, enemy);
+        }
+        self.offers.retain(|o| o.from != country && o.to != country);
+        events.push(Event::Capitulated { country });
+        let surrendering: Vec<usize> = (0..self.divisions.len())
+            .filter(|&i| self.divisions[i].country == country)
+            .collect();
+        self.remove_divisions(&surrendering, Loss::Surrendered, events);
+        self.groups.retain(|g| g.country != country);
+    }
+}

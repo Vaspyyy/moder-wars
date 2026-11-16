@@ -3,6 +3,7 @@
 pub mod army;
 mod combat;
 mod control;
+pub mod diplomacy;
 pub mod division;
 pub mod economy;
 mod front;
