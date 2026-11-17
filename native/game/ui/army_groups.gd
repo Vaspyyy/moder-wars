@@ -5,6 +5,8 @@ extends PanelContainer
 ## selects the group.
 
 signal group_pressed(group: int)
+## The row for divisions without a group was clicked: select them all.
+signal unassigned_pressed
 
 const Style := preload("res://ui/style.gd")
 const WIDTH := 312.0
@@ -12,6 +14,7 @@ const WIDTH := 312.0
 var scenario: MwScenario
 var summary: Label
 var rows := VBoxContainer.new()
+var unassigned := Style.ToolButton.new()
 ## Group ids shown, in order, to rebuild only when they change.
 var shown: Array = []
 
@@ -33,7 +36,12 @@ func setup() -> void:
 	column.add_child(header)
 	rows.add_theme_constant_override("separation", 8)
 	column.add_child(rows)
-	var hint := Style.label("Select divisions on the map, then press G to make them a new group.",
+	unassigned.padding = Vector2(14, 10)
+	unassigned.custom_minimum_size.y = 0
+	unassigned.add_child(Style.label("", 14, Style.CREDIT))
+	unassigned.pressed.connect(func() -> void: unassigned_pressed.emit())
+	column.add_child(unassigned)
+	var hint := Style.label("Select divisions on the map (Shift+drag for a box), then press G to make them a new group.",
 		13, Style.MUTED)
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.custom_minimum_size.x = WIDTH - 32 - 24
@@ -45,8 +53,11 @@ func setup() -> void:
 
 
 ## `groups` from MwWorld.groups(), only the player's; `divisions` counts all
-## of the player's divisions.
-func show_groups(groups: Array, divisions: int, selected: int) -> void:
+## of the player's divisions, `loose` those in no group.
+func show_groups(groups: Array, divisions: int, selected: int, loose: int) -> void:
+	unassigned.visible = loose > 0
+	unassigned.get_child(0).text = "%d division%s without a group: click to select %s" % [
+		loose, "" if loose == 1 else "s", "it" if loose == 1 else "them"]
 	summary.text = "%d group%s  ·  %d division%s" % [groups.size(), "" if groups.size() == 1 else "s",
 		divisions, "" if divisions == 1 else "s"]
 	var ids := groups.map(func(g: Dictionary) -> int: return int(g["id"]))
