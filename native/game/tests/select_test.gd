@@ -27,11 +27,15 @@ func _initialize() -> void:
 		if main.markers.countries[id] == poland:
 			own += 1
 	check(not main.army_list.unassigned.visible, "every division starts in a group")
+	var started: int = main._own_groups().size()
 	key(KEY_A, false, true)
 	check(main.markers.selected.size() == own, "Ctrl+A selects all your divisions")
 	key(KEY_G)
 	check(main._own_groups().size() == 1 and main.army_list.rows.get_child_count() == 1,
 		"G makes them one group, and the emptied starting groups leave the list")
+	var name := "%s Army Group" % main.Style.ordinal(started + 1)
+	check(main.command_bar.title.text == name and main.army_list.rows.get_child(0).find_child("Name", true, false).text == name,
+		"named after the groups before it: %s" % main.command_bar.title.text)
 	key(KEY_ESCAPE)
 	# A direct order takes divisions out of their group: the row for
 	# divisions in no group selects them.

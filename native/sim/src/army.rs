@@ -120,12 +120,21 @@ impl World {
         for &neighbor in faced.iter().flatten() {
             *counts.entry(neighbor).or_default() += 1;
         }
-        let fronts: Vec<CountryId> = self
+        // Each manned border with the front a group there would hold; a
+        // border whose front does not snap onto that neighbor gets none.
+        let (fronts, lines): (Vec<CountryId>, Vec<Vec<Cell>>) = self
             .neighbors(country)
             .into_iter()
             .map(|(neighbor, _)| neighbor)
             .filter(|n| counts.get(n).is_some_and(|&k| k >= STARTING_GROUP_MIN))
-            .collect();
+            .filter_map(|neighbor| {
+                let line = self.front_line(country, neighbor);
+                match self.snap_front(country, &line) {
+                    Some((enemy, front)) if enemy == neighbor => Some((neighbor, front)),
+                    _ => None,
+                }
+            })
+            .unzip();
         if fronts.is_empty() {
             return Vec::new();
         }
@@ -155,17 +164,13 @@ impl World {
             }
         }
         let mut formed = Vec::new();
-        for (neighbor, divisions) in fronts.into_iter().zip(members) {
+        for ((neighbor, front), divisions) in fronts.into_iter().zip(lines).zip(members) {
             let id = self
                 .create_army_group(country, &divisions)
                 .expect("the country's own divisions");
-            let line = self.front_line(country, neighbor);
-            if let Some((enemy, front)) = self.snap_front(country, &line)
-                && let Some(group) = self.groups.iter_mut().find(|g| g.id == id)
-            {
-                group.enemy = Some(enemy);
-                group.front = front;
-            }
+            let group = self.groups.last_mut().expect("the group just formed");
+            group.enemy = Some(neighbor);
+            group.front = front;
             formed.push(id);
         }
         formed

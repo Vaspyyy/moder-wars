@@ -9,7 +9,7 @@ mod common;
 
 use common::country;
 use mw_sim::forces::{self, Personnel};
-use mw_sim::world::{CountryId, World};
+use mw_sim::world::{Command, Controller, CountryId, Order, World};
 use std::collections::BTreeMap;
 
 fn personnel() -> &'static Personnel {
@@ -148,4 +148,38 @@ fn starting_groups_are_formed_once_and_the_same_every_time() {
         "a country with groups gets no more"
     );
     assert!(a == b);
+}
+
+#[test]
+fn the_ai_sends_a_starting_group_to_a_war_on_an_unheld_border() {
+    // Handed to the AI (the I key), a country whose starting groups hold
+    // every division moves one of them to a war on a border none holds.
+    let s = common::world_2026();
+    let mut world = deployed();
+    let poland = country(s, "Poland");
+    world.form_starting_groups(poland);
+    let held: Vec<CountryId> = world.army_groups().iter().filter_map(|g| g.enemy).collect();
+    let enemy = world
+        .neighbors(poland)
+        .into_iter()
+        .map(|(n, _)| n)
+        .find(|n| !held.contains(n))
+        .expect("a border with no starting group");
+    world.set_controller(poland, Controller::Ai).unwrap();
+    world
+        .submit(Order {
+            tick: world.tick(),
+            country: enemy,
+            command: Command::DeclareWar { target: poland },
+        })
+        .unwrap();
+    common::run(&mut world, 48);
+    assert!(
+        world
+            .army_groups()
+            .iter()
+            .any(|g| g.country == poland && g.enemy == Some(enemy) && !g.front.is_empty()),
+        "no Polish group faces {enemy}: {:?}",
+        world.army_groups()
+    );
 }

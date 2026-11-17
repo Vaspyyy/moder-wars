@@ -1049,9 +1049,15 @@ fn describe(scenario: &Scenario, world: &World, event: &Event) -> Option<String>
             _ => return None,
         },
         Event::ArmyGroupCreated { group, country } => {
-            format!("{} formed army group {}", name(*country), group.0)
+            format!(
+                "{} formed its {}",
+                name(*country),
+                group_name(world, *group)
+            )
         }
-        Event::ArrowReached { group } => format!("Army group {} reached its objective", group.0),
+        Event::ArrowReached { group } => {
+            format!("The {} reached its objective", group_name(world, *group))
+        }
         Event::DivisionRecruited { division, country } => {
             format!("{} raised division {}", name(*country), division.0)
         }
@@ -1098,9 +1104,64 @@ fn describe(scenario: &Scenario, world: &World, event: &Event) -> Option<String>
     })
 }
 
+/// "3rd Army Group": a group numbered by when its country formed it, as the
+/// army group list names it (empty groups keep their numbers).
+fn group_name(world: &World, group: ArmyGroupId) -> String {
+    let Some(country) = world.army_group(group).map(|g| g.country) else {
+        return format!("army group {}", group.0);
+    };
+    let number = world
+        .army_groups()
+        .iter()
+        .filter(|g| g.country == country && g.id <= group)
+        .count();
+    let suffix = match (number % 10, number % 100) {
+        (_, 11..=13) => "th",
+        (1, _) => "st",
+        (2, _) => "nd",
+        (3, _) => "rd",
+        _ => "th",
+    };
+    format!("{number}{suffix} Army Group")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn groups_are_named_by_when_their_country_formed_them() {
+        let s = scenario();
+        let mut world = World::new(&s, 1);
+        let (poland, germany) = (id(&s, "Poland"), id(&s, "Germany"));
+        let capital = |c: CountryId| {
+            let city = s
+                .cities
+                .iter()
+                .find(|x| x.owner_id == c && x.is_capital)
+                .unwrap();
+            s.grid.cell_at(city.lng, city.lat).unwrap() as u32
+        };
+        let (p, g) = (capital(poland), capital(germany));
+        let mut division = |country, cell| world.spawn_division(country, cell, 10_000).unwrap();
+        let polish: Vec<DivisionId> = (0..13).map(|_| division(poland, p)).collect();
+        let german = division(germany, g);
+        let mut groups = Vec::new();
+        for (i, &d) in polish.iter().enumerate() {
+            groups.push(world.create_army_group(poland, &[d]).unwrap());
+            if i == 0 {
+                world.create_army_group(germany, &[german]).unwrap();
+            }
+        }
+        let names: Vec<String> = groups.iter().map(|&g| group_name(&world, g)).collect();
+        assert_eq!(names[0], "1st Army Group");
+        assert_eq!(names[1], "2nd Army Group", "Germany's group does not count");
+        assert_eq!(names[2], "3rd Army Group");
+        assert_eq!(names[3], "4th Army Group");
+        assert_eq!(names[10], "11th Army Group");
+        assert_eq!(names[12], "13th Army Group");
+        assert_eq!(group_name(&world, ArmyGroupId(999)), "army group 999");
+    }
 
     fn scenario() -> Scenario {
         let path = concat!(
