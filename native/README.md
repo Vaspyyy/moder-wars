@@ -79,7 +79,11 @@ cargo clippy --all-targets -- -D warnings
 cargo build -p mw-godot                 # build the extension Godot loads (debug)
 godot-beta --path game                  # play/look (needs the extension built first)
 godot-beta -e --path game               # open the editor
+./test-screens.sh                       # headless screen tests (game/tests), about 10 s
+./test-screens.sh war                   # just game/tests/war_test.gd
 ```
+
+The screen tests start the game without a window or sound and click through it like a player: the pick screen, the war screen with its cards, list and country card, the budget window, selecting many divisions. Each test is a script in `game/tests/` that extends `harness.gd` (start the game, press keys, check, finish); a failed check prints `FAILED: <what>` and the script exits with 1. Rust tests cover the rules; these cover the wiring on screen. Run them when you change `game/` or the bridge.
 
 The game takes options after `--`:
 
