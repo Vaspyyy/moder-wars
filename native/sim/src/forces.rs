@@ -73,6 +73,14 @@ struct WorldBankCountry {
     id: String,
     #[serde(rename = "iso2Code")]
     iso2: String,
+    region: WorldBankRegion,
+}
+
+/// A group of countries ("Least developed countries", "Euro area") is
+/// listed like a country, in the region "Aggregates".
+#[derive(Deserialize)]
+struct WorldBankRegion {
+    value: String,
 }
 
 #[derive(Deserialize)]
@@ -110,11 +118,14 @@ pub fn read_observations(
         .as_deref()
         .and_then(|d| d.get(..4)?.parse().ok())
         .unwrap_or(2026);
+    // Groups of countries have two-letter codes of their own, which some
+    // map entries (disputed areas) share; they are no country's figures.
     let iso3_of: BTreeMap<&str, &str> = snapshot
         .responses
         .countries
         .1
         .iter()
+        .filter(|c| c.region.value != "Aggregates")
         .map(|c| (c.iso2.as_str(), c.id.as_str()))
         .collect();
     // iso3 -> (year, personnel) of the latest usable observation.

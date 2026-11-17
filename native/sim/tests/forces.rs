@@ -263,3 +263,31 @@ fn a_war_between_real_armies_runs_smoothly() {
     assert!(elapsed.as_secs_f64() < 4.0, "10 days took {elapsed:?}");
     assert!(slowest.as_secs_f64() < 0.6, "an hour took {slowest:?}");
 }
+
+#[test]
+fn groups_of_countries_in_the_data_give_no_one_an_army() {
+    // The World Bank lists groups of countries ("Least developed countries",
+    // "Euro area", "North America") beside the countries, each with a
+    // two-letter code of its own, and disputed areas on the map carry some
+    // of those codes: Barahoti (XL) was given the least developed
+    // countries' 2.5 million soldiers.
+    let s = common::world_2026();
+    let p = personnel();
+    for name in [
+        "Barahoti disputed area",
+        "Demchok sector",
+        "Nilang-Jadhang disputed area",
+        "Iturup",
+        "Kunashir",
+        "Shikotan",
+        "Paracel Islands",
+    ] {
+        assert_eq!(p.get(&country(s, name)), None, "{name}");
+    }
+    let mut world = World::new(s, 1);
+    world.deploy_forces(p);
+    let barahoti = country(s, "Barahoti disputed area");
+    assert!(world.divisions().iter().all(|d| d.country != barahoti));
+    // The real countries keep their figures.
+    assert_eq!(p.get(&country(s, "India")), Some(&3_068_000));
+}
