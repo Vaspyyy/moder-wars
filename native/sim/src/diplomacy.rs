@@ -72,11 +72,19 @@ impl World {
     }
 
     /// End the war between two countries, drop offers between them and
-    /// settle the land.
+    /// their arrows into each other (divisions do not enter land at peace,
+    /// so such an arrow could never be finished), and settle the land.
     fn end_war(&mut self, a: CountryId, b: CountryId, events: &mut Vec<Event>) {
         self.wars.remove(&(a.min(b), a.max(b)));
         self.offers
             .retain(|o| !((o.from == a && o.to == b) || (o.from == b && o.to == a)));
+        for group in &mut self.groups {
+            if (group.country, group.enemy) == (a, Some(b))
+                || (group.country, group.enemy) == (b, Some(a))
+            {
+                group.arrow.clear();
+            }
+        }
         self.settle_regions(a, b, events);
     }
 
