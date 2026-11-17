@@ -10,7 +10,7 @@ use mw_sim::division::{DivisionId, Loss};
 use mw_sim::forces;
 use mw_sim::sandbox::{self, SandboxError};
 use mw_sim::scenario::Scenario;
-use mw_sim::time::Pacer;
+use mw_sim::time::{GameTime, Pacer};
 use mw_sim::world::{Command, Controller, CountryId, Event, Order, Rejection, World};
 
 use crate::MwScenario;
@@ -143,13 +143,7 @@ impl MwWorld {
             return;
         };
         for _ in 0..hours.max(0) {
-            let enemies = world.enemies(self.player);
-            let events = world.step();
-            self.log.extend(
-                events
-                    .iter()
-                    .filter_map(|e| report(s, world, e, self.player, &enemies)),
-            );
+            self.log.extend(step_reports(s, world, self.player));
         }
     }
 
@@ -749,13 +743,14 @@ impl MwWorld {
             return Vec::new();
         };
         let enemies = world.enemies(self.player);
+        let time = world.time();
         let events = world.apply_orders();
         let bound = scenario.bind();
         if let Some(s) = bound.scenario.as_ref() {
             self.log.extend(
                 events
                     .iter()
-                    .filter_map(|e| report(s, world, e, self.player, &enemies)),
+                    .filter_map(|e| report(s, world, e, self.player, &enemies, time)),
             );
         }
         events
@@ -831,17 +826,30 @@ struct Report {
     other: CountryId,
 }
 
+/// Run one tick and report what happened in it.
+fn step_reports(scenario: &Scenario, world: &mut World, player: CountryId) -> Vec<Report> {
+    let enemies = world.enemies(player);
+    // The tick the events happen in; `step` moves the clock on after them.
+    let time = world.time();
+    let events = world.step();
+    events
+        .iter()
+        .filter_map(|e| report(scenario, world, e, player, &enemies, time))
+        .collect()
+}
+
 /// The report for an event, if it has a line. `enemies` are the player's
-/// enemies before the event, so a capitulated enemy still counts as one.
+/// enemies before the event, so a capitulated enemy still counts as one;
+/// `time` is when it happened.
 fn report(
     scenario: &Scenario,
     world: &World,
     event: &Event,
     player: CountryId,
     enemies: &[CountryId],
+    time: GameTime,
 ) -> Option<Report> {
     let text = describe(scenario, world, event)?;
-    let time = world.time();
     let own = |c: CountryId| c == player;
     let side = |c: CountryId| own(c) || enemies.contains(&c);
     let division_country = |d: DivisionId| world.division(d).map(|d| d.country);
@@ -1010,6 +1018,31 @@ mod tests {
     }
 
     #[test]
+    fn a_report_carries_the_hour_it_happened() {
+        let s = scenario();
+        let mut world = World::new(&s, 1);
+        let (poland, germany) = (id(&s, "Poland"), id(&s, "Germany"));
+        let start = world.time();
+        world
+            .submit(Order {
+                tick: 0,
+                country: germany,
+                command: Command::DeclareWar { target: poland },
+            })
+            .unwrap();
+        let reports = step_reports(&s, &mut world, poland);
+        let war = reports
+            .iter()
+            .find(|r| r.big == "war")
+            .expect("a report of the war");
+        assert_eq!(
+            (war.date.as_str(), war.hour),
+            (start.date.to_string().as_str(), start.hour),
+            "the hour of the tick it happened in, not the next"
+        );
+    }
+
+    #[test]
     fn reports_say_what_concerns_the_player() {
         let s = scenario();
         let world = World::new(&s, 1);
@@ -1021,7 +1054,7 @@ mod tests {
         );
         let war = |attacker, target| Event::WarDeclared { attacker, target };
         let concern = |event: &Event, player, enemies: &[CountryId]| {
-            let r = report(&s, &world, event, player, enemies).unwrap();
+            let r = report(&s, &world, event, player, enemies, world.time()).unwrap();
             (r.mine, r.big, r.tone, r.other)
         };
         assert_eq!(
