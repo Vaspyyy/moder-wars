@@ -246,7 +246,8 @@ func _recruits(per_day_k: int, manpower: int) -> String:
 	if per_day >= MwWorld.RECRUITS_PER_DAY:
 		return "about %d new divisions a day, the most allowed" % MwWorld.RECRUITS_PER_DAY
 	if per_day >= 1.0:
-		return "about %s new divisions a day" % String.num(per_day, 1)
+		var rate := String.num(per_day, 1)
+		return "about 1 new division a day" if rate == "1" else "about %s new divisions a day" % rate
 	return "a new division about every %d days" % ceili(1.0 / per_day)
 
 

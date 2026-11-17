@@ -284,6 +284,8 @@ static func slider() -> HSlider:
 	var knob := _circle(16, GOLD)
 	bar.add_theme_icon_override("grabber", knob)
 	bar.add_theme_icon_override("grabber_highlight", _circle(16, GOLD_HOVER))
+	# Locked (the AI runs the country): a faded knob, not the engine's.
+	bar.add_theme_icon_override("grabber_disabled", _circle(16, Color(GOLD, 0.4)))
 	return bar
 
 

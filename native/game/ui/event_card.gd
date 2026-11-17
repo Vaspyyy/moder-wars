@@ -14,7 +14,7 @@ var card := PanelContainer.new()
 
 func setup() -> void:
 	set_anchors_preset(PRESET_FULL_RECT)
-	mouse_filter = MOUSE_FILTER_STOP
+	Style.solid(self)
 	var shade := ColorRect.new()
 	shade.color = Color(0.02, 0.04, 0.07, 0.45)
 	shade.set_anchors_preset(PRESET_FULL_RECT)
