@@ -38,6 +38,10 @@ pub const LAND_SHARE_PERCENT: u64 = 60;
 /// A neighbor with fewer (or unknown) personnel counts as this many when
 /// weighing its border.
 pub const MIN_THREAT_PERSONNEL: u64 = 10_000;
+/// A border cell joined to fewer cells of its country's land than this
+/// (a sliver touching the rest only at a corner, which divisions cannot
+/// pass) gets no starting division, unless it holds the capital too.
+const MIN_REACH_CELLS: usize = 10;
 
 #[derive(Debug)]
 pub enum ForcesError {
@@ -174,12 +178,19 @@ impl World {
             if count == 0 {
                 continue;
             }
-            let places = match borders.get(&country) {
-                Some(cells) if !cells.is_empty() => {
-                    let line: Vec<Cell> = cells.keys().copied().collect();
-                    spread_by(&self.map, &line, count, |c| cells[&c])
-                }
-                _ => self.home_cities(country),
+            let source = self.supply_source(country);
+            let usable: BTreeMap<Cell, u64> = borders
+                .get(&country)
+                .into_iter()
+                .flatten()
+                .filter(|&(&cell, _)| self.leads_inland(cell, country, source))
+                .map(|(&cell, &weight)| (cell, weight))
+                .collect();
+            let places = if usable.is_empty() {
+                self.home_cities(country)
+            } else {
+                let line: Vec<Cell> = usable.keys().copied().collect();
+                spread_by(&self.map, &line, count, |c| usable[&c])
             };
             for i in 0..count {
                 let Some(&cell) = places.get(i % places.len().max(1)) else {
@@ -217,6 +228,30 @@ impl World {
             }
         }
         borders
+    }
+
+    /// Whether land held by `country` joins `cell` to at least
+    /// `MIN_REACH_CELLS` cells, or to `capital`, through side neighbours
+    /// (as divisions march).
+    fn leads_inland(&self, cell: Cell, country: CountryId, capital: Option<Cell>) -> bool {
+        let mut seen = vec![cell];
+        let mut next = 0;
+        while next < seen.len() {
+            if seen.len() >= MIN_REACH_CELLS || capital.is_some_and(|c| seen.contains(&c)) {
+                return true;
+            }
+            let here = seen[next];
+            next += 1;
+            for side in self.map.sides(here) {
+                if self.map.is_land(side)
+                    && self.control[side as usize] == country
+                    && !seen.contains(&side)
+                {
+                    seen.push(side);
+                }
+            }
+        }
+        capital.is_some_and(|c| seen.contains(&c))
     }
 
     /// The cities a country holds, or its supply source if it holds none.
