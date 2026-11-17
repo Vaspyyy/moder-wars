@@ -72,9 +72,19 @@ func _initialize() -> void:
 	key(KEY_B)
 	check(main.sim.is_paused() and not main.economy_window.visible, "keys wait")
 
+	# Only your own arrows are on the map while you lead a country.
+	var line := PackedVector2Array([Vector2.ZERO, Vector2.ONE])
+	var german_attack := {"arrow": line, "country": germany}
+	check(main.markers.arrows_of == {luxembourg: true}, "your arrows only: %s" % [main.markers.arrows_of])
+	check(not main.markers.shows_arrow(german_attack), "a German arrow is not shown")
+	check(main.markers.shows_arrow({"arrow": line, "country": luxembourg}), "yours is")
+	check(not main.markers.shows_arrow({"arrow": PackedVector2Array(), "country": luxembourg}),
+		"a group without an arrow draws none")
+
 	# Watch the world go on: the screen closes and the game runs again.
 	_press("Watch")
 	check(not screen.visible and not main.sim.is_paused(), "Watch lets the world go on")
+	check(main.markers.shows_arrow(german_attack), "watching, every country's arrows show")
 	main.sim.run(24)
 	main._refresh_sim()
 	check(not screen.visible, "and it does not come back")
@@ -99,6 +109,7 @@ func _initialize() -> void:
 	main._refresh_sim()
 	key(KEY_ESCAPE)
 	check(not main.defeat_screen.visible, "Esc closes it")
+	check(main.watching and main.markers.arrows_of.is_empty(), "and watches")
 	# A save loaded from the menu that closing the window opens over the
 	# screen takes the screen away too.
 	main._quicksave()
@@ -110,6 +121,9 @@ func _initialize() -> void:
 	check(main.menu.visible and main.menu.view == "leave", "closing the window asks over it")
 	key(KEY_F9)
 	check(not main.defeat_screen.visible and not main.menu.visible, "a load closes both")
+	main._refresh_sim()
+	check(not main.watching and main.markers.arrows_of == {luxembourg: true},
+		"the loaded game is yours to lead again: your arrows only")
 	main.cards.append({"big": "capitulated", "other": luxembourg})
 	main._refresh_sim()
 	check(main.defeat_screen.visible, "the screen again")

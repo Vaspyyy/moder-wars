@@ -159,6 +159,9 @@ var card_report: Dictionary = {}
 var paused_by_card := false
 ## The screen when the led country capitulates.
 var defeat_screen: Control = null
+## Whether the player chose to watch the world go on after a defeat: then,
+## as without a country, every country's arrows are on the map.
+var watching := false
 ## The pause menu while leading a country, and whether it paused the game.
 var menu: Control = null
 var paused_by_menu := false
@@ -422,7 +425,7 @@ func _lead(id: int, to_capital: bool) -> void:
 	defeat_screen.palette = palette
 	defeat_screen.setup()
 	defeat_screen.visible = false
-	defeat_screen.watch_pressed.connect(_close_card)
+	defeat_screen.watch_pressed.connect(_watch)
 	defeat_screen.load_pressed.connect(func() -> void:
 		_close_defeat()
 		# The menu now holds the game paused, and lets it run again if the
@@ -563,6 +566,9 @@ func _refresh_sim() -> void:
 				points.append(_world_from_lng_lat(point.x, point.y))
 			markers.routes[id] = points
 	markers.groups.clear()
+	# Another country's arrows are its own plans: only yours show, unless
+	# you are watching the world without leading it.
+	markers.arrows_of = {} if player == 0 or watching else {player: true}
 	var formed := {}
 	for group in sim.groups():
 		# Each country's groups are numbered in the order they were formed,
@@ -864,6 +870,14 @@ func _close_defeat() -> void:
 	defeat_screen.visible = false
 
 
+## Watch the world go on after a defeat: the screen closes, the game runs
+## again and every country's arrows show.
+func _watch() -> void:
+	watching = true
+	_close_card()
+	_refresh_sim()
+
+
 ## Pause while a card or the peace window is open, remembering to resume.
 func _pause_for_card() -> void:
 	if not sim.is_paused():
@@ -1050,6 +1064,7 @@ func _load_save(path: String) -> String:
 				cards.append({"big": "peace_offer", "other": int(offer["from"])})
 		# The saved game's wars are not news.
 		known_enemies = sim.enemies(player)
+		watching = false
 	else:
 		feed_lines.clear() # the viewer's feed starts over too
 	_note("Game loaded")
@@ -1402,7 +1417,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			# Esc watches the world go on, F5 and F9 still save and load;
 			# nothing else reaches the game.
 			if key == KEY_ESCAPE:
-				_close_card()
+				_watch()
 			elif key == KEY_F5:
 				_quicksave()
 			elif key == KEY_F9 and _quickload():

@@ -6,7 +6,9 @@ extends Node2D
 ## get an orange frame, cut-off ones a red corner. Selected divisions are framed in white and show their route.
 ## An army group's front is a thick line in its country's colour (white when
 ## the group is selected, gold); its arrow is drawn in orange with a head at
-## the tip. Sizes are in screen pixels, so everything looks the same at any zoom.
+## the tip, but only for the countries in `arrows_of` (the one you lead):
+## another country's plans are its own. Sizes are in screen pixels, so
+## everything looks the same at any zoom.
 
 const WIDTH := 11.0
 const HEIGHT := 7.0
@@ -31,6 +33,9 @@ var routes := {}
 ## From MwWorld.groups(), with `front` and `arrow` turned into world points.
 var groups: Array = []
 var selected_group := 0
+## Country id -> true for the countries whose arrows are drawn; empty
+## draws everyone's (watching the world without leading a country).
+var arrows_of := {}
 ## The line being drawn (world points), and whether it is an arrow.
 var stroke := PackedVector2Array()
 var stroke_is_arrow := false
@@ -74,11 +79,17 @@ func group_of(division: int) -> int:
 	return 0
 
 
+## Whether a group's arrow is on the map: it has one, and its country's
+## arrows are drawn.
+func shows_arrow(group: Dictionary) -> bool:
+	return group["arrow"].size() > 0 and (arrows_of.is_empty() or arrows_of.has(int(group["country"])))
+
+
 func _draw() -> void:
 	for group in groups:
 		_draw_front(group)
 	for group in groups:
-		if group["arrow"].size() > 0:
+		if shows_arrow(group):
 			_draw_arrow(group["arrow"], ARROW)
 	for id in routes:
 		draw_polyline(routes[id], ROUTE, 1.5 * pixel)
