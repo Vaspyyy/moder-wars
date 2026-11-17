@@ -36,7 +36,7 @@ Tests that come with this, before any game rule:
 
 1. **Pick a country** by clicking it on the map. The game starts paused.
 2. **Go to war.** Declare war on a neighbour (AI countries declaring wars on their own comes later).
-3. **Command.** Your divisions start in army groups along your borders. Drag a front onto a border sector, draw attack arrows into enemy land, set each group to hold or push. Divisions spread along the front by themselves. Select single divisions when you want precise control.
+3. **Command.** Your divisions start in army groups along your borders (built, `World::form_starting_groups`; owner's choice, 2026-11-17: groups where the forces stand). Each land neighbor that at least two of your divisions face gets a group holding a front along that border, the longest border first; divisions on quieter borders join the nearest group. A country without a land border, or whose divisions never face a neighbor two at a time, starts with none. A group whose divisions all leave it is no longer shown. Drag a front onto a border sector, draw attack arrows into enemy land, set each group to hold or push. Divisions spread along the front by themselves. Select single divisions when you want precise control.
 4. **Pay for it.** Income comes from your regions' economic output. Split the budget between recruiting, equipment and the home front. A mobilization level trades economy for soldiers.
 5. **End it.** The AI offers peace when it is losing, and you accept or refuse. You can offer peace too. Terms are counted in regions: you keep the regions you hold.
 6. **Lose it.** You capitulate when you lose your capital and most of your core regions, or when war support collapses.

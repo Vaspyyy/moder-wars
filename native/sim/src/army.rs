@@ -22,6 +22,7 @@
 //! Groups re-plan every `PLAN_EVERY` hours, and at once when given an order.
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 use crate::division::DivisionId;
 use crate::map::Cell;
@@ -60,6 +61,10 @@ const LANE_M: u64 = 40_000;
 /// shared by all such divisions, and keeps it until it gets this close.
 const FAR_M: u64 = 300_000;
 pub(crate) const PLAN_EVERY: u64 = 3;
+/// A neighbor gets a starting group only if this many divisions face it.
+const STARTING_GROUP_MIN: usize = 2;
+/// A division faces the nearest foreign land within this distance.
+const FACING_M: f64 = 30_000.0;
 
 /// Half the width of the attack sector around an arrow, in metres.
 fn sector_half_m(divisions: usize) -> f64 {
@@ -84,6 +89,93 @@ pub struct ArmyGroup {
 }
 
 impl World {
+    /// Form a country's starting army groups where its forces stand: one
+    /// per land neighbor that at least `STARTING_GROUP_MIN` of its divisions
+    /// face, holding a front along that border, the longest border first.
+    /// Divisions on quieter borders join the group with a division nearest
+    /// to them. A country that already has groups, or whose divisions face
+    /// no neighbor two at a time, gets none. Returns the new groups.
+    pub fn form_starting_groups(&mut self, country: CountryId) -> Vec<ArmyGroupId> {
+        if self.groups.iter().any(|g| g.country == country) {
+            return Vec::new();
+        }
+        let own: Vec<(DivisionId, Cell)> = self
+            .divisions
+            .iter()
+            .filter(|d| d.country == country)
+            .map(|d| (d.id, d.cell))
+            .collect();
+        let foreign = |cell: Cell| {
+            let holder = self.control[cell as usize];
+            holder != 0 && holder != country
+        };
+        let faced: Vec<Option<CountryId>> = own
+            .iter()
+            .map(|&(_, cell)| {
+                self.nearest(cell, FACING_M, foreign)
+                    .map(|c| self.control[c as usize])
+            })
+            .collect();
+        let mut counts: BTreeMap<CountryId, usize> = BTreeMap::new();
+        for &neighbor in faced.iter().flatten() {
+            *counts.entry(neighbor).or_default() += 1;
+        }
+        // Each manned border with the front a group there would hold; a
+        // border whose front does not snap onto that neighbor gets none.
+        let (fronts, lines): (Vec<CountryId>, Vec<Vec<Cell>>) = self
+            .neighbors(country)
+            .into_iter()
+            .map(|(neighbor, _)| neighbor)
+            .filter(|n| counts.get(n).is_some_and(|&k| k >= STARTING_GROUP_MIN))
+            .filter_map(|neighbor| {
+                let line = self.front_line(country, neighbor);
+                match self.snap_front(country, &line) {
+                    Some((enemy, front)) if enemy == neighbor => Some((neighbor, front)),
+                    _ => None,
+                }
+            })
+            .unzip();
+        if fronts.is_empty() {
+            return Vec::new();
+        }
+        let mut members: Vec<Vec<DivisionId>> = vec![Vec::new(); fronts.len()];
+        let mut anchors: Vec<Vec<Cell>> = vec![Vec::new(); fronts.len()];
+        let mut rest = Vec::new();
+        for (&(id, cell), facing) in own.iter().zip(&faced) {
+            match facing.and_then(|f| fronts.iter().position(|&n| n == f)) {
+                Some(g) => {
+                    members[g].push(id);
+                    anchors[g].push(cell);
+                }
+                None => rest.push((id, cell)),
+            }
+        }
+        for (id, cell) in rest {
+            let nearest = (0..fronts.len()).min_by_key(|&g| {
+                let distance = anchors[g]
+                    .iter()
+                    .map(|&c| self.map.estimate_m(cell, c))
+                    .min()
+                    .unwrap_or(u64::MAX);
+                (distance, g)
+            });
+            if let Some(g) = nearest {
+                members[g].push(id);
+            }
+        }
+        let mut formed = Vec::new();
+        for ((neighbor, front), divisions) in fronts.into_iter().zip(lines).zip(members) {
+            let id = self
+                .create_army_group(country, &divisions)
+                .expect("the country's own divisions");
+            let group = self.groups.last_mut().expect("the group just formed");
+            group.enemy = Some(neighbor);
+            group.front = front;
+            formed.push(id);
+        }
+        formed
+    }
+
     /// Snap a drawn line to the border: the country it faces and the front
     /// points, or None when the line is nowhere near a border.
     pub(crate) fn snap_front(

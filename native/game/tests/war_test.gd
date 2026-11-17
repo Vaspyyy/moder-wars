@@ -30,13 +30,14 @@ func _initialize() -> void:
 	main._close_card()
 	check(not main.sim.is_paused(), "running after the last card")
 
-	var ids := PackedInt64Array()
-	for id in main.markers.countries:
-		if main.markers.countries[id] == poland:
-			ids.append(id)
-	var group: int = main.sim.create_group(ids)
-	main._refresh_sim()
-	check(main.army_list.rows.get_child_count() == 1, "one row in the army group list")
+	# Poland starts with a group for each border its divisions man.
+	var groups: Array = main._own_groups()
+	check(groups.size() >= 2 and main.army_list.rows.get_child_count() == groups.size(),
+		"a row for each starting group: %d" % groups.size())
+	check(groups.all(func(g: Dictionary) -> bool: return PackedVector2Array(g["front"]).size() > 0),
+		"each with a front")
+	check(not main.army_list.unassigned.visible, "and no division without a group")
+	var group: int = groups[0]["id"]
 	main._focus_group(group)
 	check(main.markers.selected_group == group and main.command_bar.visible, "a click on the row selects the group")
 	check(main.command_bar.title.text == "1st Army Group", "named 1st Army Group")

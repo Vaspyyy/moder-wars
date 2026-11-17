@@ -254,14 +254,37 @@ impl World {
             .map(|d| d.id)
             .collect();
         // Every enemy it borders gets a group with a front.
-        let facing: BTreeSet<CountryId> = groups.iter().filter_map(|g| g.enemy).collect();
+        let facing: BTreeSet<CountryId> = groups
+            .iter()
+            .filter_map(|g| g.enemy)
+            .filter(|e| enemies.contains(e))
+            .collect();
         let uncovered: Vec<CountryId> = enemies
             .iter()
             .copied()
             .filter(|e| !facing.contains(e))
             .collect();
         let day = self.tick() / 24;
-        match groups.iter().find(|g| g.front.is_empty()) {
+        // The group sent to an uncovered enemy: one without a front, or, with
+        // no loose divisions to form a new one, the biggest group holding a
+        // border at peace (a player's starting groups cover every division).
+        let at_peace = || {
+            groups
+                .iter()
+                .copied()
+                .filter(|g| g.enemy.is_some_and(|e| !enemies.contains(&e)))
+                .max_by_key(|g| (g.divisions.len(), std::cmp::Reverse(g.id)))
+        };
+        let spare = groups
+            .iter()
+            .copied()
+            .find(|g| g.front.is_empty())
+            .or_else(|| {
+                (!uncovered.is_empty() && ungrouped.is_empty())
+                    .then(at_peace)
+                    .flatten()
+            });
+        match spare {
             Some(spare) => {
                 let line = uncovered
                     .iter()
@@ -289,7 +312,7 @@ impl World {
         let fronted: Vec<(&ArmyGroup, f64)> = groups
             .iter()
             .copied()
-            .filter(|g| !g.front.is_empty() && g.enemy.is_some())
+            .filter(|g| !g.front.is_empty() && g.enemy.is_some_and(|e| enemies.contains(&e)))
             .map(|g| {
                 let own: f64 = g
                     .divisions
@@ -353,7 +376,7 @@ impl World {
     }
 
     /// A line along the border with `enemy`, or empty if there is none.
-    fn front_line(&self, country: CountryId, enemy: CountryId) -> Vec<Cell> {
+    pub(crate) fn front_line(&self, country: CountryId, enemy: CountryId) -> Vec<Cell> {
         let border = self.border_cells(country, enemy);
         let walk = chain(&self.map, &border);
         let step = walk.len().div_ceil(FRONT_POINTS).max(1);

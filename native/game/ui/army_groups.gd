@@ -64,9 +64,10 @@ func show_groups(groups: Array, divisions: int, selected: int, loose: int) -> vo
 	if ids != shown:
 		shown = ids
 		for child in rows.get_children():
+			rows.remove_child(child) # gone now, so the new rows are filled below
 			child.queue_free()
 		for i in groups.size():
-			rows.add_child(_row(int(groups[i]["id"]), i + 1))
+			rows.add_child(_row(int(groups[i]["id"]), int(groups[i]["number"])))
 	for i in groups.size():
 		_fill(rows.get_child(i), groups[i], selected)
 	reset_size()

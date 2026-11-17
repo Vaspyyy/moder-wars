@@ -643,6 +643,10 @@ impl World {
                         .snap_front(country, line)
                         .ok_or(Rejection::NoFrontHere)?;
                     let group = &mut self.groups[index];
+                    // An arrow into the country it faced no longer fits.
+                    if group.enemy != Some(enemy) {
+                        group.arrow.clear();
+                    }
                     group.enemy = Some(enemy);
                     group.front = front;
                     Ok(())

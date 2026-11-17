@@ -478,7 +478,17 @@ func _refresh_sim() -> void:
 				points.append(_world_from_lng_lat(point.x, point.y))
 			markers.routes[id] = points
 	markers.groups.clear()
+	var formed := {}
 	for group in sim.groups():
+		# Each country's groups are numbered in the order they were formed,
+		# so a group keeps its name ("2nd Army Group") when others empty.
+		var owner := int(group["country"])
+		formed[owner] = int(formed.get(owner, 0)) + 1
+		group["number"] = formed[owner]
+		# A group whose divisions all left (regrouped, lost) is not shown:
+		# no row in the list and no front on the map.
+		if PackedInt64Array(group["divisions"]).is_empty():
+			continue
 		for key in ["front", "arrow"]:
 			var points := PackedVector2Array()
 			for point in PackedVector2Array(group[key]):
@@ -487,6 +497,8 @@ func _refresh_sim() -> void:
 		# The front steps cell by cell around pockets; draw it smoothed.
 		group["front"] = Lines.smooth(group["front"])
 		markers.groups.append(group)
+	if markers.groups.all(func(g: Dictionary) -> bool: return int(g["id"]) != markers.selected_group):
+		markers.selected_group = 0
 	var changes := sim.control_changes()
 	for i in range(0, changes.size(), 3):
 		var country := changes[i + 2]
@@ -559,10 +571,9 @@ func _own_groups() -> Array:
 
 ## "1st Army Group" for the player's first group, and so on.
 func _group_name(group: int) -> String:
-	var own := _own_groups()
-	for i in own.size():
-		if int(own[i]["id"]) == group:
-			return "%s Army Group" % Style.ordinal(i + 1)
+	for g in _own_groups():
+		if int(g["id"]) == group:
+			return "%s Army Group" % Style.ordinal(int(g["number"]))
 	return "Army group %d" % group
 
 
