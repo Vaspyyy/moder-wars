@@ -116,6 +116,19 @@ func _initialize() -> void:
 		"a call to arms: %s" % [main.card_report])
 	texts = _labels(main.event_card.card)
 	check(texts.has("Lithuania attacks Belarus"), "%s" % [texts])
+	# Saved and loaded now, the call is asked again.
+	var dir := (OS.get_environment("TMPDIR") if OS.has_environment("TMPDIR") else "/tmp") \
+		.path_join("mw-faction-test-%d" % OS.get_process_id())
+	DirAccess.make_dir_recursive_absolute(dir)
+	main.save_dir = dir
+	main._quicksave()
+	check(main._quickload(), "the quick save loads")
+	main._refresh_sim()
+	check(main.event_card.visible and main.card_report.get("big") == "call_to_arms"
+		and int(main.card_report.get("also", 0)) == belarus, "the call again after a load")
+	for file in DirAccess.get_files_at(dir):
+		DirAccess.remove_absolute(dir.path_join(file))
+	DirAccess.remove_absolute(dir)
 	key(KEY_Y)
 	check(not main.event_card.visible and main.sim.enemies(poland).has(belarus), "Y joins the war")
 	check(main.sim.enemies(poland).has(russia), "and the CSTO defends Belarus")

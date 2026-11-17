@@ -874,6 +874,8 @@ func _refresh_sim() -> void:
 			_open_faction(false)
 		elif faction_shown != str(faction) + str(sim.enemies(player).size() > 0):
 			_show_faction()
+		elif changes.size() > 0:
+			_faction_marks(faction) # land changed hands: the stripes follow
 	if economy_window.visible:
 		economy_window.show_economy(player, economy, sim.is_ai(player))
 	var grouped := {}
@@ -1328,7 +1330,11 @@ func _show_faction() -> void:
 	var at_war := sim.enemies(player).size() > 0
 	faction_shown = str(faction) + str(at_war)
 	faction_window.show_faction(player, faction, members, rival, at_war)
-	# Stripes: the player's faction in blue, the others in red.
+	_faction_marks(faction)
+
+
+## Stripes: the player's faction in blue, the others in red.
+func _faction_marks(faction: Dictionary) -> void:
 	var colors := {}
 	for other in sim.factions():
 		var color: Color = FactionWindow.OURS if int(other["id"]) == int(faction["id"]) else FactionWindow.OTHERS
@@ -1697,6 +1703,7 @@ func _load_save(path: String) -> String:
 	if error != "":
 		return error
 	sim.set_ai_factions(ai_factions)
+	faction_shown = "" # the faction window shows the loaded game
 	saved_hash = sim.state_hash()
 	markers.selected.clear()
 	markers.selected_group = 0
@@ -1727,6 +1734,15 @@ func _load_save(path: String) -> String:
 		for offer in sim.peace_offers():
 			if int(offer["to"]) == player:
 				cards.append({"big": "peace_offer", "other": int(offer["from"])})
+		# So do calls to arms, invitations and requests to join.
+		for call in sim.calls():
+			if int(call["ally"]) == player:
+				cards.append({"big": "call_to_arms", "other": int(call["attacker"]),
+					"also": int(call["target"])})
+		for invite in sim.invites():
+			if int(invite["to"]) == player:
+				cards.append({"big": "faction_invite" if invite["kind"] == "invite" else "faction_ask",
+					"other": int(invite["from"])})
 		# So does a conference where the player is still dividing the land.
 		for conference in sim.conferences():
 			if PackedInt32Array(conference["winners"]).has(player) \

@@ -28,7 +28,8 @@
 //!   a country that borders a member. A threatened AI in no faction looks
 //!   for one once every `SEEK_EVERY_DAYS`: it asks the strongest faction
 //!   that borders it and does not hold its threat, or else invites a
-//!   neighbor threatened by the same country to form one.
+//!   neighbor threatened by the same country to form one; it does not ask
+//!   a country that said no again for `REFUSED_DAYS`.
 //! - **Leaving.** A member leaves when it wants, when it capitulates, or by
 //!   a separate peace. A leader that leaves hands the lead to the strongest
 //!   member; a faction left with one country is dissolved.
@@ -58,6 +59,8 @@ pub const JOIN_RATIO: f64 = 1.5;
 pub const JOIN_SUPPORT: u16 = FULL_SUPPORT * 8 / 10;
 /// A threatened AI in no faction looks for one this often (days).
 pub const SEEK_EVERY_DAYS: u64 = 7;
+/// An AI told no does not ask the same country again for this many days.
+pub const REFUSED_DAYS: u64 = 60;
 
 pub type FactionId = u16;
 
@@ -430,6 +433,8 @@ impl World {
         }
         if !accept {
             events.push(Event::FactionRefused { from, to });
+            let until = self.tick() + REFUSED_DAYS * 24;
+            self.faction_refused.insert((from, to), until);
             return Ok(());
         }
         let (joining, head) = match invite.kind {
@@ -549,7 +554,7 @@ impl World {
             defenders: defenders.clone(),
         });
         for &ally in &defenders {
-            self.drag_in(attacker, ally, events);
+            self.drag_in_quietly(attacker, ally);
         }
     }
 
@@ -602,6 +607,11 @@ impl World {
         // Too late, or the two are no longer allies.
         if self.tick().saturating_sub(call.tick) >= CALL_DAYS * 24 || !self.allied(ally, attacker) {
             return Err(Rejection::NoCall);
+        }
+        if join {
+            // Joined: its other calls against the same target are moot.
+            self.calls
+                .retain(|c| !(c.ally == ally && c.target == target));
         }
         if join && !self.at_war(ally, target) {
             if !self.at_war(attacker, target) {
@@ -683,6 +693,7 @@ impl World {
         let now = self.tick();
         self.invites
             .retain(|i| now.saturating_sub(i.tick) < INVITE_DAYS * 24);
+        self.faction_refused.retain(|_, &mut until| now < until);
         let calls = std::mem::take(&mut self.calls);
         self.calls = calls
             .into_iter()
@@ -780,6 +791,14 @@ impl World {
         ready && borders && power(&ours) >= JOIN_RATIO * power(&enemies)
     }
 
+    /// Whether `to` said no to `from` less than `REFUSED_DAYS` ago (an AI
+    /// does not ask it again meanwhile).
+    pub fn was_refused(&self, from: CountryId, to: CountryId) -> bool {
+        self.faction_refused
+            .get(&(from, to))
+            .is_some_and(|&until| self.tick() < until)
+    }
+
     /// Whether threatened AI countries look for factions (on in a new or
     /// loaded game; for tests and setups).
     pub fn set_faction_seeking(&mut self, on: bool) {
@@ -807,7 +826,7 @@ impl World {
         let best = self
             .factions
             .iter()
-            .filter(|f| !f.members.contains(&threat))
+            .filter(|f| !f.members.contains(&threat) && !self.was_refused(country, f.leader))
             .filter(|f| f.members.iter().any(|&m| borders(m)))
             .filter(|f| self.can_join(country, f.leader).is_ok())
             .max_by(|a, b| {
@@ -824,7 +843,8 @@ impl World {
             .iter()
             .copied()
             .filter(|&n| n != threat && self.can_join(n, country).is_ok())
-            .filter(|&n| !self.invite_open(country, n) && self.threat(n, &[]) == Some(threat))
+            .filter(|&n| !self.invite_open(country, n) && !self.was_refused(country, n))
+            .filter(|&n| self.threat(n, &[]) == Some(threat))
             .max_by(|&a, &b| {
                 self.family_power(a)
                     .total_cmp(&self.family_power(b))

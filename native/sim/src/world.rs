@@ -416,6 +416,9 @@ pub struct World {
     pub(crate) invites: Vec<Invite>,
     /// Open calls to arms, oldest first.
     pub(crate) calls: Vec<Call>,
+    /// (from, to) -> the tick until which an AI `from` does not ask `to`
+    /// into a faction again, after `to` said no.
+    pub(crate) faction_refused: BTreeMap<(CountryId, CountryId), u64>,
     /// Each country's land neighbors as of the start of the day
     /// (`World::refresh_borders`), kept so a loaded game sees what the
     /// running one saw.
@@ -504,6 +507,7 @@ impl World {
             next_faction: 1,
             invites: Vec::new(),
             calls: Vec::new(),
+            faction_refused: BTreeMap::new(),
             borders: BTreeMap::new(),
             borders_stale: true,
             pending: Vec::new(),

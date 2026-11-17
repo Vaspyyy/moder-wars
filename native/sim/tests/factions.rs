@@ -591,6 +591,74 @@ fn a_members_puppet_is_defended_by_the_faction() {
         world.at_war(france, belgium),
         "and its overlord's faction defend it"
     );
+
+    // Germany, with its puppet, attacks the Netherlands' ally Denmark: the
+    // Netherlands defends it with one event, no declaration from the puppet.
+    let (netherlands, denmark) = (country(s, "Netherlands"), country(s, "Denmark"));
+    apply(
+        &mut world,
+        denmark,
+        Command::InviteToFaction {
+            target: netherlands,
+            name: String::new(),
+        },
+    );
+    apply(
+        &mut world,
+        netherlands,
+        Command::AnswerFaction {
+            from: denmark,
+            accept: true,
+        },
+    );
+    let events = apply(&mut world, germany, Command::DeclareWar { target: denmark });
+    assert!(world.at_war(luxembourg, netherlands), "the puppet is in it");
+    assert!(
+        !events.iter().any(|e| matches!(
+            e,
+            Event::WarDeclared { target, .. } if *target == netherlands
+        )),
+        "{events:?}"
+    );
+}
+
+#[test]
+fn an_ai_told_no_does_not_ask_again_soon() {
+    // Only Belarus thinks: threatened by Russia, it turns to Ukraine, its
+    // strongest neighbor that Russia threatens too.
+    let s = common::world_2026();
+    let mut world = armed(s, false);
+    let (ukraine, belarus) = (country(s, "Ukraine"), country(s, "Belarus"));
+    world.set_controller(belarus, Controller::Ai).unwrap();
+    let asked = |w: &World| {
+        w.invites()
+            .iter()
+            .any(|i| i.from == belarus && i.to == ukraine)
+    };
+    for _ in 0..8 * 24 {
+        world.step();
+        if asked(&world) {
+            break;
+        }
+    }
+    assert!(asked(&world), "Belarus asks Ukraine");
+    apply(
+        &mut world,
+        ukraine,
+        Command::AnswerFaction {
+            from: belarus,
+            accept: false,
+        },
+    );
+    assert!(world.was_refused(belarus, ukraine));
+    for _ in 0..30 * 24 {
+        world.step();
+        assert!(!asked(&world), "it does not ask Ukraine again soon");
+    }
+    assert!(
+        world.invites().iter().any(|i| i.from == belarus),
+        "it asks someone else"
+    );
 }
 
 #[test]

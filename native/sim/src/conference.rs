@@ -388,7 +388,24 @@ impl World {
     /// When a war between `a` and `b` begins: every member of each side's
     /// family (see `family`) is at war with every member of the other's.
     pub(crate) fn drag_in(&mut self, a: CountryId, b: CountryId, events: &mut Vec<Event>) {
+        for (x, y) in self.family_wars(a, b) {
+            self.begin_war(x, y, events);
+        }
+    }
+
+    /// `drag_in` without the declarations (a faction's defense reports
+    /// itself).
+    pub(crate) fn drag_in_quietly(&mut self, a: CountryId, b: CountryId) {
+        for (x, y) in self.family_wars(a, b) {
+            self.open_war(x, y);
+        }
+    }
+
+    /// The wars a war between `a` and `b` brings: every pair of their
+    /// families' members not at war yet.
+    fn family_wars(&self, a: CountryId, b: CountryId) -> Vec<(CountryId, CountryId)> {
         let (ours, theirs) = (self.family(a), self.family(b));
+        let mut pairs = Vec::new();
         for &x in &ours {
             for &y in &theirs {
                 if x != y
@@ -396,11 +413,13 @@ impl World {
                     && !self.at_war(x, y)
                     && !self.in_conference(x)
                     && !self.in_conference(y)
+                    && !pairs.contains(&(x, y))
                 {
-                    self.begin_war(x, y, events);
+                    pairs.push((x, y));
                 }
             }
         }
+        pairs
     }
 
     /// A puppet's overlord made peace with `enemy`: so does the puppet.
