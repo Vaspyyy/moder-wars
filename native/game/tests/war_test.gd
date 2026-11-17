@@ -18,6 +18,8 @@ func _initialize() -> void:
 	check(main.event_card.visible and main.card_report.get("big") == "war", "a war on the player opens a card")
 	check(main.sim.is_paused(), "and pauses the game")
 	check(main.reports.entries[-1][0] == "Germany declared war on Poland", "the report is in the feed")
+	check(not _said("No army group holds your border with Germany"), "Poland's starting group holds it")
+	check(_card_text().contains("Give your army groups fronts along it"), "the card says what to do")
 	main._close_card()
 	check(not main.event_card.visible and not main.sim.is_paused(), "closing it lets the game run again")
 
@@ -77,4 +79,40 @@ func _initialize() -> void:
 	var offered: bool = main.sim.peace_offers().any(func(o: Dictionary) -> bool:
 		return int(o["from"]) == poland and int(o["to"]) == france)
 	check(offered, "Offer peace sends the offer")
+
+	# A war on a border no army group holds says so: in the reports for a
+	# war the player starts, and on the card for one declared on it.
+	var belarus := country("Belarus")
+	main.sim.declare_war(poland, belarus)
+	main._refresh_sim()
+	check(_said("No army group holds your border with Belarus: select one and draw its front along it (F)"),
+		"a war on an unguarded border says so")
+	var lithuania := country("Lithuania")
+	main.sim.declare_war(lithuania, poland)
+	main._refresh_sim()
+	check(main.event_card.visible and _card_text().contains("none of your army groups holds it yet"),
+		"the war card says the border is unguarded: %s" % _card_text())
+	check(_said("No army group holds your border with Lithuania: select one and draw its front along it (F)"),
+		"and so do the reports")
+	main._close_card()
+	# Not again for a war that goes on, nor for a far-away enemy.
+	main.sim.declare_war(poland, country("Japan"))
+	main._refresh_sim()
+	main.sim.run(2)
+	main._refresh_sim()
+	check(not _said("No army group holds your border with Japan"), "no land border, no hint")
+	check(main.reports.entries.filter(func(e: Array) -> bool:
+		return String(e[0]).begins_with("No army group holds your border with Belarus")).size() == 1,
+		"said once per war")
 	finish()
+
+
+func _said(prefix: String) -> bool:
+	return main.reports.entries.any(func(e: Array) -> bool: return String(e[0]).begins_with(prefix))
+
+
+func _card_text() -> String:
+	var texts := PackedStringArray()
+	for label in main.event_card.card.find_children("*", "Label", true, false):
+		texts.append(label.text)
+	return " ".join(texts)
