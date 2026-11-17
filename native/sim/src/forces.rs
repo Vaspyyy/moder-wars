@@ -82,6 +82,7 @@ struct WorldBankCountry {
     id: String,
     #[serde(rename = "iso2Code")]
     iso2: String,
+    name: String,
     region: WorldBankRegion,
 }
 
@@ -129,14 +130,24 @@ pub fn read_observations(
         .unwrap_or(2026);
     // Groups of countries have two-letter codes of their own, which some
     // map entries (disputed areas) share; they are no country's figures.
-    let iso3_of: BTreeMap<&str, &str> = snapshot
+    let countries: Vec<&WorldBankCountry> = snapshot
         .responses
         .countries
         .1
         .iter()
         .filter(|c| c.region.value.trim() != "Aggregates")
+        .collect();
+    let iso3_of: BTreeMap<&str, &str> = countries
+        .iter()
         .map(|c| (c.iso2.as_str(), c.id.as_str()))
         .collect();
+    let mut iso3_by_name: BTreeMap<String, &str> = countries
+        .iter()
+        .map(|c| (plain_name(&c.name), c.id.as_str()))
+        .collect();
+    for &(name, iso3) in NAME_ALIASES {
+        iso3_by_name.insert(plain_name(name), iso3);
+    }
     // iso3 -> (year, personnel) of the latest usable observation.
     let mut latest: BTreeMap<&str, (i32, u32)> = BTreeMap::new();
     for o in &snapshot.responses.personnel.1 {
@@ -153,16 +164,121 @@ pub fn read_observations(
             *entry = (year, value as u32);
         }
     }
-    Ok(scenario
-        .countries
-        .iter()
-        .flatten()
-        .filter_map(|c| {
-            let iso3 = iso3_of.get(c.iso2.as_deref()?)?;
+    // A country is found by its code, else the code in its flag link, else
+    // its name (the web game does the same: some packages carry no codes).
+    // Where several entries come to one country, one found by its code
+    // wins; among the others (releasables named and flagged like it) the
+    // one holding the most land gets the figure.
+    let mut land: BTreeMap<CountryId, usize> = BTreeMap::new();
+    for (&holder, &is_land) in scenario.control.iter().zip(&scenario.land) {
+        if is_land != 0 {
+            *land.entry(holder).or_default() += 1;
+        }
+    }
+    // iso3 -> (found by its code?, land, entry).
+    let mut chosen: BTreeMap<&str, (bool, usize, CountryId)> = BTreeMap::new();
+    for c in scenario.countries.iter().flatten() {
+        let found = c
+            .iso2
+            .as_deref()
+            .and_then(|code| iso3_of.get(code))
+            .map(|&iso3| (true, iso3))
+            .or_else(|| {
+                let code = flag_code(c.flag_url.as_deref()?)?;
+                iso3_of.get(code.as_str()).map(|&iso3| (false, iso3))
+            })
+            .or_else(|| {
+                iso3_by_name
+                    .get(&plain_name(&c.name))
+                    .map(|&iso3| (false, iso3))
+            });
+        let Some((by_code, iso3)) = found else {
+            continue;
+        };
+        let candidate = (by_code, land.get(&c.id).copied().unwrap_or(0), c.id);
+        chosen
+            .entry(iso3)
+            .and_modify(|best| {
+                if (candidate.0, candidate.1) > (best.0, best.1) {
+                    *best = candidate;
+                }
+            })
+            .or_insert(candidate);
+    }
+    Ok(chosen
+        .into_iter()
+        .filter_map(|(iso3, (_, _, id))| {
             let &(year, personnel) = latest.get(iso3)?;
-            Some((c.id, Observation { personnel, year }))
+            Some((id, Observation { personnel, year }))
         })
         .collect())
+}
+
+/// The two-letter code in a flag link: `https://flagcdn.com/w320/pl.png`
+/// or the bundled `assets/flags/pl.svg`, upper case.
+fn flag_code(url: &str) -> Option<String> {
+    let rest = url
+        .split_once("flagcdn.com/")
+        .or_else(|| url.split_once("assets/flags/"))?
+        .1;
+    let file = rest.rsplit('/').next()?;
+    let (code, _) = file.split_once('.')?;
+    (code.len() == 2 && code.bytes().all(|b| b.is_ascii_alphabetic()))
+        .then(|| code.to_ascii_uppercase())
+}
+
+/// Map names the World Bank spells otherwise ("Syrian Arab Republic"), as
+/// the web game knows them (`src/country-force-profiles.js`).
+const NAME_ALIASES: &[(&str, &str)] = &[
+    ("Russia", "RUS"),
+    ("United States", "USA"),
+    ("United States of America", "USA"),
+    ("People's Republic of China", "CHN"),
+    ("China", "CHN"),
+    ("South Korea", "KOR"),
+    ("North Korea", "PRK"),
+    ("Iran", "IRN"),
+    ("Syria", "SYR"),
+    ("Egypt", "EGY"),
+    ("Vietnam", "VNM"),
+    ("Laos", "LAO"),
+    ("Venezuela", "VEN"),
+    ("Turkey", "TUR"),
+    ("Türkiye", "TUR"),
+    ("Slovakia", "SVK"),
+    ("Czech Republic", "CZE"),
+    ("Democratic Republic of the Congo", "COD"),
+    ("Republic of the Congo", "COG"),
+    ("Ivory Coast", "CIV"),
+    ("Palestine", "PSE"),
+    ("Kyrgyzstan", "KGZ"),
+];
+
+/// A name for matching: lower case ASCII letters and digits only, accents
+/// folded ("Côte d'Ivoire" and "Cote d'Ivoire" match).
+fn plain_name(name: &str) -> String {
+    name.chars()
+        .flat_map(char::to_lowercase)
+        .map(|c| match c {
+            'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' | 'ā' | 'ă' | 'ą' => 'a',
+            'ç' | 'ć' | 'č' => 'c',
+            'è' | 'é' | 'ê' | 'ë' | 'ē' | 'ė' | 'ę' | 'ě' => 'e',
+            'ì' | 'í' | 'î' | 'ï' | 'ī' | 'ı' => 'i',
+            'ñ' | 'ń' | 'ň' => 'n',
+            'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'ø' | 'ō' | 'ő' => 'o',
+            'ù' | 'ú' | 'û' | 'ü' | 'ū' | 'ů' | 'ű' => 'u',
+            'ý' | 'ÿ' => 'y',
+            'ś' | 'š' | 'ş' => 's',
+            'ź' | 'ż' | 'ž' => 'z',
+            'ğ' => 'g',
+            'ł' => 'l',
+            'ř' => 'r',
+            'ť' | 'ţ' => 't',
+            'ď' => 'd',
+            other => other,
+        })
+        .filter(char::is_ascii_alphanumeric)
+        .collect()
 }
 
 impl World {
@@ -283,5 +399,30 @@ impl World {
             cells.extend(self.supply_source(country));
         }
         cells
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_flag_link_gives_its_code() {
+        assert_eq!(
+            flag_code("https://flagcdn.com/w320/pl.png").as_deref(),
+            Some("PL")
+        );
+        assert_eq!(flag_code("assets/flags/xk.svg").as_deref(), Some("XK"));
+        assert_eq!(flag_code("https://flagcdn.com/w320/gb-eng.png"), None);
+        assert_eq!(flag_code("https://api.websim.com/blobs/0192.png"), None);
+        assert_eq!(flag_code("assets/flags/legacy/0192-abcd.png"), None);
+    }
+
+    #[test]
+    fn names_match_without_case_spaces_or_accents() {
+        assert_eq!(plain_name("Côte d'Ivoire"), plain_name("Cote d'Ivoire"));
+        assert_eq!(plain_name("Türkiye"), "turkiye");
+        assert_eq!(plain_name("Bosnia and Herz."), "bosniaandherz");
+        assert_eq!(plain_name("Korea, Rep."), "korearep");
     }
 }

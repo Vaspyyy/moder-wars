@@ -383,3 +383,83 @@ fn no_division_starts_on_a_sliver_of_land_it_cannot_leave() {
     assert_eq!(count("Singapore"), 4);
     assert_eq!(count("Bahrain"), 1);
 }
+
+#[test]
+fn a_scenario_without_codes_finds_countries_by_flag_or_name() {
+    // The Ukraine 2023 package keeps the 2022 setup's countries, which carry
+    // no two-letter codes; like the web game, the figures are found through
+    // the code in a country's flag link, or else its name.
+    let s = common::ukraine_2023();
+    let path = common::repo_root().join("assets/data/forces/world-bank.json.gz");
+    let p = forces::read_personnel(&std::fs::read(path).unwrap(), s).unwrap();
+    let figure = |name: &str| p.get(&country(s, name)).copied();
+    // Figures up to the scenario's start (2023): the latest is 2020.
+    assert_eq!(figure("Ukraine"), Some(298_000));
+    assert_eq!(figure("Russia"), Some(1_454_000));
+    assert_eq!(figure("Poland"), Some(189_000));
+    // Afghanistan's flag is an old WebSim link: found by its name.
+    assert!(figure("Afghanistan").is_some(), "Afghanistan by name");
+    // Syria too, although the World Bank calls it the Syrian Arab Republic.
+    assert_eq!(figure("Syria"), Some(269_000));
+    assert!(p.len() >= 80, "only {} countries matched", p.len());
+    // The scenario has three entries named Romania and two named Moldova
+    // (releasables with the same flag); one army each, for the entry that
+    // holds land.
+    for name in ["Romania", "Moldova"] {
+        let entries: Vec<CountryId> = s
+            .countries
+            .iter()
+            .flatten()
+            .filter(|c| c.name == name)
+            .map(|c| c.id)
+            .collect();
+        assert!(entries.len() > 1, "{name} appears more than once");
+        let armed: Vec<CountryId> = entries
+            .iter()
+            .copied()
+            .filter(|c| p.contains_key(c))
+            .collect();
+        assert_eq!(armed.len(), 1, "{name}: {armed:?} of {entries:?}");
+        let land = |id: CountryId| {
+            s.control
+                .iter()
+                .zip(&s.land)
+                .filter(|&(&h, &l)| h == id && l != 0)
+                .count()
+        };
+        let most = entries.iter().map(|&c| land(c)).max().unwrap();
+        assert!(
+            most > 0 && land(armed[0]) == most,
+            "{name}'s figure goes to the entry holding the most land"
+        );
+    }
+    let mut world = World::new(s, 1);
+    world.deploy_forces(&p);
+    assert!(
+        world.divisions().len() > 500,
+        "{} divisions",
+        world.divisions().len()
+    );
+}
+
+#[test]
+fn an_entry_found_by_its_code_keeps_its_figure() {
+    // An entry found only by its flag link or name never takes a figure
+    // from the one found by its code, however much land it holds: here
+    // Russia, stripped of its code and given Poland's flag.
+    let mut s = common::world_2026().clone();
+    let (russia, poland) = (country(&s, "Russia"), country(&s, "Poland"));
+    let entry = s
+        .countries
+        .iter_mut()
+        .flatten()
+        .find(|c| c.id == russia)
+        .unwrap();
+    entry.iso2 = None;
+    entry.flag_url = Some("https://flagcdn.com/w320/pl.png".into());
+    let path = common::repo_root().join("assets/data/forces/world-bank.json.gz");
+    let p = forces::read_personnel(&std::fs::read(path).unwrap(), &s).unwrap();
+    assert_eq!(p.get(&poland), Some(&189_000));
+    // Its flag points at Poland, whose figure is taken: none for it.
+    assert_eq!(p.get(&russia), None);
+}
