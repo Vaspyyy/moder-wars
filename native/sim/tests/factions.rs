@@ -864,3 +864,64 @@ fn borders_kept_up_to_date_match_a_fresh_count() {
     );
     assert!(world.bordering(germany).contains(&france));
 }
+
+#[test]
+fn a_leaders_peace_ends_its_members_wars_with_the_defenders_too() {
+    // Lithuania attacks Belarus; Poland and the United States join; the CSTO
+    // defends Belarus against each of them. Peace between the United States
+    // and Belarus ends it all.
+    let s = common::world_2026();
+    let mut world = armed(s, true);
+    let (lithuania, belarus, poland, usa, russia) = (
+        country(s, "Lithuania"),
+        country(s, "Belarus"),
+        country(s, "Poland"),
+        country(s, "United States of America"),
+        country(s, "Russia"),
+    );
+    apply(
+        &mut world,
+        lithuania,
+        Command::DeclareWar { target: belarus },
+    );
+    for ally in [poland, usa] {
+        apply(
+            &mut world,
+            ally,
+            Command::AnswerCall {
+                attacker: lithuania,
+                target: belarus,
+                join: true,
+            },
+        );
+    }
+    assert!(world.at_war(poland, russia) && world.at_war(usa, russia));
+    apply(
+        &mut world,
+        usa,
+        Command::OfferPeace {
+            to: belarus,
+            terms: vec![],
+        },
+    );
+    apply(
+        &mut world,
+        belarus,
+        Command::AnswerPeace {
+            from: usa,
+            accept: true,
+        },
+    );
+    for (who, name) in [
+        (lithuania, "Lithuania"),
+        (poland, "Poland"),
+        (usa, "United States"),
+    ] {
+        assert!(
+            world.enemies(who).is_empty(),
+            "{name}: {:?}",
+            world.enemies(who)
+        );
+    }
+    assert_eq!(world.war_count(), 0);
+}

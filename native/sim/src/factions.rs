@@ -677,8 +677,13 @@ impl World {
             }
         }
         // Those who went to war only to defend one side make peace with the
-        // other too.
-        for (country, enemy) in [(a, b), (b, a)] {
+        // other too: for every pair this peace covers (with a leader's, its
+        // whole faction).
+        let covered: Vec<(CountryId, CountryId)> = ours
+            .iter()
+            .flat_map(|&x| theirs.iter().flat_map(move |&y| [(x, y), (y, x)]))
+            .collect();
+        for (country, enemy) in covered {
             let defenders: Vec<CountryId> = self
                 .defending
                 .iter()
