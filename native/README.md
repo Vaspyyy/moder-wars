@@ -85,7 +85,7 @@ godot-beta -e --path game               # open the editor
 ./test-screens.sh war                   # just game/tests/war_test.gd
 ```
 
-The screen tests start the game without a window or sound and click through it like a player: the pick screen, the war screen with its cards, list and country card, the budget window, selecting many divisions. Each test is a script in `game/tests/` that extends `harness.gd` (start the game, press keys, check, finish); a failed check prints `FAILED: <what>` and the script exits with 1. Rust tests cover the rules; these cover the wiring on screen. Run them when you change `game/` or the bridge.
+The screen tests start the game without a window or sound and click through it like a player: the pick screen, the war screen with its cards, list and country card, the budget window, selecting many divisions. Each test is a script in `game/tests/` that extends `harness.gd` (start the game, press keys, check, finish); a failed check prints `FAILED: <what>` and the script exits with 1. Rust tests cover the rules; these cover the wiring on screen. Run them when you change `game/` or the bridge. CI runs them too, on the Godot build the project uses (downloaded and checked against the release's SHA-512); set `GODOT=<path>` to run them with another Godot binary.
 
 The game takes options after `--`:
 

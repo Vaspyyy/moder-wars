@@ -21,6 +21,7 @@ The first playable is smaller than today's game on purpose. It must be playable 
 - **Golden tests** (`sim/tests/golden.rs`) only for exact data: the native code must read a scenario exactly like the old game did. The files come from `scripts/export-native-golden.mjs`.
 - **Behavior tests** for rules, written before the code. They state what should happen, not how the code is built. Examples: the same seed gives the same result; 3:1 odds win most battles; an encircled army surrenders; a year of Modern World 2026 runs within a time budget.
 - **Scenario tests** for AI: a small setup and an outcome ("attacks the weak border within N days"), never exact numbers.
+- **Screen tests** (`game/tests/*_test.gd`, `test-screens.sh`) click through the screens headless like a player would; CI runs them on every pull request.
 - **Screenshots** for the screen: `--screenshot` and `--probe` run headless, so they never open a window.
 
 ## Rules of the road
