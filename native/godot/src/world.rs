@@ -767,6 +767,17 @@ impl MwWorld {
         }
     }
 
+    /// A number that changes whenever the game changes (an order, an hour
+    /// gone by) and matches for a loaded game and the one saved: keep it at
+    /// a save and compare later to know whether leaving loses anything.
+    /// 0 without a game.
+    #[func]
+    fn state_hash(&self) -> i64 {
+        self.world
+            .as_ref()
+            .map_or(0, |world| mw_sim::save::fingerprint(world) as i64)
+    }
+
     /// Load a game saved on this scenario (and its region map). Returns an
     /// empty string on success, or the error; after an error the current
     /// game goes on.

@@ -16,7 +16,9 @@ extends Node2D
 ## border; R then a left-drag draws its arrow into enemy land; X removes the
 ## arrow. Right-click sends the selected divisions somewhere directly, which
 ## takes them out of their group. Esc cancels drawing, then clears the
-## selection. Orders take effect at once, even while paused.
+## selection, and with nothing left to close opens the pause menu (Continue,
+## Saves, New game, Quit to desktop). Orders take effect at once, even
+## while paused. F5 and F9 save and load the quick save.
 ##
 ## The stand-in controls below act for the country you lead, or in the viewer
 ## for the selected division's country.
@@ -79,7 +81,13 @@ const EventCard := preload("res://ui/event_card.gd")
 const EconomyWindow := preload("res://ui/economy.gd")
 const PeaceWindow := preload("res://ui/peace.gd")
 const CountryCard := preload("res://ui/country_card.gd")
+const PauseMenu := preload("res://ui/pause_menu.gd")
 const Lines := preload("res://ui/lines.gd")
+const SaveSlots := preload("res://saves.gd")
+
+## New game starts the scene again with these options instead of the
+## command line's (only the scenario), so it opens on the pick screen.
+static var restart_args := {}
 
 var scenario := MwScenario.new()
 var sim := MwWorld.new()
@@ -147,9 +155,21 @@ var cards: Array = []
 var card_report: Dictionary = {}
 ## Whether a card paused the game (so closing the last one resumes it).
 var paused_by_card := false
+## The pause menu while leading a country, and whether it paused the game.
+var menu: Control = null
+var paused_by_menu := false
+## `MwWorld.state_hash` at the last save or load (or when the player took
+## the country): leaving asks first only when the game changed since.
+var saved_hash := 0
+## What New game and Quit do (tests replace them).
+var restart := func() -> void: get_tree().reload_current_scene()
+var quit_game := func() -> void: get_tree().quit()
 
 
 func _ready() -> void:
+	# Closing the window asks first when the game changed since the last
+	# save (see _notification).
+	get_tree().set_auto_accept_quit(false)
 	var args := _parse_args()
 	var name: String = args.get("scenario", "world-map-2026-v3")
 	scenario_name = name
@@ -391,6 +411,34 @@ func _lead(id: int, to_capital: bool) -> void:
 	event_card.visible = false
 	event_card.closed.connect(_close_card)
 	ui_layer.add_child(event_card)
+	menu = PauseMenu.new()
+	menu.setup()
+	menu.visible = false
+	menu.continued.connect(_close_menu)
+	menu.new_game_pressed.connect(func() -> void: _leave("new"))
+	menu.quit_pressed.connect(func() -> void: _leave("quit"))
+	menu.leave_confirmed.connect(_do_leave)
+	menu.save_pressed.connect(func(name: String) -> void:
+		_after_save(_slots().create(sim, name), "Game saved: %s" % name))
+	menu.overwrite_pressed.connect(func(path: String, name: String) -> void:
+		_after_save(_slots().write(sim, path, name), "Game saved: %s" % name))
+	menu.delete_pressed.connect(func(path: String) -> void:
+		var error := _slots().delete(path)
+		var state := _menu_state()
+		state["message"] = error
+		menu.show_saves(state))
+	menu.load_pressed.connect(func(path: String) -> void:
+		var error := _load_save(path)
+		if error != "":
+			var state := _menu_state()
+			state["message"] = error
+			menu.show_saves(state)
+			return
+		# The loaded game waits, paused, for the player to look at it.
+		paused_by_menu = false
+		menu.visible = false
+		_refresh_sim())
+	ui_layer.add_child(menu)
 	ui_layer.move_child(credit, -1)
 	for label in [clock, feed, details, help]:
 		label.visible = false
@@ -418,6 +466,8 @@ func _lead(id: int, to_capital: bool) -> void:
 		tween.tween_callback(func() -> void:
 			markers.pixel = 1.0 / camera.zoom.x
 			markers.queue_redraw()).set_delay(0.7)
+	# Nothing to lose yet: leaving right away asks nothing.
+	saved_hash = sim.state_hash()
 	_refresh_sim()
 
 
@@ -688,9 +738,10 @@ func _hold() -> void:
 		_refresh_sim()
 
 
-## Open the card for the next big report, pausing the game.
+## Open the card for the next big report, pausing the game. Cards wait
+## while the pause menu is open.
 func _show_next_card() -> void:
-	if event_card.visible or peace_window.visible or cards.is_empty():
+	if event_card.visible or peace_window.visible or menu.visible or cards.is_empty():
 		return
 	card_report = cards.pop_front()
 	var other := scenario.country_name(int(card_report["other"]))
@@ -833,28 +884,50 @@ func _show_country_card(country: int, world: Vector2) -> void:
 		[["Offer peace" if at_war else "Declare war", true, action]], "Esc closes")
 
 
-## One quick save slot per scenario and led country, and one per scenario
-## for the viewer: a save made leading one country must not load into a
-## game leading another (it would hand yours to the AI and leave the saved
-## one with no one running it). The id tells apart countries of one name.
-func _quicksave_path() -> String:
-	var who := "viewer"
+## The saves of this scenario and the led country (or the viewer): a save
+## made leading one country must not load into a game leading another (it
+## would hand yours to the AI and leave the saved one with no one running
+## it). The id tells apart countries of one name.
+func _slots() -> SaveSlots:
+	var slots := SaveSlots.new()
+	slots.dir = save_dir
+	slots.scenario_name = scenario_name
 	if player != 0:
-		who = "%d-%s" % [player, scenario.country_name(player)]
-	var file := ("quicksave-%s-%s.mwsave" % [scenario_name, who]).validate_filename()
-	return ProjectSettings.globalize_path(save_dir.path_join(file))
+		slots.who = "%d-%s" % [player, scenario.country_name(player)]
+	return slots
 
 
-func _quickload() -> void:
+func _quicksave_path() -> String:
+	return _slots().quick_path()
+
+
+func _quicksave() -> void:
+	var error := _slots().write(sim, _quicksave_path(), "Quick save")
+	if error == "":
+		saved_hash = sim.state_hash()
+	_note(error if error != "" else "Game saved")
+
+
+## Load the quick save. Returns whether it loaded.
+func _quickload() -> bool:
 	var path := _quicksave_path()
 	if not FileAccess.file_exists(path):
 		var whose := (" for %s" % scenario.country_name(player)) if player != 0 else ""
 		_note("No quick save%s yet: F5 makes one" % whose)
-		return
-	var error := sim.load_game(path)
+		return false
+	var error := _load_save(path)
 	if error != "":
 		_note(error)
-		return
+	return error == ""
+
+
+## Load a save of this scenario and country. Returns an empty string or
+## the error (the game goes on as it was then).
+func _load_save(path: String) -> String:
+	var error := sim.load_game(path)
+	if error != "":
+		return error
+	saved_hash = sim.state_hash()
 	markers.selected.clear()
 	markers.selected_group = 0
 	if drawing != "":
@@ -875,6 +948,82 @@ func _quickload() -> void:
 	else:
 		feed_lines.clear() # the viewer's feed starts over too
 	_note("Game loaded")
+	return ""
+
+
+## The pause menu, pausing the game until it closes.
+func _open_menu() -> void:
+	if not sim.is_paused():
+		sim.toggle_pause()
+		paused_by_menu = true
+	menu.show_menu(_menu_state())
+	_refresh_sim()
+
+
+func _close_menu() -> void:
+	menu.visible = false
+	if paused_by_menu:
+		paused_by_menu = false
+		if sim.is_paused():
+			sim.toggle_pause()
+	_refresh_sim()
+
+
+## What the pause menu shows (see PauseMenu.state).
+func _menu_state() -> Dictionary:
+	var slots := _slots()
+	var enemies := PackedStringArray()
+	for enemy in sim.enemies(player):
+		enemies.append(scenario.country_name(enemy))
+	var time := sim.time_text()
+	return {"date": time, "name": scenario.country_name(player),
+		"color": palette.get_pixel(player, 0), "enemies": enemies,
+		"scenario": scenario.scenario_name(), "quick": slots.quick(), "saves": slots.list(),
+		"suggested": "%s, %s" % [Style.long_date(_today()), time.get_slice(" ", 1)]}
+
+
+## After a save from the menu: the list again with the new save, or the
+## error.
+func _after_save(error: String, line: String) -> void:
+	if error == "":
+		saved_hash = sim.state_hash()
+		_note(line)
+	var state := _menu_state()
+	state["message"] = error
+	menu.show_saves(state)
+
+
+## Whether the game changed since the last save or load.
+func _unsaved() -> bool:
+	return sim.state_hash() != saved_hash
+
+
+## New game ("new") or Quit ("quit"): ask first if the game changed since
+## the last save.
+func _leave(action: String) -> void:
+	if _unsaved():
+		menu.show_leave(action)
+	else:
+		_do_leave(action)
+
+
+func _do_leave(action: String) -> void:
+	if action == "new":
+		restart_args = {"scenario": scenario_name}
+		restart.call()
+	else:
+		quit_game.call()
+
+
+func _notification(what: int) -> void:
+	if what != NOTIFICATION_WM_CLOSE_REQUEST:
+		return
+	if menu != null and _unsaved():
+		if not menu.visible:
+			_open_menu()
+		menu.show_leave("quit")
+	else:
+		quit_game.call()
 
 
 func _add_feed(line: String) -> void:
@@ -1122,6 +1271,21 @@ func _unhandled_input(event: InputEvent) -> void:
 		# window unseen or give the same order again and again.
 		if (event as InputEventKey).echo and key not in [KEY_EQUAL, KEY_KP_ADD, KEY_MINUS, KEY_KP_SUBTRACT]:
 			return
+		if menu != null and menu.visible:
+			# The menu keeps the game paused; only its own keys work.
+			if key == KEY_ESCAPE:
+				menu.back()
+			elif key == KEY_F5:
+				_quicksave()
+				if menu.view == "saves":
+					menu.show_saves(_menu_state())
+				elif menu.view == "menu":
+					menu.show_menu(_menu_state())
+			elif key == KEY_F9 and _quickload():
+				paused_by_menu = false
+				menu.visible = false
+				_refresh_sim()
+			return
 		if event_card != null and event_card.visible:
 			# A card waits to be closed; the game stays paused.
 			if key == KEY_ENTER or key == KEY_KP_ENTER or key == KEY_ESCAPE:
@@ -1203,8 +1367,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				sim.answer_peace(int(newest["from"]), int(newest["to"]), key == KEY_Y)
 			_refresh_sim()
 		elif key == KEY_F5:
-			var error := sim.save_game(_quicksave_path())
-			_note(error if error != "" else "Game saved")
+			_quicksave()
 			_refresh_sim()
 		elif key == KEY_F9:
 			_quickload()
@@ -1226,9 +1389,12 @@ func _unhandled_input(event: InputEvent) -> void:
 				stroke_points.clear()
 				markers.stroke.clear()
 				_show_help()
-			else:
+			elif not markers.selected.is_empty() or markers.selected_group != 0 or menu == null:
 				markers.selected.clear()
 				markers.selected_group = 0
+			else:
+				_open_menu()
+				return
 			_refresh_sim()
 
 
@@ -1236,7 +1402,8 @@ func _process(delta: float) -> void:
 	var direction := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	# WASD pans, but not as part of Ctrl+A or Shift+W, and not while a card
 	# or the peace window waits for an answer.
-	var modal: bool = (event_card != null and event_card.visible) or (peace_window != null and peace_window.visible)
+	var modal: bool = (event_card != null and event_card.visible) \
+		or (peace_window != null and peace_window.visible) or (menu != null and menu.visible)
 	if not modal and not Input.is_key_pressed(KEY_CTRL) and not Input.is_key_pressed(KEY_SHIFT):
 		for pair in [[KEY_A, Vector2.LEFT], [KEY_D, Vector2.RIGHT], [KEY_W, Vector2.UP], [KEY_S, Vector2.DOWN]]:
 			if Input.is_physical_key_pressed(pair[0]):
@@ -1357,6 +1524,8 @@ func _mercator_y(lat: float) -> float:
 
 
 func _parse_args() -> Dictionary:
+	if not restart_args.is_empty():
+		return restart_args.duplicate()
 	var result := {}
 	for arg in OS.get_cmdline_user_args():
 		var parts := arg.trim_prefix("--").split("=", true, 1)

@@ -61,6 +61,21 @@ pub fn save(world: &World) -> Vec<u8> {
     gzip.finish().expect("writing to memory cannot fail")
 }
 
+/// A number that changes whenever anything saved in the world changes (an
+/// order given, an hour gone by) and is the same for a loaded game as for
+/// the one saved. The front end compares it with the one it kept at the
+/// last save to know whether leaving would lose anything. Not stable
+/// across versions of the game: compare only within one run.
+pub fn fingerprint(world: &World) -> u64 {
+    use std::hash::Hasher;
+    let body = postcard::to_allocvec(world).expect("the world always serializes");
+    // `DefaultHasher::new` uses fixed keys: the same bytes give the same
+    // number every time within one build.
+    let mut hasher = std::hash::DefaultHasher::new();
+    hasher.write(&body);
+    hasher.finish()
+}
+
 /// Load a save made on `scenario`. `regions` is needed when the game settles
 /// peace terms in regions, and ignored otherwise.
 pub fn load(

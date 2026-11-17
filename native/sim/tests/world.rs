@@ -239,3 +239,23 @@ fn saves_are_small_and_quick() {
     // Generous: guards against accidental slowness, not a benchmark.
     assert!(elapsed.as_secs_f64() < 2.0, "save + load took {elapsed:?}");
 }
+
+#[test]
+fn a_fingerprint_tells_whether_the_game_changed() {
+    // The front end asks "Leave this game?" only when the game changed
+    // since the last save: it keeps the fingerprint of what it saved.
+    let mut world = world();
+    let saved = save::fingerprint(&world);
+    assert_eq!(save::fingerprint(&self::world()), saved, "the same game");
+    world.submit(declare(5, RUSSIA, UKRAINE)).unwrap();
+    let ordered = save::fingerprint(&world);
+    assert_ne!(ordered, saved, "an order given while paused is a change");
+    world.step();
+    assert_ne!(save::fingerprint(&world), ordered, "so is time going on");
+    let loaded = save::load(&save::save(&world), common::world_2026(), None).unwrap();
+    assert_eq!(
+        save::fingerprint(&loaded),
+        save::fingerprint(&world),
+        "a loaded game is the saved one"
+    );
+}
