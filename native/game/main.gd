@@ -22,9 +22,10 @@ extends Node2D
 ## M the mobilization level.
 ## AI: I hands the country to the AI or takes it back (with --ai both sides
 ## of the sandbox war start on the AI).
-## War and peace (stand-in controls): W declares war on the country under the
-## mouse, P offers peace to all enemies, and Y or N accepts or refuses the
-## newest open peace offer (made to you while you lead a country).
+## War and peace (stand-in controls): Shift+W declares war on the country
+## under the mouse (W alone pans), P offers peace to all enemies, and Y or N
+## accepts or refuses the newest open peace offer (made to you while you lead
+## a country).
 ##
 ## Command-line options (after `--`):
 ##   --scenario=<name>        package in assets/maps/compiled (default world-map-2026-v3)
@@ -838,7 +839,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			_note(("%s is now run by the AI" if on else "%s takes orders from you again")
 				% scenario.country_name(country))
 			_refresh_sim()
-		elif key == KEY_W and _acting_country() != 0 and hovered_id > 0:
+		elif key == KEY_W and (event as InputEventKey).shift_pressed and _acting_country() != 0 \
+				and hovered_id > 0:
+			# Shift: W alone pans the map.
 			sim.declare_war(_acting_country(), hovered_id)
 			_refresh_sim()
 		elif key == KEY_P and _acting_country() != 0:
