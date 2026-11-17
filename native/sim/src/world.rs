@@ -17,6 +17,7 @@ use crate::conference::{Conference, Move};
 use crate::diplomacy::PeaceOffer;
 use crate::division::{Division, DivisionId, Loss, SpawnError};
 use crate::economy::{Budget, Economy, SERVE_PER_MILLE};
+use crate::factions::{Call, Faction, FactionId, Invite};
 use crate::map::{Cell, MapData};
 use crate::path;
 use crate::record::{Tally, WarRecord};
@@ -118,6 +119,32 @@ pub enum Command {
     LeaveConference {
         loser: CountryId,
     },
+    /// Invite a country in no faction into this one's faction (as its
+    /// leader), or, in none, to form one named `name` (empty: unnamed).
+    InviteToFaction {
+        target: CountryId,
+        name: String,
+    },
+    /// Ask a faction's leader to let this country in.
+    AskToJoin {
+        faction: FactionId,
+    },
+    /// Accept or refuse an invitation or request from `from`.
+    AnswerFaction {
+        from: CountryId,
+        accept: bool,
+    },
+    LeaveFaction,
+    /// The leader names its faction.
+    RenameFaction {
+        name: String,
+    },
+    /// Join (or not) an ally's war on `target`, as called to arms.
+    AnswerCall {
+        attacker: CountryId,
+        target: CountryId,
+        join: bool,
+    },
 }
 
 /// A command from one country, to apply at the start of `tick`.
@@ -215,9 +242,67 @@ pub enum Event {
         country: CountryId,
         overlord: CountryId,
     },
-    /// Its overlord capitulated: the puppet is free.
+    /// Its overlord capitulated (or it did): the puppet is free.
     PuppetFreed {
         country: CountryId,
+    },
+    /// `from` invited `to` into its faction (or to form one).
+    FactionInvited {
+        from: CountryId,
+        to: CountryId,
+    },
+    /// `from` asked `to`, a leader, to let it into its faction.
+    AskedToJoin {
+        from: CountryId,
+        to: CountryId,
+    },
+    /// `to` said no to `from`'s invitation or request.
+    FactionRefused {
+        from: CountryId,
+        to: CountryId,
+    },
+    FactionFormed {
+        faction: FactionId,
+        leader: CountryId,
+    },
+    JoinedFaction {
+        country: CountryId,
+        faction: FactionId,
+    },
+    /// `separate_peace`: it made peace while its allies fight on.
+    LeftFaction {
+        country: CountryId,
+        faction: FactionId,
+        separate_peace: bool,
+    },
+    /// The faction has a new leader.
+    FactionLeader {
+        faction: FactionId,
+        leader: CountryId,
+    },
+    /// One country left (`last`): the faction is no more.
+    FactionDissolved {
+        faction: FactionId,
+        last: CountryId,
+    },
+    /// `attacker`, a member, declared war on `target`; `allies` may join.
+    CalledToArms {
+        attacker: CountryId,
+        target: CountryId,
+        allies: Vec<CountryId>,
+    },
+    CallAnswered {
+        ally: CountryId,
+        attacker: CountryId,
+        target: CountryId,
+        join: bool,
+    },
+    /// `attacker` attacked `ally`: its faction's `defenders` are at war
+    /// with `attacker` from now on.
+    Defended {
+        ally: CountryId,
+        attacker: CountryId,
+        defenders: Vec<CountryId>,
     },
 }
 
@@ -266,6 +351,18 @@ pub enum Rejection {
     /// A country whose land a conference is dividing is not at war with
     /// anyone, and cannot be attacked.
     InConference,
+    /// No war on an ally (a member of one's faction, or its puppet).
+    Ally,
+    /// The country is in a faction already (one at most).
+    InFaction,
+    /// Only a faction's leader invites or names it.
+    NotLeader,
+    /// Not in a faction, or no such faction.
+    NoFaction,
+    /// No alliance with a country at war with one's side.
+    Enemy,
+    /// No open call to arms for that war.
+    NoCall,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -312,6 +409,19 @@ pub struct World {
     /// (winner, loser) -> soldiers of the loser the winner put out of
     /// action in their current (or last) war.
     pub(crate) defeated: BTreeMap<(CountryId, CountryId), u64>,
+    /// Factions, oldest first (`factions.rs`).
+    pub(crate) factions: Vec<Faction>,
+    pub(crate) next_faction: FactionId,
+    /// Open invitations and requests to join a faction, oldest first.
+    pub(crate) invites: Vec<Invite>,
+    /// Open calls to arms, oldest first.
+    pub(crate) calls: Vec<Call>,
+    /// Each country's land neighbors as of the start of the day
+    /// (`World::refresh_borders`), kept so a loaded game sees what the
+    /// running one saw.
+    pub(crate) borders: BTreeMap<CountryId, Vec<CountryId>>,
+    /// Land changed hands since `borders` was worked out.
+    pub(crate) borders_stale: bool,
     /// Orders not applied yet, sorted by (tick, country, seq).
     pending: Vec<Queued>,
     next_seq: u64,
@@ -331,10 +441,18 @@ pub struct World {
     /// game uses the default. See `set_aggression_days`.
     #[serde(skip, default = "default_aggression_days")]
     pub(crate) aggression_days: u32,
+    /// Whether threatened AI countries look for factions (`factions.rs`).
+    /// Not saved: a loaded game has it on.
+    #[serde(skip, default = "seek_by_default")]
+    pub(crate) seek_factions: bool,
 }
 
 fn default_aggression_days() -> u32 {
     crate::ai::AGGRESSION_DAYS
+}
+
+fn seek_by_default() -> bool {
+    true
 }
 
 /// Used when a scenario has no start date.
@@ -382,6 +500,12 @@ impl World {
             talks_closed: BTreeMap::new(),
             conferences: Vec::new(),
             defeated: BTreeMap::new(),
+            factions: Vec::new(),
+            next_faction: 1,
+            invites: Vec::new(),
+            calls: Vec::new(),
+            borders: BTreeMap::new(),
+            borders_stale: true,
             pending: Vec::new(),
             next_seq: 0,
             ceded: BTreeMap::new(),
@@ -389,8 +513,10 @@ impl World {
             map: Arc::new(MapData::new(scenario)),
             regions: None,
             aggression_days: default_aggression_days(),
+            seek_factions: true,
         };
         world.count_output();
+        world.refresh_borders();
         world
     }
 
@@ -531,9 +657,30 @@ impl World {
         }
     }
 
-    /// How many wars are going on.
+    /// How many wars are going on: groups of countries linked by fighting
+    /// each other (a faction defending a member is one war, not one for
+    /// each pair of countries at war).
     pub fn war_count(&self) -> usize {
-        self.wars.len()
+        fn find(head: &mut BTreeMap<CountryId, CountryId>, c: CountryId) -> CountryId {
+            let parent = *head.entry(c).or_insert(c);
+            if parent == c {
+                return c;
+            }
+            let root = find(head, parent);
+            head.insert(c, root);
+            root
+        }
+        let mut head: BTreeMap<CountryId, CountryId> = BTreeMap::new();
+        for &(a, b) in self.wars.keys() {
+            let (ra, rb) = (find(&mut head, a), find(&mut head, b));
+            if ra != rb {
+                head.insert(ra.max(rb), ra.min(rb));
+            }
+        }
+        let countries: Vec<CountryId> = head.keys().copied().collect();
+        let roots: BTreeSet<CountryId> =
+            countries.into_iter().map(|c| find(&mut head, c)).collect();
+        roots.len()
     }
 
     /// The countries at war with `country`, in id order.
@@ -606,6 +753,9 @@ impl World {
     /// advance time.
     pub fn step(&mut self) -> Vec<Event> {
         let mut events = Vec::new();
+        if self.borders_stale && self.tick.is_multiple_of(24) {
+            self.refresh_borders();
+        }
         let mut replan = self.apply_due(&mut events);
         if !self.conferences.is_empty() {
             self.run_conferences(&mut events);
@@ -625,6 +775,7 @@ impl World {
         }
         if self.tick.is_multiple_of(24) {
             self.expire_offers();
+            self.expire_factions();
             self.check_capitulation(&mut events);
             self.run_economy(&mut events);
             self.run_support(&mut events);
@@ -749,6 +900,26 @@ impl World {
             Command::LeaveConference { loser } => {
                 self.conference_move(country, *loser, Move::Leave, events)
             }
+            Command::InviteToFaction { target, name } => {
+                self.invite(country, *target, name, events)
+            }
+            Command::AskToJoin { faction } => self.ask_to_join(country, *faction, events),
+            Command::AnswerFaction { from, accept } => {
+                self.answer_faction(*from, country, *accept, events)
+            }
+            Command::LeaveFaction => match self.faction_index(country) {
+                Some(_) => {
+                    self.leave_faction(country, false, events);
+                    Ok(())
+                }
+                None => Err(Rejection::NoFaction),
+            },
+            Command::RenameFaction { name } => self.rename_faction(country, name),
+            Command::AnswerCall {
+                attacker,
+                target,
+                join,
+            } => self.answer_call(country, *attacker, *target, *join, events),
             Command::DeclareWar { .. } | Command::MoveDivision { .. } => {
                 self.apply_basic(order, events);
                 return false;
@@ -866,8 +1037,9 @@ impl World {
         Ok(())
     }
 
-    /// `attacker` and `target` are at war from now on, and each side's
-    /// overlord and puppets join in (`World::drag_in`).
+    /// `attacker` and `target` are at war from now on: each side's overlord
+    /// and puppets join in (`World::drag_in`), `target`'s faction defends
+    /// it and `attacker`'s is called to arms (`factions.rs`).
     pub(crate) fn start_war(
         &mut self,
         attacker: CountryId,
@@ -876,6 +1048,8 @@ impl World {
     ) {
         self.begin_war(attacker, target, events);
         self.drag_in(attacker, target, events);
+        self.defend(attacker, target, events);
+        self.call_allies(attacker, target, events);
     }
 
     /// The war itself. A side going from peace to war counts this war's
@@ -886,6 +1060,12 @@ impl World {
         target: CountryId,
         events: &mut Vec<Event>,
     ) {
+        self.open_war(attacker, target);
+        events.push(Event::WarDeclared { attacker, target });
+    }
+
+    /// `begin_war` without the event (a faction's defense reports itself).
+    pub(crate) fn open_war(&mut self, attacker: CountryId, target: CountryId) {
         for side in [attacker, target] {
             if self.enemies(side).is_empty()
                 && let Some(index) = self.index_of(side)
@@ -896,7 +1076,6 @@ impl World {
         self.defeated.remove(&(attacker, target));
         self.defeated.remove(&(target, attacker));
         self.wars.insert(pair(attacker, target), self.tick);
-        events.push(Event::WarDeclared { attacker, target });
     }
 
     pub(crate) fn check_declare_war(
@@ -917,6 +1096,8 @@ impl World {
             Err(Rejection::Puppet)
         } else if self.in_conference(target) || self.in_conference(attacker) {
             Err(Rejection::InConference)
+        } else if self.allied(attacker, target) {
+            Err(Rejection::Ally)
         } else {
             Ok(())
         }

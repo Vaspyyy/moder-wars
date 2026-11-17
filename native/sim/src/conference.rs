@@ -358,6 +358,7 @@ impl World {
         let Some(index) = self.index_of(country) else {
             return;
         };
+        self.leave_faction(country, false, events);
         self.countries[index].overlord = Some(overlord);
         self.countries[index].controller = Controller::Ai;
         self.offers.retain(|o| o.from != country && o.to != country);

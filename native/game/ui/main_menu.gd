@@ -3,8 +3,9 @@ extends Control
 ##
 ## - main: Play, Continue (the newest save, of any scenario or country),
 ##   Load game and Quit to desktop;
-## - play: a card for each scenario (scenarios.gd) and Observer mode, then
-##   Pick a country (or Start watching when observer mode is on);
+## - play: a card for each scenario (scenarios.gd), the game setup (real
+##   alliances at the start) and Observer mode, then Pick a country (or
+##   Start watching when observer mode is on);
 ## - load: every save, newest first, each with Load.
 ##
 ## Esc goes back one view. The data credit (main's label) stays on top.
@@ -32,9 +33,11 @@ var view := "main"
 ## Package name -> {name, date, credit} of each scenario, read from its
 ## package (main fills it).
 var infos := {}
-## The scenario selected on the play view, and whether observer mode is on.
+## The scenario selected on the play view, whether observer mode is on,
+## and the game setup's real alliances (main fills it from the settings).
 var selected := ""
 var observe := false
+var alliances := true
 ## Every save (SaveSlots.all), newest first.
 var saves: Array = []
 ## Unix seconds now, for "saved 12 minutes ago" (tests replace it).
@@ -137,43 +140,27 @@ func show_play() -> void:
 		cards.add_child(_card(entry, card_width))
 	content.add_child(cards)
 
-	var bottom := 170.0 + CARD_PICTURE + 230.0
-	# Observer mode: a switch with its name and what it does, all one button.
-	var toggle := Button.new()
-	toggle.name = "Observer"
-	toggle.toggle_mode = true
-	toggle.button_pressed = observe
-	toggle.focus_mode = FOCUS_NONE
-	toggle.mouse_default_cursor_shape = CURSOR_POINTING_HAND
-	for state in ["normal", "hover", "pressed", "hover_pressed", "focus"]:
-		toggle.add_theme_stylebox_override(state, StyleBoxEmpty.new())
-	toggle.position = Vector2(LEFT, bottom)
-	toggle.toggled.connect(func(on: bool) -> void:
-		observe = on
-		show_play())
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 14)
-	row.mouse_filter = MOUSE_FILTER_IGNORE
-	var knob := Switch.new()
-	knob.on = observe
-	knob.custom_minimum_size = Vector2(44, 24)
-	knob.size_flags_vertical = SIZE_SHRINK_BEGIN
-	knob.mouse_filter = MOUSE_FILTER_IGNORE
-	row.add_child(knob)
-	var words := VBoxContainer.new()
-	words.add_theme_constant_override("separation", 4)
-	words.mouse_filter = MOUSE_FILTER_IGNORE
-	var title := Style.label("Observer mode", 21, Style.TEXT, Style.TITLE)
-	title.mouse_filter = MOUSE_FILTER_IGNORE
-	words.add_child(title)
-	words.add_child(_wrapped("Watch without leading a country: the AI plays everyone, and every army's "
-		+ "arrows are on the map. Off: you pick a country next, and see only your own arrows.", 14,
-		Style.MUTED, minf(820.0, screen.x - 2 * LEFT - 420.0)))
-	row.add_child(words)
-	toggle.add_child(row)
-	content.add_child(toggle)
-	row.reset_size()
-	toggle.custom_minimum_size = row.size
+	var bottom := 170.0 + CARD_PICTURE + 214.0
+	var width := minf(820.0, screen.x - 2 * LEFT - 420.0)
+	var kicker := Style.label("GAME SETUP", 13, Style.MUTED, Style.spaced(Style.BODY, 1))
+	kicker.position = Vector2(LEFT, bottom - 6)
+	content.add_child(kicker)
+	var setup := _switch("Alliances", alliances, "Real alliances at the start",
+		"NATO and the CSTO as they stand on the scenario's date: attack a member and you fight them "
+		+ "all. Off: every country starts alone, and factions only form in play.", width,
+		func(on: bool) -> void:
+			alliances = on
+			show_play())
+	setup.position = Vector2(LEFT, bottom + 20)
+	content.add_child(setup)
+	var watch := _switch("Observer", observe, "Observer mode",
+		"Watch without leading a country: the AI plays everyone, and every army's arrows are on the "
+		+ "map. Off: you pick a country next, and see your side's arrows only.", width,
+		func(on: bool) -> void:
+			observe = on
+			show_play())
+	watch.position = Vector2(LEFT, setup.position.y + setup.custom_minimum_size.y + 14)
+	content.add_child(watch)
 
 	var buttons := HBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 12)
@@ -182,10 +169,47 @@ func show_play() -> void:
 		func() -> void: play_chosen.emit(selected, observe)))
 	buttons.set_anchors_preset(PRESET_TOP_RIGHT)
 	buttons.grow_horizontal = GROW_DIRECTION_BEGIN
-	buttons.position = Vector2(screen.x - LEFT, bottom + 6)
+	buttons.position = Vector2(screen.x - LEFT, bottom + 26)
 	content.add_child(buttons)
 	buttons.reset_size()
 	buttons.position.x = screen.x - LEFT - buttons.size.x
+
+
+## A switch with its name and what it does, all one button.
+func _switch(id: String, on: bool, title: String, text: String, width: float,
+		toggled: Callable) -> Button:
+	var toggle := Button.new()
+	toggle.name = id
+	toggle.toggle_mode = true
+	toggle.button_pressed = on
+	toggle.focus_mode = FOCUS_NONE
+	toggle.mouse_default_cursor_shape = CURSOR_POINTING_HAND
+	for state in ["normal", "hover", "pressed", "hover_pressed", "focus"]:
+		toggle.add_theme_stylebox_override(state, StyleBoxEmpty.new())
+	toggle.toggled.connect(toggled)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14)
+	row.mouse_filter = MOUSE_FILTER_IGNORE
+	var knob := Switch.new()
+	knob.on = on
+	knob.custom_minimum_size = Vector2(44, 24)
+	knob.size_flags_vertical = SIZE_SHRINK_BEGIN
+	knob.mouse_filter = MOUSE_FILTER_IGNORE
+	row.add_child(knob)
+	var words := VBoxContainer.new()
+	words.add_theme_constant_override("separation", 4)
+	words.mouse_filter = MOUSE_FILTER_IGNORE
+	var name := Style.label(title, 21, Style.TEXT, Style.TITLE)
+	name.mouse_filter = MOUSE_FILTER_IGNORE
+	words.add_child(name)
+	words.add_child(_wrapped(text, 14, Style.MUTED, width))
+	row.add_child(words)
+	toggle.add_child(row)
+	# Wrapped text knows its height only once laid out: measure it.
+	var lines := Style.BODY.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, width, 14)
+	toggle.custom_minimum_size = Vector2(58 + width, name.get_minimum_size().y + 4 + lines.y)
+	row.size = toggle.custom_minimum_size
+	return toggle
 
 
 func show_load() -> void:

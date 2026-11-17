@@ -48,6 +48,8 @@ extends Node2D
 ##   --seed=<n>               simulation seed (default 1)
 ##   --speed=<1-5>            starting speed
 ##   --play                   start running (the game starts paused)
+##   --alliances=on|off       start with NATO and the CSTO, or without (default: the
+##                            Play screen's last choice, on at first)
 ##   --ai                     hand both sides of the --war sandbox to the AI
 ##   --forces                 with --war: every country starts with its real army
 ##                            (World Bank data, always on without --war) and --war
@@ -94,6 +96,8 @@ const Lines := preload("res://ui/lines.gd")
 const SaveSlots := preload("res://saves.gd")
 const Scenarios := preload("res://scenarios.gd")
 const MainMenu := preload("res://ui/main_menu.gd")
+const Settings := preload("res://settings.gd")
+const FactionWindow := preload("res://ui/faction.gd")
 
 ## The scene starts again with these options instead of the command line's:
 ## the scenario (Main menu in the pause menu: it opens on the main menu),
@@ -165,6 +169,14 @@ var peace_window: Control = null
 var conference_window: Control = null
 var conference_loser := 0
 var conference_selected := 0
+## The player's faction (top bar button), and what it showed last.
+var faction_window: Control = null
+var faction_shown := ""
+## Whether this game started with the real alliances of its date.
+var alliances := true
+## Whether threatened AI countries look for factions (the screen tests turn
+## it off); a loaded game keeps it.
+var ai_factions := true
 ## The card about a foreign country clicked while leading.
 var country_card: Control = null
 ## The other country of the open peace window, and whether it offered.
@@ -414,6 +426,7 @@ func _open_main_menu() -> void:
 	main_menu.infos = _scenario_infos()
 	main_menu.saves = _all_saves()
 	main_menu.selected = scenario_name
+	main_menu.alliances = Settings.real_alliances()
 	main_menu.setup()
 	main_menu.play_chosen.connect(_play)
 	main_menu.load_chosen.connect(_load_from_menu)
@@ -475,8 +488,12 @@ func _all_saves() -> Array:
 ## Play: the pick screen (or, in observer mode, the viewer) of a scenario.
 ## Another scenario's package loads with the scene started again.
 func _play(id: String, observe: bool) -> void:
-	if id != scenario_name:
-		restart_args = {"scenario": id, "observe" if observe else "pick": ""}
+	var setup: bool = main_menu.alliances
+	Settings.set_real_alliances(setup)
+	# Another scenario, or another setup: the scene starts again with it.
+	if id != scenario_name or setup != alliances:
+		restart_args = {"scenario": id, "observe" if observe else "pick": "",
+			"alliances": "on" if setup else "off"}
 		restart.call()
 		return
 	_close_main_menu()
@@ -586,6 +603,7 @@ func _lead(id: int, to_capital: bool) -> bool:
 		sim.set_speed(speed)
 		_refresh_sim())
 	top_bar.economy_pressed.connect(func() -> void: _show_economy(not economy_window.visible))
+	top_bar.faction_pressed.connect(func() -> void: _open_faction(not faction_window.visible))
 	top_bar.visible = not no_hud
 	ui_layer.add_child(top_bar)
 	army_list = ArmyGroups.new()
@@ -646,10 +664,25 @@ func _lead(id: int, to_capital: bool) -> bool:
 	conference_window.annex_pressed.connect(func() -> void: _conference_move("annex", 0))
 	conference_window.leave_pressed.connect(func() -> void: _conference_move("leave", 0))
 	ui_layer.add_child(conference_window)
+	faction_window = FactionWindow.new()
+	faction_window.scenario = scenario
+	faction_window.palette = palette
+	faction_window.setup()
+	faction_window.closed.connect(func() -> void: _open_faction(false))
+	faction_window.left_pressed.connect(func() -> void:
+		sim.leave_faction(player)
+		_open_faction(false)
+		_refresh_sim())
+	faction_window.name_entered.connect(func(name: String) -> void:
+		sim.rename_faction(player, name)
+		faction_shown = ""
+		_refresh_sim())
+	ui_layer.add_child(faction_window)
 	event_card = EventCard.new()
 	event_card.setup()
 	event_card.visible = false
 	event_card.closed.connect(_close_card)
+	event_card.chosen.connect(_answer_card)
 	ui_layer.add_child(event_card)
 	defeat_screen = DefeatScreen.new()
 	defeat_screen.scenario = scenario
@@ -715,11 +748,17 @@ func _start_sim(args: Dictionary) -> void:
 		else:
 			# License requirement (CC BY 4.0): the force data credit stays visible.
 			credit.text += "  ·  Forces: World Bank, IISS (CC BY 4.0)"
-		# The wars already going on when the scenario starts.
+		# The game setup: NATO and the CSTO as they stood on the start date.
+		alliances = String(args["alliances"]) != "off" if args.has("alliances") \
+			else Settings.real_alliances()
+		if alliances and not args.has("war"):
+			sim.use_real_factions()
+		# The wars already going on when the scenario starts (nobody is
+		# called to arms for them).
 		for war in Scenarios.wars(scenario_name):
 			var attacker := scenario.country_id(war[0])
 			var defender := scenario.country_id(war[1])
-			if attacker == 0 or defender == 0 or not sim.declare_war(attacker, defender):
+			if attacker == 0 or defender == 0 or not sim.scenario_war(attacker, defender):
 				push_error("%s: cannot start the war of %s on %s" % [scenario_name, war[0], war[1]])
 	if args.has("war"):
 		var war: PackedStringArray = String(args["war"]).split(",")
@@ -774,7 +813,7 @@ func _refresh_sim() -> void:
 	# Another country's arrows are its own plans: only yours (and your
 	# puppets' and overlord's) show, unless you are watching the world
 	# without leading it.
-	markers.arrows_of = {} if player == 0 or watching else _family_of(player)
+	markers.arrows_of = {} if player == 0 or watching else _side_of(player)
 	var formed := {}
 	for group in sim.groups():
 		# Each country's groups are numbered in the order they were formed,
@@ -828,6 +867,13 @@ func _refresh_sim() -> void:
 	var economy: Dictionary = sim.economy(player)
 	top_bar.show_state(player, economy, sim.enemies(player), divisions,
 		sim.time_text(), sim.is_paused(), sim.speed())
+	var faction := _faction_of(player)
+	top_bar.show_faction(String(faction.get("name", "")))
+	if faction_window.visible:
+		if faction.is_empty():
+			_open_faction(false)
+		elif faction_shown != str(faction) + str(sim.enemies(player).size() > 0):
+			_show_faction()
 	if economy_window.visible:
 		economy_window.show_economy(player, economy, sim.is_ai(player))
 	var grouped := {}
@@ -1011,7 +1057,16 @@ func _show_next_card() -> void:
 	card_report = {}
 	while not cards.is_empty() and card_report.is_empty():
 		var next: Dictionary = cards.pop_front()
-		if next["big"] != "peace_offer" or _offered_peace(int(next["other"])):
+		var other_id := int(next["other"])
+		var still := true
+		match String(next["big"]):
+			"peace_offer":
+				still = _offered_peace(other_id)
+			"call_to_arms":
+				still = _called(other_id, int(next.get("also", 0)))
+			"faction_invite", "faction_ask":
+				still = _invited(other_id)
+		if still:
 			card_report = next
 	if card_report.is_empty():
 		return
@@ -1033,6 +1088,54 @@ func _show_next_card() -> void:
 			_open_peace(int(card_report["other"]), true)
 		"conference":
 			_open_conference(int(card_report["other"]))
+		"call_to_arms":
+			var target := int(card_report["also"])
+			var them := scenario.country_name(target)
+			var faction := String(_faction_of(player).get("name", "your faction"))
+			var defenders := sim.defenders(target)
+			var text := "Your ally %s declared war on %s and asks %s to join." % [other, them, faction]
+			if not defenders.is_empty():
+				text += " %s defend %s, so joining means war with them too (%d divisions with %s)." % [
+					_country_list(defenders), them, _divisions_of(defenders) + _divisions_of(
+					PackedInt32Array([target])), them]
+			text += "\n\nJoin: you are at war with %s from today. Stay out: you stay at peace and in %s." % [
+				them if defenders.is_empty() else "all of them", faction]
+			event_card.show_choice("CALL TO ARMS", "%s attacks %s" % [other, them], text,
+				["Stay out", "N"], ["Join the war", "Y"])
+		"defend":
+			var ally := scenario.country_name(int(card_report["also"]))
+			var faction := String(_faction_of(player).get("name", "your faction"))
+			var text := "%s is in %s, so every member is now at war with %s, you too." % [ally, faction, other]
+			if _unguarded(int(card_report["other"])):
+				text += " None of your army groups holds that border yet: select one and draw its front (F)."
+			event_card.show_event("WAR  ·  %s DEFENDS %s" % [faction.to_upper(), ally.to_upper()],
+				"%s attacked %s" % [other, ally], text)
+		"faction_invite":
+			var inviter := _faction_of(int(card_report["other"]))
+			var title := "%s asks you to form a faction" % other if inviter.is_empty() \
+				else "%s invites you into %s" % [other, inviter["name"]]
+			var text := "Members defend each other: if one is attacked, all are at war with the attacker. " \
+				+ "If one attacks, the others choose whether to join. The wars going on now stay their own."
+			if inviter.is_empty():
+				text += " %s would lead it." % other
+			else:
+				text += " %s has %d members." % [inviter["name"], PackedInt32Array(inviter["members"]).size()]
+			event_card.show_choice("INVITATION", title, text, ["Refuse", "N"], ["Accept", "Y"])
+		"faction_ask":
+			var faction := String(_faction_of(player).get("name", "your faction"))
+			event_card.show_choice("REQUEST", "%s asks to join %s" % [other, faction],
+				"If you let it in, %s defends it when it is attacked, and it defends you. " % faction
+				+ "Its wars going on now stay its own.", ["Refuse", "N"], ["Let it in", "Y"])
+		"joined":
+			var faction := _faction_of(int(card_report["also"]))
+			var name := String(faction.get("name", "the faction"))
+			if int(card_report["other"]) == player:
+				event_card.show_event("FACTION", "You joined %s" % name,
+					"Its members defend you if you are attacked, and you them. When one of you attacks, "
+					+ "the others are asked to join. Making peace on your own while they fight on takes you out.")
+			else:
+				event_card.show_event("FACTION", "%s joined %s" % [other, name],
+					"%s is your ally now: it defends you, and you it, and its arrows show on your map." % other)
 		"peace":
 			event_card.show_event("PEACE", "Peace with %s" % other,
 				"The war is over. The reports list the regions that changed hands.")
@@ -1066,6 +1169,7 @@ func _open_conference(loser: int) -> void:
 	conference_loser = loser
 	conference_selected = 0
 	_stop_drawing() # a click now chooses a region
+	_open_faction(false)
 	_pause_for_card()
 	country_card.show_country(0, Vector2.ZERO, {}, "", [], "")
 	for panel in [army_list, reports, command_bar]:
@@ -1164,16 +1268,133 @@ func _owns_nothing(country: int) -> bool:
 	return float(sim.war_record(country).get("land_kept", 1.0)) <= 0.0
 
 
-## `country`, its overlord and the overlord's puppets (or its own), as a
-## set: whose arrows the player sees.
-func _family_of(country: int) -> Dictionary:
+## `country`'s side as a set: its overlord (or itself), every member of
+## that one's faction, and all their puppets. Whose arrows the player sees.
+func _side_of(country: int) -> Dictionary:
 	var head := sim.overlord(country)
 	if head == 0:
 		head = country
-	var family := {head: true}
-	for puppet in sim.puppets(head):
-		family[puppet] = true
-	return family
+	var faction := _faction_of(head)
+	var side := {}
+	for member in PackedInt32Array(faction.get("members", [head])):
+		side[member] = true
+		for puppet in sim.puppets(member):
+			side[puppet] = true
+	return side
+
+
+## `country`'s faction as MwWorld.factions lists it, or {} for none.
+func _faction_of(country: int) -> Dictionary:
+	var id := sim.faction_of(country)
+	if id == 0:
+		return {}
+	for faction in sim.factions():
+		if int(faction["id"]) == id:
+			return faction
+	return {}
+
+
+## Open or close the player's faction window, with the factions striped
+## on the map while it is open.
+func _open_faction(open: bool) -> void:
+	var material := map_rect.material as ShaderMaterial
+	if not open:
+		faction_window.visible = false
+		faction_shown = ""
+		if not peace_window.visible and not conference_window.visible:
+			material.set_shader_parameter("has_marks", false)
+		return
+	if _faction_of(player).is_empty() or peace_window.visible or conference_window.visible:
+		return
+	_show_economy(false)
+	_show_faction()
+
+
+func _show_faction() -> void:
+	var faction := _faction_of(player)
+	var members := {}
+	for member in PackedInt32Array(faction["members"]):
+		members[member] = sim.country_info(member)
+	# The rival: the strongest other faction, by divisions.
+	var rival := {}
+	for other in sim.factions():
+		if int(other["id"]) == int(faction["id"]):
+			continue
+		var divisions := 0
+		for member in PackedInt32Array(other["members"]):
+			divisions += int(sim.country_info(member).get("divisions", 0))
+		if rival.is_empty() or divisions > int(rival["divisions"]):
+			rival = {"name": other["name"], "divisions": divisions}
+	var at_war := sim.enemies(player).size() > 0
+	faction_shown = str(faction) + str(at_war)
+	faction_window.show_faction(player, faction, members, rival, at_war)
+	# Stripes: the player's faction in blue, the others in red.
+	var colors := {}
+	for other in sim.factions():
+		var color: Color = FactionWindow.OURS if int(other["id"]) == int(faction["id"]) else FactionWindow.OTHERS
+		for member in PackedInt32Array(other["members"]):
+			colors[member] = color
+	var count := scenario.region_count()
+	var marks := Image.create(count + 1, 1, false, Image.FORMAT_RGBA8)
+	for region in range(1, count + 1):
+		var owner := sim.region_owner(region)
+		if colors.has(owner):
+			marks.set_pixel(region, 0, colors[owner])
+	var material := map_rect.material as ShaderMaterial
+	material.set_shader_parameter("marks", ImageTexture.create_from_image(marks))
+	material.set_shader_parameter("has_marks", true)
+
+
+## The player's answer on a card that asks (a call to arms, an invitation,
+## a request to join).
+func _answer_card(yes: bool) -> void:
+	var report := card_report
+	var other := int(report.get("other", 0))
+	match String(report.get("big", "")):
+		"call_to_arms":
+			sim.answer_call(player, other, int(report["also"]), yes)
+		"faction_invite", "faction_ask":
+			sim.answer_faction(player, other, yes)
+	_close_card()
+	_refresh_sim()
+
+
+## Whether `ally`'s call to arms against `target` still waits for the player.
+func _called(attacker: int, target: int) -> bool:
+	return sim.calls().any(func(call: Dictionary) -> bool:
+		return int(call["ally"]) == player and int(call["attacker"]) == attacker \
+			and int(call["target"]) == target)
+
+
+## Whether `from`'s invitation or request still waits for the player.
+func _invited(from: int) -> bool:
+	return sim.invites().any(func(invite: Dictionary) -> bool:
+		return int(invite["from"]) == from and int(invite["to"]) == player)
+
+
+## "Russia, Belarus and 3 more", for a list of countries, the most
+## divisions first.
+func _country_list(ids: PackedInt32Array, most := 3) -> String:
+	var strength := {}
+	for id in ids:
+		strength[id] = int(sim.country_info(id).get("divisions", 0))
+	var sorted := Array(ids)
+	sorted.sort_custom(func(a: int, b: int) -> bool:
+		return strength[a] > strength[b] if strength[a] != strength[b] else a < b)
+	var names := PackedStringArray()
+	for id in sorted:
+		names.append(scenario.country_name(id))
+	if names.size() > most:
+		return "%s and %d more" % [", ".join(names.slice(0, most)), names.size() - most]
+	return Style.list_and(names)
+
+
+## Divisions of all of `ids`.
+func _divisions_of(ids: PackedInt32Array) -> int:
+	var total := 0
+	for id in ids:
+		total += int(sim.country_info(id).get("divisions", 0))
+	return total
 
 
 func _close_card() -> void:
@@ -1223,6 +1444,7 @@ func _open_peace(other: int, incoming: bool) -> void:
 	peace_with = other
 	peace_incoming = incoming
 	_stop_drawing() # a click now chooses a region
+	_open_faction(false)
 	_pause_for_card()
 	country_card.show_country(0, Vector2.ZERO, {}, "", [], "")
 	peace_terms = PackedInt32Array()
@@ -1275,6 +1497,8 @@ func _show_peace() -> void:
 	var material := map_rect.material as ShaderMaterial
 	material.set_shader_parameter("marks", ImageTexture.create_from_image(marks))
 	material.set_shader_parameter("has_marks", true)
+	peace_window.leaving = String(_faction_of(player).get("name", "")) \
+		if sim.separate_peace(player, peace_with) else ""
 	if peace_incoming:
 		peace_window.show_offer(player, peace_with, peace_terms,
 			{"player": _side(player), "other": _side(peace_with)},
@@ -1369,7 +1593,62 @@ func _show_country_card(country: int, world: Vector2) -> void:
 					_open_peace(head, false)
 				else:
 					_show_country_card(country, world)]]
-	country_card.show_country(country, world, sim.country_info(country), relation, actions, "Esc closes")
+	var aside := "Esc closes"
+	var mine := _faction_of(player)
+	var theirs := _faction_of(country)
+	if overlord != player and sim.overlord(player) != country and sim.allied(player, country):
+		relation = "Your ally  ·  %s" % mine.get("name", "your faction")
+		if overlord != 0:
+			relation += ", a puppet of %s" % scenario.country_name(overlord)
+		actions = []
+		aside = "Its arrows show on your map, and it defends you as you defend it."
+	elif sim.overlord(player) == 0 and overlord == 0:
+		if not theirs.is_empty():
+			relation += "  ·  %s %s" % ["leads" if int(theirs["leader"]) == country else "in",
+				theirs["name"]]
+		if not at_war:
+			var warning := PackedStringArray()
+			var defenders := sim.defenders(country)
+			if not defenders.is_empty():
+				warning.append("%s defends it: you would be at war with %s too (%d divisions)." % [
+					theirs.get("name", "Its side"), _country_list(defenders), _divisions_of(defenders)])
+			if not mine.is_empty():
+				warning.append("Your allies are asked to join.")
+			var join := _faction_action(country, mine, theirs)
+			if not join.is_empty():
+				actions.append(join["action"])
+				warning.append(join["advice"])
+			if not warning.is_empty():
+				aside = " ".join(warning)
+	country_card.show_country(country, world, sim.country_info(country), relation, actions, aside)
+
+
+## The faction button for `country`'s card, if any: ask to join the
+## faction it leads, form a faction with it, or invite it into the one the
+## player leads. A dictionary with `action` (for the card) and `advice`
+## (whether the AI would say yes), or {}.
+func _faction_action(country: int, mine: Dictionary, theirs: Dictionary) -> Dictionary:
+	var send := func(sent: bool, what: String) -> void:
+		_note(what if sent else "That is not possible now")
+		country_card.show_country(0, Vector2.ZERO, {}, "", [], "")
+		_refresh_sim()
+	var them := scenario.country_name(country)
+	if mine.is_empty() and not theirs.is_empty() and int(theirs["leader"]) == country:
+		var advice: Dictionary = sim.faction_advice(player, country, "ask")
+		var faction := int(theirs["id"])
+		return {"action": ["Ask to join %s" % theirs["name"], false, func() -> void:
+			send.call(sim.ask_to_join(player, faction), "%s answers within a day" % them)],
+			"advice": ("It would likely say yes: you border its members." if advice.get("yes", false)
+				else "It would likely say no: you border none of its members.")}
+	if theirs.is_empty() and (mine.is_empty() or int(mine["leader"]) == player):
+		var advice: Dictionary = sim.faction_advice(player, country, "invite")
+		var threat := int(advice.get("threat", 0))
+		var label := "Form a faction" if mine.is_empty() else "Invite to %s" % mine["name"]
+		return {"action": [label, false, func() -> void:
+			send.call(sim.invite_to_faction(player, country, ""), "%s answers within a day" % them)],
+			"advice": ("It would likely say yes: %s threatens it." % scenario.country_name(threat)
+				if advice.get("yes", false) else "It would likely say no: no stronger neighbor threatens it.")}
+	return {}
 
 
 ## The saves of this scenario and the led country (or the viewer): a save
@@ -1417,6 +1696,7 @@ func _load_save(path: String) -> String:
 	var error := sim.load_game(path)
 	if error != "":
 		return error
+	sim.set_ai_factions(ai_factions)
 	saved_hash = sim.state_hash()
 	markers.selected.clear()
 	markers.selected_group = 0
@@ -1830,8 +2110,13 @@ func _unhandled_input(event: InputEvent) -> void:
 				_refresh_sim()
 			return
 		if event_card != null and event_card.visible:
-			# A card waits to be closed; the game stays paused.
-			if key == KEY_ENTER or key == KEY_KP_ENTER or key == KEY_ESCAPE:
+			# A card waits to be closed (or answered); the game stays paused.
+			if event_card.choice:
+				if key == KEY_Y or key == KEY_ENTER or key == KEY_KP_ENTER:
+					_answer_card(true)
+				elif key == KEY_N or key == KEY_ESCAPE:
+					_answer_card(false)
+			elif key == KEY_ENTER or key == KEY_KP_ENTER or key == KEY_ESCAPE:
 				_close_card()
 			return
 		if defeat_screen != null and defeat_screen.visible:
@@ -1939,6 +2224,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			select_box.visible = false
 		elif key == KEY_ESCAPE and economy_window != null and economy_window.visible:
 			_show_economy(false)
+		elif key == KEY_ESCAPE and faction_window != null and faction_window.visible:
+			_open_faction(false)
 		elif key == KEY_ESCAPE and country_card != null and country_card.card.visible:
 			_show_country_card(0, Vector2.ZERO)
 		elif key == KEY_ESCAPE:

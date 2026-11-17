@@ -30,6 +30,9 @@ var scenario: MwScenario
 var palette: Image
 var dialog := PanelContainer.new()
 var incoming := true
+## The faction this peace would take the player out of (a separate peace:
+## its allies fight on), or "" (main sets it before showing).
+var leaving := ""
 
 
 func setup() -> void:
@@ -121,6 +124,8 @@ func show_offer(player: int, other: int, terms: PackedInt32Array, sides: Diction
 			cell.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 			table.add_child(cell)
 	column.add_child(table)
+	if leaving != "":
+		column.add_child(_leaving_warning(them))
 
 	var bottom := HBoxContainer.new()
 	bottom.add_theme_constant_override("separation", 12)
@@ -171,6 +176,8 @@ func show_talks(player: int, other: int, terms: PackedInt32Array, talks: Diction
 	scroll.custom_minimum_size.y = 62.0 * mini(maxi(terms.size(), 1), ROWS_SHOWN) if terms.size() > 0 else 24.0
 	column.add_child(scroll)
 
+	if leaving != "":
+		column.add_child(_leaving_warning(them))
 	column.add_child(_meter(them, talks, closed_days))
 
 	var bottom := HBoxContainer.new()
@@ -182,7 +189,7 @@ func show_talks(player: int, other: int, terms: PackedInt32Array, talks: Diction
 	var white := _button("White", "White peace", "", func() -> void: white_peace.emit())
 	white.disabled = closed_days > 0
 	bottom.add_child(white)
-	var send := Style.primary_button("Send terms", 19)
+	var send := Style.primary_button("Send terms" if leaving == "" else "Send terms, leave %s" % leaving, 19)
 	send.name = "Send"
 	send.custom_minimum_size.y = 48
 	send.disabled = closed_days > 0
@@ -192,6 +199,22 @@ func show_talks(player: int, other: int, terms: PackedInt32Array, talks: Diction
 	column.add_child(_wrapped("If %s refuses, the war goes on, and it won't talk again for %d days." % [them,
 		MwWorld.TALKS_CLOSED_DAYS], 13, Style.MUTED))
 	_end(column)
+
+
+## A separate peace: the player would leave its faction, whose other
+## members fight on.
+func _leaving_warning(them: String) -> PanelContainer:
+	var box := PanelContainer.new()
+	box.name = "Leaving"
+	box.add_theme_stylebox_override("panel", Style.box(Color("2a1414"), Style.WAR_LINE, 8, 16, 12))
+	var lines := VBoxContainer.new()
+	lines.add_theme_constant_override("separation", 4)
+	lines.add_child(Style.label("You would leave %s" % leaving, 19, Color("f0a49f"), Style.TITLE))
+	lines.add_child(_wrapped("Other members are still at war with %s. Peace on your own takes you out of "
+		% them + "%s: nobody defends you any more, and the others fight on." % leaving, 14,
+		Color("e3c3c0"), WIDTH - 92))
+	box.add_child(lines)
+	return box
 
 
 ## The chance, as a meter with a word and a sentence on why.
@@ -263,7 +286,10 @@ static func reason(them: String, talks: Dictionary) -> String:
 		roundi(support * 100.0)]
 	var chance := float(talks.get("chance", 0.0))
 	var mood := "so it would rather fight on." if chance < 0.5 else "so it is ready to stop."
-	return "%s. %s, %s" % [ask, war, mood]
+	var text := "%s. %s, %s" % [ask, war, mood]
+	if talks.get("separate", false):
+		text += " Its allies fight on: peace on its own would cost it its faction, which halves the chance."
+	return text
 
 
 func _term_row(region: int, player: int, them: String, facts: Dictionary) -> PanelContainer:

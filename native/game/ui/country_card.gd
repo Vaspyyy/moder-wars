@@ -110,6 +110,7 @@ func show_country(id: int, world_spot: Vector2, info: Dictionary, relation: Stri
 	body.add_child(facts)
 
 	var buttons := HBoxContainer.new()
+	buttons.name = "Buttons"
 	buttons.add_theme_constant_override("separation", 16)
 	for action in actions:
 		var button: Control
@@ -121,13 +122,21 @@ func show_country(id: int, world_spot: Vector2, info: Dictionary, relation: Stri
 			button = Style.tool_button(action[0], "")
 			button.pressed.connect(action[2])
 		buttons.add_child(button)
-	if aside != "":
+	# A short note goes next to the buttons, a longer one under them.
+	var under := aside.length() > 30 or actions.size() > 1
+	if aside != "" and not under:
 		var note := Style.label(aside, 14, Style.MUTED)
 		note.size_flags_vertical = SIZE_SHRINK_CENTER
 		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		note.size_flags_horizontal = SIZE_EXPAND_FILL
 		buttons.add_child(note)
 	body.add_child(buttons)
+	if aside != "" and under:
+		var note := Style.label(aside, 14, Style.CREDIT)
+		note.name = "Aside"
+		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		note.custom_minimum_size.x = CARD_WIDTH - 48
+		body.add_child(note)
 	card.reset_size()
 	_place_card()
 

@@ -123,8 +123,7 @@ func _initialize() -> void:
 	_press("Leave")
 	check(quits == 2, "Leave without saving quits")
 	# An order given while paused is a change too.
-	main.sim.load_game(first)
-	main.saved_hash = main.sim.state_hash()
+	main._load_save(first)
 	main.sim.set_budget(poland, 40, 20)
 	check(main._unsaved(), "an order while paused counts as a change")
 

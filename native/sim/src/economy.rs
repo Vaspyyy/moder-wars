@@ -197,6 +197,7 @@ impl World {
             }
         }
         self.control[cell as usize] = to;
+        self.borders_stale = true;
     }
 
     /// The daily payday: income into the funds (puppets pay tribute first),

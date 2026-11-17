@@ -9,6 +9,7 @@ use mw_sim::army::ArmyGroupId;
 use mw_sim::conference::Move;
 use mw_sim::division::{DivisionId, Loss};
 use mw_sim::economy;
+use mw_sim::factions::{Faction, InviteKind};
 use mw_sim::forces;
 use mw_sim::regions::Regions;
 use mw_sim::sandbox::{self, SandboxError};
@@ -520,6 +521,16 @@ impl MwWorld {
         }
     }
 
+    /// Whether threatened AI countries look for factions of their own (on
+    /// by default; the screen tests turn it off so no invitation
+    /// interrupts them). A loaded game has it on again.
+    #[func]
+    fn set_ai_factions(&mut self, on: bool) {
+        if let Some(world) = self.world.as_mut() {
+            world.set_faction_seeking(on);
+        }
+    }
+
     /// Observer mode: the AI runs every country and nobody is led.
     #[func]
     fn observe(&mut self) {
@@ -873,6 +884,274 @@ impl MwWorld {
                 .any(|e| matches!(e, Event::Rejected { .. }))
     }
 
+    /// NATO and the CSTO as they stood on the scenario's start date (the
+    /// game setup's "real alliances"). Call before any war starts.
+    #[func]
+    fn use_real_factions(&mut self) {
+        let (Some(world), Some(scenario)) = (self.world.as_mut(), self.scenario.as_ref()) else {
+            return;
+        };
+        if let Some(s) = scenario.bind().scenario.as_ref() {
+            world.use_real_factions(s);
+        }
+    }
+
+    /// A war the scenario starts with: like `declare_war`, with the
+    /// target's faction defending it, but nobody called to arms. Returns
+    /// whether it began.
+    #[func]
+    fn scenario_war(&mut self, attacker: i32, target: i32) -> bool {
+        let (Ok(attacker), Ok(target)) = (u16::try_from(attacker), u16::try_from(target)) else {
+            return false;
+        };
+        let (Some(world), Some(scenario)) = (self.world.as_mut(), self.scenario.as_ref()) else {
+            return false;
+        };
+        let enemies = world.enemies(self.player);
+        let time = world.time();
+        let events = world.start_scenario_war(attacker, target);
+        let bound = scenario.bind();
+        if let Some(s) = bound.scenario.as_ref() {
+            let regions = bound.regions.as_ref();
+            self.log.extend(
+                events
+                    .iter()
+                    .filter_map(|e| report(s, regions, world, e, self.player, &enemies, time)),
+            );
+        }
+        !events.is_empty()
+    }
+
+    /// Factions, oldest first, as dictionaries: `id`, `name` (as shown:
+    /// "Ukraine's faction" when nobody named it), `leader` and `members`
+    /// (ids, the leader among them).
+    #[func]
+    fn factions(&self) -> Array<VarDictionary> {
+        let (Some(world), Some(scenario)) = (self.world.as_ref(), self.scenario.as_ref()) else {
+            return Array::new();
+        };
+        let bound = scenario.bind();
+        let Some(s) = bound.scenario.as_ref() else {
+            return Array::new();
+        };
+        world
+            .factions()
+            .iter()
+            .map(|f| faction_entry(s, f))
+            .collect()
+    }
+
+    /// The id of `country`'s faction (as `factions` lists it), or 0.
+    #[func]
+    fn faction_of(&self, country: i32) -> i32 {
+        let Ok(country) = u16::try_from(country) else {
+            return 0;
+        };
+        self.world
+            .as_ref()
+            .and_then(|w| w.faction_of(country))
+            .map_or(0, |f| i32::from(f.id))
+    }
+
+    /// Whether two countries are on one side (one faction, or its puppets).
+    #[func]
+    fn allied(&self, a: i32, b: i32) -> bool {
+        let (Ok(a), Ok(b)) = (u16::try_from(a), u16::try_from(b)) else {
+            return false;
+        };
+        self.world.as_ref().is_some_and(|w| w.allied(a, b))
+    }
+
+    /// Who would be at war with an attacker of `target` at once: the other
+    /// members of its faction (or of its overlord's), and their puppets.
+    #[func]
+    fn defenders(&self, target: i32) -> PackedInt32Array {
+        let (Some(world), Ok(target)) = (self.world.as_ref(), u16::try_from(target)) else {
+            return PackedInt32Array::new();
+        };
+        let head = world.overlord(target).unwrap_or(target);
+        let mut found: Vec<CountryId> = world
+            .faction_of(head)
+            .map(|f| f.members.clone())
+            .unwrap_or_default()
+            .into_iter()
+            .flat_map(|m| world.family(m))
+            .filter(|&c| c != target)
+            .collect();
+        if head != target {
+            found.push(head);
+        }
+        found.sort_unstable();
+        found.dedup();
+        found.into_iter().map(i32::from).collect()
+    }
+
+    /// `from` invites `target` into its faction, or (in none) to form one
+    /// named `name`. Returns whether it was taken.
+    #[func]
+    fn invite_to_faction(&mut self, from: i32, target: i32, name: GString) -> bool {
+        let (Ok(from), Ok(target)) = (u16::try_from(from), u16::try_from(target)) else {
+            return false;
+        };
+        let name = name.to_string();
+        self.command_now(from, Command::InviteToFaction { target, name })
+    }
+
+    /// `from` asks the leader of faction `faction` to let it in.
+    #[func]
+    fn ask_to_join(&mut self, from: i32, faction: i32) -> bool {
+        let (Ok(from), Ok(faction)) = (u16::try_from(from), u16::try_from(faction)) else {
+            return false;
+        };
+        self.command_now(from, Command::AskToJoin { faction })
+    }
+
+    /// `country` answers the invitation or request of `from`.
+    #[func]
+    fn answer_faction(&mut self, country: i32, from: i32, accept: bool) -> bool {
+        let (Ok(country), Ok(from)) = (u16::try_from(country), u16::try_from(from)) else {
+            return false;
+        };
+        self.command_now(country, Command::AnswerFaction { from, accept })
+    }
+
+    #[func]
+    fn leave_faction(&mut self, country: i32) -> bool {
+        let Ok(country) = u16::try_from(country) else {
+            return false;
+        };
+        self.command_now(country, Command::LeaveFaction)
+    }
+
+    /// The leader names its faction.
+    #[func]
+    fn rename_faction(&mut self, country: i32, name: GString) -> bool {
+        let Ok(country) = u16::try_from(country) else {
+            return false;
+        };
+        let name = name.to_string();
+        self.command_now(country, Command::RenameFaction { name })
+    }
+
+    /// `ally` answers the call to join `attacker`'s war on `target`.
+    #[func]
+    fn answer_call(&mut self, ally: i32, attacker: i32, target: i32, join: bool) -> bool {
+        let (Ok(ally), Ok(attacker), Ok(target)) = (
+            u16::try_from(ally),
+            u16::try_from(attacker),
+            u16::try_from(target),
+        ) else {
+            return false;
+        };
+        self.command_now(
+            ally,
+            Command::AnswerCall {
+                attacker,
+                target,
+                join,
+            },
+        )
+    }
+
+    /// Open invitations and requests to join, oldest first, as
+    /// dictionaries: `from`, `to`, `kind` ("invite" or "ask") and `name`.
+    #[func]
+    fn invites(&self) -> Array<VarDictionary> {
+        let Some(world) = self.world.as_ref() else {
+            return Array::new();
+        };
+        world
+            .invites()
+            .iter()
+            .map(|i| {
+                let mut entry = VarDictionary::new();
+                entry.set("from", i64::from(i.from));
+                entry.set("to", i64::from(i.to));
+                let kind = match i.kind {
+                    InviteKind::Invite => "invite",
+                    InviteKind::Ask => "ask",
+                };
+                entry.set("kind", &GString::from(kind));
+                entry.set("name", &GString::from(&i.name));
+                entry
+            })
+            .collect()
+    }
+
+    /// Open calls to arms, oldest first, as dictionaries: `ally`,
+    /// `attacker` and `target`.
+    #[func]
+    fn calls(&self) -> Array<VarDictionary> {
+        let Some(world) = self.world.as_ref() else {
+            return Array::new();
+        };
+        world
+            .calls()
+            .iter()
+            .map(|c| {
+                let mut entry = VarDictionary::new();
+                entry.set("ally", i64::from(c.ally));
+                entry.set("attacker", i64::from(c.attacker));
+                entry.set("target", i64::from(c.target));
+                entry
+            })
+            .collect()
+    }
+
+    /// Whether the AI running `to` would say yes to `from` ("invite": an
+    /// invitation into `from`'s faction or to form one; "ask": `from` asks
+    /// to join the faction `to` leads), as a dictionary: `yes` and
+    /// `threat` (the neighbor that threatens `to`, for an invitation; 0).
+    #[func]
+    fn faction_advice(&self, from: i32, to: i32, kind: GString) -> VarDictionary {
+        let mut entry = VarDictionary::new();
+        let (Some(world), Ok(from), Ok(to)) =
+            (self.world.as_ref(), u16::try_from(from), u16::try_from(to))
+        else {
+            return entry;
+        };
+        let kind = if kind == "ask" {
+            InviteKind::Ask
+        } else {
+            InviteKind::Invite
+        };
+        entry.set("yes", world.ai_accepts(from, to, kind));
+        let side = world
+            .faction_of(from)
+            .map_or(vec![from], |f| f.members.clone());
+        let threat = world.threat(to, &side).unwrap_or(0);
+        entry.set("threat", i64::from(threat));
+        entry
+    }
+
+    /// Whether the AI running `ally` would join `attacker`'s war on `target`.
+    #[func]
+    fn would_join(&self, ally: i32, attacker: i32, target: i32) -> bool {
+        let (Some(world), Ok(ally), Ok(attacker), Ok(target)) = (
+            self.world.as_ref(),
+            u16::try_from(ally),
+            u16::try_from(attacker),
+            u16::try_from(target),
+        ) else {
+            return false;
+        };
+        world.ai_joins(ally, attacker, target)
+    }
+
+    /// Whether peace with `enemy` would cost `country` its faction (a
+    /// separate peace: another member still fights `enemy`).
+    #[func]
+    fn separate_peace(&self, country: i32, enemy: i32) -> bool {
+        let (Some(world), Ok(country), Ok(enemy)) = (
+            self.world.as_ref(),
+            u16::try_from(country),
+            u16::try_from(enemy),
+        ) else {
+            return false;
+        };
+        world.separate_peace(country, enemy)
+    }
+
     /// What the AI would do on `winner`'s turn at the conference on
     /// `loser`: "take" with `region`, "puppet" or "leave", as a dictionary
     /// with `action` and `region` (0 when none).
@@ -956,7 +1235,8 @@ impl MwWorld {
     /// `lost` (share of its own land's output in enemy hands), `support`
     /// (its war support, 0 to 1), `asked` (what the terms take from it, as
     /// a share of its own land's output) and `asked_held` (the part of that
-    /// `from` holds), `closed_days` (days until `from` may offer again after
+    /// `from` holds), `separate` (whether peace would take `to` out of its
+    /// faction), `closed_days` (days until `from` may offer again after
     /// `to` refused it, 0 if it may now), and `regions`: one dictionary per
     /// region in `terms`
     /// with `region`, `owner`, `share` (of what its owner's own land
@@ -977,6 +1257,7 @@ impl MwWorld {
         entry.set("support", f64::from(w.support) / 1000.0);
         entry.set("asked", w.asked);
         entry.set("asked_held", w.asked_held);
+        entry.set("separate", w.separate);
         let wait = world
             .talks_reopen(from, to)
             .map_or(0, |until| (until - world.tick()).div_ceil(24));
@@ -1148,8 +1429,8 @@ impl MwWorld {
     /// What happened since the last call, one dictionary per event with a
     /// line: `text`, `date` ("2026-10-25") and `hour`, `mine` (whether it
     /// belongs in the player's feed), `big` (the card it pops up, see
-    /// `Report`), `tone` ("war", "peace" or "") and `other` (the other
-    /// country of a big event).
+    /// `Report`), `tone` ("war", "peace" or ""), `other` (the other
+    /// country of a big event) and `also` (a third one, see `Report`).
     #[func]
     fn take_reports(&mut self) -> Array<VarDictionary> {
         self.log
@@ -1163,6 +1444,7 @@ impl MwWorld {
                 entry.set("big", &GString::from(r.big));
                 entry.set("tone", &GString::from(r.tone));
                 entry.set("other", i64::from(r.other));
+                entry.set("also", i64::from(r.also));
                 entry
             })
             .collect()
@@ -1183,6 +1465,16 @@ impl MwWorld {
                 command,
             })
             .is_ok()
+    }
+
+    /// Give `country`'s order and apply it now. Returns whether it was
+    /// taken.
+    fn command_now(&mut self, country: u16, command: Command) -> bool {
+        self.order(country, command)
+            && !self
+                .apply_now()
+                .iter()
+                .any(|e| matches!(e, Event::Rejected { .. }))
     }
 
     /// Apply queued orders now (see `World::apply_orders`), log what
@@ -1293,6 +1585,36 @@ struct Report {
     /// For wars, peace and capitulations: the country other than the
     /// player (the attacker when the player is not involved), or 0.
     other: CountryId,
+    /// A third country a card names: the ally attacked ("defend"), the
+    /// target ("call_to_arms") or the faction's leader ("joined"); or 0.
+    also: CountryId,
+}
+
+/// A faction as `MwWorld::factions` lists it.
+fn faction_entry(scenario: &Scenario, faction: &Faction) -> VarDictionary {
+    let mut entry = VarDictionary::new();
+    entry.set("id", i64::from(faction.id));
+    entry.set("name", &GString::from(&faction_name(scenario, faction)));
+    entry.set("leader", i64::from(faction.leader));
+    let members: PackedInt32Array = faction.members.iter().map(|&m| i32::from(m)).collect();
+    entry.set("members", &members);
+    entry
+}
+
+/// The name of faction `id`, or "its faction" once it is gone.
+fn faction_label(scenario: &Scenario, world: &World, id: mw_sim::factions::FactionId) -> String {
+    world
+        .faction(id)
+        .map_or_else(|| "its faction".to_string(), |f| faction_name(scenario, f))
+}
+
+/// Its name, or "Ukraine's faction" when nobody named it.
+fn faction_name(scenario: &Scenario, faction: &Faction) -> String {
+    if faction.name.is_empty() {
+        format!("{}'s faction", country_name(scenario, faction.leader))
+    } else {
+        faction.name.clone()
+    }
 }
 
 /// Run one tick and report what happened in it. A capitulation is one
@@ -1357,9 +1679,10 @@ fn report(
     enemies: &[CountryId],
     time: GameTime,
 ) -> Option<Report> {
-    let text = describe(scenario, regions, world, event)?;
+    let text = describe(scenario, regions, world, event, player)?;
     let own = |c: CountryId| c == player;
     let side = |c: CountryId| own(c) || enemies.contains(&c);
+    let ours = |faction| world.faction_of(player).is_some_and(|f| f.id == faction);
     let division_country = |d: DivisionId| world.division(d).map(|d| d.country);
     let (mine, big, tone, other) = match *event {
         Event::WarDeclared { attacker, target } => {
@@ -1420,6 +1743,85 @@ fn report(
         }
         Event::DivisionDestroyed { country, .. } => (side(country), "", "", 0),
         Event::DivisionArrived { .. } => (false, "", "", 0),
+        Event::FactionInvited { from, to } => (
+            own(from) || own(to),
+            if own(to) { "faction_invite" } else { "" },
+            "",
+            from,
+        ),
+        Event::AskedToJoin { from, to } => (
+            own(from) || own(to),
+            if own(to) { "faction_ask" } else { "" },
+            "",
+            from,
+        ),
+        Event::FactionRefused { from, to } => (own(from) || own(to), "", "", to),
+        Event::FactionFormed { leader, .. } => (own(leader), "", "", leader),
+        Event::JoinedFaction { country, faction } => {
+            // The player is in, or let someone into the faction it leads.
+            let leading = world
+                .faction(faction)
+                .is_some_and(|f| f.leader == player && !own(country));
+            let big = if own(country) || leading {
+                "joined"
+            } else {
+                ""
+            };
+            (own(country) || ours(faction), big, "", country)
+        }
+        Event::LeftFaction {
+            country, faction, ..
+        } => (own(country) || ours(faction), "", "", country),
+        Event::FactionLeader { faction, .. } => (ours(faction), "", "", 0),
+        Event::FactionDissolved { last, .. } => (own(last), "", "", 0),
+        Event::CalledToArms {
+            attacker,
+            ref allies,
+            ..
+        } => {
+            let called = allies.contains(&player);
+            (
+                called || own(attacker),
+                if called { "call_to_arms" } else { "" },
+                "",
+                attacker,
+            )
+        }
+        Event::CallAnswered {
+            ally,
+            attacker,
+            join,
+            ..
+        } => {
+            // Who stays out matters only to the countries in that war.
+            if !join && !(own(ally) || own(attacker)) {
+                return None;
+            }
+            (own(ally) || own(attacker), "", "", 0)
+        }
+        Event::Defended {
+            ally,
+            attacker,
+            ref defenders,
+        } => {
+            let defending = defenders.contains(&player);
+            (
+                defending || own(ally) || own(attacker),
+                if defending { "defend" } else { "" },
+                if defending || own(attacker) {
+                    "war"
+                } else {
+                    ""
+                },
+                attacker,
+            )
+        }
+    };
+    let also = match *event {
+        Event::Defended { ally, .. } => ally,
+        Event::CalledToArms { target, .. } => target,
+        Event::JoinedFaction { faction, .. } => world.faction(faction).map_or(0, |f| f.leader),
+        _ => 0,
     };
     Some(Report {
         text,
@@ -1431,6 +1833,7 @@ fn report(
         big,
         tone,
         other,
+        also,
     })
 }
 
@@ -1439,6 +1842,7 @@ fn describe(
     regions: Option<&Regions>,
     world: &World,
     event: &Event,
+    player: CountryId,
 ) -> Option<String> {
     let region_name = |region: usize| -> String {
         regions.and_then(|r| r.list.get(region)).map_or_else(
@@ -1557,6 +1961,111 @@ fn describe(
         ),
         Event::MoveBlocked { division } => {
             format!("{} found its way blocked", division_name(*division))
+        }
+        Event::FactionInvited { from, to } => match world.faction_of(*from) {
+            Some(f) => format!(
+                "{} invites {} into {}",
+                name(*from),
+                name(*to),
+                faction_name(scenario, f)
+            ),
+            None => format!("{} asks {} to form a faction", name(*from), name(*to)),
+        },
+        Event::AskedToJoin { from, to } => format!(
+            "{} asks to join {}",
+            name(*from),
+            world.faction_of(*to).map_or_else(
+                || format!("{}'s faction", name(*to)),
+                |f| faction_name(scenario, f)
+            )
+        ),
+        Event::FactionRefused { from, to } => {
+            format!("{} said no to {}", name(*to), name(*from))
+        }
+        Event::FactionFormed { faction, leader } => format!(
+            "{} formed {}",
+            name(*leader),
+            faction_label(scenario, world, *faction)
+        ),
+        Event::JoinedFaction { country, faction } => format!(
+            "{} joined {}",
+            name(*country),
+            faction_label(scenario, world, *faction)
+        ),
+        Event::LeftFaction {
+            country,
+            faction,
+            separate_peace,
+        } => {
+            let faction = faction_label(scenario, world, *faction);
+            if *separate_peace {
+                format!(
+                    "{} made a separate peace and left {faction}",
+                    name(*country)
+                )
+            } else {
+                format!("{} left {faction}", name(*country))
+            }
+        }
+        Event::FactionLeader { faction, leader } => format!(
+            "{} now leads {}",
+            name(*leader),
+            faction_label(scenario, world, *faction)
+        ),
+        Event::FactionDissolved { last, .. } => {
+            format!("{} is alone: its faction broke up", name(*last))
+        }
+        Event::CalledToArms {
+            attacker,
+            target,
+            allies,
+        } => {
+            let faction = world
+                .faction_of(*attacker)
+                .map_or_else(|| "its allies".to_string(), |f| faction_name(scenario, f));
+            if allies.contains(&player) {
+                format!(
+                    "{} calls you to arms against {}",
+                    name(*attacker),
+                    name(*target)
+                )
+            } else {
+                format!(
+                    "{} calls {faction} to arms against {}",
+                    name(*attacker),
+                    name(*target)
+                )
+            }
+        }
+        Event::CallAnswered {
+            ally,
+            attacker,
+            target,
+            join,
+        } => format!(
+            "{} {} {}'s war on {}",
+            name(*ally),
+            if *join { "joins" } else { "stays out of" },
+            name(*attacker),
+            name(*target)
+        ),
+        Event::Defended {
+            ally,
+            attacker,
+            defenders,
+        } => {
+            let faction = world
+                .faction_of(*ally)
+                .map_or_else(|| "Its allies".to_string(), |f| faction_name(scenario, f));
+            let count = match defenders.len() {
+                1 => format!("{} is", name(defenders[0])),
+                n => format!("{n} countries are"),
+            };
+            format!(
+                "{faction} defends {}: {count} at war with {}",
+                name(*ally),
+                name(*attacker)
+            )
         }
         _ => return None,
     })

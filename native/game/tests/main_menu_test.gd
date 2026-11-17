@@ -102,7 +102,8 @@ func _initialize() -> void:
 	(main.main_menu.content.find_child("Card-ukraine-2023-v3", true, false) as Button).pressed.emit()
 	check(main.main_menu.selected == "ukraine-2023-v3", "a click chooses Ukraine 2023")
 	_press("Start")
-	check(restarts == [{"scenario": "ukraine-2023-v3", "pick": ""}], "it loads with the scene: %s" % [restarts])
+	check(restarts == [{"scenario": "ukraine-2023-v3", "pick": "", "alliances": "off"}],
+		"it loads with the scene: %s" % [restarts])
 
 	# Observer mode: the AI plays everyone, Esc opens the observer's menu.
 	await _menu()
