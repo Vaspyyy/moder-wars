@@ -68,23 +68,39 @@ pub(crate) fn chain(map: &MapData, cells: &[Cell]) -> Vec<Cell> {
 /// Up to `count` cells of `line`, spread as evenly as possible: each next
 /// pick is the cell farthest from all cells picked so far.
 pub(crate) fn spread(map: &MapData, line: &[Cell], count: usize) -> Vec<Cell> {
+    spread_by(map, line, count, |_| 1)
+}
+
+/// Like `spread`, but cells with more `weight` get picks closer together:
+/// each next pick is the cell whose distance to the nearest pick, times its
+/// weight, is largest. Spacing ends up about inversely proportional to the
+/// weight.
+pub(crate) fn spread_by(
+    map: &MapData,
+    line: &[Cell],
+    count: usize,
+    weight: impl Fn(Cell) -> u64,
+) -> Vec<Cell> {
     let Some(&first) = line.first() else {
         return Vec::new();
     };
-    // Start at one end: the cell farthest from an arbitrary one.
-    let farthest = |from: &dyn Fn(Cell) -> u64| {
-        line.iter()
-            .copied()
-            .max_by_key(|&cell| (from(cell), std::cmp::Reverse(cell)))
-    };
-    let start = farthest(&|cell| map.estimate_m(first, cell)).unwrap_or(first);
+    let weights: Vec<u64> = line.iter().map(|&c| weight(c).max(1)).collect();
+    // Start far out: the cell whose distance from an arbitrary one, times its
+    // weight, is largest (with equal weights, one end of the line).
+    let (start, _) = line
+        .iter()
+        .zip(&weights)
+        .max_by_key(|&(&cell, &w)| (map.estimate_m(first, cell) * w, std::cmp::Reverse(cell)))
+        .expect("line is not empty");
+    let start = *start;
     let mut picked = vec![start];
     let mut nearest: Vec<u64> = line.iter().map(|&c| map.estimate_m(start, c)).collect();
     while picked.len() < count.min(line.len()) {
         let (at, _) = nearest
             .iter()
+            .zip(&weights)
             .enumerate()
-            .max_by_key(|&(i, &d)| (d, std::cmp::Reverse(line[i])))
+            .max_by_key(|&(i, (&d, &w))| (d * w, std::cmp::Reverse(line[i])))
             .expect("line is not empty");
         let next = line[at];
         picked.push(next);
