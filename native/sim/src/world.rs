@@ -13,6 +13,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::army::{ArmyGroup, ArmyGroupId, PLAN_EVERY};
+use crate::conference::{Conference, Move};
 use crate::diplomacy::PeaceOffer;
 use crate::division::{Division, DivisionId, Loss, SpawnError};
 use crate::economy::{Budget, Economy, SERVE_PER_MILLE};
@@ -41,6 +42,9 @@ pub struct CountryState {
     pub economy: Economy,
     /// What its wars cost it so far (see `record.rs`).
     pub record: WarRecord,
+    /// The country it is a puppet of (see `conference.rs`).
+    #[serde(default)]
+    pub overlord: Option<CountryId>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -94,6 +98,25 @@ pub enum Command {
     AnswerPeace {
         from: CountryId,
         accept: bool,
+    },
+    /// At the conference on `loser`, on this country's turn: take a region
+    /// (its index) of the loser's not taken yet.
+    TakeRegion {
+        loser: CountryId,
+        region: u16,
+    },
+    /// At the conference: make the loser this country's puppet.
+    MakePuppet {
+        loser: CountryId,
+    },
+    /// At the conference, once every other winner is done: take every
+    /// region left.
+    AnnexRest {
+        loser: CountryId,
+    },
+    /// At the conference: take nothing more.
+    LeaveConference {
+        loser: CountryId,
     },
 }
 
@@ -173,6 +196,29 @@ pub enum Event {
         to: CountryId,
         regions: u32,
     },
+    /// `loser` capitulated; its enemies divide its land, in this order.
+    ConferenceOpened {
+        loser: CountryId,
+        winners: Vec<CountryId>,
+    },
+    /// At the conference on `loser`, `by` took a region (its index).
+    RegionTaken {
+        loser: CountryId,
+        by: CountryId,
+        region: usize,
+    },
+    /// The conference on `loser` is over and its land settled.
+    ConferenceClosed {
+        loser: CountryId,
+    },
+    Puppeted {
+        country: CountryId,
+        overlord: CountryId,
+    },
+    /// Its overlord capitulated: the puppet is free.
+    PuppetFreed {
+        country: CountryId,
+    },
 }
 
 /// Why an order had no effect.
@@ -205,8 +251,21 @@ pub enum Rejection {
     /// That country refused this one's peace less than
     /// `diplomacy::TALKS_CLOSED_DAYS` ago.
     TalksClosed,
-    /// Peace terms named a region neither side owns by law.
+    /// Peace terms named a region neither side owns by law, or a conference
+    /// move a region not left to take.
     NotTheirRegion,
+    /// A puppet cannot do that: declare war, make peace, or take a puppet;
+    /// and no one declares war on its own puppet or overlord.
+    Puppet,
+    /// No conference on that country is open.
+    NoConference,
+    /// Another winner's turn at the conference.
+    NotYourTurn,
+    /// Annexing the rest waits until every other winner is done.
+    OthersStillPicking,
+    /// A country whose land a conference is dividing is not at war with
+    /// anyone, and cannot be attacked.
+    InConference,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -248,6 +307,11 @@ pub struct World {
     /// (from, to) -> the tick until which `from` may not offer `to` peace
     /// again, after `to` refused it.
     pub(crate) talks_closed: BTreeMap<(CountryId, CountryId), u64>,
+    /// Open peace conferences, oldest first (`conference.rs`).
+    pub(crate) conferences: Vec<Conference>,
+    /// (winner, loser) -> soldiers of the loser the winner put out of
+    /// action in their current (or last) war.
+    pub(crate) defeated: BTreeMap<(CountryId, CountryId), u64>,
     /// Orders not applied yet, sorted by (tick, country, seq).
     pending: Vec<Queued>,
     next_seq: u64,
@@ -293,6 +357,7 @@ impl World {
                 controller: Controller::Passive,
                 economy: Economy::new(c.pop.unwrap_or(0.0).max(0.0) as u64),
                 record: WarRecord::default(),
+                overlord: None,
             })
             .collect();
         countries.sort_by_key(|c| c.id);
@@ -315,6 +380,8 @@ impl World {
             next_group: 1,
             offers: Vec::new(),
             talks_closed: BTreeMap::new(),
+            conferences: Vec::new(),
+            defeated: BTreeMap::new(),
             pending: Vec::new(),
             next_seq: 0,
             ceded: BTreeMap::new(),
@@ -540,6 +607,9 @@ impl World {
     pub fn step(&mut self) -> Vec<Event> {
         let mut events = Vec::new();
         let mut replan = self.apply_due(&mut events);
+        if !self.conferences.is_empty() {
+            self.run_conferences(&mut events);
+        }
         replan |= self.run_ai(&mut events);
         if replan || self.tick.is_multiple_of(PLAN_EVERY) {
             self.plan_groups(&mut events);
@@ -570,6 +640,10 @@ impl World {
         let mut events = Vec::new();
         if self.apply_due(&mut events) {
             self.plan_groups(&mut events);
+        }
+        // The AI winners at a conference move once the player has.
+        if !self.conferences.is_empty() {
+            self.run_conferences(&mut events);
         }
         events
     }
@@ -663,6 +737,18 @@ impl World {
             Command::AnswerPeace { from, accept } => {
                 self.answer_peace(*from, country, *accept, events)
             }
+            Command::TakeRegion { loser, region } => {
+                self.conference_move(country, *loser, Move::Take(*region), events)
+            }
+            Command::MakePuppet { loser } => {
+                self.conference_move(country, *loser, Move::Puppet, events)
+            }
+            Command::AnnexRest { loser } => {
+                self.conference_move(country, *loser, Move::AnnexRest, events)
+            }
+            Command::LeaveConference { loser } => {
+                self.conference_move(country, *loser, Move::Leave, events)
+            }
             Command::DeclareWar { .. } | Command::MoveDivision { .. } => {
                 self.apply_basic(order, events);
                 return false;
@@ -751,22 +837,7 @@ impl World {
     fn apply_basic(&mut self, order: Order, events: &mut Vec<Event>) {
         match order.command {
             Command::DeclareWar { target } => match self.check_declare_war(order.country, target) {
-                Ok(()) => {
-                    // A side going from peace to war counts this war's cost
-                    // from now on.
-                    for side in [order.country, target] {
-                        if self.enemies(side).is_empty()
-                            && let Some(index) = self.index_of(side)
-                        {
-                            self.countries[index].record.war = Tally::default();
-                        }
-                    }
-                    self.wars.insert(pair(order.country, target), self.tick);
-                    events.push(Event::WarDeclared {
-                        attacker: order.country,
-                        target,
-                    });
-                }
+                Ok(()) => self.start_war(order.country, target, events),
                 Err(reason) => events.push(Event::Rejected { order, reason }),
             },
             Command::MoveDivision { division, to } => {
@@ -795,13 +866,61 @@ impl World {
         Ok(())
     }
 
-    fn check_declare_war(&self, attacker: CountryId, target: CountryId) -> Result<(), Rejection> {
+    /// `attacker` and `target` are at war from now on, and each side's
+    /// overlord and puppets join in (`World::drag_in`).
+    pub(crate) fn start_war(
+        &mut self,
+        attacker: CountryId,
+        target: CountryId,
+        events: &mut Vec<Event>,
+    ) {
+        self.begin_war(attacker, target, events);
+        self.drag_in(attacker, target, events);
+    }
+
+    /// The war itself. A side going from peace to war counts this war's
+    /// cost from now on.
+    pub(crate) fn begin_war(
+        &mut self,
+        attacker: CountryId,
+        target: CountryId,
+        events: &mut Vec<Event>,
+    ) {
+        for side in [attacker, target] {
+            if self.enemies(side).is_empty()
+                && let Some(index) = self.index_of(side)
+            {
+                self.countries[index].record.war = Tally::default();
+            }
+        }
+        self.defeated.remove(&(attacker, target));
+        self.defeated.remove(&(target, attacker));
+        self.wars.insert(pair(attacker, target), self.tick);
+        events.push(Event::WarDeclared { attacker, target });
+    }
+
+    pub(crate) fn check_declare_war(
+        &self,
+        attacker: CountryId,
+        target: CountryId,
+    ) -> Result<(), Rejection> {
         if self.index_of(attacker).is_none() || self.index_of(target).is_none() {
             Err(Rejection::UnknownCountry)
         } else if attacker == target {
             Err(Rejection::SelfTarget)
         } else if self.at_war(attacker, target) {
             Err(Rejection::AlreadyAtWar)
+        } else if self.overlord(attacker).is_some()
+            || self.overlord(target) == Some(attacker)
+            || self.overlord(attacker) == Some(target)
+        {
+            Err(Rejection::Puppet)
+        } else if self
+            .conferences
+            .iter()
+            .any(|c| c.loser == target || c.loser == attacker)
+        {
+            Err(Rejection::InConference)
         } else {
             Ok(())
         }

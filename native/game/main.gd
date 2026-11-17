@@ -86,6 +86,7 @@ const MapKey := preload("res://ui/map_key.gd")
 const EventCard := preload("res://ui/event_card.gd")
 const EconomyWindow := preload("res://ui/economy.gd")
 const PeaceWindow := preload("res://ui/peace.gd")
+const ConferenceWindow := preload("res://ui/conference.gd")
 const CountryCard := preload("res://ui/country_card.gd")
 const PauseMenu := preload("res://ui/pause_menu.gd")
 const DefeatScreen := preload("res://ui/defeat.gd")
@@ -159,6 +160,11 @@ var command_bar: PanelContainer = null
 var event_card: Control = null
 var economy_window: PanelContainer = null
 var peace_window: Control = null
+## The peace conference on `conference_loser` while the player is one of
+## its winners, and the region clicked on the map (0 for none).
+var conference_window: Control = null
+var conference_loser := 0
+var conference_selected := 0
 ## The card about a foreign country clicked while leading.
 var country_card: Control = null
 ## The other country of the open peace window, and whether it offered.
@@ -630,6 +636,16 @@ func _lead(id: int, to_capital: bool) -> bool:
 		peace_terms = PackedInt32Array()
 		_answer_peace(true))
 	ui_layer.add_child(peace_window)
+	conference_window = ConferenceWindow.new()
+	conference_window.scenario = scenario
+	conference_window.palette = palette
+	conference_window.setup()
+	conference_window.visible = false
+	conference_window.took.connect(func(region: int) -> void: _conference_move("take", region))
+	conference_window.puppet_pressed.connect(func() -> void: _conference_move("puppet", 0))
+	conference_window.annex_pressed.connect(func() -> void: _conference_move("annex", 0))
+	conference_window.leave_pressed.connect(func() -> void: _conference_move("leave", 0))
+	ui_layer.add_child(conference_window)
 	event_card = EventCard.new()
 	event_card.setup()
 	event_card.visible = false
@@ -986,7 +1002,8 @@ func _hold() -> void:
 ## Open the card for the next big report, pausing the game. Cards wait
 ## while the pause menu is open.
 func _show_next_card() -> void:
-	if event_card.visible or peace_window.visible or menu.visible or defeat_screen.visible:
+	if event_card.visible or peace_window.visible or menu.visible or defeat_screen.visible \
+			or conference_window.visible:
 		return
 	# A peace offer that is no longer open (the war ended in the same hour:
 	# the country capitulated or made peace) gets no window.
@@ -1013,6 +1030,8 @@ func _show_next_card() -> void:
 					+ "and arrows where you want to strike back.")
 		"peace_offer":
 			_open_peace(int(card_report["other"]), true)
+		"conference":
+			_open_conference(int(card_report["other"]))
 		"peace":
 			event_card.show_event("PEACE", "Peace with %s" % other,
 				"The war is over. The reports list the regions that changed hands.")
@@ -1033,17 +1052,113 @@ func _offered_peace(other: int) -> bool:
 ## What a victory over `enemy` gave the led country: the regions its
 ## capitulation handed over to it, by name.
 func _victory_text(enemy: int) -> String:
-	var gained := PackedStringArray()
-	for region in sim.war_record(enemy).get("ceded", []):
-		if int(region["to"]) == player:
-			gained.append(scenario.region_name(int(region["region"])))
-	if gained.is_empty():
-		return ("It gave up and the war is over, but you held most of none of its regions, "
-			+ "so none of them are yours.")
-	var listed := Style.list_and(gained)
-	if gained.size() > 6:
-		listed = ", ".join(gained.slice(0, 6)) + " and %d more" % (gained.size() - 6)
-	return "It gave up and the war is over. You gain %s." % listed
+	for conference in sim.conferences():
+		if int(conference["loser"]) == enemy:
+			if PackedInt32Array(conference["winners"]).size() == 1:
+				return "It gave up and the war is over. Next, at the peace conference, you decide what becomes of its land."
+			return "It gave up and the war is over. Next, at the peace conference, you and the other winners divide its land."
+	return "It gave up and the war is over."
+
+
+## The peace conference on `loser`: the player's turns, paused.
+func _open_conference(loser: int) -> void:
+	conference_loser = loser
+	conference_selected = 0
+	_pause_for_card()
+	country_card.show_country(0, Vector2.ZERO, {}, "", [], "")
+	for panel in [army_list, reports, command_bar]:
+		panel.visible = false
+	var capital := scenario.country_capital(loser)
+	if not is_nan(capital.x):
+		var screen_w := get_viewport_rect().size.x
+		var target_x := (screen_w - ConferenceWindow.WIDTH - 16) / 2.0
+		var at := (_world_from_lng_lat(capital.x, capital.y)
+			+ Vector2((screen_w / 2.0 - target_x) / camera.zoom.x, 0)).clamp(-map_size / 2, map_size / 2)
+		create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT) \
+			.tween_property(camera, "position", at, 0.5)
+	_show_conference()
+
+
+## The conference window and the regions taken, striped in each taker's
+## color (the one clicked in gold); the summary card once it is over.
+func _show_conference() -> void:
+	var conference := {}
+	for open in sim.conferences():
+		if int(open["loser"]) == conference_loser:
+			conference = open
+	if conference.is_empty():
+		_close_conference()
+		return
+	var width := conference_selected + 1
+	for pick in conference["picks"]:
+		width = maxi(width, int(pick["region"]) + 1)
+	var marks := Image.create(width, 1, false, Image.FORMAT_RGBA8)
+	for pick in conference["picks"]:
+		marks.set_pixel(int(pick["region"]), 0, palette.get_pixel(int(pick["by"]), 0))
+	if conference_selected > 0:
+		marks.set_pixel(conference_selected, 0, Style.GOLD)
+	var material := map_rect.material as ShaderMaterial
+	material.set_shader_parameter("marks", ImageTexture.create_from_image(marks))
+	material.set_shader_parameter("has_marks", true)
+	var share := 0.0
+	if conference_selected > 0:
+		var rows: Array = sim.peace_talks(player, conference_loser,
+			PackedInt32Array([conference_selected])).get("regions", [])
+		if not rows.is_empty():
+			share = float(rows[0]["share"])
+	var defeated := {}
+	for winner in PackedInt32Array(conference["winners"]):
+		defeated[winner] = sim.defeated(winner, conference_loser)
+	conference_window.show_conference(player, conference, conference_selected, share, defeated, _today())
+
+
+## The player's move: "take" (the region clicked), "puppet", "annex" or
+## "leave". The AI winners after the player move at once.
+func _conference_move(action: String, region: int) -> void:
+	if not sim.conference_move(player, conference_loser, action, region):
+		_note("That move is not open now")
+	conference_selected = 0
+	_show_conference()
+
+
+## The conference is over: say what became of the loser's land.
+func _close_conference() -> void:
+	conference_window.visible = false
+	(map_rect.material as ShaderMaterial).set_shader_parameter("has_marks", false)
+	for panel in [army_list, reports]:
+		panel.visible = not no_hud
+	var loser := conference_loser
+	var them := scenario.country_name(loser)
+	var by_taker := {}
+	for region in sim.war_record(loser).get("ceded", []):
+		var to := int(region["to"])
+		if not by_taker.has(to):
+			by_taker[to] = PackedStringArray()
+		by_taker[to].append(scenario.region_name(int(region["region"])))
+	var lines := PackedStringArray()
+	if by_taker.has(player):
+		lines.append("You took %s." % Style.list_and(by_taker[player]))
+	for taker in by_taker:
+		if taker != player:
+			lines.append("%s took %s." % [scenario.country_name(taker), Style.list_and(by_taker[taker])])
+	if by_taker.is_empty():
+		lines.append("No region changed hands.")
+	if sim.overlord(loser) == player:
+		lines.append("%s is now your puppet: it fights in your wars and pays you a quarter of its income." % them)
+	elif sim.overlord(loser) != 0:
+		lines.append("%s is now a puppet of %s." % [them, scenario.country_name(sim.overlord(loser))])
+	elif _owns_nothing(loser):
+		lines.append("%s is gone from the map." % them)
+	else:
+		lines.append("%s keeps the rest, free." % them)
+	conference_loser = 0
+	card_report = {"big": "conference_over", "other": loser}
+	event_card.show_event("PEACE CONFERENCE", "%s is divided" % them, " ".join(lines))
+
+
+## Whether `country` owns no region by law any more.
+func _owns_nothing(country: int) -> bool:
+	return float(sim.war_record(country).get("land_kept", 1.0)) <= 0.0
 
 
 func _close_card() -> void:
@@ -1079,7 +1194,7 @@ func _pause_for_card() -> void:
 func _after_modal() -> void:
 	_show_next_card()
 	if not event_card.visible and not peace_window.visible and not defeat_screen.visible \
-			and paused_by_card:
+			and not conference_window.visible and paused_by_card:
 		paused_by_card = false
 		if sim.is_paused():
 			sim.toggle_pause()
@@ -1140,7 +1255,7 @@ func _show_peace() -> void:
 	var marks := Image.create(width, 1, false, Image.FORMAT_RGBA8)
 	for region in peace_terms:
 		var gain := sim.region_owner(region) != player
-		marks.set_pixel(region, 0, Color(1, 0, 0) if gain else Color(0, 1, 0))
+		marks.set_pixel(region, 0, Style.GOLD if gain else Style.WAR)
 	var material := map_rect.material as ShaderMaterial
 	material.set_shader_parameter("marks", ImageTexture.create_from_image(marks))
 	material.set_shader_parameter("has_marks", true)
@@ -1215,9 +1330,18 @@ func _show_country_card(country: int, world: Vector2) -> void:
 				sim.declare_war(player, country)
 			country_card.show_country(0, Vector2.ZERO, {}, "", [], "")
 			_refresh_sim()
-	country_card.show_country(country, world, sim.country_info(country),
-		"At war with you" if at_war else "At peace with you",
-		[["Offer peace" if at_war else "Declare war", true, action]], "Esc closes")
+	var relation := "At war with you" if at_war else "At peace with you"
+	var actions := [["Offer peace" if at_war else "Declare war", true, action]]
+	var overlord := sim.overlord(country)
+	if overlord == player:
+		relation = "Your puppet: it fights in your wars and pays you a quarter of its income"
+		actions = []
+	elif sim.overlord(player) == country:
+		relation = "Your overlord: you fight in its wars"
+		actions = []
+	elif overlord != 0:
+		relation += "  ·  a puppet of %s" % scenario.country_name(overlord)
+	country_card.show_country(country, world, sim.country_info(country), relation, actions, "Esc closes")
 
 
 ## The saves of this scenario and the led country (or the viewer): a save
@@ -1281,6 +1405,12 @@ func _load_save(path: String) -> String:
 		card_report = {}
 		event_card.visible = false
 		defeat_screen.visible = false
+		if conference_window.visible:
+			conference_window.visible = false
+			conference_loser = 0
+			(map_rect.material as ShaderMaterial).set_shader_parameter("has_marks", false)
+			for panel in [army_list, reports]:
+				panel.visible = not no_hud
 		if peace_window.visible:
 			peace_window.visible = false
 			(map_rect.material as ShaderMaterial).set_shader_parameter("has_marks", false)
@@ -1474,6 +1604,15 @@ func _show_help() -> void:
 ## removes one division and leaves group selection.
 func _select_at(screen_point: Vector2, add: bool) -> void:
 	var world := get_canvas_transform().affine_inverse() * screen_point
+	if conference_window != null and conference_window.visible:
+		# The conference: a click on one of the loser's regions left chooses it.
+		var region := _region_at(world)
+		for conference in sim.conferences():
+			if int(conference["loser"]) == conference_loser \
+					and PackedInt32Array(conference["open"]).has(region):
+				conference_selected = region
+		_show_conference()
+		return
 	if peace_window != null and peace_window.visible:
 		# The talks: a click on a region adds it to the terms or drops it.
 		_toggle_term(_region_at(world))
@@ -1547,7 +1686,8 @@ func _finish_drawing() -> void:
 
 
 func _order_at(screen_point: Vector2) -> void:
-	if markers.selected.is_empty() or pick != null or (peace_window != null and peace_window.visible):
+	if markers.selected.is_empty() or pick != null or (peace_window != null and peace_window.visible) \
+			or (conference_window != null and conference_window.visible):
 		return
 	var world := get_canvas_transform().affine_inverse() * screen_point
 	var lng_lat := _lng_lat_from_world(world)
@@ -1661,6 +1801,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			elif key == KEY_F9 and _quickload():
 				_refresh_sim()
 			return
+		if conference_window != null and conference_window.visible:
+			return # the conference waits for the player's move
 		if peace_window != null and peace_window.visible:
 			if key == KEY_Y or key == KEY_ENTER or key == KEY_KP_ENTER:
 				_answer_peace(true)
@@ -1777,6 +1919,7 @@ func _process(delta: float) -> void:
 	# WASD not as part of Ctrl+A or Shift+W.
 	var modal: bool = (event_card != null and event_card.visible) \
 		or (peace_window != null and peace_window.visible) or (menu != null and menu.visible) \
+		or (conference_window != null and conference_window.visible) \
 		or (defeat_screen != null and defeat_screen.visible) or main_menu != null
 	var direction := Vector2.ZERO
 	if not modal:

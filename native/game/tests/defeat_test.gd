@@ -63,7 +63,10 @@ func _initialize() -> void:
 	check(float(record["land_kept"]) < 1.0, "Germany took some of it")
 	var story: Label = screen.inner.find_child("Story", true, false)
 	check(story.text.begins_with("Luxembourg fell and most of the country with it."), story.text)
-	check(story.text.ends_with("the regions Germany held most of now belong to it."), story.text)
+	check(story.text.contains("at the peace conference Germany took the regions below."), story.text)
+	check(main.sim.overlord(luxembourg) == germany and story.text.ends_with(
+		"Germany made you its puppet: you keep the rest, but fight in its wars and pay it a quarter of your income."),
+		"the AI made Luxembourg its puppet: %s" % story.text)
 	var ceded: Control = screen.inner.find_child("Ceded", true, false)
 	check(ceded != null and ceded.find_children("*", "Label", true, false).any(
 		func(l: Label) -> bool: return l.text.begins_with("Ceded to Germany: ")), "the regions Germany got")

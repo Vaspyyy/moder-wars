@@ -17,7 +17,7 @@
 //! same on every machine.
 
 use crate::economy::SERVE_PER_MILLE;
-use crate::world::{Event, World};
+use crate::world::{CountryId, Event, UnknownCountry, World};
 
 /// Support at the start, and the most it can be.
 pub const FULL_SUPPORT: u16 = 1000;
@@ -32,6 +32,19 @@ pub const OCCUPATION_PER_DAY: i64 = 10;
 pub const PEACE_RECOVERY_PER_DAY: i64 = 10;
 
 impl World {
+    /// Set a country's war support, per mille (at most full), for
+    /// sandboxes and tests: at zero it capitulates at the next daily
+    /// update if it is at war.
+    pub fn set_war_support(
+        &mut self,
+        country: CountryId,
+        support: u16,
+    ) -> Result<(), UnknownCountry> {
+        let index = self.index_of(country).ok_or(UnknownCountry(country))?;
+        self.countries[index].economy.support = support.min(FULL_SUPPORT);
+        Ok(())
+    }
+
     /// The daily change in every country's war support; countries at war
     /// whose support runs out capitulate.
     pub(crate) fn run_support(&mut self, events: &mut Vec<Event>) {

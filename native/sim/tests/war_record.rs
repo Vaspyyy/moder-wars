@@ -8,7 +8,7 @@ mod common;
 use common::{cell, country, run};
 use mw_sim::record::Capitulation;
 use mw_sim::save;
-use mw_sim::world::{Command, CountryId, Event, Order, World};
+use mw_sim::world::{Command, Controller, CountryId, Event, Order, World};
 
 fn order(world: &mut World, country: CountryId, command: Command) {
     let tick = world.tick();
@@ -162,6 +162,13 @@ fn a_capitulation_is_remembered_with_its_enemies_and_the_war_it_ended() {
         }
     }
     let when = when.expect("Luxembourg capitulated");
+    // Its enemies divide it at a conference; the AI acts for both.
+    assert_eq!(world.conferences().len(), 1);
+    for winner in [germany, france] {
+        world.set_controller(winner, Controller::Ai).unwrap();
+    }
+    world.step();
+    assert!(world.conferences().is_empty(), "the conference is over");
     let record = world.war_record(luxembourg).unwrap();
     let mut enemies = vec![france, germany];
     enemies.sort_unstable();

@@ -3,6 +3,7 @@
 pub mod ai;
 pub mod army;
 mod combat;
+pub mod conference;
 mod control;
 pub mod diplomacy;
 pub mod division;

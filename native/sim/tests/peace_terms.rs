@@ -10,7 +10,7 @@ mod common;
 use common::{cell, country, run};
 use mw_sim::save::{self, SaveError};
 use mw_sim::terms::Cession;
-use mw_sim::world::{Command, CountryId, Event, Order, World};
+use mw_sim::world::{Command, Controller, CountryId, Event, Order, World};
 
 fn order(world: &mut World, country: CountryId, command: Command) {
     let tick = world.tick();
@@ -386,15 +386,19 @@ fn a_capitulation_hands_over_the_regions_the_winner_holds() {
             to: capital,
         },
     );
-    let mut events = Vec::new();
+    let mut capitulated = false;
     for _ in 0..10 * 24 {
-        events = world.step();
-        if events.contains(&Event::Capitulated {
+        if world.step().contains(&Event::Capitulated {
             country: luxembourg,
         }) {
+            capitulated = true;
             break;
         }
     }
+    assert!(capitulated);
+    // At the conference Germany, now run by the AI, takes what it holds.
+    world.set_controller(germany, Controller::Ai).unwrap();
+    let events = world.step();
     assert!(
         events.iter().any(|e| matches!(
             e,

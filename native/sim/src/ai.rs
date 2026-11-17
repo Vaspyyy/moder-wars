@@ -152,6 +152,7 @@ impl World {
     /// fewer than `MAX_WARS` wars are going on, against `war_target`.
     pub(crate) fn aggression(&self, country: CountryId, chance: bool) -> Option<CountryId> {
         let ready = chance
+            && self.overlord(country).is_none()
             && self.enemies(country).is_empty()
             && self
                 .economy(country)
@@ -191,7 +192,9 @@ impl World {
             .into_iter()
             .map(|(neighbor, _)| (neighbor, self.power_of(neighbor)))
             .filter(|&(neighbor, power)| {
-                own >= AGGRESSION_RATIO * power && self.enemies(neighbor).is_empty()
+                own >= AGGRESSION_RATIO * power
+                    && self.enemies(neighbor).is_empty()
+                    && self.check_declare_war(country, neighbor).is_ok()
             })
             .min_by(|a, b| a.1.total_cmp(&b.1).then(a.0.cmp(&b.0)))
             .map(|(neighbor, _)| neighbor)
@@ -218,6 +221,9 @@ impl World {
         support: u16,
         orders: &mut Vec<Command>,
     ) {
+        if self.overlord(country).is_some() {
+            return; // its overlord makes its peace
+        }
         for offer in self.offers.iter().filter(|o| o.to == country) {
             let chance = self.willingness(offer.from, country, &offer.terms).chance;
             let stream = PEACE_STREAM
@@ -238,7 +244,7 @@ impl World {
             let open = self.offers.iter().any(|o| {
                 (o.from == country && o.to == enemy) || (o.from == enemy && o.to == country)
             });
-            if open || self.talks_closed(country, enemy) {
+            if open || self.talks_closed(country, enemy) || self.overlord(enemy).is_some() {
                 continue;
             }
             let cessions = self.peace_terms(country, enemy);
