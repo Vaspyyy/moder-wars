@@ -529,3 +529,156 @@ fn a_threatened_ai_looks_for_allies() {
     assert!(!world.allied(estonia, russia));
     assert_eq!(world.war_count(), 0, "forming factions starts no war");
 }
+
+#[test]
+fn a_members_puppet_is_defended_by_the_faction() {
+    // Germany makes Luxembourg its puppet, then forms a faction with France.
+    let s = common::world_2026();
+    let mut world = armed(s, false);
+    world.use_regions(common::regions_2026());
+    let (germany, france, luxembourg, belgium) = (
+        country(s, "Germany"),
+        country(s, "France"),
+        country(s, "Luxembourg"),
+        country(s, "Belgium"),
+    );
+    apply(
+        &mut world,
+        germany,
+        Command::DeclareWar { target: luxembourg },
+    );
+    world.set_war_support(luxembourg, 0).unwrap();
+    for _ in 0..48 {
+        if world.step().contains(&Event::Capitulated {
+            country: luxembourg,
+        }) {
+            break;
+        }
+    }
+    apply(
+        &mut world,
+        germany,
+        Command::MakePuppet { loser: luxembourg },
+    );
+    assert_eq!(world.overlord(luxembourg), Some(germany));
+    apply(
+        &mut world,
+        germany,
+        Command::InviteToFaction {
+            target: france,
+            name: String::new(),
+        },
+    );
+    apply(
+        &mut world,
+        france,
+        Command::AnswerFaction {
+            from: germany,
+            accept: true,
+        },
+    );
+    assert!(
+        world.allied(france, luxembourg),
+        "the puppet counts with Germany"
+    );
+    apply(
+        &mut world,
+        belgium,
+        Command::DeclareWar { target: luxembourg },
+    );
+    assert!(world.at_war(germany, belgium), "its overlord");
+    assert!(
+        world.at_war(france, belgium),
+        "and its overlord's faction defend it"
+    );
+}
+
+#[test]
+fn a_call_ends_when_the_caller_leaves() {
+    let s = common::world_2026();
+    let mut world = armed(s, true);
+    let (lithuania, belarus, poland) = (
+        country(s, "Lithuania"),
+        country(s, "Belarus"),
+        country(s, "Poland"),
+    );
+    apply(
+        &mut world,
+        lithuania,
+        Command::DeclareWar { target: belarus },
+    );
+    assert!(world.calls().iter().any(|c| c.ally == poland));
+    apply(&mut world, lithuania, Command::LeaveFaction);
+    assert!(world.calls().is_empty(), "its calls are gone");
+    let events = apply(
+        &mut world,
+        poland,
+        Command::AnswerCall {
+            attacker: lithuania,
+            target: belarus,
+            join: true,
+        },
+    );
+    assert_eq!(rejections(&events), vec![Rejection::NoCall]);
+    assert!(!world.at_war(poland, belarus));
+}
+
+#[test]
+fn a_call_or_invitation_that_ran_out_cannot_be_answered() {
+    let s = common::world_2026();
+    let mut world = armed(s, true);
+    let (lithuania, belarus, poland) = (
+        country(s, "Lithuania"),
+        country(s, "Belarus"),
+        country(s, "Poland"),
+    );
+    let (ukraine, moldova) = (country(s, "Ukraine"), country(s, "Moldova"));
+    world.step(); // an hour past midnight: the daily clean-up is far
+    apply(
+        &mut world,
+        lithuania,
+        Command::DeclareWar { target: belarus },
+    );
+    apply(
+        &mut world,
+        moldova,
+        Command::InviteToFaction {
+            target: ukraine,
+            name: String::new(),
+        },
+    );
+    // An hour past the call's seven days, before the daily clean-up.
+    for _ in 0..mw_sim::factions::CALL_DAYS * 24 {
+        world.step();
+    }
+    assert!(
+        world.calls().iter().any(|c| c.ally == poland),
+        "still listed"
+    );
+    let events = apply(
+        &mut world,
+        poland,
+        Command::AnswerCall {
+            attacker: lithuania,
+            target: belarus,
+            join: true,
+        },
+    );
+    assert_eq!(rejections(&events), vec![Rejection::NoCall]);
+    assert!(!world.at_war(poland, belarus));
+    // And an hour past the invitation's fourteen days.
+    for _ in 0..(INVITE_DAYS - mw_sim::factions::CALL_DAYS) * 24 {
+        world.step();
+    }
+    assert_eq!(world.invites().len(), 1, "still listed");
+    let events = apply(
+        &mut world,
+        ukraine,
+        Command::AnswerFaction {
+            from: moldova,
+            accept: true,
+        },
+    );
+    assert_eq!(rejections(&events), vec![Rejection::NoOffer]);
+    assert!(world.faction_of(ukraine).is_none());
+}

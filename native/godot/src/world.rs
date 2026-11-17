@@ -2054,15 +2054,21 @@ fn describe(
             attacker,
             defenders,
         } => {
+            // A puppet's defenders are its overlord's faction.
             let faction = world
-                .faction_of(*ally)
+                .faction_of(world.overlord(*ally).unwrap_or(*ally))
                 .map_or_else(|| "Its allies".to_string(), |f| faction_name(scenario, f));
             let count = match defenders.len() {
                 1 => format!("{} is", name(defenders[0])),
                 n => format!("{n} countries are"),
             };
+            let defends = if faction == "Its allies" {
+                "defend"
+            } else {
+                "defends"
+            };
             format!(
-                "{faction} defends {}: {count} at war with {}",
+                "{faction} {defends} {}: {count} at war with {}",
                 name(*ally),
                 name(*attacker)
             )

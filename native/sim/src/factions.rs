@@ -425,6 +425,9 @@ impl World {
             .position(|i| i.from == from && i.to == to)
             .ok_or(Rejection::NoOffer)?;
         let invite = self.invites.remove(at);
+        if self.tick().saturating_sub(invite.tick) >= INVITE_DAYS * 24 {
+            return Err(Rejection::NoOffer); // it ran out
+        }
         if !accept {
             events.push(Event::FactionRefused { from, to });
             return Ok(());
@@ -486,7 +489,9 @@ impl World {
             return;
         };
         self.factions[index].members.retain(|&m| m != country);
-        self.calls.retain(|c| c.ally != country);
+        // Its calls to arms, either way, are moot.
+        self.calls
+            .retain(|c| c.ally != country && c.attacker != country);
         let id = self.factions[index].id;
         events.push(Event::LeftFaction {
             country,
@@ -517,11 +522,15 @@ impl World {
         target: CountryId,
         events: &mut Vec<Event>,
     ) {
+        // A puppet is defended by its overlord's faction (its overlord is
+        // in the war already, see `drag_in`).
+        let head = self.overlord(target).unwrap_or(target);
         let defenders: Vec<CountryId> = self
-            .allies(target)
+            .allies(head)
             .into_iter()
             .filter(|&ally| {
                 ally != attacker
+                    && ally != target
                     && !self.at_war(ally, attacker)
                     && !self.allied(ally, attacker)
                     && !self.in_conference(ally)
@@ -589,7 +598,11 @@ impl World {
             .iter()
             .position(|c| (c.ally, c.attacker, c.target) == (ally, attacker, target))
             .ok_or(Rejection::NoCall)?;
-        self.calls.remove(at);
+        let call = self.calls.remove(at);
+        // Too late, or the two are no longer allies.
+        if self.tick().saturating_sub(call.tick) >= CALL_DAYS * 24 || !self.allied(ally, attacker) {
+            return Err(Rejection::NoCall);
+        }
         if join && !self.at_war(ally, target) {
             if !self.at_war(attacker, target) {
                 return Err(Rejection::NotAtWar);
