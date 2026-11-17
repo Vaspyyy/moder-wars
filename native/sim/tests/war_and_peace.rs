@@ -61,7 +61,14 @@ fn an_accepted_peace_ends_the_war() {
         poland,
         ukraine,
     } = war();
-    order(&mut world, ukraine, Command::OfferPeace { to: poland });
+    order(
+        &mut world,
+        ukraine,
+        Command::OfferPeace {
+            to: poland,
+            terms: vec![],
+        },
+    );
     let events = world.step();
     assert!(events.contains(&Event::PeaceOffered {
         from: ukraine,
@@ -92,7 +99,14 @@ fn a_refused_peace_keeps_the_war() {
         poland,
         ukraine,
     } = war();
-    order(&mut world, ukraine, Command::OfferPeace { to: poland });
+    order(
+        &mut world,
+        ukraine,
+        Command::OfferPeace {
+            to: poland,
+            terms: vec![],
+        },
+    );
     world.step();
     order(
         &mut world,
@@ -119,7 +133,14 @@ fn peace_orders_are_checked() {
         ukraine,
     } = war();
     let germany = country(common::world_2026(), "Germany");
-    order(&mut world, poland, Command::OfferPeace { to: germany });
+    order(
+        &mut world,
+        poland,
+        Command::OfferPeace {
+            to: germany,
+            terms: vec![],
+        },
+    );
     order(
         &mut world,
         poland,
@@ -128,8 +149,22 @@ fn peace_orders_are_checked() {
             accept: true,
         },
     );
-    order(&mut world, ukraine, Command::OfferPeace { to: poland });
-    order(&mut world, ukraine, Command::OfferPeace { to: poland });
+    order(
+        &mut world,
+        ukraine,
+        Command::OfferPeace {
+            to: poland,
+            terms: vec![],
+        },
+    );
+    order(
+        &mut world,
+        ukraine,
+        Command::OfferPeace {
+            to: poland,
+            terms: vec![],
+        },
+    );
     assert_eq!(
         rejections(&world.step()),
         vec![
@@ -147,7 +182,14 @@ fn an_unanswered_offer_runs_out() {
         poland,
         ukraine,
     } = war();
-    order(&mut world, ukraine, Command::OfferPeace { to: poland });
+    order(
+        &mut world,
+        ukraine,
+        Command::OfferPeace {
+            to: poland,
+            terms: vec![],
+        },
+    );
     run(&mut world, 15 * 24);
     assert!(world.peace_offers().is_empty());
     order(
@@ -183,7 +225,14 @@ fn peace_keeps_the_land_each_side_holds() {
     run(&mut world, 5 * 24);
     let taken = polish_side as usize + 10;
     assert_eq!(world.control()[taken], poland, "Poland took the cell");
-    order(&mut world, poland, Command::OfferPeace { to: ukraine });
+    order(
+        &mut world,
+        poland,
+        Command::OfferPeace {
+            to: ukraine,
+            terms: vec![],
+        },
+    );
     world.step();
     order(
         &mut world,
@@ -211,7 +260,14 @@ fn each_pair_makes_peace_on_its_own() {
     } = war();
     let germany = country(common::world_2026(), "Germany");
     order(&mut world, poland, Command::DeclareWar { target: germany });
-    order(&mut world, ukraine, Command::OfferPeace { to: poland });
+    order(
+        &mut world,
+        ukraine,
+        Command::OfferPeace {
+            to: poland,
+            terms: vec![],
+        },
+    );
     world.step();
     order(
         &mut world,
@@ -328,7 +384,14 @@ fn peace_offers_survive_a_save() {
         poland,
         ukraine,
     } = war();
-    order(&mut world, ukraine, Command::OfferPeace { to: poland });
+    order(
+        &mut world,
+        ukraine,
+        Command::OfferPeace {
+            to: poland,
+            terms: vec![],
+        },
+    );
     world.step();
     let mut loaded = save::load(&save::save(&world), s, None).unwrap();
     assert!(loaded == world);

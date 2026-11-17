@@ -20,7 +20,7 @@ const MAGIC: &[u8; 6] = b"MWSAVE";
 /// (divisions remember a target out of reach). 7: peace terms in regions.
 /// 8: war support. 9: war records (what the wars cost, the last
 /// capitulation) and the tick each war began.
-const VERSION: u16 = 9;
+const VERSION: u16 = 10;
 
 #[derive(Debug)]
 pub enum SaveError {

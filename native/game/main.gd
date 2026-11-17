@@ -164,6 +164,9 @@ var country_card: Control = null
 ## The other country of the open peace window, and whether it offered.
 var peace_with := 0
 var peace_incoming := true
+## The terms on the table, as region numbers: the offer's, or in the
+## talks the player's draft.
+var peace_terms := PackedInt32Array()
 ## Whether the country on the card was at war with the player when it was
 ## made, to rebuild it when that changes.
 var card_at_war := false
@@ -622,6 +625,10 @@ func _lead(id: int, to_capital: bool) -> bool:
 	peace_window.setup()
 	peace_window.visible = false
 	peace_window.answered.connect(_answer_peace)
+	peace_window.dropped.connect(_toggle_term)
+	peace_window.white_peace.connect(func() -> void:
+		peace_terms = PackedInt32Array()
+		_answer_peace(true))
 	ui_layer.add_child(peace_window)
 	event_card = EventCard.new()
 	event_card.setup()
@@ -1087,23 +1094,24 @@ func _open_peace(other: int, incoming: bool) -> void:
 	peace_incoming = incoming
 	_pause_for_card()
 	country_card.show_country(0, Vector2.ZERO, {}, "", [], "")
-	var terms := sim.peace_terms(player, other)
-	# One pixel per region number up to the highest one marked; the shader
-	# leaves regions past the edge alone.
-	var width := 1
-	for term in terms:
-		width = maxi(width, int(term["region"]) + 1)
-	var marks := Image.create(width, 1, false, Image.FORMAT_RGBA8)
+	peace_terms = PackedInt32Array()
+	if incoming:
+		for offer in sim.peace_offers():
+			if int(offer["from"]) == other and int(offer["to"]) == player:
+				peace_terms = PackedInt32Array(offer["terms"])
+	else:
+		# The talks start from what the land held gives each side.
+		for term in sim.peace_terms(player, other):
+			peace_terms.append(int(term["region"]))
 	var anchors := PackedVector2Array()
-	for term in terms:
-		var gain := int(term["to"]) == player
-		marks.set_pixel(int(term["region"]), 0, Color(1, 0, 0) if gain else Color(0, 1, 0))
-		var anchor := scenario.region_anchor(int(term["region"]))
+	for region in peace_terms:
+		var anchor := scenario.region_anchor(region)
 		if not is_nan(anchor.x):
 			anchors.append(_world_from_lng_lat(anchor.x, anchor.y))
-	var material := map_rect.material as ShaderMaterial
-	material.set_shader_parameter("marks", ImageTexture.create_from_image(marks))
-	material.set_shader_parameter("has_marks", true)
+	if anchors.is_empty():
+		var capital := scenario.country_capital(other)
+		if not is_nan(capital.x):
+			anchors.append(_world_from_lng_lat(capital.x, capital.y))
 	if anchors.size() > 0:
 		var center := Vector2.ZERO
 		for anchor in anchors:
@@ -1118,7 +1126,46 @@ func _open_peace(other: int, incoming: bool) -> void:
 			.tween_property(camera, "position", at, 0.5)
 	for panel in [army_list, reports, command_bar]:
 		panel.visible = false
-	peace_window.show_terms(incoming, player, other, terms, {"player": _side(player), "other": _side(other)})
+	_show_peace()
+
+
+## The peace window and the striped regions for the terms on the table.
+func _show_peace() -> void:
+	# One pixel per region number up to the highest one marked; the shader
+	# leaves regions past the edge alone. Gold: the player gains it; red:
+	# the player gives it up.
+	var width := 1
+	for region in peace_terms:
+		width = maxi(width, region + 1)
+	var marks := Image.create(width, 1, false, Image.FORMAT_RGBA8)
+	for region in peace_terms:
+		var gain := sim.region_owner(region) != player
+		marks.set_pixel(region, 0, Color(1, 0, 0) if gain else Color(0, 1, 0))
+	var material := map_rect.material as ShaderMaterial
+	material.set_shader_parameter("marks", ImageTexture.create_from_image(marks))
+	material.set_shader_parameter("has_marks", true)
+	if peace_incoming:
+		peace_window.show_offer(player, peace_with, peace_terms,
+			{"player": _side(player), "other": _side(peace_with)},
+			sim.peace_talks(peace_with, player, peace_terms))
+	else:
+		var talks: Dictionary = sim.peace_talks(player, peace_with, peace_terms)
+		peace_window.show_talks(player, peace_with, peace_terms, talks, int(talks.get("closed_days", 0)))
+
+
+## In the talks: add a region of either side to the terms, or drop it.
+func _toggle_term(region: int) -> void:
+	if peace_incoming or not peace_window.visible:
+		return
+	var owner := sim.region_owner(region)
+	if owner != player and owner != peace_with:
+		return
+	var at := peace_terms.find(region)
+	if at >= 0:
+		peace_terms.remove_at(at)
+	else:
+		peace_terms.append(region)
+	_show_peace()
 
 
 ## One side of the peace window's table.
@@ -1133,9 +1180,9 @@ func _side(country: int) -> Dictionary:
 func _answer_peace(accept: bool) -> void:
 	if peace_incoming:
 		sim.answer_peace(peace_with, player, accept)
-	elif accept and not sim.offer_peace_to(player, peace_with):
+	elif accept and not sim.offer_peace_to(player, peace_with, peace_terms):
 		# Sent offers show in the reports; say why one was not sent.
-		_note("No offer went to %s: you are not at war, or your last offer is still open"
+		_note("No terms went to %s: you are not at war, your last terms are still open, or it refused you too recently"
 			% scenario.country_name(peace_with))
 	peace_window.visible = false
 	(map_rect.material as ShaderMaterial).set_shader_parameter("has_marks", false)
@@ -1427,6 +1474,10 @@ func _show_help() -> void:
 ## removes one division and leaves group selection.
 func _select_at(screen_point: Vector2, add: bool) -> void:
 	var world := get_canvas_transform().affine_inverse() * screen_point
+	if peace_window != null and peace_window.visible:
+		# The talks: a click on a region adds it to the terms or drops it.
+		_toggle_term(_region_at(world))
+		return
 	if pick != null:
 		var country := _country_at(world)
 		_pick_country(country if country > 0 else 0, world)
@@ -1496,7 +1547,7 @@ func _finish_drawing() -> void:
 
 
 func _order_at(screen_point: Vector2) -> void:
-	if markers.selected.is_empty() or pick != null:
+	if markers.selected.is_empty() or pick != null or (peace_window != null and peace_window.visible):
 		return
 	var world := get_canvas_transform().affine_inverse() * screen_point
 	var lng_lat := _lng_lat_from_world(world)

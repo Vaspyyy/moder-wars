@@ -78,6 +78,9 @@ impl MwWorld {
     /// Days a peace offer stays open.
     #[constant]
     const OFFER_DAYS: i32 = mw_sim::diplomacy::OFFER_DAYS as i32;
+    /// Days a refused country waits before it can offer peace again.
+    #[constant]
+    const TALKS_CLOSED_DAYS: i32 = mw_sim::diplomacy::TALKS_CLOSED_DAYS as i32;
 
     /// The mobilization levels, peacetime first: `serve_per_mille` (share
     /// of the people who may serve) and `output_loss_percent` (what it
@@ -693,13 +696,16 @@ impl MwWorld {
             .collect()
     }
 
-    /// `from` offers peace to `to`. Returns whether the offer was made.
+    /// `from` offers peace to `to` on `terms`: the region numbers (as
+    /// `region_name` takes them) of either side that change hands; empty
+    /// for a white peace. Returns whether the offer was made.
     #[func]
-    fn offer_peace_to(&mut self, from: i32, to: i32) -> bool {
+    fn offer_peace_to(&mut self, from: i32, to: i32, terms: PackedInt32Array) -> bool {
         let (Ok(from), Ok(to)) = (u16::try_from(from), u16::try_from(to)) else {
             return false;
         };
-        self.order(from, Command::OfferPeace { to })
+        let terms = region_indices(&terms);
+        self.order(from, Command::OfferPeace { to, terms })
             && self
                 .apply_now()
                 .iter()
@@ -737,8 +743,9 @@ impl MwWorld {
                 .any(|e| matches!(e, Event::Rejected { .. }))
     }
 
-    /// `country` offers peace to every country it is at war with. Returns
-    /// how many offers it made.
+    /// `country` offers peace to every country it is at war with, each on
+    /// the terms the land held gives (`peace_terms`). Returns how many
+    /// offers it made.
     #[func]
     fn offer_peace(&mut self, country: i32) -> i32 {
         let Ok(country) = u16::try_from(country) else {
@@ -747,14 +754,20 @@ impl MwWorld {
         let Some(world) = self.world.as_ref() else {
             return 0;
         };
-        let enemies: Vec<u16> = world
-            .countries()
-            .iter()
-            .map(|c| c.id)
-            .filter(|&other| world.at_war(country, other))
+        let offers: Vec<(u16, Vec<u16>)> = world
+            .enemies(country)
+            .into_iter()
+            .map(|to| {
+                let terms = world
+                    .peace_terms(country, to)
+                    .iter()
+                    .map(|c| c.region as u16)
+                    .collect();
+                (to, terms)
+            })
             .collect();
-        for &to in &enemies {
-            self.order(country, Command::OfferPeace { to });
+        for (to, terms) in offers {
+            self.order(country, Command::OfferPeace { to, terms });
         }
         self.apply_now()
             .iter()
@@ -762,7 +775,8 @@ impl MwWorld {
             .count() as i32
     }
 
-    /// Open peace offers as dictionaries: `from`, `to`, `tick` (when made).
+    /// Open peace offers as dictionaries: `from`, `to`, `tick` (when made)
+    /// and `terms` (region numbers that change hands, see `offer_peace_to`).
     #[func]
     fn peace_offers(&self) -> Array<VarDictionary> {
         let Some(world) = self.world.as_ref() else {
@@ -776,9 +790,73 @@ impl MwWorld {
                 entry.set("from", i64::from(o.from));
                 entry.set("to", i64::from(o.to));
                 entry.set("tick", o.tick as i64);
+                let terms: PackedInt32Array = o.terms.iter().map(|&r| i32::from(r) + 1).collect();
+                entry.set("terms", &terms);
                 entry
             })
             .collect()
+    }
+
+    /// The owner by law now of region number `region` (as `region_name`
+    /// takes it): a peace may have handed it over since the game began.
+    /// 0 for an unknown region.
+    #[func]
+    fn region_owner(&self, region: i32) -> i32 {
+        let (Some(world), Ok(index)) = (self.world.as_ref(), usize::try_from(region - 1)) else {
+            return 0;
+        };
+        i32::from(world.region_owner_now(index))
+    }
+
+    /// How willing `to` is to make peace with `from` on `terms` (region
+    /// numbers, see `offer_peace_to`), as a dictionary: `chance` (0 to 1),
+    /// `lost` (share of its own land's output in enemy hands), `support`
+    /// (its war support, 0 to 1), `asked` (what the terms take from it, as
+    /// a share of its own land's output) and `asked_held` (the part of that
+    /// `from` holds), `closed_days` (days until `from` may offer again after
+    /// `to` refused it, 0 if it may now), and `regions`: one dictionary per
+    /// region in `terms`
+    /// with `region`, `owner`, `share` (of what its owner's own land
+    /// produces), `held` (the share of it `from` holds) and `most`
+    /// (whether `from` alone holds more than half of it).
+    #[func]
+    fn peace_talks(&self, from: i32, to: i32, terms: PackedInt32Array) -> VarDictionary {
+        let mut entry = VarDictionary::new();
+        let (Some(world), Ok(from), Ok(to)) =
+            (self.world.as_ref(), u16::try_from(from), u16::try_from(to))
+        else {
+            return entry;
+        };
+        let indices = region_indices(&terms);
+        let w = world.willingness(from, to, &indices);
+        entry.set("chance", w.chance);
+        entry.set("lost", w.lost);
+        entry.set("support", f64::from(w.support) / 1000.0);
+        entry.set("asked", w.asked);
+        entry.set("asked_held", w.asked_held);
+        let wait = world
+            .talks_reopen(from, to)
+            .map_or(0, |until| (until - world.tick()).div_ceil(24));
+        entry.set("closed_days", wait as i64);
+        let regions: Vec<usize> = indices.iter().map(|&r| usize::from(r)).collect();
+        let holding = world.holding(from, &regions);
+        let rows: Array<VarDictionary> = regions
+            .iter()
+            .zip(holding)
+            .map(|(&region, (held, most))| {
+                let owner = world.region_owner_now(region);
+                let home = world.economy(owner).map_or(0, |e| e.home_total_k).max(1);
+                let mut row = VarDictionary::new();
+                row.set("region", region as i64 + 1);
+                row.set("owner", i64::from(owner));
+                row.set("share", world.region_value_k(region) as f64 / home as f64);
+                row.set("held", held);
+                row.set("most", most);
+                row
+            })
+            .collect();
+        entry.set("regions", &rows);
+        entry
     }
 
     /// `to` answers the peace offer from `from`. Returns whether it was taken.
@@ -1021,6 +1099,16 @@ impl MwWorld {
         let bound = scenario.bind();
         bound.scenario.as_ref().map(|s| s.grid)
     }
+}
+
+/// Region numbers from Godot (index + 1, as `region_name` takes them) as
+/// the simulation's region indices; numbers out of range are dropped.
+fn region_indices(numbers: &PackedInt32Array) -> Vec<u16> {
+    numbers
+        .as_slice()
+        .iter()
+        .filter_map(|&n| u16::try_from(n - 1).ok())
+        .collect()
 }
 
 fn country_name(scenario: &Scenario, id: u16) -> &str {

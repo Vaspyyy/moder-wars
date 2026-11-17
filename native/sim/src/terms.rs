@@ -189,19 +189,24 @@ impl World {
     /// The regions a peace between `a` and `b` would hand over by law, in
     /// region order (empty without regions). Reading them changes nothing.
     pub fn peace_terms(&self, a: CountryId, b: CountryId) -> Vec<Cession> {
-        self.settlement(a, b).map(|s| s.ceded).unwrap_or_default()
+        self.settlement(a, b, None)
+            .map(|s| s.ceded)
+            .unwrap_or_default()
     }
 
-    /// What a peace between `a` and `b` settles, or None without regions.
-    fn settlement(&self, a: CountryId, b: CountryId) -> Option<Settlement> {
-        let map = self.regions.as_deref()?;
-        let (a, b) = (a.min(b), a.max(b));
+    /// What `a` and `b` hold of each region either of them holds any of:
+    /// region -> [cells held by a, by b], and [output held by a, by b].
+    fn holdings(
+        &self,
+        map: &RegionMap,
+        a: CountryId,
+        b: CountryId,
+    ) -> (BTreeMap<usize, [u64; 2]>, BTreeMap<usize, [u64; 2]>) {
         let side = |cell: Cell| match self.control[cell as usize] {
             h if h == a => Some(0),
             h if h == b => Some(1),
             _ => None,
         };
-        // Cells of each region held by a and by b, and what they produce.
         let mut held: BTreeMap<usize, [u64; 2]> = BTreeMap::new();
         for cell in 0..self.control.len() as Cell {
             if let Some(side) = side(cell)
@@ -218,8 +223,102 @@ impl World {
                 worth.entry(region).or_default()[side] += value;
             }
         }
+        (held, worth)
+    }
+
+    /// Whether the country on `side` of `holdings` alone holds more than
+    /// half of a region (by what it produces, or by cells in a region that
+    /// produces nothing).
+    fn holds_most(
+        map: &RegionMap,
+        region: usize,
+        side: usize,
+        held: &BTreeMap<usize, [u64; 2]>,
+        worth: &BTreeMap<usize, [u64; 2]>,
+    ) -> bool {
+        let (on, total) = if map.value_k[region] > 0 {
+            let value = worth.get(&region).copied().unwrap_or_default();
+            (value[side], map.value_k[region])
+        } else {
+            let cells = held.get(&region).copied().unwrap_or_default();
+            (cells[side], u64::from(map.cells[region]))
+        };
+        on * 2 > total
+    }
+
+    /// What `country` holds of each region in `regions`, in the same order:
+    /// its share of what the region produces (of its cells if it produces
+    /// nothing), and whether that is more than half (see `holds_most`).
+    pub fn holding(&self, country: CountryId, regions: &[usize]) -> Vec<(f64, bool)> {
+        let Some(map) = self.regions.as_deref() else {
+            return vec![(0.0, false); regions.len()];
+        };
+        let (held, worth) = self.holdings(map, country, country);
+        regions
+            .iter()
+            .map(|&region| {
+                if region >= map.home.len() {
+                    return (0.0, false);
+                }
+                let share = if map.value_k[region] > 0 {
+                    worth.get(&region).map_or(0, |w| w[0]) as f64 / map.value_k[region] as f64
+                } else if map.cells[region] > 0 {
+                    held.get(&region).map_or(0, |h| h[0]) as f64 / f64::from(map.cells[region])
+                } else {
+                    0.0
+                };
+                (share, Self::holds_most(map, region, 0, &held, &worth))
+            })
+            .collect()
+    }
+
+    /// What a region produces (`MapData::value_k` summed; 0 for an unknown
+    /// region or without regions).
+    pub fn region_value_k(&self, region: usize) -> u64 {
+        self.regions
+            .as_deref()
+            .and_then(|map| map.value_k.get(region).copied())
+            .unwrap_or(0)
+    }
+
+    /// The region's owner by law now (0 for an unknown region or without
+    /// regions).
+    pub fn region_owner_now(&self, region: usize) -> CountryId {
+        match self.regions.as_deref() {
+            Some(map) if region < map.home.len() => self.region_owner(map, region),
+            _ => 0,
+        }
+    }
+
+    /// What a peace between `a` and `b` settles, or None without regions:
+    /// the regions in `terms` change hands (each goes from its owner by law
+    /// to the other side); with no terms given, each region one side alone
+    /// holds most of goes to it. Regions of other countries in `terms` are
+    /// left out.
+    fn settlement(&self, a: CountryId, b: CountryId, terms: Option<&[u16]>) -> Option<Settlement> {
+        let map = self.regions.as_deref()?;
+        let (a, b) = (a.min(b), a.max(b));
+        let (held, worth) = self.holdings(map, a, b);
         let mut settlement = Settlement::default();
-        for (&region, &cells) in &held {
+        if let Some(terms) = terms {
+            // Regions in the terms that neither side holds any of change
+            // owner by law only.
+            for &region in terms {
+                let region = usize::from(region);
+                if region < map.home.len() && !held.contains_key(&region) {
+                    let owner = self.region_owner(map, region);
+                    if owner == a || owner == b {
+                        let to = if owner == a { b } else { a };
+                        settlement.ceded.push(Cession {
+                            region,
+                            from: owner,
+                            to,
+                        });
+                    }
+                }
+            }
+        }
+        for &region in held.keys() {
             let owner = self.region_owner(map, region);
             let other_side = match owner {
                 o if o == a => 1,
@@ -228,13 +327,11 @@ impl World {
                 _ => continue,
             };
             let other = [a, b][other_side];
-            let (on_other, total) = if map.value_k[region] > 0 {
-                let value = worth.get(&region).copied().unwrap_or_default();
-                (value[other_side], map.value_k[region])
-            } else {
-                (cells[other_side], u64::from(map.cells[region]))
+            let hands_over = match terms {
+                Some(terms) => terms.contains(&(region as u16)),
+                None => Self::holds_most(map, region, other_side, &held, &worth),
             };
-            if on_other * 2 > total {
+            if hands_over {
                 settlement.ceded.push(Cession {
                     region,
                     from: owner,
@@ -248,11 +345,19 @@ impl World {
         Some(settlement)
     }
 
-    /// Settle the land between two countries that just made peace.
-    pub(crate) fn settle_regions(&mut self, a: CountryId, b: CountryId, events: &mut Vec<Event>) {
-        let Some(settlement) = self.settlement(a, b) else {
+    /// Settle the land between two countries that just made peace, on
+    /// `terms` (see `settlement`).
+    pub(crate) fn settle_regions(
+        &mut self,
+        a: CountryId,
+        b: CountryId,
+        terms: Option<&[u16]>,
+        events: &mut Vec<Event>,
+    ) {
+        let Some(mut settlement) = self.settlement(a, b, terms) else {
             return;
         };
+        settlement.ceded.sort_by_key(|c| c.region);
         let map = self.regions.clone().expect("a settlement needs regions");
         let mut handed: BTreeMap<(CountryId, CountryId), u32> = BTreeMap::new();
         for cession in &settlement.ceded {

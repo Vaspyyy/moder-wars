@@ -1,9 +1,13 @@
 //! War and peace.
 //!
-//! A country at war can offer peace to an enemy; the enemy accepts or
-//! refuses, and an offer nobody answers runs out after `OFFER_DAYS`. Each
-//! pair of countries makes peace on its own, and the land between them is
-//! settled in whole regions (`terms.rs`).
+//! A country at war can offer peace to an enemy on terms: the regions of
+//! either side that change hands (each goes from its owner by law to the
+//! other side); everything else either side holds of the other's land goes
+//! back. The enemy accepts or refuses (an AI weighs the terms against how
+//! the war goes, see `talks.rs`), and an offer nobody answers runs out
+//! after `OFFER_DAYS`. After a refusal the same country cannot offer again
+//! for `TALKS_CLOSED_DAYS`. Each pair of countries makes peace on its own,
+//! and the land between them is settled in whole regions (`terms.rs`).
 //!
 //! Once a day, a country at war that has lost its capital and holds less
 //! than half of its own land (by what that land produces), or whose war
@@ -20,13 +24,18 @@ use crate::world::{CountryId, Event, Rejection, World};
 
 /// Days an unanswered peace offer stays open.
 pub const OFFER_DAYS: u64 = 14;
+/// Days a refused country waits before it can offer peace again.
+pub const TALKS_CLOSED_DAYS: u64 = 7;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PeaceOffer {
     pub from: CountryId,
     pub to: CountryId,
     /// The tick it was made.
     pub tick: u64,
+    /// The regions that would change hands, sorted: each goes from its
+    /// owner by law (`from` or `to`) to the other. Empty for a white peace.
+    pub terms: Vec<u16>,
 }
 
 impl World {
@@ -34,21 +43,56 @@ impl World {
         &mut self,
         from: CountryId,
         to: CountryId,
+        terms: &[u16],
         events: &mut Vec<Event>,
     ) -> Result<(), Rejection> {
         if !self.at_war(from, to) {
             return Err(Rejection::NotAtWar);
+        }
+        if self.talks_closed(from, to) {
+            return Err(Rejection::TalksClosed);
+        }
+        let mut terms = terms.to_vec();
+        terms.sort_unstable();
+        terms.dedup();
+        if terms.iter().any(|&region| {
+            let owner = self.region_owner_now(usize::from(region));
+            owner != from && owner != to
+        }) {
+            return Err(Rejection::NotTheirRegion);
         }
         let key = |o: &PeaceOffer| (o.from, o.to);
         match self.offers.binary_search_by_key(&(from, to), key) {
             Ok(_) => Err(Rejection::AlreadyOffered),
             Err(at) => {
                 let tick = self.tick();
-                self.offers.insert(at, PeaceOffer { from, to, tick });
+                self.offers.insert(
+                    at,
+                    PeaceOffer {
+                        from,
+                        to,
+                        tick,
+                        terms,
+                    },
+                );
                 events.push(Event::PeaceOffered { from, to });
                 Ok(())
             }
         }
+    }
+
+    /// Whether `from` was refused by `to` less than `TALKS_CLOSED_DAYS` ago.
+    pub fn talks_closed(&self, from: CountryId, to: CountryId) -> bool {
+        self.talks_reopen(from, to).is_some()
+    }
+
+    /// The tick from which `from` may offer `to` peace again, while `to`'s
+    /// refusal still keeps it waiting.
+    pub fn talks_reopen(&self, from: CountryId, to: CountryId) -> Option<u64> {
+        self.talks_closed
+            .get(&(from, to))
+            .copied()
+            .filter(|&until| self.tick() < until)
     }
 
     pub(crate) fn answer_peace(
@@ -62,20 +106,29 @@ impl World {
             .offers
             .binary_search_by_key(&(from, to), |o| (o.from, o.to))
             .map_err(|_| Rejection::NoOffer)?;
-        self.offers.remove(at);
+        let offer = self.offers.remove(at);
         if accept {
             events.push(Event::PeaceMade { from, to });
-            self.end_war(from, to, events);
+            self.end_war(from, to, Some(&offer.terms), events);
         } else {
             events.push(Event::PeaceRefused { from, to });
+            let until = self.tick() + TALKS_CLOSED_DAYS * 24;
+            self.talks_closed.insert((from, to), until);
         }
         Ok(())
     }
 
     /// End the war between two countries, drop offers between them and
     /// their arrows into each other (divisions do not enter land at peace,
-    /// so such an arrow could never be finished), and settle the land.
-    fn end_war(&mut self, a: CountryId, b: CountryId, events: &mut Vec<Event>) {
+    /// so such an arrow could never be finished), and settle the land on
+    /// `terms` (see `World::settle_regions`).
+    fn end_war(
+        &mut self,
+        a: CountryId,
+        b: CountryId,
+        terms: Option<&[u16]>,
+        events: &mut Vec<Event>,
+    ) {
         self.wars.remove(&(a.min(b), a.max(b)));
         self.offers
             .retain(|o| !((o.from == a && o.to == b) || (o.from == b && o.to == a)));
@@ -86,7 +139,9 @@ impl World {
                 group.arrow.clear();
             }
         }
-        self.settle_regions(a, b, events);
+        self.talks_closed.remove(&(a, b));
+        self.talks_closed.remove(&(b, a));
+        self.settle_regions(a, b, terms, events);
     }
 
     /// Drop offers older than `OFFER_DAYS`.
@@ -94,6 +149,7 @@ impl World {
         let now = self.tick();
         self.offers
             .retain(|o| now.saturating_sub(o.tick) < OFFER_DAYS * 24);
+        self.talks_closed.retain(|_, &mut until| now < until);
     }
 
     /// The country's capital: its most populous capital city.
@@ -146,8 +202,9 @@ impl World {
             .unwrap_or(self.tick());
         let lost_before = self.lost_regions(country);
         events.push(Event::Capitulated { country });
+        // Each winner takes the regions it holds most of.
         for &enemy in &enemies {
-            self.end_war(country, enemy, events);
+            self.end_war(country, enemy, None, events);
         }
         let ceded = self
             .lost_regions(country)
