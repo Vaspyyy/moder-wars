@@ -8,6 +8,8 @@ extends Control
 ## - load: every save, newest first, each with Load.
 ##
 ## Esc goes back one view. The data credit (main's label) stays on top.
+## A save that would not load leaves the menu open with the reason
+## (`show_error`) until the next view.
 
 signal play_chosen(scenario: String, observe: bool)
 signal load_chosen(entry: Dictionary)
@@ -38,6 +40,8 @@ var saves: Array = []
 ## Unix seconds now, for "saved 12 minutes ago" (tests replace it).
 var now := func() -> float: return Time.get_unix_time_from_system()
 var content := Control.new()
+## Why the last chosen save did not load, under the menu.
+var error := Label.new()
 
 
 func setup() -> void:
@@ -51,6 +55,25 @@ func setup() -> void:
 	content.set_anchors_preset(PRESET_FULL_RECT)
 	content.mouse_filter = MOUSE_FILTER_IGNORE
 	add_child(content)
+	error.name = "Error"
+	error.add_theme_font_override("font", Style.BODY)
+	error.add_theme_font_size_override("font_size", 16)
+	error.add_theme_color_override("font_color", Style.WAR)
+	error.add_theme_stylebox_override("normal", Style.box(Color(Style.PANEL, 0.9), Style.WAR, 6, 16, 10))
+	error.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	error.custom_minimum_size.x = LOAD_WIDTH
+	error.set_anchors_preset(PRESET_BOTTOM_LEFT)
+	error.grow_vertical = GROW_DIRECTION_BEGIN
+	error.offset_left = LEFT
+	error.offset_bottom = -76
+	error.visible = false
+	add_child(error)
+
+
+## Say why a chosen save did not load; the next view takes it away.
+func show_error(text: String) -> void:
+	error.text = text
+	error.visible = true
 
 
 func _input(event: InputEvent) -> void:
@@ -321,6 +344,7 @@ func _save_row(entry: Dictionary, index: int) -> PanelContainer:
 
 
 func _clear() -> void:
+	error.visible = false
 	for child in content.get_children():
 		content.remove_child(child)
 		child.queue_free()

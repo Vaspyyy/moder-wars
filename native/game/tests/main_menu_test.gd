@@ -1,7 +1,8 @@
 extends "res://tests/harness.gd"
 ## The main menu: the game opens on it, Play chooses a scenario (another one
 ## loads with the scene started again) and observer mode, Continue and Load
-## game load any save of any scenario, Quit quits.
+## game load any save of any scenario (a save that would not load keeps the
+## menu open and says why), Quit quits.
 
 var dir := ""
 var restarts: Array = []
@@ -49,6 +50,12 @@ func _initialize() -> void:
 		"the data credit stays on top")
 	key(KEY_SPACE)
 	check(main.sim.is_paused(), "keys do not reach the game behind it")
+	# --play starts the game running, but it waits behind the menu.
+	main.free()
+	await start("", {"play": ""})
+	check(main.main_menu != null and main.sim.is_paused(), "with --play too")
+	await _menu()
+	menu = main.main_menu
 
 	# Play: a card for each scenario, the first one chosen.
 	_press("Play")
@@ -112,8 +119,15 @@ func _initialize() -> void:
 	check(main.menu != null and not main.menu.visible, "a pause menu waits for Esc")
 	key(KEY_ESCAPE)
 	check(main.menu.visible and main.sim.is_paused(), "Esc opens it")
+	check(main.credit.get_index() == main.ui_layer.get_child_count() - 1, "under the data credit")
 	var menu_texts := _texts(main.menu.dialog)
 	check(menu_texts.has("Observer"), "the observer's menu: %s" % [menu_texts])
+	main.menu.show_saves(main._menu_state())
+	menu_texts = _texts(main.menu.dialog)
+	check(menu_texts[0].begins_with("PAUSED  ·  OBSERVER  ·  MODERN WORLD 2026"), "its saves say Observer: %s" % [menu_texts])
+	check(menu_texts.has("The saves of observer mode in this scenario, newest first. Overwrite and Delete ask once before they replace or remove a save."),
+		"and whose they are")
+	main.menu.back()
 	main.menu.back()
 	check(not main.menu.visible, "and closes it")
 
@@ -156,6 +170,68 @@ func _initialize() -> void:
 	check(main.main_menu == null and main.player == poland, "Continue leads Poland")
 	check(main.sim.time_text() == saved_time, "in the saved game: %s" % main.sim.time_text())
 	check(main.sim.is_paused() and main.top_bar != null, "paused, with the top bar")
+
+	# Observer mode's saves: listed as the observer's, loaded in place with
+	# the AI on every country. The --war sandbox viewer's are not listed.
+	await _menu()
+	_press("Play")
+	(main.main_menu.content.find_child("Observer", true, false) as Button).button_pressed = true
+	_press("Start")
+	main.sim.run(3)
+	check(main._slots().create(main.sim, "Watching") == "", "an observer save")
+	var watched_time: String = main.sim.time_text()
+	var observer_save: String = main._slots().list()[0]["path"]
+	check(observer_save.get_file().begins_with("save-world-map-2026-v3-observer-"), observer_save.get_file())
+	DirAccess.copy_absolute(observer_save, dir.path_join("save-world-map-2026-v3-viewer-1.mwsave"))
+	await _menu()
+	var newest: Dictionary = main.main_menu.saves[0]
+	check(newest["path"] == observer_save and int(newest["country"]) == 0, "the newest save is the observer's")
+	check(main.main_menu.saves.size() == 3, "the sandbox's is left out: %d saves" % main.main_menu.saves.size())
+	check(main.main_menu.describe(newest).begins_with("Observer  ·  Modern World 2026  ·  Watching"),
+		main.main_menu.describe(newest))
+	_press("Continue")
+	check(main.main_menu == null and main.observing and main.player == 0, "Continue watches")
+	check(main.sim.time_text() == watched_time, "the saved game: %s" % main.sim.time_text())
+	check(main.sim.is_ai(poland), "with the AI playing every country")
+
+	# A save that would not load: the menu stays, saying why.
+	var broken := dir.path_join("save-world-map-2026-v3-%d-Poland-2.mwsave" % poland)
+	var bytes := FileAccess.open(broken, FileAccess.WRITE)
+	bytes.store_string("not a save")
+	bytes.close()
+	var sidecar := FileAccess.open(broken.get_basename() + ".json", FileAccess.WRITE)
+	sidecar.store_string(JSON.stringify({"name": "Broken", "time": "2026-01-01 05:00",
+		"saved": Time.get_unix_time_from_system() + 60.0}))
+	sidecar.close()
+	await _menu()
+	check(main.main_menu.saves[0]["path"] == broken, "the broken save is the newest")
+	_press("Continue")
+	check(main.main_menu != null and main.main_menu.view == "main" and main.pick == null and main.player == 0,
+		"the menu stays")
+	check(main.main_menu.error.visible and main.main_menu.error.text.begins_with("Cannot load"),
+		"and says why: %s" % main.main_menu.error.text)
+	_press("Play")
+	check(not main.main_menu.error.visible, "until the next view")
+	# Started with one (another scenario's save from the menu): the menu again.
+	main.free()
+	await start("", {"lead": str(poland), "load": broken})
+	check(main.main_menu != null and main.player == 0 and main.main_menu.error.visible,
+		"a scene started with it opens the menu, saying why")
+	main.free()
+	await start("", {"lead": "9999", "load": ours})
+	check(main.main_menu != null and main.main_menu.error.visible, "and with a country not in the scenario")
+	main.free()
+	await start("", {"lead": str(poland), "load": ours})
+	check(main.main_menu == null and main.player == poland and main.sim.time_text() == saved_time,
+		"a good one leads its country in the saved game")
+	DirAccess.remove_absolute(broken)
+	DirAccess.remove_absolute(broken.get_basename() + ".json")
+
+	# The menu opens on the scenario of the game behind it.
+	main.free()
+	await start("ukraine-2023-v3", {})
+	main.main_menu.show_play()
+	check(main.main_menu.selected == "ukraine-2023-v3", "Ukraine 2023 chosen behind Ukraine 2023")
 
 	# Quit to desktop.
 	await _menu()

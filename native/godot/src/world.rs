@@ -868,6 +868,31 @@ impl MwWorld {
             .map_or(0, |world| mw_sim::save::fingerprint(world) as i64)
     }
 
+    /// Whether a save would load on this scenario (and its region map):
+    /// an empty string, or the error `load_game` would give. The game goes
+    /// on as it is either way.
+    #[func]
+    fn check_save(&self, path: GString) -> GString {
+        let Some(scenario) = self.scenario.as_ref() else {
+            return GString::from("Start a game first");
+        };
+        let bound = scenario.bind();
+        let Some(s) = bound.scenario.as_ref() else {
+            return GString::from("Start a game first");
+        };
+        let path = path.to_string();
+        let checked = std::fs::read(&path)
+            .map_err(|e| format!("Cannot read {path}: {e}"))
+            .and_then(|bytes| {
+                mw_sim::save::load(&bytes, s, bound.regions.as_ref())
+                    .map(|_| ())
+                    .map_err(|e| format!("Cannot load {path}: {e}"))
+            });
+        checked
+            .err()
+            .map_or_else(GString::new, |m| GString::from(&m))
+    }
+
     /// Load a game saved on this scenario (and its region map). Returns an
     /// empty string on success, or the error; after an error the current
     /// game goes on.

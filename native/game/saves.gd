@@ -44,10 +44,12 @@ func list() -> Array:
 
 
 ## Every save in the folder of a scenario in `scenarios` (package names),
-## named or quick, of any country (whatever `scenario_name` and `who` say):
-## entries as in `list`, plus `scenario` (the package), `country` (the led
-## country's id, 0 for the viewer) and `country_name`, newest first.
-func all(scenarios: PackedStringArray) -> Array:
+## named or quick, of any country or of observer mode (`observer`: its
+## `who`), whatever `scenario_name` and `who` say; the --war viewer's are
+## left out. Entries as in `list`, plus `scenario` (the package), `country`
+## (the led country's id, 0 for observer mode) and `country_name`, newest
+## first.
+func all(scenarios: PackedStringArray, observer := "observer") -> Array:
 	var found: Array = []
 	for file in DirAccess.get_files_at(ProjectSettings.globalize_path(dir)):
 		if not file.ends_with(".mwsave"):
@@ -71,7 +73,9 @@ func all(scenarios: PackedStringArray) -> Array:
 			entry["scenario"] = scenario
 			entry["country"] = 0
 			entry["country_name"] = ""
-			if who != "viewer":
+			if who == "viewer":
+				break # the --war sandbox's, which the menu does not offer
+			if who != observer:
 				var dash := who.find("-")
 				if dash <= 0 or not who.left(dash).is_valid_int():
 					break

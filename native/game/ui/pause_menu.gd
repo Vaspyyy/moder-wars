@@ -142,7 +142,8 @@ func show_saves(info: Dictionary) -> void:
 	top.add_theme_constant_override("separation", 16)
 	var heading := _column(6)
 	heading.size_flags_horizontal = SIZE_EXPAND_FILL
-	heading.add_child(_kicker("PAUSED  ·  %s  ·  %s" % [String(info["name"]).to_upper(),
+	var who := "OBSERVER" if info.get("observer", false) else String(info["name"]).to_upper()
+	heading.add_child(_kicker("PAUSED  ·  %s  ·  %s" % [who,
 		String(info["scenario"]).to_upper()]))
 	heading.add_child(Style.label("Saves", 34, Style.TEXT, Style.TITLE))
 	top.add_child(heading)
@@ -206,7 +207,8 @@ func show_saves(info: Dictionary) -> void:
 		column.add_child(rows)
 	if String(info.get("message", "")) != "":
 		column.add_child(_wrapped(info["message"], 14, Style.WAR, Style.BODY, SAVES_WIDTH - 60))
-	column.add_child(_wrapped("The saves of the country you lead in this scenario, newest first. "
+	var whose := "observer mode" if info.get("observer", false) else "the country you lead"
+	column.add_child(_wrapped("The saves of %s in this scenario, newest first. " % whose
 		+ "Overwrite and Delete ask once before they replace or remove a save.", 13, Style.MUTED,
 		Style.BODY, SAVES_WIDTH - 60))
 	_end()
