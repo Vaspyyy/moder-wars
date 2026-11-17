@@ -5,8 +5,10 @@
 //! 4.0): the latest observation up to the scenario's start year. It counts
 //! all services and paramilitary forces, so `LAND_SHARE_PERCENT` of it
 //! becomes divisions of `DIVISION_SIZE`. They stand spread along the
-//! country's land borders, or over its cities when it has none. A country
-//! without an observation starts with no divisions.
+//! country's land borders, closer together where the neighbor's army is
+//! bigger (by the square root of its personnel, so a giant does not pull
+//! everyone to one border), or over its cities when it has no land border.
+//! A country without an observation starts with no divisions.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -16,7 +18,7 @@ use serde::Deserialize;
 use serde::de::IgnoredAny;
 
 use crate::economy::DIVISION_SIZE;
-use crate::front::spread;
+use crate::front::spread_by;
 use crate::map::Cell;
 use crate::scenario::Scenario;
 use crate::world::{CountryId, World};
@@ -33,6 +35,9 @@ pub struct Observation {
 
 /// The share of active personnel that serves in land divisions.
 pub const LAND_SHARE_PERCENT: u64 = 60;
+/// A neighbor with fewer (or unknown) personnel counts as this many when
+/// weighing its border.
+pub const MIN_THREAT_PERSONNEL: u64 = 10_000;
 
 #[derive(Debug)]
 pub enum ForcesError {
@@ -143,7 +148,12 @@ pub fn read_observations(
 impl World {
     /// Give every country with known personnel its starting divisions.
     pub fn deploy_forces(&mut self, personnel: &Personnel) {
-        let borders = self.all_borders();
+        // A border cell weighs as much as the biggest army next to it.
+        let threat = |neighbor: CountryId| {
+            let people = personnel.get(&neighbor).map_or(0, |&p| u64::from(p));
+            people.max(MIN_THREAT_PERSONNEL).isqrt()
+        };
+        let borders = self.all_borders(threat);
         for (&country, &people) in personnel {
             if self.country(country).is_none() {
                 continue;
@@ -154,7 +164,10 @@ impl World {
                 continue;
             }
             let places = match borders.get(&country) {
-                Some(cells) if !cells.is_empty() => spread(&self.map, cells, count),
+                Some(cells) if !cells.is_empty() => {
+                    let line: Vec<Cell> = cells.keys().copied().collect();
+                    spread_by(&self.map, &line, count, |c| cells[&c])
+                }
                 _ => self.home_cities(country),
             };
             for i in 0..count {
@@ -167,21 +180,28 @@ impl World {
         }
     }
 
-    /// Every country's land cells touching another country's land, from
-    /// one pass over the map.
-    fn all_borders(&self) -> BTreeMap<CountryId, Vec<Cell>> {
-        let mut borders: BTreeMap<CountryId, Vec<Cell>> = BTreeMap::new();
+    /// Every country's land cells touching another country's land, each
+    /// with the largest `threat` among the neighbors it touches, from one
+    /// pass over the map.
+    fn all_borders(
+        &self,
+        threat: impl Fn(CountryId) -> u64,
+    ) -> BTreeMap<CountryId, BTreeMap<Cell, u64>> {
+        let mut borders: BTreeMap<CountryId, BTreeMap<Cell, u64>> = BTreeMap::new();
         for cell in 0..self.map.len() as Cell {
             let holder = self.control[cell as usize];
-            if holder == 0 || !self.map.is_land(cell) {
+            if holder == 0 {
                 continue;
             }
-            let foreign = self.map.sides(cell).any(|n| {
-                let other = self.control[n as usize];
-                other != 0 && other != holder && self.map.is_land(n)
-            });
-            if foreign {
-                borders.entry(holder).or_default().push(cell);
+            let weight = self
+                .map
+                .sides(cell)
+                .map(|n| self.control[n as usize])
+                .filter(|&other| other != 0 && other != holder)
+                .map(&threat)
+                .max();
+            if let Some(weight) = weight {
+                borders.entry(holder).or_default().insert(cell, weight);
             }
         }
         borders

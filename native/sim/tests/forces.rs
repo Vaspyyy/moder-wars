@@ -11,7 +11,7 @@ mod common;
 use common::country;
 use mw_sim::forces::{self, Personnel};
 use mw_sim::scenario::Scenario;
-use mw_sim::world::{Command, Controller, Order, World};
+use mw_sim::world::{Command, Controller, CountryId, Order, World};
 
 fn personnel() -> &'static Personnel {
     static CELL: std::sync::OnceLock<Personnel> = std::sync::OnceLock::new();
@@ -129,6 +129,55 @@ fn starting_divisions_stand_spread_along_the_borders() {
         .collect();
     assert_eq!(japanese.len(), 16);
     assert!(japanese.iter().all(|d| cities.contains(&d.cell)));
+}
+
+/// How many of `country`'s divisions stand next to land held by any of
+/// `neighbors`.
+fn facing(world: &World, s: &Scenario, country: CountryId, neighbors: &[&str]) -> usize {
+    let ids: Vec<CountryId> = neighbors.iter().map(|n| common::country(s, n)).collect();
+    let width = s.grid.width;
+    world
+        .divisions()
+        .iter()
+        .filter(|d| d.country == country)
+        .filter(|d| {
+            let c = d.cell;
+            [c - 1, c + 1, c - width, c + width]
+                .iter()
+                .any(|&n| ids.contains(&world.control()[n as usize]))
+        })
+        .count()
+}
+
+#[test]
+fn more_divisions_face_bigger_armies() {
+    let s = common::world_2026();
+    let mut world = World::new(s, 1);
+    world.deploy_forces(personnel());
+    // Poland's eastern neighbors field far bigger armies than its southern
+    // ones (Russia 1,454,000 and Ukraine 298,000 against Czechia and
+    // Slovakia's few tens of thousands).
+    let poland = country(s, "Poland");
+    let east = facing(&world, s, poland, &["Russia", "Belarus", "Ukraine"]);
+    let south = facing(&world, s, poland, &["Czechia", "Slovakia"]);
+    assert!(east >= 2 * south.max(1), "east {east}, south {south}");
+    assert!(
+        facing(&world, s, poland, &["Germany"]) > 0,
+        "smaller neighbors still get some"
+    );
+    // Ukraine: mostly facing Russia and Belarus, not its western neighbors.
+    let ukraine = country(s, "Ukraine");
+    let north_east = facing(&world, s, ukraine, &["Russia", "Belarus"]);
+    let west = facing(
+        &world,
+        s,
+        ukraine,
+        &["Poland", "Slovakia", "Hungary", "Romania", "Moldova"],
+    );
+    assert!(
+        north_east >= 2 * west.max(1),
+        "north and east {north_east}, west {west}"
+    );
 }
 
 #[test]
