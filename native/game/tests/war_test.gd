@@ -104,6 +104,31 @@ func _initialize() -> void:
 	check(main.reports.entries.filter(func(e: Array) -> bool:
 		return String(e[0]).begins_with("No army group holds your border with Belarus")).size() == 1,
 		"said once per war")
+
+	# A victory names what the player gains: as Germany, one division takes
+	# Luxembourg's capital.
+	main.free()
+	await start()
+	var germany_led := country("Germany")
+	var luxembourg := country("Luxembourg")
+	main._lead(germany_led, false)
+	main.sim.declare_war(germany_led, luxembourg)
+	main._refresh_sim()
+	var target: Vector2 = main._world_from_lng_lat(6.13, 49.61)
+	var nearest := -1
+	for id in main.markers.countries:
+		if main.markers.countries[id] == germany_led and (nearest < 0
+				or main.markers.positions[id].distance_to(target) < main.markers.positions[nearest].distance_to(target)):
+			nearest = id
+	main.sim.move_divisions(PackedInt64Array([nearest]), 6.13, 49.61)
+	for day in 30:
+		main.sim.run(24)
+		if main.sim.war_record(luxembourg)["capitulated"]:
+			break
+	main._refresh_sim()
+	check(not main.peace_window.visible, "no window for the peace offer the capitulation ended")
+	check(main.event_card.visible and _card_text().contains("Luxembourg capitulated"), "a victory card")
+	check(_card_text().contains("You gain Grevenmacher and Luxembourg."), "naming the regions gained: %s" % _card_text())
 	finish()
 
 

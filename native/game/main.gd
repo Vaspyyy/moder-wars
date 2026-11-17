@@ -783,10 +783,17 @@ func _hold() -> void:
 ## Open the card for the next big report, pausing the game. Cards wait
 ## while the pause menu is open.
 func _show_next_card() -> void:
-	if event_card.visible or peace_window.visible or menu.visible or defeat_screen.visible \
-			or cards.is_empty():
+	if event_card.visible or peace_window.visible or menu.visible or defeat_screen.visible:
 		return
-	card_report = cards.pop_front()
+	# A peace offer that is no longer open (the war ended in the same hour:
+	# the country capitulated or made peace) gets no window.
+	card_report = {}
+	while not cards.is_empty() and card_report.is_empty():
+		var next: Dictionary = cards.pop_front()
+		if next["big"] != "peace_offer" or _offered_peace(int(next["other"])):
+			card_report = next
+	if card_report.is_empty():
+		return
 	var other := scenario.country_name(int(card_report["other"]))
 	var kind := String(card_report["big"])
 	_pause_for_card()
@@ -811,7 +818,29 @@ func _show_next_card() -> void:
 				defeat_screen.show_defeat(player, sim.war_record(player))
 			else:
 				event_card.show_event("VICTORY", "%s capitulated" % other,
-					"It gave up: the war is over, and the regions you hold most of are yours.")
+					_victory_text(int(card_report["other"])))
+
+
+## Whether `other` has an open peace offer to the led country.
+func _offered_peace(other: int) -> bool:
+	return sim.peace_offers().any(func(offer: Dictionary) -> bool:
+		return int(offer["from"]) == other and int(offer["to"]) == player)
+
+
+## What a victory over `enemy` gave the led country: the regions its
+## capitulation handed over to it, by name.
+func _victory_text(enemy: int) -> String:
+	var gained := PackedStringArray()
+	for region in sim.war_record(enemy).get("ceded", []):
+		if int(region["to"]) == player:
+			gained.append(scenario.region_name(int(region["region"])))
+	if gained.is_empty():
+		return ("It gave up and the war is over, but you held most of none of its regions, "
+			+ "so none of them are yours.")
+	var listed := Style.list_and(gained)
+	if gained.size() > 6:
+		listed = ", ".join(gained.slice(0, 6)) + " and %d more" % (gained.size() - 6)
+	return "It gave up and the war is over. You gain %s." % listed
 
 
 func _close_card() -> void:
