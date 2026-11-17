@@ -79,6 +79,7 @@ const EventCard := preload("res://ui/event_card.gd")
 const EconomyWindow := preload("res://ui/economy.gd")
 const PeaceWindow := preload("res://ui/peace.gd")
 const CountryCard := preload("res://ui/country_card.gd")
+const Lines := preload("res://ui/lines.gd")
 
 var scenario := MwScenario.new()
 var sim := MwWorld.new()
@@ -483,6 +484,8 @@ func _refresh_sim() -> void:
 			for point in PackedVector2Array(group[key]):
 				points.append(_world_from_lng_lat(point.x, point.y))
 			group[key] = points
+		# The front steps cell by cell around pockets; draw it smoothed.
+		group["front"] = Lines.smooth(group["front"])
 		markers.groups.append(group)
 	var changes := sim.control_changes()
 	for i in range(0, changes.size(), 3):
