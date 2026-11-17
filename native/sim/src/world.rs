@@ -422,12 +422,11 @@ pub struct World {
     /// (from, to) -> the tick until which an AI `from` does not ask `to`
     /// into a faction again, after `to` said no.
     pub(crate) faction_refused: BTreeMap<(CountryId, CountryId), u64>,
-    /// Each country's land neighbors as of the start of the day
-    /// (`World::refresh_borders`), kept so a loaded game sees what the
-    /// running one saw.
-    pub(crate) borders: BTreeMap<CountryId, Vec<CountryId>>,
-    /// Land changed hands since `borders` was worked out.
-    pub(crate) borders_stale: bool,
+    /// (a, b) -> cell sides where land `a` holds touches land `b` holds,
+    /// kept up to date as cells change hands (`World::refresh_borders`);
+    /// worked out again from the control map when a save loads.
+    #[serde(skip)]
+    pub(crate) border_sides: BTreeMap<(CountryId, CountryId), u32>,
     /// Orders not applied yet, sorted by (tick, country, seq).
     pending: Vec<Queued>,
     next_seq: u64,
@@ -512,8 +511,7 @@ impl World {
             calls: Vec::new(),
             defending: BTreeMap::new(),
             faction_refused: BTreeMap::new(),
-            borders: BTreeMap::new(),
-            borders_stale: true,
+            border_sides: BTreeMap::new(),
             pending: Vec::new(),
             next_seq: 0,
             ceded: BTreeMap::new(),
@@ -531,6 +529,7 @@ impl World {
     /// Give a loaded save its map back.
     pub(crate) fn attach(&mut self, scenario: &Scenario) {
         self.map = Arc::new(MapData::new(scenario));
+        self.refresh_borders();
     }
 
     /// Place a new division at full strength. This is for setting up a game
@@ -761,9 +760,6 @@ impl World {
     /// advance time.
     pub fn step(&mut self) -> Vec<Event> {
         let mut events = Vec::new();
-        if self.borders_stale && self.tick.is_multiple_of(24) {
-            self.refresh_borders();
-        }
         let mut replan = self.apply_due(&mut events);
         if !self.conferences.is_empty() {
             self.run_conferences(&mut events);

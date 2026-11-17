@@ -38,10 +38,11 @@
 //! `World::use_real_factions` sets up NATO and the CSTO as they stood on
 //! the scenario's start date.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
+use crate::map::Cell;
 use crate::scenario::Scenario;
 use crate::support::FULL_SUPPORT;
 use crate::time::Date;
@@ -548,7 +549,8 @@ impl World {
         // One event for all of them, not a declaration each.
         for &ally in &defenders {
             self.open_war(attacker, ally);
-            self.defending.insert((ally, attacker), target);
+            // Peace for a puppet is its overlord's: remember the overlord.
+            self.defending.insert((ally, attacker), head);
         }
         events.push(Event::Defended {
             ally: target,
@@ -726,41 +728,62 @@ impl World {
             .collect();
     }
 
-    /// Every country's land neighbors, worked out from who holds which cell
-    /// with a new world and at the start of a day after land changed hands:
-    /// `bordering` reads them.
+    /// Count every border between countries, cell side by cell side, from
+    /// who holds which cell (a new world, or a loaded one). `set_control`
+    /// keeps the count up to date (`count_border_sides`); `bordering` reads
+    /// it.
     pub(crate) fn refresh_borders(&mut self) {
-        self.borders_stale = false;
-        let size = usize::from(self.countries.last().map_or(0, |c| c.id)) + 1;
-        // Which pairs touch, as a size × size grid of flags.
-        let mut touch = vec![false; size * size];
+        let mut sides: BTreeMap<(CountryId, CountryId), u32> = BTreeMap::new();
         for (cell, &holder) in self.control.iter().enumerate() {
-            if holder == 0 || usize::from(holder) >= size {
+            if holder == 0 {
                 continue;
             }
-            for next in self.map.sides(cell as crate::map::Cell) {
+            for next in self.map.sides(cell as Cell) {
                 let other = self.control[next as usize];
-                if other != 0 && other != holder && usize::from(other) < size {
-                    touch[usize::from(holder) * size + usize::from(other)] = true;
+                if other != 0 && other != holder {
+                    *sides.entry((holder, other)).or_default() += 1;
                 }
             }
         }
-        self.borders.clear();
-        for a in 0..size {
-            let row = &touch[a * size..(a + 1) * size];
-            let near: Vec<CountryId> = (0..size)
-                .filter(|&b| row[b])
-                .map(|b| b as CountryId)
-                .collect();
-            if !near.is_empty() {
-                self.borders.insert(a as CountryId, near);
-            }
-        }
+        self.border_sides = sides;
     }
 
-    /// `country`'s land neighbors as of the start of the day, in id order.
-    pub fn bordering(&self, country: CountryId) -> &[CountryId] {
-        self.borders.get(&country).map_or(&[], Vec::as_slice)
+    /// `cell` goes from `from` to `to`: the border counts around it change.
+    pub(crate) fn count_border_sides(&mut self, cell: Cell, from: CountryId, to: CountryId) {
+        let change = |a: CountryId, b: CountryId, up: bool, sides: &mut BTreeMap<_, u32>| {
+            for key in [(a, b), (b, a)] {
+                if up {
+                    *sides.entry(key).or_default() += 1;
+                } else if let Some(count) = sides.get_mut(&key) {
+                    *count -= 1;
+                    if *count == 0 {
+                        sides.remove(&key);
+                    }
+                }
+            }
+        };
+        let mut sides = std::mem::take(&mut self.border_sides);
+        for next in self.map.sides(cell) {
+            let other = self.control[next as usize];
+            if other == 0 {
+                continue;
+            }
+            if from != 0 && other != from {
+                change(from, other, false, &mut sides);
+            }
+            if to != 0 && other != to {
+                change(to, other, true, &mut sides);
+            }
+        }
+        self.border_sides = sides;
+    }
+
+    /// `country`'s land neighbors now, in id order.
+    pub fn bordering(&self, country: CountryId) -> Vec<CountryId> {
+        self.border_sides
+            .range((country, 0)..=(country, CountryId::MAX))
+            .map(|(&(_, other), _)| other)
+            .collect()
     }
 
     /// The neighbor that threatens `country`: the strongest land neighbor
@@ -841,7 +864,8 @@ impl World {
             return None;
         }
         let threat = self.threat(country, &[])?;
-        let borders = |c: CountryId| self.bordering(country).contains(&c);
+        let near = self.bordering(country);
+        let borders = |c: CountryId| near.contains(&c);
         let faction_power =
             |f: &Faction| f.members.iter().map(|&m| self.family_power(m)).sum::<f64>();
         let best = self
@@ -860,8 +884,7 @@ impl World {
                 faction: faction.id,
             });
         }
-        self.bordering(country)
-            .iter()
+        near.iter()
             .copied()
             .filter(|&n| n != threat && self.can_join(n, country).is_ok())
             .filter(|&n| !self.invite_open(country, n) && !self.was_refused(country, n))

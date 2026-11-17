@@ -759,3 +759,108 @@ fn a_call_or_invitation_that_ran_out_cannot_be_answered() {
     assert_eq!(rejections(&events), vec![Rejection::NoOffer]);
     assert!(world.faction_of(ukraine).is_none());
 }
+
+#[test]
+fn peace_with_a_puppets_overlord_ends_its_defenders_war() {
+    // France leads a faction with Germany, whose puppet is Luxembourg.
+    let s = common::world_2026();
+    let mut world = armed(s, false);
+    world.use_regions(common::regions_2026());
+    let (germany, france, luxembourg, belgium) = (
+        country(s, "Germany"),
+        country(s, "France"),
+        country(s, "Luxembourg"),
+        country(s, "Belgium"),
+    );
+    apply(
+        &mut world,
+        germany,
+        Command::DeclareWar { target: luxembourg },
+    );
+    world.set_war_support(luxembourg, 0).unwrap();
+    for _ in 0..48 {
+        if world.step().contains(&Event::Capitulated {
+            country: luxembourg,
+        }) {
+            break;
+        }
+    }
+    apply(
+        &mut world,
+        germany,
+        Command::MakePuppet { loser: luxembourg },
+    );
+    apply(
+        &mut world,
+        france,
+        Command::InviteToFaction {
+            target: germany,
+            name: String::new(),
+        },
+    );
+    apply(
+        &mut world,
+        germany,
+        Command::AnswerFaction {
+            from: france,
+            accept: true,
+        },
+    );
+    apply(
+        &mut world,
+        belgium,
+        Command::DeclareWar { target: luxembourg },
+    );
+    assert!(
+        world.at_war(france, belgium),
+        "France defends Germany's puppet"
+    );
+    apply(
+        &mut world,
+        belgium,
+        Command::OfferPeace {
+            to: germany,
+            terms: vec![],
+        },
+    );
+    apply(
+        &mut world,
+        germany,
+        Command::AnswerPeace {
+            from: belgium,
+            accept: true,
+        },
+    );
+    for (who, name) in [
+        (germany, "Germany"),
+        (luxembourg, "Luxembourg"),
+        (france, "France"),
+    ] {
+        assert!(
+            !world.at_war(who, belgium),
+            "{name} is at peace with Belgium"
+        );
+    }
+    assert!(
+        world.allied(germany, france),
+        "no separate peace: nobody fights on"
+    );
+}
+
+#[test]
+fn borders_kept_up_to_date_match_a_fresh_count() {
+    // A war moves the borders cell by cell; a loaded game counts them anew.
+    let s = common::world_2026();
+    let mut world = World::new(s, 1);
+    let (germany, france) = (country(s, "Germany"), country(s, "France"));
+    mw_sim::sandbox::border_war(&mut world, germany, france, 24, 12, 10_000).unwrap();
+    for _ in 0..10 * 24 {
+        world.step();
+    }
+    let loaded = save::load(&save::save(&world), s, None).unwrap();
+    assert_eq!(
+        loaded, world,
+        "the counts kept up to date are a fresh count"
+    );
+    assert!(world.bordering(germany).contains(&france));
+}
