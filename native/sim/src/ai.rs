@@ -2,7 +2,11 @@
 //!
 //! Each AI country thinks once a day, at its own hour (countries take
 //! turns, so they never all think in the same tick). At peace it keeps a
-//! peacetime budget. At war it:
+//! peacetime budget, and now and then starts a war: when its people fully
+//! back it (war support at 100%), a daily one-in-`AGGRESSION_DAYS` chance
+//! comes up and fewer than `MAX_WARS` wars are going on anywhere, it
+//! declares war on the land neighbor at peace it outnumbers most, if it is
+//! at least `AGGRESSION_RATIO` times stronger. At war it:
 //!
 //! - switches to a war budget and mobilizes (further once it has lost a
 //!   quarter of its land);
@@ -25,6 +29,7 @@ use crate::division::DivisionId;
 use crate::economy::{Budget, DEFAULT_BUDGET};
 use crate::front::chain;
 use crate::map::Cell;
+use crate::support::FULL_SUPPORT;
 use crate::world::{Command, Controller, CountryId, Event, Order, World};
 
 const WAR_BUDGET: Budget = Budget {
@@ -51,6 +56,15 @@ const ASK_SUPPORT: u16 = 300;
 const FRONT_POINTS: usize = 40;
 /// Looking for a border it does not have is retried this often (days).
 const BORDER_RETRY_DAYS: u64 = 7;
+/// An AI country at peace with a much weaker neighbor attacks it about once
+/// in this many days.
+pub const AGGRESSION_DAYS: u32 = 3650;
+/// How much stronger (in army power) it must be than the neighbor.
+pub const AGGRESSION_RATIO: f64 = 3.0;
+/// No AI starts a war while this many wars are going on anywhere.
+pub const MAX_WARS: usize = 2;
+/// Mixed into the daily dice so they do not follow any other random stream.
+const AGGRESSION_STREAM: u64 = 0xA66E_5510;
 
 impl World {
     /// Let the AI countries whose hour it is think, and apply their orders.
@@ -68,6 +82,9 @@ impl World {
         if due.is_empty() {
             return false;
         }
+        // Each country's orders apply before the next one thinks, so a war
+        // one declares counts against `MAX_WARS` for the next.
+        let mut replan = false;
         for country in due {
             for command in self.think(country) {
                 self.submit(Order {
@@ -77,8 +94,9 @@ impl World {
                 })
                 .expect("orders for the current tick are accepted");
             }
+            replan |= self.apply_due(events);
         }
-        self.apply_due(events)
+        replan
     }
 
     fn think(&self, country: CountryId) -> Vec<Command> {
@@ -116,11 +134,59 @@ impl World {
             });
         }
         if !at_war {
+            if let Some(target) = self.aggression(country, self.aggression_comes_up(country)) {
+                orders.push(Command::DeclareWar { target });
+            }
             return orders;
         }
         self.think_peace(country, &enemies, lost, economy.support, &mut orders);
         self.think_armies(country, &enemies, &mut orders);
         orders
+    }
+
+    /// The war `country` starts today, if any, given whether its daily
+    /// chance came up: only at peace, with its people fully behind it, while
+    /// fewer than `MAX_WARS` wars are going on, against `war_target`.
+    pub(crate) fn aggression(&self, country: CountryId, chance: bool) -> Option<CountryId> {
+        let ready = chance
+            && self.enemies(country).is_empty()
+            && self
+                .economy(country)
+                .is_some_and(|e| e.support == FULL_SUPPORT)
+            && self.wars.len() < MAX_WARS;
+        if ready {
+            self.war_target(country)
+        } else {
+            None
+        }
+    }
+
+    /// The daily one-in-`AGGRESSION_DAYS` chance (`World::aggression_days`),
+    /// from a fork of the world's
+    /// random numbers (it does not advance them).
+    fn aggression_comes_up(&self, country: CountryId) -> bool {
+        let stream = AGGRESSION_STREAM ^ (self.tick() << 16) ^ u64::from(country);
+        self.rng.fork(stream).below(self.aggression_days) == 0
+    }
+
+    /// The neighbor `country` would attack: of its land neighbors at peace,
+    /// the weakest, if `country` is at least `AGGRESSION_RATIO` times
+    /// stronger than it (ties go to the lower id).
+    pub fn war_target(&self, country: CountryId) -> Option<CountryId> {
+        let own = self.power_of(country);
+        self.neighbors(country)
+            .into_iter()
+            .map(|(neighbor, _)| (neighbor, self.power_of(neighbor)))
+            .filter(|&(neighbor, power)| {
+                own >= AGGRESSION_RATIO * power && self.enemies(neighbor).is_empty()
+            })
+            .min_by(|a, b| a.1.total_cmp(&b.1).then(a.0.cmp(&b.0)))
+            .map(|(neighbor, _)| neighbor)
+    }
+
+    /// The fighting power of all of a country's divisions.
+    pub fn army_power(&self, country: CountryId) -> f64 {
+        self.power_of(country)
     }
 
     fn power_of(&self, country: CountryId) -> f64 {
@@ -288,5 +354,121 @@ impl World {
             line.push(end);
         }
         line
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::scenario::{self, Scenario};
+    use std::sync::OnceLock;
+
+    fn scenario() -> &'static Scenario {
+        static CELL: OnceLock<Scenario> = OnceLock::new();
+        CELL.get_or_init(|| {
+            let path = concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../assets/maps/compiled/world-map-2026-v3.mwsc.gz"
+            );
+            scenario::decode_gzip(&std::fs::read(path).unwrap()).unwrap()
+        })
+    }
+
+    fn id(name: &str) -> CountryId {
+        scenario()
+            .countries
+            .iter()
+            .flatten()
+            .find(|c| c.name == name)
+            .unwrap()
+            .id
+    }
+
+    /// Russia with an army, Estonia without: a much weaker neighbor.
+    fn world() -> World {
+        let mut world = World::new(scenario(), 1);
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../assets/data/forces/world-bank.json.gz"
+        );
+        let personnel =
+            crate::forces::read_personnel(&std::fs::read(path).unwrap(), scenario()).unwrap();
+        world.deploy_forces(&personnel);
+        world
+    }
+
+    fn declare(world: &mut World, attacker: CountryId, target: CountryId) {
+        world
+            .submit(Order {
+                tick: world.tick(),
+                country: attacker,
+                command: Command::DeclareWar { target },
+            })
+            .unwrap();
+        world.step();
+    }
+
+    #[test]
+    fn a_war_starts_only_when_the_chance_comes_up() {
+        let world = world();
+        let russia = id("Russia");
+        assert_eq!(world.aggression(russia, false), None);
+        assert_eq!(world.aggression(russia, true), world.war_target(russia));
+        assert!(world.war_target(russia).is_some());
+    }
+
+    #[test]
+    fn no_war_without_full_support() {
+        let mut world = world();
+        let russia = id("Russia");
+        let index = world.index_of(russia).unwrap();
+        world.countries[index].economy.support = FULL_SUPPORT - 1;
+        assert_eq!(world.aggression(russia, true), None);
+    }
+
+    #[test]
+    fn no_new_war_for_a_country_already_at_war() {
+        let mut world = world();
+        let russia = id("Russia");
+        declare(&mut world, russia, id("Ukraine"));
+        // A day of war already cost a little support; give it back, so only
+        // the war itself stands in the way.
+        let index = world.index_of(russia).unwrap();
+        world.countries[index].economy.support = FULL_SUPPORT;
+        assert!(world.war_target(russia).is_some());
+        assert_eq!(world.aggression(russia, true), None);
+    }
+
+    #[test]
+    fn no_new_war_while_enough_are_going_on() {
+        let mut world = world();
+        let russia = id("Russia");
+        declare(&mut world, id("France"), id("Spain"));
+        assert!(
+            world.aggression(russia, true).is_some(),
+            "one war is not enough"
+        );
+        declare(&mut world, id("Brazil"), id("Argentina"));
+        assert_eq!(world.wars.len(), MAX_WARS);
+        assert_eq!(world.aggression(russia, true), None);
+    }
+
+    #[test]
+    fn countries_thinking_in_the_same_hour_respect_the_war_limit() {
+        let mut world = world();
+        world.aggression_days = 1; // every AI at peace attacks if it can
+        declare(&mut world, id("France"), id("Spain"));
+        let ids: Vec<CountryId> = world.countries.iter().map(|c| c.id).collect();
+        for country in ids {
+            world.set_controller(country, Controller::Ai).unwrap();
+        }
+        let mut events = Vec::new();
+        world.run_ai(&mut events);
+        let declared = events
+            .iter()
+            .filter(|e| matches!(e, Event::WarDeclared { .. }))
+            .count();
+        assert_eq!(declared, 1, "only one more war: {events:?}");
+        assert_eq!(world.wars.len(), MAX_WARS);
     }
 }

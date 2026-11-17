@@ -395,3 +395,83 @@ fn a_war_weary_ai_makes_peace() {
         assert!(seen >= 300, "below 30% and still not asking");
     }
 }
+
+/// Every country with its real army, all run by the AI.
+fn ai_world() -> World {
+    let s = common::world_2026();
+    let path = common::repo_root().join("assets/data/forces/world-bank.json.gz");
+    let personnel =
+        mw_sim::forces::read_personnel(&std::fs::read(path).unwrap(), s).expect("force data");
+    let mut world = World::new(s, 1);
+    world.deploy_forces(&personnel);
+    let ids: Vec<CountryId> = world.countries().iter().map(|c| c.id).collect();
+    for id in ids {
+        world.set_controller(id, Controller::Ai).unwrap();
+    }
+    world
+}
+
+#[test]
+fn an_ai_picks_a_much_weaker_neighbor_to_attack() {
+    let s = common::world_2026();
+    let world = ai_world();
+    let russia = country(s, "Russia");
+    let target = world
+        .war_target(russia)
+        .expect("Russia has much weaker neighbors");
+    assert!(
+        world.neighbors(russia).iter().any(|&(c, _)| c == target),
+        "a neighbor"
+    );
+    assert!(
+        world.army_power(russia) >= 3.0 * world.army_power(target),
+        "at least three times weaker"
+    );
+    let weakest = world
+        .neighbors(russia)
+        .iter()
+        .map(|&(c, _)| world.army_power(c))
+        .fold(f64::INFINITY, f64::min);
+    assert_eq!(world.army_power(target), weakest, "the weakest neighbor");
+    // A neighbor already at war is left alone.
+    let mut busy = world.clone();
+    let other = busy
+        .neighbors(target)
+        .into_iter()
+        .map(|(c, _)| c)
+        .find(|&c| c != russia)
+        .expect("the target has another neighbor");
+    busy.submit(mw_sim::world::Order {
+        tick: busy.tick(),
+        country: other,
+        command: Command::DeclareWar { target },
+    })
+    .unwrap();
+    busy.step();
+    assert_ne!(busy.war_target(russia), Some(target));
+    // Mongolia's only neighbors are Russia and China.
+    assert_eq!(world.war_target(country(s, "Mongolia")), None);
+}
+
+#[test]
+fn ai_countries_start_wars_rarely_and_only_on_the_weak() {
+    let mut world = ai_world();
+    let mut started = Vec::new();
+    for _ in 0..240 {
+        let before = world.clone();
+        for event in run(&mut world, 24) {
+            if let Event::WarDeclared { attacker, target } = event {
+                // Judged by the day before: support was full, the target a
+                // much weaker neighbor at peace.
+                let support = before.economy(attacker).unwrap().support;
+                assert_eq!(support, mw_sim::support::FULL_SUPPORT);
+                assert!(before.enemies(target).is_empty(), "the target was at peace");
+                assert!(before.army_power(attacker) >= 3.0 * before.army_power(target));
+                started.push((attacker, target));
+            }
+        }
+        assert!(world.war_count() <= 2, "no more than two wars at once");
+    }
+    assert!(!started.is_empty(), "the world does not stand still");
+    assert!(started.len() <= 12, "but wars are rare: {started:?}");
+}

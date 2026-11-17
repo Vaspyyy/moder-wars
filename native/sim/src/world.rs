@@ -248,6 +248,14 @@ pub struct World {
     /// The region map, given again when a save loads.
     #[serde(skip)]
     pub(crate) regions: Option<Arc<RegionMap>>,
+    /// An AI at peace with a much weaker neighbor attacks it about once in
+    /// this many days (`ai::AGGRESSION_DAYS`; tests set 1 to force it).
+    #[serde(skip, default = "default_aggression_days")]
+    pub(crate) aggression_days: u32,
+}
+
+fn default_aggression_days() -> u32 {
+    crate::ai::AGGRESSION_DAYS
 }
 
 /// Used when a scenario has no start date.
@@ -296,6 +304,7 @@ impl World {
             regions_fingerprint: None,
             map: Arc::new(MapData::new(scenario)),
             regions: None,
+            aggression_days: default_aggression_days(),
         };
         world.count_output();
         world
@@ -409,6 +418,11 @@ impl World {
 
     pub fn at_war(&self, a: CountryId, b: CountryId) -> bool {
         self.wars.contains(&pair(a, b))
+    }
+
+    /// How many wars are going on.
+    pub fn war_count(&self) -> usize {
+        self.wars.len()
     }
 
     /// The countries at war with `country`, in id order.
