@@ -108,8 +108,9 @@ var stroke_points := PackedVector2Array()
 var hovered_id := -1
 var hovered_region := -1
 var dragging := false
-## Shift+drag: the box being drawn to select divisions.
+## Shift+drag: the box being drawn to select divisions, from this corner.
 var boxing := false
+var box_from := Vector2.ZERO
 var select_box := Panel.new()
 var ui_layer := CanvasLayer.new()
 var no_hud := false
@@ -617,13 +618,17 @@ func _select_all_own() -> void:
 ## Add the divisions inside a screen rectangle to the selection (only your
 ## own while you lead a country).
 func _select_in_box(box: Rect2) -> void:
-	markers.selected_group = 0
+	var added := false
 	for id in markers.positions:
 		if player != 0 and markers.countries[id] != player:
 			continue
-		if box.has_point(get_canvas_transform() * markers.positions[id]):
+		if box.has_point(get_canvas_transform() * markers.positions[id]) and not markers.selected.has(id):
 			markers.selected[id] = true
-	_refresh_sim()
+			added = true
+	if added:
+		# Loose divisions now, not one group (an empty box changes nothing).
+		markers.selected_group = 0
+		_refresh_sim()
 
 
 ## Take the selected group's arrow away: it holds its front.
@@ -872,9 +877,9 @@ func _show_help() -> void:
 		"arrow":
 			help.text = "Drawing an arrow: drag from the front into enemy land  ·  Esc cancels"
 		_:
-			help.text = ("Space pause  ·  1-5 speed  ·  click select  ·  right-click move  ·  "
+			help.text = ("Space pause  ·  1-5 speed  ·  click select  ·  Shift+drag box  ·  right-click move  ·  "
 				+ "G group  ·  F front  ·  R arrow  ·  X drop arrow\n"
-				+ "B budget  ·  M mobilize  ·  W war  ·  P peace  ·  Y/N answer  ·  I AI on/off  ·  F5/F9 save/load  ·  Esc clear")
+				+ "B budget  ·  M mobilize  ·  Shift+W war  ·  P peace  ·  Y/N answer  ·  I AI on/off  ·  F5/F9 save/load  ·  Esc clear")
 
 
 ## Click: select a division, or its whole army group. Shift-click adds or
@@ -967,6 +972,25 @@ func _unhandled_input(event: InputEvent) -> void:
 				_zoom_at(1.15, button.position)
 			MOUSE_BUTTON_WHEEL_DOWN:
 				_zoom_at(1.0 / 1.15, button.position)
+			MOUSE_BUTTON_LEFT when pick == null and (boxing or (button.pressed and button.shift_pressed
+					and drawing == "")):
+				# Shift+drag draws a box; a Shift-click without dragging adds or
+				# removes one division. A box ends with its own release, even
+				# if F or R started a drawing meanwhile.
+				if button.pressed:
+					boxing = true
+					box_from = button.position
+					select_box.position = box_from
+					select_box.size = Vector2.ZERO
+				else:
+					boxing = false
+					select_box.visible = false
+					if drawing != "":
+						pass # a drawing started meanwhile keeps its group
+					elif button.position.distance_to(box_from) < CLICK_SLOP:
+						_select_at(button.position, true)
+					else:
+						_select_in_box(Rect2(box_from, Vector2.ZERO).expand(button.position))
 			MOUSE_BUTTON_LEFT when drawing != "":
 				if button.pressed:
 					stroke_points = PackedVector2Array([_lng_lat_at(button.position)])
@@ -974,21 +998,8 @@ func _unhandled_input(event: InputEvent) -> void:
 					markers.stroke_is_arrow = drawing == "arrow"
 				else:
 					_finish_drawing()
-			MOUSE_BUTTON_LEFT when pick == null and (boxing or (button.pressed and button.shift_pressed)):
-				# Shift+drag draws a box; a Shift-click without dragging adds or
-				# removes one division.
-				if button.pressed:
-					boxing = true
-					press_at = button.position
-					select_box.position = press_at
-					select_box.size = Vector2.ZERO
-				else:
-					boxing = false
-					select_box.visible = false
-					if button.position.distance_to(press_at) < CLICK_SLOP:
-						_select_at(button.position, true)
-					else:
-						_select_in_box(Rect2(press_at, Vector2.ZERO).expand(button.position))
+			MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_RIGHT when boxing:
+				pass # no panning or orders while a box is drawn
 			MOUSE_BUTTON_LEFT, MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_RIGHT:
 				dragging = button.pressed
 				if button.pressed:
@@ -1007,7 +1018,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				markers.stroke.append(_screen_to_world(motion.position))
 				markers.queue_redraw()
 		elif boxing:
-			var box := Rect2(press_at, Vector2.ZERO).expand(motion.position)
+			var box := Rect2(box_from, Vector2.ZERO).expand(motion.position)
 			select_box.position = box.position
 			select_box.size = box.size
 			select_box.visible = box.size.length() >= CLICK_SLOP
@@ -1046,7 +1057,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif key >= KEY_1 and key <= KEY_5:
 			sim.set_speed(key - KEY_0)
 			_refresh_sim()
-		elif key == KEY_A and (event as InputEventKey).ctrl_pressed and player != 0:
+		elif key == KEY_A and (event as InputEventKey).ctrl_pressed and player != 0 and drawing == "":
 			_select_all_own()
 		elif key == KEY_G and not markers.selected.is_empty():
 			var group := int(sim.create_group(PackedInt64Array(markers.selected.keys())))
@@ -1116,6 +1127,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			_refresh_sim()
 		elif key == KEY_X and markers.selected_group != 0:
 			_hold()
+		elif key == KEY_ESCAPE and boxing:
+			boxing = false
+			select_box.visible = false
 		elif key == KEY_ESCAPE and economy_window != null and economy_window.visible:
 			_show_economy(false)
 		elif key == KEY_ESCAPE and country_card != null and country_card.card.visible:

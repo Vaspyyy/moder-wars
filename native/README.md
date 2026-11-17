@@ -58,7 +58,7 @@ That puts 24 German and 12 French divisions on their border, each side as one ar
 | I | hand the country to the AI, or take it back |
 | F5 or F9 | quick save, or load the quick save (one slot, in Godot's user data folder) |
 | Esc | stop drawing, or clear the selection |
-| drag, WASD or arrows | pan |
+| drag, WASD or arrows | pan (WASD waits while Shift or Ctrl is held, for Shift+W and Ctrl+A) |
 | wheel, + or - | zoom |
 
 A marker is a box in the country's colour with a bar for the soldiers left. An orange frame means it is fighting, a red corner means it is cut off from supply. A front is a thick line in the group's colour (gold when selected), an arrow is orange.
