@@ -85,6 +85,7 @@ const PauseMenu := preload("res://ui/pause_menu.gd")
 const DefeatScreen := preload("res://ui/defeat.gd")
 const Lines := preload("res://ui/lines.gd")
 const SaveSlots := preload("res://saves.gd")
+const Scenarios := preload("res://scenarios.gd")
 
 ## New game starts the scene again with these options instead of the
 ## command line's (only the scenario), so it opens on the pick screen.
@@ -494,7 +495,8 @@ func _lead(id: int, to_capital: bool) -> void:
 
 
 ## Start the simulation, with the sandbox war from --war if given. Every
-## country gets its real army, except in a --war sandbox without --forces.
+## country gets its real army and the scenario's wars begin, except in a
+## --war sandbox without --forces.
 func _start_sim(args: Dictionary) -> void:
 	sim.start(scenario, int(args.get("seed", "1")))
 	if args.has("forces") or not args.has("war"):
@@ -505,6 +507,12 @@ func _start_sim(args: Dictionary) -> void:
 		else:
 			# License requirement (CC BY 4.0): the force data credit stays visible.
 			credit.text += "  ·  Forces: World Bank, IISS (CC BY 4.0)"
+		# The wars already going on when the scenario starts.
+		for war in Scenarios.wars(scenario_name):
+			var attacker := scenario.country_id(war[0])
+			var defender := scenario.country_id(war[1])
+			if attacker == 0 or defender == 0 or not sim.declare_war(attacker, defender):
+				push_error("%s: cannot start the war of %s on %s" % [scenario_name, war[0], war[1]])
 	if args.has("war"):
 		var war: PackedStringArray = String(args["war"]).split(",")
 		var sides: Array[int] = []
