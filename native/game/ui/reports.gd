@@ -13,6 +13,7 @@ var list := VBoxContainer.new()
 
 
 func setup() -> void:
+	Style.solid(self)
 	set_anchors_preset(PRESET_TOP_RIGHT)
 	grow_horizontal = GROW_DIRECTION_BEGIN
 	position = Vector2(-16, 76)

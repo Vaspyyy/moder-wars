@@ -7,6 +7,7 @@ use godot::classes::IRefCounted;
 use godot::prelude::*;
 use mw_sim::army::ArmyGroupId;
 use mw_sim::division::{DivisionId, Loss};
+use mw_sim::economy;
 use mw_sim::forces;
 use mw_sim::sandbox::{self, SandboxError};
 use mw_sim::scenario::Scenario;
@@ -66,6 +67,31 @@ impl MwWorld {
     const IN_BATTLE: i32 = IN_BATTLE as i32;
     #[constant]
     const MOVING: i32 = MOVING as i32;
+    /// Raising a division: thousands of dollars and soldiers.
+    #[constant]
+    const DIVISION_COST_K: i32 = economy::DIVISION_COST_K as i32;
+    #[constant]
+    const DIVISION_SIZE: i32 = economy::DIVISION_SIZE as i32;
+    /// The most divisions a country raises in a day.
+    #[constant]
+    const RECRUITS_PER_DAY: i32 = economy::RECRUITS_PER_DAY as i32;
+
+    /// The mobilization levels, peacetime first: `serve_per_mille` (share
+    /// of the people who may serve) and `output_loss_percent` (what it
+    /// costs in output).
+    #[func]
+    fn mobilization_levels() -> Array<VarDictionary> {
+        economy::SERVE_PER_MILLE
+            .iter()
+            .zip(economy::OUTPUT_LOSS_PERCENT)
+            .map(|(&serve, loss)| {
+                let mut entry = VarDictionary::new();
+                entry.set("serve_per_mille", serve as i64);
+                entry.set("output_loss_percent", loss);
+                entry
+            })
+            .collect()
+    }
 
     /// Start a new game on a loaded scenario. Returns false if it has none.
     /// With the scenario's regions loaded, peace terms count whole regions.
@@ -353,11 +379,13 @@ impl MwWorld {
         })
     }
 
-    /// A country's economy as a dictionary: `income_k` (thousands of
-    /// dollars a day after mobilization), `recruiting`, `equipment` and
-    /// `home_front` (budget percent), `mobilization` (0 to 3), `manpower`,
-    /// `recruit_fund_k`, `equipment_k`, `support` (war support, per mille).
-    /// Empty for an unknown country.
+    /// A country's economy as a dictionary: `output_k` (thousands of
+    /// dollars a day the land it holds produces) and `income_k` (after
+    /// mobilization), `recruiting`, `equipment` and `home_front` (budget
+    /// percent), `mobilization` (0 to 3), `manpower` (people it may still
+    /// draft), `may_serve` (people who may serve at this level, drafted or
+    /// not), `recruit_fund_k`, `equipment_k`, `support` (war support, per
+    /// mille). Empty for an unknown country.
     #[func]
     fn economy(&self, country: i32) -> VarDictionary {
         let mut entry = VarDictionary::new();
@@ -368,7 +396,9 @@ impl MwWorld {
         else {
             return entry;
         };
+        entry.set("output_k", e.output_k);
         entry.set("income_k", e.income_k());
+        entry.set("may_serve", e.may_serve() as i64);
         entry.set("recruiting", i64::from(e.budget.recruiting));
         entry.set("equipment", i64::from(e.budget.equipment));
         entry.set("home_front", i64::from(e.home_front()));

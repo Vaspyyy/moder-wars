@@ -6,6 +6,8 @@ extends PanelContainer
 
 signal pause_pressed
 signal speed_pressed(speed: int)
+## Income or people left to draft was clicked: open the economy window.
+signal economy_pressed
 
 const Style := preload("res://ui/style.gd")
 
@@ -22,6 +24,7 @@ var values := {}
 
 
 func setup() -> void:
+	Style.solid(self)
 	set_anchors_preset(PRESET_TOP_WIDE)
 	custom_minimum_size.y = 60
 	var style := Style.box(Style.PANEL_SOLID, Color.TRANSPARENT, 0, 20, 0)
@@ -77,6 +80,7 @@ func setup() -> void:
 		var stat := VBoxContainer.new()
 		stat.alignment = BoxContainer.ALIGNMENT_CENTER
 		stat.add_theme_constant_override("separation", -1)
+		stat.mouse_filter = MOUSE_FILTER_IGNORE
 		var caption := Style.label(key, 12, Style.MUTED)
 		caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		stat.add_child(caption)
@@ -84,7 +88,19 @@ func setup() -> void:
 		value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		stat.add_child(value)
 		values[key] = value
-		right.add_child(stat)
+		if key == "Income" or key == "Can draft":
+			# These two open the economy window.
+			var button := Style.ToolButton.new()
+			button.flat = true
+			button.padding = Vector2(8, 4)
+			button.custom_minimum_size.y = 0
+			button.size_flags_vertical = SIZE_SHRINK_CENTER
+			button.tooltip_text = "Budget and mobilization (B)"
+			button.pressed.connect(func() -> void: economy_pressed.emit())
+			button.add_child(stat)
+			right.add_child(button)
+		else:
+			right.add_child(stat)
 	row.add_child(right)
 
 

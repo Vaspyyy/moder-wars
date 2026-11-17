@@ -18,8 +18,10 @@ extends Node2D
 ##
 ## The stand-in controls below act for the country you lead, or in the viewer
 ## for the selected division's country.
-## Economy (stand-in controls): B cycles the budget (peace, war, all-out) and
-## M the mobilization level.
+## Economy: while leading a country, B or M (or a click on income or people
+## left to draft in the top bar) opens the budget and mobilization window; in
+## the viewer B cycles the budget (peace, war, all-out) and M the
+## mobilization level.
 ## AI: I hands the country to the AI or takes it back (with --ai both sides
 ## of the sandbox war start on the AI).
 ## War and peace (stand-in controls): Shift+W declares war on the country
@@ -72,6 +74,7 @@ const Reports := preload("res://ui/reports.gd")
 const CommandBar := preload("res://ui/command_bar.gd")
 const MapKey := preload("res://ui/map_key.gd")
 const EventCard := preload("res://ui/event_card.gd")
+const EconomyWindow := preload("res://ui/economy.gd")
 
 var scenario := MwScenario.new()
 var sim := MwWorld.new()
@@ -114,6 +117,7 @@ var army_list: PanelContainer = null
 var reports: PanelContainer = null
 var command_bar: PanelContainer = null
 var event_card: Control = null
+var economy_window: PanelContainer = null
 ## Big reports waiting for their card, and the one shown.
 var cards: Array = []
 var card_report: Dictionary = {}
@@ -306,6 +310,7 @@ func _lead(id: int, to_capital: bool) -> void:
 	top_bar.speed_pressed.connect(func(speed: int) -> void:
 		sim.set_speed(speed)
 		_refresh_sim())
+	top_bar.economy_pressed.connect(func() -> void: _show_economy(not economy_window.visible))
 	top_bar.visible = not no_hud
 	ui_layer.add_child(top_bar)
 	army_list = ArmyGroups.new()
@@ -324,6 +329,19 @@ func _lead(id: int, to_capital: bool) -> void:
 	for panel in [army_list, reports, command_bar, key]:
 		panel.visible = not no_hud
 		ui_layer.add_child(panel)
+	economy_window = EconomyWindow.new()
+	economy_window.scenario = scenario
+	economy_window.palette = palette
+	economy_window.setup()
+	economy_window.visible = false
+	economy_window.budget_changed.connect(func(recruiting: int, equipment: int) -> void:
+		sim.set_budget(player, recruiting, equipment)
+		_refresh_sim())
+	economy_window.mobilization_changed.connect(func(level: int) -> void:
+		sim.set_mobilization(player, level)
+		_refresh_sim())
+	economy_window.close_pressed.connect(func() -> void: _show_economy(false))
+	ui_layer.add_child(economy_window)
 	event_card = EventCard.new()
 	event_card.setup()
 	event_card.visible = false
@@ -449,10 +467,20 @@ func _refresh_sim() -> void:
 		if report["big"] != "":
 			cards.append(report)
 	_show_next_card()
-	top_bar.show_state(player, sim.economy(player), sim.enemies(player), divisions,
+	var economy: Dictionary = sim.economy(player)
+	top_bar.show_state(player, economy, sim.enemies(player), divisions,
 		sim.time_text(), sim.is_paused(), sim.speed())
+	if economy_window.visible:
+		economy_window.show_economy(player, economy, sim.is_ai(player))
 	army_list.show_groups(_own_groups(), divisions, markers.selected_group)
 	_show_command_bar()
+
+
+## Open or close the budget and mobilization window.
+func _show_economy(open: bool) -> void:
+	economy_window.visible = open and not no_hud
+	if economy_window.visible:
+		economy_window.show_economy(player, sim.economy(player), sim.is_ai(player))
 
 
 ## The game date, "2026-10-25".
@@ -819,6 +847,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_start_drawing("front")
 		elif key == KEY_R:
 			_start_drawing("arrow")
+		elif (key == KEY_B or key == KEY_M) and economy_window != null:
+			_show_economy(not economy_window.visible)
 		elif key == KEY_B and _acting_country() != 0:
 			var country := _acting_country()
 			var now: Dictionary = sim.economy(country)
@@ -875,6 +905,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_refresh_sim()
 		elif key == KEY_X and markers.selected_group != 0:
 			_hold()
+		elif key == KEY_ESCAPE and economy_window != null and economy_window.visible:
+			_show_economy(false)
 		elif key == KEY_ESCAPE:
 			if drawing != "":
 				drawing = ""

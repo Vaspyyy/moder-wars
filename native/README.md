@@ -22,9 +22,11 @@ native/play.sh --watch    # same, then follow main: pull, rebuild and restart wh
 
 Other options go to the game, e.g. `native/play.sh --scenario=ukraine-2023-v3 --view=34,48.5,9`. Close the game window or press Ctrl+C to stop. `--watch` checks every 30 seconds, only fast-forwards, and keeps the old game running if a build fails.
 
-The game opens on the world, paused, with every country's real army on its borders. Click a country to see its card (population, economy, forces, borders), then press "Lead" to take it: the camera moves to its capital, the bar along the top shows its date, speed, income, people left to draft, divisions and war support, and the AI runs every other country with the same orders you have. `--lead=Poland` skips the pick screen. While you lead a country, only its divisions take your orders, and the stand-in keys below (B, M, Shift+W, P, Y/N, I) act for it.
+The game opens on the world, paused, with every country's real army on its borders. Click a country to see its card (population, economy, forces, borders), then press "Lead" to take it: the camera moves to its capital, the bar along the top shows its date, speed, income, people left to draft, divisions and war support, and the AI runs every other country with the same orders you have. `--lead=Poland` skips the pick screen. While you lead a country, only its divisions take your orders, and the stand-in keys below (Shift+W, P, Y/N, I) act for it.
 
 While you lead a country, your army groups are listed on the left (click one to select it and look at it), the reports on the right tell what happened to you and your enemies (wars and peace anywhere too), and with divisions selected a bar at the bottom offers Draw front (F), Draw arrow (R) and Hold (X). Big events pause the game and open a card: a war declared on you, a peace offer (Accept or Refuse, or Y and N), a peace you made, a capitulation. Closing the last card lets the game run again if it was running. The key in the bottom right corner explains the marks on the map; the corner on the left names the region under the mouse.
+
+Clicking Income or Can draft in the top bar (or pressing B or M) opens the budget and mobilization window: what your land produces and what mobilization costs, sliders for the recruiting and equipment shares (the home front gets the rest, so the three always add up to 100%), what that buys ("about 2 new divisions a day"), the four mobilization levels and the people you can still draft. Changes apply at once, even while paused; Esc closes it. While the AI runs your country (I) the window only shows what it chose.
 
 To watch divisions fight, start a sandbox war between two neighbours (names as the scenario spells them); `--war` opens the viewer, where any country's divisions take orders, unless `--lead` is given too:
 
@@ -45,8 +47,7 @@ That puts 24 German and 12 French divisions on their border, each side as one ar
 | R, then drag | draw the selected group's arrow into enemy land |
 | X | take the selected group's arrow away |
 | right-click | send the selected divisions there directly (takes them out of their group) |
-| B | cycle the budget: peace, war, all-out (your country, or in the viewer the selected division's) |
-| M | cycle its mobilization: peacetime, partial, general, total |
+| B or M | open or close the budget and mobilization window (in the viewer: B cycles the selected division's country's budget, peace, war, all-out, and M its mobilization) |
 | Shift+W | declare war on the country under the mouse (W alone pans) |
 | P | offer peace to all enemies |
 | Y or N | accept or refuse the newest peace offer (made to you, or in the viewer to anyone) |
