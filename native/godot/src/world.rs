@@ -75,6 +75,9 @@ impl MwWorld {
     /// The most divisions a country raises in a day.
     #[constant]
     const RECRUITS_PER_DAY: i32 = economy::RECRUITS_PER_DAY as i32;
+    /// Days a peace offer stays open.
+    #[constant]
+    const OFFER_DAYS: i32 = mw_sim::diplomacy::OFFER_DAYS as i32;
 
     /// The mobilization levels, peacetime first: `serve_per_mille` (share
     /// of the people who may serve) and `output_loss_percent` (what it
@@ -381,11 +384,13 @@ impl MwWorld {
 
     /// A country's economy as a dictionary: `output_k` (thousands of
     /// dollars a day the land it holds produces) and `income_k` (after
-    /// mobilization), `recruiting`, `equipment` and `home_front` (budget
-    /// percent), `mobilization` (0 to 3), `manpower` (people it may still
-    /// draft), `may_serve` (people who may serve at this level, drafted or
-    /// not), `recruit_fund_k`, `equipment_k`, `support` (war support, per
-    /// mille). Empty for an unknown country.
+    /// mobilization), `home_total_k` and `home_k` (what its own land
+    /// produces, and the part it still holds), `recruiting`, `equipment`
+    /// and `home_front` (budget percent), `mobilization` (0 to 3),
+    /// `manpower` (people it may still draft), `may_serve` (people who may
+    /// serve at this level, drafted or not), `recruit_fund_k`,
+    /// `equipment_k`, `support` (war support, per mille). Empty for an
+    /// unknown country.
     #[func]
     fn economy(&self, country: i32) -> VarDictionary {
         let mut entry = VarDictionary::new();
@@ -398,6 +403,8 @@ impl MwWorld {
         };
         entry.set("output_k", e.output_k);
         entry.set("income_k", e.income_k());
+        entry.set("home_k", e.home_k);
+        entry.set("home_total_k", e.home_total_k);
         entry.set("may_serve", e.may_serve() as i64);
         entry.set("recruiting", i64::from(e.budget.recruiting));
         entry.set("equipment", i64::from(e.budget.equipment));
@@ -550,6 +557,58 @@ impl MwWorld {
         entry.set("neighbors", &neighbors);
         entry.set("enemies", &self.enemies(country));
         entry
+    }
+
+    /// A country's divisions and soldiers in them, as a dictionary:
+    /// `divisions`, `personnel`.
+    #[func]
+    fn army(&self, country: i32) -> VarDictionary {
+        let mut entry = VarDictionary::new();
+        let (Some(world), Ok(country)) = (self.world.as_ref(), u16::try_from(country)) else {
+            return entry;
+        };
+        let own = || world.divisions().iter().filter(|d| d.country == country);
+        entry.set("divisions", own().count() as i64);
+        entry.set(
+            "personnel",
+            own().map(|d| i64::from(d.personnel)).sum::<i64>(),
+        );
+        entry
+    }
+
+    /// The regions a peace between `a` and `b` would hand over by law: one
+    /// dictionary each with `region` (region number, as `region_name`
+    /// takes it), `from` and `to`.
+    #[func]
+    fn peace_terms(&self, a: i32, b: i32) -> Array<VarDictionary> {
+        let (Some(world), Ok(a), Ok(b)) = (self.world.as_ref(), u16::try_from(a), u16::try_from(b))
+        else {
+            return Array::new();
+        };
+        world
+            .peace_terms(a, b)
+            .iter()
+            .map(|c| {
+                let mut entry = VarDictionary::new();
+                entry.set("region", c.region as i64 + 1);
+                entry.set("from", i64::from(c.from));
+                entry.set("to", i64::from(c.to));
+                entry
+            })
+            .collect()
+    }
+
+    /// `from` offers peace to `to`. Returns whether the offer was made.
+    #[func]
+    fn offer_peace_to(&mut self, from: i32, to: i32) -> bool {
+        let (Ok(from), Ok(to)) = (u16::try_from(from), u16::try_from(to)) else {
+            return false;
+        };
+        self.order(from, Command::OfferPeace { to })
+            && self
+                .apply_now()
+                .iter()
+                .any(|e| matches!(e, Event::PeaceOffered { .. }))
     }
 
     /// The countries at war with `country`.

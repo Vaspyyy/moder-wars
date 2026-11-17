@@ -9,6 +9,7 @@ mod common;
 
 use common::{cell, country, run};
 use mw_sim::save::{self, SaveError};
+use mw_sim::terms::Cession;
 use mw_sim::world::{Command, CountryId, Event, Order, World};
 
 fn order(world: &mut World, country: CountryId, command: Command) {
@@ -110,6 +111,41 @@ fn a_region_the_other_side_holds_most_of_changes_hands_by_law() {
     let oblast = cells_of(region("UKR-321"));
     assert_eq!(held_by(&world, &oblast, poland), 0, "the oblast goes back");
     assert!(oblast.iter().all(|&c| world.owner_by_law(c) == ukraine));
+}
+
+#[test]
+fn the_terms_can_be_read_before_the_peace() {
+    let Kyiv {
+        mut world,
+        poland,
+        ukraine,
+    } = polish_kyiv();
+    let kyiv = Cession {
+        region: region("UKR-4826"),
+        from: ukraine,
+        to: poland,
+    };
+    assert_eq!(world.peace_terms(ukraine, poland), vec![kyiv]);
+    assert_eq!(
+        world.peace_terms(poland, ukraine),
+        vec![kyiv],
+        "either way round"
+    );
+    make_peace(&mut world, ukraine, poland);
+    assert!(
+        cells_of(kyiv.region)
+            .iter()
+            .all(|&c| world.owner_by_law(c) == poland),
+        "the peace did what the terms said"
+    );
+    assert!(
+        world.peace_terms(ukraine, poland).is_empty(),
+        "nothing left to settle"
+    );
+
+    let s = common::world_2026();
+    let without_regions = World::new(s, 1);
+    assert!(without_regions.peace_terms(ukraine, poland).is_empty());
 }
 
 #[test]

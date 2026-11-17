@@ -107,6 +107,16 @@ impl MwScenario {
         self.region(value).map_or(0, |r| i32::from(r.home))
     }
 
+    /// Where a region's label goes, as (longitude, latitude); NAN for an
+    /// unknown region number.
+    #[func]
+    fn region_anchor(&self, value: i32) -> Vector2 {
+        self.region(value)
+            .map_or(Vector2::new(f32::NAN, f32::NAN), |r| {
+                Vector2::new(r.anchor[0] as f32, r.anchor[1] as f32)
+            })
+    }
+
     #[func]
     fn region_count(&self) -> i32 {
         self.regions
