@@ -51,29 +51,30 @@ fn the_record_counts_soldiers_lost_and_put_out_of_action() {
     let events = run(&mut world, 14 * 24);
     for side in [germany, france] {
         let record = world.war_record(side).unwrap();
-        assert!(record.lost > 0, "{side} lost nobody");
+        assert!(record.total.lost > 0, "{side} lost nobody");
         assert_eq!(
-            record.lost,
+            record.total.lost,
             gone(&world, side),
             "{side}: every soldier lost is counted"
         );
+        assert_eq!(record.war, record.total, "{side}: all of it in this war");
         assert!(record.capitulation.is_none());
         let recruited = events
             .iter()
             .filter(|e| matches!(e, Event::DivisionRecruited { country, .. } if *country == side))
             .count();
         assert_eq!(
-            record.raised as usize, recruited,
+            record.total.raised as usize, recruited,
             "{side}: divisions raised"
         );
     }
     assert!(
-        world.war_record(germany).unwrap().raised > 0,
+        world.war_record(germany).unwrap().total.raised > 0,
         "Germany recruited"
     );
     let (g, f) = (
-        world.war_record(germany).unwrap(),
-        world.war_record(france).unwrap(),
+        world.war_record(germany).unwrap().total,
+        world.war_record(france).unwrap().total,
     );
     assert!(
         g.inflicted > 0 && f.inflicted > 0,
@@ -95,7 +96,7 @@ fn the_record_counts_soldiers_lost_and_put_out_of_action() {
     );
     // A country at peace has a clean record.
     let spain = world.war_record(country(s, "Spain")).unwrap();
-    assert_eq!((spain.raised, spain.lost, spain.inflicted), (0, 0, 0));
+    assert_eq!(spain.total, Default::default());
     // The record survives a save.
     let loaded = save::load(&save::save(&world), s, None).unwrap();
     assert_eq!(loaded.war_record(germany), world.war_record(germany));
@@ -164,6 +165,7 @@ fn a_capitulation_is_remembered_with_its_enemies_and_the_war_it_ended() {
     let record = world.war_record(luxembourg).unwrap();
     let mut enemies = vec![france, germany];
     enemies.sort_unstable();
+    let lost = world.lost_regions(luxembourg);
     assert_eq!(
         record.capitulation,
         Some(Capitulation {
@@ -171,18 +173,20 @@ fn a_capitulation_is_remembered_with_its_enemies_and_the_war_it_ended() {
             enemies,
             war_began: began,
             support_collapsed: false,
+            cost: record.war,
+            // Its first loss: what it lost in the game, it lost now.
+            ceded: lost.iter().map(|c| (c.region as u16, c.to)).collect(),
         })
     );
     // The divisions that laid down their arms at the end are not losses
     // (it may have lost a few more in battle that same hour).
     assert!(surrendering > 0, "its division was still there");
-    let laid_down = gone(&world, luxembourg) - record.lost;
+    let laid_down = gone(&world, luxembourg) - record.total.lost;
     assert!(
         laid_down > 0 && laid_down <= surrendering,
         "{laid_down} laid down their arms, {surrendering} were left"
     );
     // Germany took the capital's region; it is German by law now.
-    let lost = world.lost_regions(luxembourg);
     assert!(!lost.is_empty(), "regions handed over");
     for cession in &lost {
         assert_eq!(cession.from, luxembourg);
@@ -242,4 +246,37 @@ fn a_collapse_at_home_is_remembered_as_one() {
         1.0,
         "nothing taken without regions"
     );
+}
+
+#[test]
+fn a_war_counts_from_when_the_country_went_to_war() {
+    // Germany raises divisions in peacetime, then goes to war with France:
+    // the war's tally starts at the declaration, the game's does not.
+    let s = common::world_2026();
+    let (germany, france) = (country(s, "Germany"), country(s, "France"));
+    let mut world = World::new(s, 1);
+    order(&mut world, germany, Command::SetMobilization { level: 2 });
+    order(
+        &mut world,
+        germany,
+        Command::SetBudget {
+            recruiting: 60,
+            equipment: 20,
+        },
+    );
+    run(&mut world, 10 * 24);
+    let at_peace = world.war_record(germany).unwrap().total.raised;
+    assert!(at_peace > 0, "Germany recruited in peacetime");
+    order(&mut world, germany, Command::DeclareWar { target: france });
+    let events = run(&mut world, 5 * 24);
+    let record = world.war_record(germany).unwrap();
+    let in_war = events
+        .iter()
+        .filter(|e| matches!(e, Event::DivisionRecruited { country, .. } if *country == germany))
+        .count();
+    assert_eq!(
+        record.war.raised as usize, in_war,
+        "only this war's recruits"
+    );
+    assert_eq!(record.total.raised, at_peace + record.war.raised);
 }

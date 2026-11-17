@@ -88,6 +88,7 @@ func _initialize() -> void:
 	check(not main.defeat_screen.visible and main.menu.visible and main.menu.view == "saves",
 		"Load your save opens the saves")
 	check(main.sim.is_paused(), "still paused")
+	check(main.paused_by_menu and not main.paused_by_card, "the menu now holds the pause")
 	key(KEY_ESCAPE)
 	key(KEY_ESCAPE)
 	check(not main.menu.visible and not main.sim.is_paused(),
@@ -109,6 +110,11 @@ func _initialize() -> void:
 	check(main.menu.visible and main.menu.view == "leave", "closing the window asks over it")
 	key(KEY_F9)
 	check(not main.defeat_screen.visible and not main.menu.visible, "a load closes both")
+	main.cards.append({"big": "capitulated", "other": luxembourg})
+	main._refresh_sim()
+	check(main.defeat_screen.visible, "the screen again")
+	key(KEY_F9)
+	check(not main.defeat_screen.visible and main.sim.is_paused(), "F9 on the screen loads, paused")
 	check(await _lose(), "a fourth defeat")
 	main._refresh_sim()
 	_press("NewGame")

@@ -1,6 +1,8 @@
 //! What a country's wars cost it, for the end-of-war screen: divisions
-//! raised, soldiers lost, enemy soldiers its divisions put out of action,
-//! and its last capitulation.
+//! raised, soldiers lost and enemy soldiers its divisions put out of
+//! action, over the whole game and since it last went from peace to war,
+//! and its last capitulation with what that war cost and the regions it
+//! handed over.
 
 use serde::{Deserialize, Serialize};
 
@@ -8,7 +10,18 @@ use crate::world::CountryId;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WarRecord {
-    /// Divisions recruited since the game began (not the starting army).
+    /// Since the game began.
+    pub total: Tally,
+    /// Since the country last went from peace to war (its wars that
+    /// overlap count as one). Starts again at its next war after a peace.
+    pub war: Tally,
+    /// The last time the country capitulated.
+    pub capitulation: Option<Capitulation>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Tally {
+    /// Divisions recruited (not the starting army).
     pub raised: u32,
     /// Soldiers lost: put out of action in battle, worn away while cut off
     /// from supply, left in divisions too weak to fight on, or in divisions
@@ -19,8 +32,6 @@ pub struct WarRecord {
     /// surrender. When several countries attack together, each gets a share
     /// by its part of the attack.
     pub inflicted: u64,
-    /// The last time the country capitulated.
-    pub capitulation: Option<Capitulation>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -34,6 +45,11 @@ pub struct Capitulation {
     /// Whether war support at home ran out (else it lost its capital and
     /// most of its land).
     pub support_collapsed: bool,
+    /// What those wars cost it (`WarRecord::war` when it gave up).
+    pub cost: Tally,
+    /// The regions this capitulation handed over by law: (region index, new
+    /// owner), in region order.
+    pub ceded: Vec<(u16, CountryId)>,
 }
 
 /// Split `total` among countries by `weights` (in order), whole numbers

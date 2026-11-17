@@ -160,16 +160,24 @@ impl MwScenario {
     }
 
     /// The name of a country's capital (its most populous capital city, the
-    /// one the simulation counts), or an empty string for none.
+    /// one the simulation counts: on a tie, the one on the lowest cell), or
+    /// an empty string for none.
     #[func]
     fn country_capital_name(&self, id: i32) -> GString {
         self.scenario
             .as_ref()
             .and_then(|s| {
+                // The simulation's map keeps whole people.
+                let key = |c: &mw_sim::scenario::City| {
+                    (
+                        c.pop.max(0.0) as u64,
+                        std::cmp::Reverse(s.grid.cell_at(c.lng, c.lat)),
+                    )
+                };
                 s.cities
                     .iter()
                     .filter(|c| i32::from(c.owner_id) == id && c.is_capital)
-                    .max_by(|a, b| a.pop.total_cmp(&b.pop))
+                    .max_by_key(|c| key(c))
             })
             .map(|c| GString::from(&c.name))
             .unwrap_or_default()

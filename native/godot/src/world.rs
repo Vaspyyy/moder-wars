@@ -590,15 +590,18 @@ impl MwWorld {
     }
 
     /// What `country`'s wars cost it, for the end-of-war screen, as a
-    /// dictionary: `raised` (divisions recruited), `lost` (soldiers lost),
-    /// `inflicted` (enemy soldiers its divisions put out of action),
-    /// `land_kept` (share of its land it still owns by law, 0 to 1),
-    /// `lost_regions` (one dictionary per region handed over: `region` as
-    /// `region_name` takes it, and `to`), and `capitulated`. When it has
-    /// capitulated, also `date` ("2027-03-03"), `enemies` (the countries it
-    /// gave up to), `war_days` (since the oldest of those wars began) and
-    /// `support_collapsed` (war support ran out, rather than the capital
-    /// and most of the land). Empty for an unknown country.
+    /// dictionary: `raised` (divisions recruited), `lost` (soldiers lost)
+    /// and `inflicted` (enemy soldiers its divisions put out of action)
+    /// over the whole game, `war` (the same three since it last went from
+    /// peace to war), `land_kept` (share of its land it still owns by law,
+    /// 0 to 1), `lost_regions` (every region it lost by law in the game:
+    /// `region` as `region_name` takes it, and `to`), and `capitulated`.
+    /// When it has capitulated, also `date` ("2027-03-03"), `enemies` (the
+    /// countries it gave up to), `war_days` (since the oldest of those wars
+    /// began), `support_collapsed` (war support ran out, rather than the
+    /// capital and most of the land), `cost` (the three counts for those
+    /// wars) and `ceded` (the regions that capitulation handed over, like
+    /// `lost_regions`). Empty for an unknown country.
     #[func]
     fn war_record(&self, country: i32) -> VarDictionary {
         let mut entry = VarDictionary::new();
@@ -608,20 +611,28 @@ impl MwWorld {
         let Some(record) = world.war_record(country) else {
             return entry;
         };
-        entry.set("raised", i64::from(record.raised));
-        entry.set("lost", record.lost as i64);
-        entry.set("inflicted", record.inflicted as i64);
-        entry.set("land_kept", world.land_kept(country));
-        let lost: Array<VarDictionary> = world
-            .lost_regions(country)
-            .iter()
-            .map(|c| {
-                let mut region = VarDictionary::new();
-                region.set("region", c.region as i64 + 1);
-                region.set("to", i64::from(c.to));
-                region
+        let tally = |t: &mw_sim::record::Tally| {
+            let mut counts = VarDictionary::new();
+            counts.set("raised", i64::from(t.raised));
+            counts.set("lost", t.lost as i64);
+            counts.set("inflicted", t.inflicted as i64);
+            counts
+        };
+        let regions = |list: &mut dyn Iterator<Item = (usize, CountryId)>| -> Array<VarDictionary> {
+            list.map(|(region, to)| {
+                let mut entry = VarDictionary::new();
+                entry.set("region", region as i64 + 1);
+                entry.set("to", i64::from(to));
+                entry
             })
-            .collect();
+            .collect()
+        };
+        entry.set("raised", i64::from(record.total.raised));
+        entry.set("lost", record.total.lost as i64);
+        entry.set("inflicted", record.total.inflicted as i64);
+        entry.set("war", &tally(&record.war));
+        entry.set("land_kept", world.land_kept(country));
+        let lost = regions(&mut world.lost_regions(country).iter().map(|c| (c.region, c.to)));
         entry.set("lost_regions", &lost);
         entry.set("capitulated", record.capitulation.is_some());
         if let Some(capitulation) = &record.capitulation {
@@ -633,6 +644,14 @@ impl MwWorld {
             let days = capitulation.tick.saturating_sub(capitulation.war_began) / 24;
             entry.set("war_days", days as i64);
             entry.set("support_collapsed", capitulation.support_collapsed);
+            entry.set("cost", &tally(&capitulation.cost));
+            let ceded = regions(
+                &mut capitulation
+                    .ceded
+                    .iter()
+                    .map(|&(region, to)| (usize::from(region), to)),
+            );
+            entry.set("ceded", &ceded);
         }
         entry
     }

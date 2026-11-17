@@ -110,6 +110,10 @@ impl World {
     /// give up.
     pub(crate) fn check_capitulation(&mut self, events: &mut Vec<Event>) {
         for country in self.countries_at_war() {
+            // An earlier capitulation today may have ended its last war.
+            if !self.countries_at_war().contains(&country) {
+                continue;
+            }
             let Some(index) = self.index_of(country) else {
                 continue;
             };
@@ -126,7 +130,8 @@ impl World {
 
     /// `country` gives up (`support_collapsed`: because war support at home
     /// ran out): all its wars end and its divisions lay down their arms.
-    /// Its record remembers when, to whom and since when it was at war.
+    /// Its record remembers when, to whom, since when it was at war, what
+    /// those wars cost it and the regions it handed over.
     pub(crate) fn capitulate(
         &mut self,
         country: CountryId,
@@ -139,17 +144,28 @@ impl World {
             .filter_map(|&enemy| self.war_began(country, enemy))
             .min()
             .unwrap_or(self.tick());
+        let lost_before = self.lost_regions(country);
+        events.push(Event::Capitulated { country });
+        for &enemy in &enemies {
+            self.end_war(country, enemy, events);
+        }
+        let ceded = self
+            .lost_regions(country)
+            .into_iter()
+            .filter(|c| !lost_before.contains(c))
+            .map(|c| (c.region as u16, c.to))
+            .collect();
+        let tick = self.tick();
         if let Some(index) = self.index_of(country) {
-            self.countries[index].record.capitulation = Some(Capitulation {
-                tick: self.tick(),
-                enemies: enemies.clone(),
+            let record = &mut self.countries[index].record;
+            record.capitulation = Some(Capitulation {
+                tick,
+                enemies,
                 war_began,
                 support_collapsed,
+                cost: record.war,
+                ceded,
             });
-        }
-        events.push(Event::Capitulated { country });
-        for enemy in enemies {
-            self.end_war(country, enemy, events);
         }
         self.offers.retain(|o| o.from != country && o.to != country);
         let surrendering: Vec<usize> = (0..self.divisions.len())

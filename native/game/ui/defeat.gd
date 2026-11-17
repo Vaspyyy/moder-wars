@@ -13,6 +13,8 @@ const Style := preload("res://ui/style.gd")
 const WIDTH := 660.0
 ## Regions named per line before "and 12 more".
 const MAX_NAMES := 8
+## Countries given a line of their own before "and to 3 more countries".
+const MAX_RECEIVERS := 4
 
 var scenario: MwScenario
 var palette: Image
@@ -45,7 +47,8 @@ func setup() -> void:
 	add_child(dialog)
 
 
-## `country` capitulated; `record` is MwWorld.war_record for it.
+## `country` capitulated; `record` is MwWorld.war_record for it. The
+## numbers and regions are those of the wars it gave up, not of the game.
 func show_defeat(country: int, record: Dictionary) -> void:
 	for child in inner.get_children():
 		inner.remove_child(child) # gone now, so the new size is not the old one's
@@ -72,7 +75,7 @@ func show_defeat(country: int, record: Dictionary) -> void:
 	heading.custom_minimum_size.x = WIDTH - 98
 	title.add_child(heading)
 	top.add_child(title)
-	var story := Style.label(_story(country, record, enemies), 16, Style.CREDIT)
+	var story := Style.label(_story(country, record), 16, Style.CREDIT)
 	story.name = "Story"
 	story.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	story.custom_minimum_size.x = WIDTH - 68
@@ -83,20 +86,24 @@ func show_defeat(country: int, record: Dictionary) -> void:
 	table.name = "Table"
 	table.add_theme_constant_override("separation", 0)
 	var days := int(record.get("war_days", 0))
+	var cost: Dictionary = record.get("cost", {})
+	var kept := float(record.get("land_kept", 1.0))
 	var rows := [
 		["At war with " + Style.list_and(enemies), "1 day" if days == 1 else "%d days" % days],
-		["Divisions you raised", Style.thousands(int(record.get("raised", 0)))],
-		["Soldiers lost", Style.thousands(int(record.get("lost", 0)))],
-		["Enemy soldiers lost", Style.thousands(int(record.get("inflicted", 0)))],
-		["Land %s keeps" % name, "%d%%" % roundi(float(record.get("land_kept", 1.0)) * 100.0)],
+		["Divisions you raised", Style.thousands(int(cost.get("raised", 0)))],
+		["Soldiers lost", Style.thousands(int(cost.get("lost", 0)))],
+		["Enemy soldiers lost", Style.thousands(int(cost.get("inflicted", 0)))],
+		# Rounded down: a sliver lost never shows as 100%.
+		["Land %s keeps" % name, "100%" if kept >= 1.0 else "%d%%" % floori(kept * 100.0)],
 	]
 	for row in rows:
 		table.add_child(_row(row[0], row[1]))
 	column.add_child(table)
 
-	# The regions handed over, one line per country that got some.
+	# The regions this capitulation handed over, one line per country that
+	# got some (the first few; the box must fit the screen).
 	var by_country := {}
-	for lost in record.get("lost_regions", []):
+	for lost in record.get("ceded", []):
 		var to := int(lost["to"])
 		if not by_country.has(to):
 			by_country[to] = PackedStringArray()
@@ -105,8 +112,13 @@ func show_defeat(country: int, record: Dictionary) -> void:
 		var ceded := VBoxContainer.new()
 		ceded.name = "Ceded"
 		ceded.add_theme_constant_override("separation", 8)
-		for to in by_country:
+		var receivers: Array = by_country.keys()
+		for to in receivers.slice(0, MAX_RECEIVERS):
 			ceded.add_child(_ceded_line(scenario.country_name(to), by_country[to]))
+		if receivers.size() > MAX_RECEIVERS:
+			var more := receivers.size() - MAX_RECEIVERS
+			ceded.add_child(Style.label("and to %d more %s" % [more, "country" if more == 1 else "countries"],
+				14, Style.MUTED))
 		column.add_child(ceded)
 
 	var buttons := HBoxContainer.new()
@@ -134,19 +146,23 @@ func show_defeat(country: int, record: Dictionary) -> void:
 	visible = true
 
 
-## What happened, in two sentences.
-func _story(country: int, record: Dictionary, enemies: PackedStringArray) -> String:
+## What happened, in two sentences, from this capitulation's own regions.
+func _story(country: int, record: Dictionary) -> String:
 	var why := "War support at home ran out."
 	if not record.get("support_collapsed", false):
 		var capital := scenario.country_capital_name(country)
 		why = ("%s fell and most of the country with it." % capital) if capital != "" \
-			else "Your capital fell and most of the country with it."
-	var lost: Array = record.get("lost_regions", [])
+			else "Most of the country fell."
+	var ceded: Array = record.get("ceded", [])
+	var receivers := {}
+	for region in ceded:
+		receivers[int(region["to"])] = true
 	var then := "The war is over: your divisions laid down their arms"
-	if lost.is_empty():
-		then += ", and you keep all your land."
-	elif enemies.size() == 1:
-		then += ", and the regions %s held most of now belong to it." % enemies[0]
+	if ceded.is_empty():
+		then += ", and no region changed hands."
+	elif receivers.size() == 1:
+		then += ", and the regions %s held most of now belong to it." \
+			% scenario.country_name(int(receivers.keys()[0]))
 	else:
 		then += ", and each enemy now owns the regions it held most of."
 	return why + " " + then

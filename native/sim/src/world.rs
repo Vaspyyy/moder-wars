@@ -18,7 +18,7 @@ use crate::division::{Division, DivisionId, Loss, SpawnError};
 use crate::economy::{Budget, Economy, SERVE_PER_MILLE};
 use crate::map::{Cell, MapData};
 use crate::path;
-use crate::record::WarRecord;
+use crate::record::{Tally, WarRecord};
 use crate::rng::Rng;
 use crate::scenario::Scenario;
 use crate::terms::RegionMap;
@@ -446,8 +446,10 @@ impl World {
     pub(crate) fn count_losses(&mut self, country: CountryId, lost: u64, inflicted: u64) {
         if let Some(index) = self.index_of(country) {
             let record = &mut self.countries[index].record;
-            record.lost += lost;
-            record.inflicted += inflicted;
+            for tally in [&mut record.total, &mut record.war] {
+                tally.lost += lost;
+                tally.inflicted += inflicted;
+            }
         }
     }
 
@@ -739,6 +741,15 @@ impl World {
         match order.command {
             Command::DeclareWar { target } => match self.check_declare_war(order.country, target) {
                 Ok(()) => {
+                    // A side going from peace to war counts this war's cost
+                    // from now on.
+                    for side in [order.country, target] {
+                        if self.enemies(side).is_empty()
+                            && let Some(index) = self.index_of(side)
+                        {
+                            self.countries[index].record.war = Tally::default();
+                        }
+                    }
                     self.wars.insert(pair(order.country, target), self.tick);
                     events.push(Event::WarDeclared {
                         attacker: order.country,

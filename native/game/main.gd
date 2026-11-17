@@ -1362,9 +1362,14 @@ func _unhandled_input(event: InputEvent) -> void:
 				_close_card()
 			return
 		if defeat_screen != null and defeat_screen.visible:
-			# Esc watches the world go on; nothing else reaches the game.
+			# Esc watches the world go on, F5 and F9 still save and load;
+			# nothing else reaches the game.
 			if key == KEY_ESCAPE:
 				_close_card()
+			elif key == KEY_F5:
+				_quicksave()
+			elif key == KEY_F9 and _quickload():
+				_refresh_sim()
 			return
 		if peace_window != null and peace_window.visible:
 			if key == KEY_Y or key == KEY_ENTER or key == KEY_KP_ENTER:

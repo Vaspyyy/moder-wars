@@ -140,14 +140,22 @@ impl World {
     }
 
     /// The share of the land `country` owned by law when the game started
-    /// that it still owns by law, by area (1.0 for a country with no land).
+    /// that it still owns by law, counted in map cells (1.0 for a country
+    /// with no land). Without regions a peace keeps every cell each side
+    /// holds, so it is the share it holds.
     pub fn land_kept(&self, country: CountryId) -> f64 {
         let law = self.law_of();
+        let with_regions = self.regions.is_some();
         let (mut had, mut kept) = (0u64, 0u64);
         for cell in 0..self.map.len() as Cell {
             if self.map.de_jure(cell) == country {
                 had += 1;
-                if law(cell) == country {
+                let owner = if with_regions {
+                    law(cell)
+                } else {
+                    self.control[cell as usize]
+                };
+                if owner == country {
                     kept += 1;
                 }
             }
