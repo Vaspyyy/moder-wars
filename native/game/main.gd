@@ -164,6 +164,8 @@ var saved_hash := 0
 ## What New game and Quit do (tests replace them).
 var restart := func() -> void: get_tree().reload_current_scene()
 var quit_game := func() -> void: get_tree().quit()
+## The led country's enemies at the last refresh, to notice a war begin.
+var known_enemies := PackedInt32Array()
 
 
 func _ready() -> void:
@@ -457,6 +459,7 @@ func _lead(id: int, to_capital: bool) -> void:
 	hovered_id = -2
 	markers.selected.clear()
 	markers.selected_group = 0
+	known_enemies = sim.enemies(id)
 	var capital := scenario.country_capital(id)
 	if to_capital and not is_nan(capital.x):
 		var zoom := LEAD_ZOOM * get_viewport_rect().size.x / map_size.x
@@ -575,6 +578,7 @@ func _refresh_sim() -> void:
 		if int(markers.data[i + 1]) == player:
 			divisions += 1
 	reports.add(news, _today())
+	_check_new_wars()
 	for report in news:
 		if report["big"] != "":
 			cards.append(report)
@@ -617,6 +621,25 @@ func _note(line: String) -> void:
 	else:
 		_add_feed(line)
 		_show_feed()
+
+
+## A war of the led country that just began on a border none of its army
+## groups holds: say so in the reports, once.
+func _check_new_wars() -> void:
+	var enemies := sim.enemies(player)
+	for enemy in enemies:
+		if not known_enemies.has(enemy) and _unguarded(enemy):
+			_note("No army group holds your border with %s: select one and draw its front along it (F)"
+				% scenario.country_name(enemy))
+	known_enemies = enemies
+
+
+## Whether `enemy` borders the led country by land and none of its army
+## groups faces it.
+func _unguarded(enemy: int) -> bool:
+	var neighbors := PackedInt32Array(sim.country_info(player).get("neighbors", PackedInt32Array()))
+	return neighbors.has(enemy) and _own_groups().all(
+		func(group: Dictionary) -> bool: return int(group["enemy"]) != enemy)
 
 
 ## The player's army groups, from the last refresh.
@@ -749,9 +772,15 @@ func _show_next_card() -> void:
 	_pause_for_card()
 	match kind:
 		"war":
-			event_card.show_event("WAR", "%s declared war on you" % other,
-				"Its divisions will cross the border. Give your army groups fronts along it, "
-				+ "and arrows where you want to strike back.")
+			if _unguarded(int(card_report["other"])):
+				event_card.show_event("WAR", "%s declared war on you" % other,
+					"Its divisions will cross the border, and none of your army groups holds it yet: "
+					+ "select one and draw its front along it (F), then arrows where you want to "
+					+ "strike back (R).")
+			else:
+				event_card.show_event("WAR", "%s declared war on you" % other,
+					"Its divisions will cross the border. Give your army groups fronts along it, "
+					+ "and arrows where you want to strike back.")
 		"peace_offer":
 			_open_peace(int(card_report["other"]), true)
 		"peace":
@@ -954,6 +983,8 @@ func _load_save(path: String) -> String:
 		for offer in sim.peace_offers():
 			if int(offer["to"]) == player:
 				cards.append({"big": "peace_offer", "other": int(offer["from"])})
+		# The saved game's wars are not news.
+		known_enemies = sim.enemies(player)
 	else:
 		feed_lines.clear() # the viewer's feed starts over too
 	_note("Game loaded")
