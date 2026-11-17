@@ -4,19 +4,24 @@ extends SceneTree
 ## all with `native/test-screens.sh`; each prints its failed checks and
 ## exits with 1 if there were any.
 
+const Main := preload("res://main.gd")
+
 var main: Node
 var scenario: MwScenario
 var failures := 0
 
 
 ## Start the game on the pick screen, in a 1600x900 window (a headless
-## window is tiny otherwise, which makes click radii huge).
-func start() -> void:
+## window is tiny otherwise, which makes click radii huge), with this
+## scenario's package (default: the command line's, or the 2026 world).
+func start(scenario_name := "") -> void:
 	root.size = Vector2i(1600, 900)
+	Main.restart_args = {"scenario": scenario_name} if scenario_name != "" else {}
 	main = load("res://main.tscn").instantiate()
 	root.add_child(main)
 	await process_frame
 	await process_frame
+	Main.restart_args = {} # read by _ready, which runs once the tree does
 	scenario = main.scenario
 	# No AI war of its own may interrupt a test with a card.
 	main.sim.set_ai_wars(false)

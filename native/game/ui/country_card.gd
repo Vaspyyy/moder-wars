@@ -90,12 +90,20 @@ func show_country(id: int, world_spot: Vector2, info: Dictionary, relation: Stri
 	]
 	if relation != "":
 		rows.push_front(["Relation", relation])
+	else:
+		# Before the game starts: a war the scenario begins with.
+		var enemies := PackedStringArray()
+		for enemy in PackedInt32Array(info.get("enemies", [])):
+			enemies.append(scenario.country_name(enemy))
+		if not enemies.is_empty():
+			rows.push_front(["At war with", Style.list_and(enemies)])
 	for row in rows:
 		var key := Style.label(row[0], 16, Style.MUTED)
 		key.custom_minimum_size.x = 132
 		key.size_flags_vertical = SIZE_SHRINK_BEGIN
 		facts.add_child(key)
-		var value := Style.label(row[1], 16, Style.WAR if row[0] == "Relation" and row[1].begins_with("At war") else Style.TEXT)
+		var at_war: bool = row[0] == "At war with" or (row[0] == "Relation" and row[1].begins_with("At war"))
+		var value := Style.label(row[1], 16, Style.WAR if at_war else Style.TEXT)
 		value.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		value.custom_minimum_size.x = CARD_WIDTH - 48 - 132 - 12
 		facts.add_child(value)

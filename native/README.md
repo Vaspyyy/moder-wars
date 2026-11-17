@@ -20,7 +20,7 @@ native/play.sh            # build the Rust extension, then open the game
 native/play.sh --watch    # same, then follow main: pull, rebuild and restart whenever new commits land
 ```
 
-Other options go to the game, e.g. `native/play.sh --scenario=ukraine-2023-v3 --view=34,48.5,9`. Close the game window or press Ctrl+C to stop. `--watch` checks every 30 seconds, only fast-forwards, and keeps the old game running if a build fails.
+Other options go to the game, e.g. `native/play.sh --scenario=ukraine-2023-v3 --view=34,48.5,9` (Ukraine 2023 starts with Russia and Ukraine at war, and the card of a country at war says so before you pick it; `game/scenarios.gd` lists the wars each scenario starts with). Close the game window or press Ctrl+C to stop. `--watch` checks every 30 seconds, only fast-forwards, and keeps the old game running if a build fails.
 
 The game opens on the world, paused, with every country's real army on its borders. Click a country to see its card (population, economy, forces, borders), then press "Lead" to take it: the camera moves to its capital, the bar along the top shows its date, speed, income, people left to draft, divisions and war support, and the AI runs every other country with the same orders you have. Now and then an AI country attacks a much weaker neighbor (rarely, and never while two wars are already going on), and that can be you. `--lead=Poland` skips the pick screen. While you lead a country, only its divisions take your orders, and the stand-in keys below (Shift+W, P, I) act for it.
 
