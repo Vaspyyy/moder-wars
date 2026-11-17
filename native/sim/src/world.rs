@@ -915,11 +915,7 @@ impl World {
             || self.overlord(attacker) == Some(target)
         {
             Err(Rejection::Puppet)
-        } else if self
-            .conferences
-            .iter()
-            .any(|c| c.loser == target || c.loser == attacker)
-        {
+        } else if self.in_conference(target) || self.in_conference(attacker) {
             Err(Rejection::InConference)
         } else {
             Ok(())

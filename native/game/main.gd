@@ -897,7 +897,7 @@ func _group_name(group: int) -> String:
 func _show_command_bar() -> void:
 	if command_bar == null:
 		return
-	command_bar.visible = not no_hud and not peace_window.visible \
+	command_bar.visible = not no_hud and not _in_talks() \
 		and (drawing != "" or not markers.selected.is_empty())
 	if not command_bar.visible:
 		return
@@ -1065,6 +1065,7 @@ func _victory_text(enemy: int) -> String:
 func _open_conference(loser: int) -> void:
 	conference_loser = loser
 	conference_selected = 0
+	_stop_drawing() # a click now chooses a region
 	_pause_for_card()
 	country_card.show_country(0, Vector2.ZERO, {}, "", [], "")
 	for panel in [army_list, reports, command_bar]:
@@ -1110,6 +1111,7 @@ func _show_conference() -> void:
 	var defeated := {}
 	for winner in PackedInt32Array(conference["winners"]):
 		defeated[winner] = sim.defeated(winner, conference_loser)
+	conference_window.can_puppet = sim.overlord(player) == 0
 	conference_window.show_conference(player, conference, conference_selected, share, defeated, _today())
 
 
@@ -1220,6 +1222,7 @@ func _after_modal() -> void:
 func _open_peace(other: int, incoming: bool) -> void:
 	peace_with = other
 	peace_incoming = incoming
+	_stop_drawing() # a click now chooses a region
 	_pause_for_card()
 	country_card.show_country(0, Vector2.ZERO, {}, "", [], "")
 	peace_terms = PackedInt32Array()
@@ -1352,8 +1355,20 @@ func _show_country_card(country: int, world: Vector2) -> void:
 	elif sim.overlord(player) == country:
 		relation = "Your overlord: you fight in its wars"
 		actions = []
+	elif sim.overlord(player) != 0:
+		# A puppet makes no war or peace of its own.
+		relation += "  ·  your overlord %s decides war and peace" % scenario.country_name(sim.overlord(player))
+		actions = []
 	elif overlord != 0:
 		relation += "  ·  a puppet of %s" % scenario.country_name(overlord)
+		if at_war:
+			# Its peace comes with its overlord's.
+			var head := overlord
+			actions = [["Offer peace to %s" % scenario.country_name(head), true, func() -> void:
+				if sim.enemies(player).has(head):
+					_open_peace(head, false)
+				else:
+					_show_country_card(country, world)]]
 	country_card.show_country(country, world, sim.country_info(country), relation, actions, "Esc closes")
 
 
@@ -1405,11 +1420,7 @@ func _load_save(path: String) -> String:
 	saved_hash = sim.state_hash()
 	markers.selected.clear()
 	markers.selected_group = 0
-	if drawing != "":
-		drawing = ""
-		stroke_points.clear()
-		markers.stroke.clear()
-		_show_help()
+	_stop_drawing()
 	if player != 0:
 		# What was waiting or open belonged to the game before the load (the
 		# menu can open over a card or the peace window when the window is
@@ -1436,6 +1447,11 @@ func _load_save(path: String) -> String:
 		for offer in sim.peace_offers():
 			if int(offer["to"]) == player:
 				cards.append({"big": "peace_offer", "other": int(offer["from"])})
+		# So does a conference where the player is still dividing the land.
+		for conference in sim.conferences():
+			if PackedInt32Array(conference["winners"]).has(player) \
+					and not PackedInt32Array(conference["done"]).has(player):
+				cards.append({"big": "conference", "other": int(conference["loser"])})
 		# The saved game's wars are not news.
 		known_enemies = sim.enemies(player)
 		watching = false
@@ -1691,11 +1707,25 @@ func _finish_drawing() -> void:
 			sim.set_front(group, stroke_points)
 		else:
 			sim.draw_arrow(group, stroke_points)
+	_stop_drawing()
+	_refresh_sim()
+
+
+## Drop the front or arrow being drawn, if any.
+func _stop_drawing() -> void:
+	if drawing == "":
+		return
 	drawing = ""
 	stroke_points.clear()
 	markers.stroke.clear()
 	_show_help()
-	_refresh_sim()
+
+
+## Whether the peace window or the conference is open: the map then only
+## takes clicks that choose a region.
+func _in_talks() -> bool:
+	return (peace_window != null and peace_window.visible) \
+		or (conference_window != null and conference_window.visible)
 
 
 func _order_at(screen_point: Vector2) -> void:
@@ -1719,8 +1749,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				_zoom_at(1.15, button.position)
 			MOUSE_BUTTON_WHEEL_DOWN:
 				_zoom_at(1.0 / 1.15, button.position)
-			MOUSE_BUTTON_LEFT when pick == null and (boxing or (button.pressed and button.shift_pressed
-					and drawing == "")):
+			MOUSE_BUTTON_LEFT when pick == null and not _in_talks() and (boxing
+					or (button.pressed and button.shift_pressed and drawing == "")):
 				# Shift+drag draws a box; a Shift-click without dragging adds or
 				# removes one division. A box ends with its own release, even
 				# if F or R started a drawing meanwhile.
@@ -1913,10 +1943,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_show_country_card(0, Vector2.ZERO)
 		elif key == KEY_ESCAPE:
 			if drawing != "":
-				drawing = ""
-				stroke_points.clear()
-				markers.stroke.clear()
-				_show_help()
+				_stop_drawing()
 			elif not markers.selected.is_empty() or markers.selected_group != 0 or menu == null:
 				markers.selected.clear()
 				markers.selected_group = 0

@@ -26,7 +26,8 @@
 //! war or make peace of its own, and pays its overlord `TRIBUTE_PERCENT`
 //! of its income. When its overlord makes peace, so does it (a white
 //! peace); when its overlord capitulates, it is free again and its wars
-//! with its overlord's enemies end.
+//! with its overlord's enemies end. A puppet can capitulate too: then it is
+//! free, and its own conference decides what becomes of it.
 
 use serde::{Deserialize, Serialize};
 
@@ -143,6 +144,10 @@ impl World {
             opened: tick,
         });
         events.push(Event::ConferenceOpened { loser, winners });
+        // Nothing to divide (no region map, or no land left): over at once.
+        if self.conferences.last().is_some_and(Conference::over) {
+            self.close_conference(self.conferences.len() - 1, events);
+        }
         self.run_conferences(events);
     }
 
@@ -324,8 +329,15 @@ impl World {
                 regions,
             });
         }
-        for &winner in &conference.winners {
-            self.withdraw(winner, loser);
+        // Divisions on land that is now another side's go home: the loser's
+        // and the winners', also a winner's on a region another one took
+        // (unless those two are at war).
+        for (i, &a) in sides.iter().enumerate() {
+            for &b in &sides[i + 1..] {
+                if !self.at_war(a, b) {
+                    self.withdraw(a, b);
+                }
+            }
         }
         if let Some(index) = self.index_of(loser)
             && let Some(capitulation) = self.countries[index].record.capitulation.as_mut()
@@ -340,19 +352,27 @@ impl World {
         }
     }
 
-    /// `country` becomes `overlord`'s puppet, and joins its wars.
+    /// `country` becomes `overlord`'s puppet: the AI runs it from now on
+    /// (also once it is free again), and it joins its overlord's wars.
     fn make_puppet(&mut self, country: CountryId, overlord: CountryId, events: &mut Vec<Event>) {
         let Some(index) = self.index_of(country) else {
             return;
         };
         self.countries[index].overlord = Some(overlord);
+        self.countries[index].controller = Controller::Ai;
         self.offers.retain(|o| o.from != country && o.to != country);
         events.push(Event::Puppeted { country, overlord });
         for enemy in self.enemies(overlord) {
-            if enemy != country && !self.at_war(country, enemy) {
+            if enemy != country && !self.at_war(country, enemy) && !self.in_conference(enemy) {
                 self.begin_war(country, enemy, events);
             }
         }
+    }
+
+    /// Whether `country` capitulated and waits for its conference to end
+    /// (no war can begin on it or by it meanwhile).
+    pub fn in_conference(&self, country: CountryId) -> bool {
+        self.conferences.iter().any(|c| c.loser == country)
     }
 
     /// `country`, its overlord and the overlord's puppets (or its own).
@@ -370,7 +390,12 @@ impl World {
         let (ours, theirs) = (self.family(a), self.family(b));
         for &x in &ours {
             for &y in &theirs {
-                if x != y && !ours.contains(&y) && !self.at_war(x, y) {
+                if x != y
+                    && !ours.contains(&y)
+                    && !self.at_war(x, y)
+                    && !self.in_conference(x)
+                    && !self.in_conference(y)
+                {
                     self.begin_war(x, y, events);
                 }
             }

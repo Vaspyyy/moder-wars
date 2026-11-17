@@ -2,7 +2,8 @@ extends "res://tests/harness.gd"
 ## The peace conference with two winners: Poland (led) and Russia (AI)
 ## against Belarus, whose war support runs out. Poland picks first (ties
 ## go to the lower id), takes Minsk, Russia (holding nothing) leaves, and
-## Poland makes Belarus its puppet, which then shows on its card.
+## Poland makes Belarus its puppet, which then shows on its card. A save
+## made in the middle of it opens the conference again when loaded.
 
 
 func _labels(node: Node) -> Array:
@@ -11,6 +12,10 @@ func _labels(node: Node) -> Array:
 
 func _initialize() -> void:
 	await start()
+	var dir := (OS.get_environment("TMPDIR") if OS.has_environment("TMPDIR") else "/tmp") \
+		.path_join("mw-conference-test-%d" % OS.get_process_id())
+	DirAccess.make_dir_recursive_absolute(dir)
+	main.save_dir = dir
 	var poland := country("Poland")
 	var russia := country("Russia")
 	var belarus := country("Belarus")
@@ -30,9 +35,15 @@ func _initialize() -> void:
 	check(main.sim.war_record(belarus)["capitulated"], "Belarus gave up")
 	check(main.event_card.visible and main.card_report.get("big") == "capitulated", "the victory card first")
 	check(main.sim.is_paused(), "paused")
+	main.drawing = "front" # a front half drawn when the card came
 	main._close_card()
 	var window: Control = main.conference_window
 	check(window.visible and main.conference_loser == belarus, "then the conference")
+	check(main.drawing == "", "a click now chooses a region, not where the front goes")
+	main.markers.selected[int(main.markers.data[0])] = true # a Polish division, say
+	main._refresh_sim()
+	check(not main.command_bar.visible, "no orders while dividing the land")
+	main.markers.selected.clear()
 	var turns: Control = window.dialog.find_child("Turns", true, false)
 	check(turns != null and turns.get_child_count() == 2, "two winners in turn")
 	var texts := _labels(turns)
@@ -54,6 +65,18 @@ func _initialize() -> void:
 	main._select_at(screen_at(21.0, 52.23), false)
 	check(main.conference_selected == 0, "Warsaw is not on the table")
 
+	# Saved and loaded now: the conference opens again where it was.
+	main._quicksave()
+	main.sim.conference_move(poland, belarus, "leave", 0)
+	check(main.sim.conferences().is_empty(), "(left, so the load has something to undo)")
+	main._close_conference()
+	main._close_card()
+	check(main._quickload(), "the quick save loads")
+	main._refresh_sim()
+	check(window.visible and main.conference_loser == belarus, "the conference again")
+	check(main.sim.conferences().size() == 1 and int(main.sim.conferences()[0]["picking"]) == poland
+		and main.sim.conferences()[0]["picks"].size() == 1, "with Minsk taken and Poland to pick")
+
 	(window.dialog.find_child("Puppet", true, false) as Button).pressed.emit()
 	check(not window.visible and main.sim.conferences().is_empty(), "Puppet ends it")
 	check(main.sim.overlord(belarus) == poland, "Belarus is Poland's puppet")
@@ -71,4 +94,7 @@ func _initialize() -> void:
 	var facts := _labels(main.country_card.body)
 	check(facts.any(func(t: String) -> bool: return t.begins_with("Your puppet")), "%s" % [facts])
 	check(card_buttons(main.country_card).is_empty(), "no Declare war on your own puppet")
+	for file in DirAccess.get_files_at(dir):
+		DirAccess.remove_absolute(dir.path_join(file))
+	DirAccess.remove_absolute(dir)
 	finish()

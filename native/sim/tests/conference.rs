@@ -2,13 +2,15 @@
 //! one who defeated the most soldiers first, each taking a region, making
 //! the loser its puppet, annexing the rest (once the others are done) or
 //! leaving. Puppets join their overlord's wars, pay it tribute, make no
-//! wars or peace of their own, and go free when it capitulates.
+//! wars or peace of their own, and go free when it capitulates (or when
+//! they do).
 
 mod common;
 
 use common::{cell, country, run};
 use mw_sim::conference::{TRIBUTE_PERCENT, WAIT_DAYS};
 use mw_sim::save;
+use mw_sim::support::AFTER_CAPITULATION;
 use mw_sim::world::{Command, Controller, CountryId, Event, Order, Rejection, World};
 
 fn order(world: &mut World, country: CountryId, command: Command) {
@@ -419,4 +421,214 @@ fn soldiers_put_out_of_action_are_counted_for_each_pair() {
     // Germany fights only France, so all it put out of action is French.
     assert_eq!(world.defeated(germany, france), record(germany).inflicted);
     assert_eq!(world.defeated(france, germany), record(france).inflicted);
+}
+
+/// `winner` (and, if given, `also`) at war with `loser`, whose war support
+/// runs out: it capitulates within two days.
+fn collapse(world: &mut World, loser: CountryId, winners: &[CountryId]) {
+    for &winner in winners {
+        if !world.at_war(winner, loser) {
+            order(world, winner, Command::DeclareWar { target: loser });
+        }
+    }
+    world.step();
+    world.set_war_support(loser, 0).unwrap();
+    for _ in 0..48 {
+        if world
+            .step()
+            .contains(&Event::Capitulated { country: loser })
+        {
+            return;
+        }
+    }
+    panic!("{loser} did not capitulate");
+}
+
+#[test]
+fn a_new_puppet_sent_to_war_does_not_give_up_again() {
+    // Luxembourg's war support runs out; Germany, also at war with Poland,
+    // makes it its puppet, which sends it into that war at once.
+    let s = common::world_2026();
+    let (germany, poland, luxembourg) = (
+        country(s, "Germany"),
+        country(s, "Poland"),
+        country(s, "Luxembourg"),
+    );
+    let mut world = World::new(s, 1);
+    world.use_regions(common::regions_2026());
+    world
+        .spawn_division(luxembourg, cell(s, 6.0, 49.95), 10_000)
+        .unwrap();
+    order(&mut world, poland, Command::DeclareWar { target: germany });
+    collapse(&mut world, luxembourg, &[germany]);
+    assert_eq!(
+        world.economy(luxembourg).unwrap().support,
+        AFTER_CAPITULATION,
+        "its war support starts again"
+    );
+    order(
+        &mut world,
+        germany,
+        Command::MakePuppet { loser: luxembourg },
+    );
+    world.step();
+    assert_eq!(world.overlord(luxembourg), Some(germany));
+    assert!(world.at_war(luxembourg, poland), "in its overlord's war");
+    for _ in 0..3 * 24 {
+        assert!(
+            !world.step().contains(&Event::Capitulated {
+                country: luxembourg
+            }),
+            "it does not give up again (nor count its surrendered division as lost)"
+        );
+    }
+}
+
+#[test]
+fn a_puppet_that_capitulates_goes_free_and_its_winners_decide() {
+    let Fallen {
+        mut world,
+        germany,
+        luxembourg,
+        ..
+    } = luxembourg_falls();
+    order(
+        &mut world,
+        germany,
+        Command::MakePuppet { loser: luxembourg },
+    );
+    world.step();
+    let s = common::world_2026();
+    let poland = country(s, "Poland");
+    order(&mut world, poland, Command::DeclareWar { target: germany });
+    world.step();
+    assert!(world.at_war(luxembourg, poland), "the puppet is in it too");
+    world.set_war_support(luxembourg, 0).unwrap();
+    let mut events = Vec::new();
+    for _ in 0..48 {
+        events = world.step();
+        if events.contains(&Event::Capitulated {
+            country: luxembourg,
+        }) {
+            break;
+        }
+    }
+    assert!(events.contains(&Event::PuppetFreed {
+        country: luxembourg
+    }));
+    assert_eq!(world.overlord(luxembourg), None, "free of Germany");
+    assert!(world.at_war(germany, poland), "Germany fights on");
+    assert!(world.puppets(germany).is_empty());
+    // Poland makes it its own puppet: now it fights Germany.
+    order(
+        &mut world,
+        poland,
+        Command::MakePuppet { loser: luxembourg },
+    );
+    world.step();
+    assert_eq!(world.overlord(luxembourg), Some(poland));
+    assert!(world.at_war(luxembourg, germany));
+}
+
+#[test]
+fn a_winners_divisions_on_a_region_another_winner_took_go_home() {
+    let Fallen {
+        mut world,
+        germany,
+        france,
+        luxembourg,
+    } = luxembourg_falls();
+    let raider = world
+        .divisions()
+        .iter()
+        .find(|d| d.country == germany)
+        .unwrap()
+        .id;
+    // The district the German division stands in, which France takes.
+    let at = world.division(raider).unwrap().cell;
+    let district = common::regions_2026().index_of_cell(at as usize).unwrap() as u16;
+    assert!(world.conferences()[0].open.contains(&district));
+    assert_eq!(world.control()[at as usize], germany);
+    assert_eq!(world.conferences()[0].picking(), germany);
+    order(
+        &mut world,
+        germany,
+        Command::LeaveConference { loser: luxembourg },
+    );
+    world.step();
+    order(
+        &mut world,
+        france,
+        Command::TakeRegion {
+            loser: luxembourg,
+            region: district,
+        },
+    );
+    world.step();
+    order(
+        &mut world,
+        france,
+        Command::LeaveConference { loser: luxembourg },
+    );
+    world.step();
+    assert!(world.conferences().is_empty());
+    assert_eq!(world.region_owner_now(usize::from(district)), france);
+    let at = world.division(raider).unwrap().cell;
+    assert_eq!(
+        world.control()[at as usize],
+        germany,
+        "the German division went home from the district France took"
+    );
+}
+
+#[test]
+fn a_conference_with_nothing_to_divide_ends_at_once() {
+    // No region map: nothing to take, so nobody has to move.
+    let s = common::world_2026();
+    let (germany, luxembourg) = (country(s, "Germany"), country(s, "Luxembourg"));
+    let mut world = World::new(s, 1);
+    order(
+        &mut world,
+        germany,
+        Command::DeclareWar { target: luxembourg },
+    );
+    world.step();
+    world.set_war_support(luxembourg, 0).unwrap();
+    let mut closed = false;
+    for _ in 0..48 {
+        let events = world.step();
+        if events.contains(&Event::Capitulated {
+            country: luxembourg,
+        }) {
+            closed = events.contains(&Event::ConferenceClosed { loser: luxembourg });
+            break;
+        }
+    }
+    assert!(closed, "closed in the hour it opened");
+    assert!(world.conferences().is_empty());
+}
+
+#[test]
+fn a_puppeted_country_is_run_by_the_ai() {
+    let Fallen {
+        mut world,
+        germany,
+        luxembourg,
+        ..
+    } = luxembourg_falls();
+    assert_eq!(
+        world.country(luxembourg).unwrap().controller,
+        Controller::Passive,
+        "like a player's"
+    );
+    order(
+        &mut world,
+        germany,
+        Command::MakePuppet { loser: luxembourg },
+    );
+    world.step();
+    assert_eq!(
+        world.country(luxembourg).unwrap().controller,
+        Controller::Ai
+    );
 }

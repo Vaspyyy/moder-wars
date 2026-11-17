@@ -20,6 +20,8 @@ const MAX_PICKS := 6
 var scenario: MwScenario
 var palette: Image
 var dialog := PanelContainer.new()
+## False while the player is a puppet itself, which may make no puppets.
+var can_puppet := true
 
 
 func setup() -> void:
@@ -135,7 +137,10 @@ func show_conference(player: int, conference: Dictionary, selected: int, share: 
 		"It keeps the rest, fights in your wars and pays you a quarter of its income.",
 		func() -> void: puppet_pressed.emit())
 	puppet.disabled = not mine
-	settle.add_child(puppet)
+	if can_puppet:
+		settle.add_child(puppet)
+	else:
+		puppet.queue_free()
 	if others_done:
 		var annex := _settle("Annex", "Annex the rest", "Every region left becomes yours; %s is gone from the map." % them,
 			func() -> void: annex_pressed.emit())

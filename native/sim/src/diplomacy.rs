@@ -198,10 +198,11 @@ impl World {
 
     /// `country` gives up (`support_collapsed`: because war support at home
     /// ran out): all its wars end, its divisions lay down their arms, its
-    /// puppets are free, and its enemies divide its land at a conference
-    /// (`conference.rs`). Its record remembers when, to whom, since when it
-    /// was at war and what those wars cost it (the regions it hands over
-    /// once the conference ends).
+    /// puppets are free (and so is it, if it was one), its war support
+    /// starts again at `support::AFTER_CAPITULATION`, and its enemies divide
+    /// its land at a conference (`conference.rs`). Its record remembers
+    /// when, to whom, since when it was at war and what those wars cost it
+    /// (the regions it hands over once the conference ends).
     pub(crate) fn capitulate(
         &mut self,
         country: CountryId,
@@ -228,6 +229,13 @@ impl World {
             });
         }
         self.free_puppets(country, &enemies, events);
+        // A puppet that gives up is free of its overlord too: the winners
+        // decide what becomes of it.
+        if let Some(index) = self.index_of(country)
+            && self.countries[index].overlord.take().is_some()
+        {
+            events.push(Event::PuppetFreed { country });
+        }
         for &enemy in &enemies {
             self.stop_war(country, enemy);
         }
@@ -237,6 +245,7 @@ impl World {
             .collect();
         self.remove_divisions(&surrendering, Loss::Surrendered, events);
         self.groups.retain(|g| g.country != country);
+        self.after_capitulation(country);
         self.open_conference(country, enemies, events);
     }
 }

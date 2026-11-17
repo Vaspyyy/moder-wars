@@ -181,16 +181,18 @@ impl World {
 
     /// The neighbor `country` would attack: of its land neighbors at peace,
     /// the weakest, if `country` is at least `AGGRESSION_RATIO` times
-    /// stronger than it (ties go to the lower id). A country without an army
-    /// attacks no one (nothing is three times stronger than nothing).
+    /// stronger than it (ties go to the lower id). Each side counts with its
+    /// overlord and puppets, who join the war (`family_power`). A country
+    /// without an army attacks no one (nothing is three times stronger than
+    /// nothing).
     pub fn war_target(&self, country: CountryId) -> Option<CountryId> {
-        let own = self.power_of(country);
+        let own = self.family_power(country);
         if own <= 0.0 {
             return None;
         }
         self.neighbors(country)
             .into_iter()
-            .map(|(neighbor, _)| (neighbor, self.power_of(neighbor)))
+            .map(|(neighbor, _)| (neighbor, self.family_power(neighbor)))
             .filter(|&(neighbor, power)| {
                 own >= AGGRESSION_RATIO * power
                     && self.enemies(neighbor).is_empty()
@@ -203,6 +205,11 @@ impl World {
     /// The fighting power of all of a country's divisions.
     pub fn army_power(&self, country: CountryId) -> f64 {
         self.power_of(country)
+    }
+
+    /// The power of `country` with its overlord and puppets (`family`).
+    fn family_power(&self, country: CountryId) -> f64 {
+        self.family(country).iter().map(|&c| self.power_of(c)).sum()
     }
 
     fn power_of(&self, country: CountryId) -> f64 {
@@ -478,6 +485,17 @@ mod tests {
         assert!(ids.iter().all(|&c| world.aggression_comes_up(c)));
         world.set_aggression_days(0);
         assert!(ids.iter().all(|&c| !world.aggression_comes_up(c)));
+    }
+
+    #[test]
+    fn a_weak_puppet_counts_with_its_overlord() {
+        let mut world = world();
+        let russia = id("Russia");
+        let target = world.war_target(russia).unwrap();
+        // The same neighbor as China's puppet: China would join the war.
+        let index = world.index_of(target).unwrap();
+        world.countries[index].overlord = Some(id("People's Republic of China"));
+        assert_ne!(world.war_target(russia), Some(target));
     }
 
     #[test]

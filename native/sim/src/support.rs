@@ -13,8 +13,9 @@
 //!   `OCCUPATION_PER_DAY` with all of it lost).
 //!
 //! At peace it recovers by `PEACE_RECOVERY_PER_DAY`. A country at war whose
-//! support reaches zero capitulates. Whole numbers only, so it adds up the
-//! same on every machine.
+//! support reaches zero capitulates, and starts again at
+//! `AFTER_CAPITULATION`. Whole numbers only, so it adds up the same on every
+//! machine.
 
 use crate::economy::SERVE_PER_MILLE;
 use crate::world::{CountryId, Event, UnknownCountry, World};
@@ -30,6 +31,10 @@ pub const CASUALTY_WEIGHT: u64 = 2;
 /// With all of its own land in enemy hands.
 pub const OCCUPATION_PER_DAY: i64 = 10;
 pub const PEACE_RECOVERY_PER_DAY: i64 = 10;
+/// Support after a capitulation: enough that a country made a puppet and
+/// sent into its overlord's wars at once does not give up again the next
+/// day.
+pub const AFTER_CAPITULATION: u16 = FULL_SUPPORT / 2;
 
 impl World {
     /// Set a country's war support, per mille (at most full), for
@@ -43,6 +48,23 @@ impl World {
         let index = self.index_of(country).ok_or(UnknownCountry(country))?;
         self.countries[index].economy.support = support.min(FULL_SUPPORT);
         Ok(())
+    }
+
+    /// `country` just capitulated: its support starts again at
+    /// `AFTER_CAPITULATION`, and the soldiers who laid down their arms are
+    /// not lost again the next day.
+    pub(crate) fn after_capitulation(&mut self, country: CountryId) {
+        let serving: u64 = self
+            .divisions
+            .iter()
+            .filter(|d| d.country == country)
+            .map(|d| u64::from(d.personnel))
+            .sum();
+        if let Some(index) = self.index_of(country) {
+            let economy = &mut self.countries[index].economy;
+            economy.support = AFTER_CAPITULATION;
+            economy.casualties = economy.drafted.saturating_sub(serving);
+        }
     }
 
     /// The daily change in every country's war support; countries at war
