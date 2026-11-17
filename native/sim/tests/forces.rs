@@ -263,3 +263,123 @@ fn a_war_between_real_armies_runs_smoothly() {
     assert!(elapsed.as_secs_f64() < 4.0, "10 days took {elapsed:?}");
     assert!(slowest.as_secs_f64() < 0.6, "an hour took {slowest:?}");
 }
+
+#[test]
+fn groups_of_countries_in_the_data_give_no_one_an_army() {
+    // The World Bank lists groups of countries ("Least developed countries",
+    // "Euro area", "North America") beside the countries, each with a
+    // two-letter code of its own, and disputed areas on the map carry some
+    // of those codes: Barahoti (XL) was given the least developed
+    // countries' 2.5 million soldiers.
+    let s = common::world_2026();
+    let p = personnel();
+    for name in [
+        "Barahoti disputed area",
+        "Demchok sector",
+        "Nilang-Jadhang disputed area",
+        "Iturup",
+        "Kunashir",
+        "Shikotan",
+        "Paracel Islands",
+        // Groups without figures in this snapshot, which a refresh may add.
+        "Bir Tawil",
+        "Tunb Islands",
+        "Abyei",
+    ] {
+        assert_eq!(p.get(&country(s, name)), None, "{name}");
+    }
+    let mut world = World::new(s, 1);
+    world.deploy_forces(p);
+    let barahoti = country(s, "Barahoti disputed area");
+    assert!(world.divisions().iter().all(|d| d.country != barahoti));
+    // The real countries keep their figures.
+    assert_eq!(p.get(&country(s, "India")), Some(&3_068_000));
+}
+
+/// How many cells of `country`'s land `start` connects to (through side
+/// neighbours, as divisions march), counting up to `limit`.
+fn reach(
+    world: &World,
+    s: &Scenario,
+    start: u32,
+    country: CountryId,
+    limit: usize,
+) -> (usize, std::collections::BTreeSet<u32>) {
+    let width = s.grid.width;
+    let mut seen = std::collections::BTreeSet::from([start]);
+    let mut queue = std::collections::VecDeque::from([start]);
+    while let Some(c) = queue.pop_front() {
+        if seen.len() >= limit {
+            break;
+        }
+        let (x, y) = (c % width, c / width);
+        // Columns wrap around the date line, as on the game's map.
+        let mut next = vec![
+            y * width + (x + width - 1) % width,
+            y * width + (x + 1) % width,
+        ];
+        if y > 0 {
+            next.push(c - width);
+        }
+        if y + 1 < s.grid.height {
+            next.push(c + width);
+        }
+        for n in next {
+            if s.land[n as usize] != 0 && world.control()[n as usize] == country && seen.insert(n) {
+                queue.push_back(n);
+            }
+        }
+    }
+    (seen.len(), seen)
+}
+
+#[test]
+fn no_division_starts_on_a_sliver_of_land_it_cannot_leave() {
+    // Where a border wiggles, the map can leave a cell or two of a country
+    // touching the rest only at a corner, which divisions cannot pass. One
+    // placed there could never move.
+    let s = common::world_2026();
+    let mut world = World::new(s, 1);
+    world.deploy_forces(personnel());
+    // On a small piece of land with the capital a division is not stuck,
+    // nor anywhere in a country smaller than ten cells (Singapore, Bahrain).
+    let land = |country: CountryId| {
+        (0..s.land.len())
+            .filter(|&c| s.land[c] != 0 && s.control[c] == country)
+            .count()
+    };
+    let capital_of = |country: CountryId| {
+        s.cities
+            .iter()
+            .filter(|c| c.owner_id == country && c.is_capital)
+            .filter_map(|c| s.grid.cell_at(c.lng, c.lat).map(|cell| cell as u32))
+            .collect::<Vec<u32>>()
+    };
+    let stuck: Vec<String> = world
+        .divisions()
+        .iter()
+        .filter(|d| {
+            let (reached, cells) = reach(&world, s, d.cell, d.country, 10);
+            reached < 10
+                && !capital_of(d.country).iter().any(|c| cells.contains(c))
+                && land(d.country) >= 10
+        })
+        .map(|d| {
+            let (lng, lat) = s.grid.center(d.cell as usize);
+            format!("{} at {lng:.2},{lat:.2}", d.country)
+        })
+        .collect();
+    assert!(
+        stuck.is_empty(),
+        "{} divisions on slivers: {stuck:?}",
+        stuck.len()
+    );
+    // A country that small, with no city on the map, keeps its divisions
+    // on its border.
+    let count = |name: &str| {
+        let c = country(s, name);
+        world.divisions().iter().filter(|d| d.country == c).count()
+    };
+    assert_eq!(count("Singapore"), 4);
+    assert_eq!(count("Bahrain"), 1);
+}
