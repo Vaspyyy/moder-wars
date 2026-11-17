@@ -121,6 +121,8 @@ var no_hud := false
 var player := 0
 ## Where quick saves go: Godot's user data folder (tests use their own).
 var save_dir := "user://"
+## The scenario package loaded ("world-map-2026-v3"), for the save slots.
+var scenario_name := ""
 ## The pick screen while it is open.
 var pick: Control = null
 ## The bar along the top while the player leads a country, and the other
@@ -150,6 +152,7 @@ var paused_by_card := false
 func _ready() -> void:
 	var args := _parse_args()
 	var name: String = args.get("scenario", "world-map-2026-v3")
+	scenario_name = name
 	var path := ProjectSettings.globalize_path("res://").path_join(
 		"../../assets/maps/compiled/%s.mwsc.gz" % name)
 	var started := Time.get_ticks_msec()
@@ -830,13 +833,15 @@ func _show_country_card(country: int, world: Vector2) -> void:
 		[["Offer peace" if at_war else "Declare war", true, action]], "Esc closes")
 
 
-## One quick save slot per led country, and one for the viewer: a save made
-## leading one country must not load into a game leading another (it would
-## hand yours to the AI and leave the saved one with no one running it).
+## One quick save slot per scenario and led country, and one per scenario
+## for the viewer: a save made leading one country must not load into a
+## game leading another (it would hand yours to the AI and leave the saved
+## one with no one running it). The id tells apart countries of one name.
 func _quicksave_path() -> String:
-	var file := "quicksave.mwsave"
+	var who := "viewer"
 	if player != 0:
-		file = "quicksave-%s.mwsave" % scenario.country_name(player).validate_filename()
+		who = "%d-%s" % [player, scenario.country_name(player)]
+	var file := ("quicksave-%s-%s.mwsave" % [scenario_name, who]).validate_filename()
 	return ProjectSettings.globalize_path(save_dir.path_join(file))
 
 
@@ -863,6 +868,12 @@ func _quickload() -> void:
 		card_report = {}
 		country_card.show_country(0, Vector2.ZERO, {}, "", [], "")
 		reports.clear()
+		# Peace offered to the player in the saved game waits for an answer.
+		for offer in sim.peace_offers():
+			if int(offer["to"]) == player:
+				cards.append({"big": "peace_offer", "other": int(offer["from"])})
+	else:
+		feed_lines.clear() # the viewer's feed starts over too
 	_note("Game loaded")
 
 

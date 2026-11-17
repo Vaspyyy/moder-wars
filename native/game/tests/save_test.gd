@@ -25,11 +25,13 @@ func _initialize() -> void:
 	var poland := await _lead_fresh("Poland")
 	var saved_at: String = main.sim.time_text()
 	key(KEY_F5)
-	check(FileAccess.file_exists(dir.path_join("quicksave-Poland.mwsave")), "F5 saves into Poland's slot")
+	var slot := "quicksave-world-map-2026-v3-%d-Poland.mwsave" % poland
+	check(FileAccess.file_exists(dir.path_join(slot)), "F5 saves into Poland's slot in this scenario")
 	main.sim.run(30)
 	check(main.sim.time_text() != saved_at, "time goes on")
 	main.cards.append({"big": "war", "other": country("Germany")})
 	main._show_country_card(country("Germany"), main._world_from_lng_lat(10.0, 51.0))
+	check(main.country_card.card.visible, "a country card is open")
 	key(KEY_F9)
 	check(main.sim.time_text() == saved_at, "F9 goes back to the save")
 	check(not main.sim.is_ai(poland), "and Poland is still yours")
@@ -37,6 +39,23 @@ func _initialize() -> void:
 	check(not main.country_card.card.visible, "and an open country card closes")
 	check(main.reports.entries.size() == 1 and main.reports.entries[0][0] == "Game loaded",
 		"the reports start over: %s" % [main.reports.entries])
+
+	# A peace offer waiting in the saved game opens the peace window again.
+	var germany := country("Germany")
+	main.sim.declare_war(germany, poland)
+	main.sim.offer_peace_to(germany, poland)
+	main.sim.take_reports() # no card now: the offer is only in the save
+	main.sim.save_game(main._quicksave_path())
+	main._quickload()
+	main._refresh_sim()
+	check(main.peace_window.visible and main.peace_window.incoming and main.peace_with == germany,
+		"a peace offer in the save waits for an answer")
+	key(KEY_N)
+	check(not main.peace_window.visible, "and can be refused")
+	# The viewer has a slot of its own, apart from every led country's.
+	main.player = 0
+	check(main._quicksave_path().get_file() == "quicksave-world-map-2026-v3-viewer.mwsave", "the viewer's slot")
+	main.player = poland
 
 	# Leading another country: Poland's save is not this game's.
 	var ukraine := await _lead_fresh("Ukraine")
