@@ -49,6 +49,13 @@ static func box(fill: Color, line: Color = Color.TRANSPARENT, radius := 6,
 	return style
 
 
+## Make a panel keep the mouse to itself: clicks and the wheel over it do
+## not reach the map behind it (containers let them through otherwise).
+static func solid(control: Control) -> void:
+	control.mouse_filter = Control.MOUSE_FILTER_STOP
+	control.mouse_force_pass_scroll_events = false
+
+
 ## The panel every floating box on the map uses.
 static func panel(pad_x := 16, pad_y := 12, line: Color = LINE, radius := 6) -> StyleBoxFlat:
 	return box(PANEL, line, radius, pad_x, pad_y)

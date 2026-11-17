@@ -86,7 +86,7 @@ The genre (real-time-with-pause grand strategy) is the inspiration, not any one 
 The owner approved the mockups (pick a country, command the war, budget and mobilization, a peace offer) on 2026-11-16 and chose:
 
 - **Army groups:** a list on the left, one row per group with its front, size and strength (not cards on the map).
-- **Budget:** three sliders that always add up to 100% (recruiting, equipment, and the home front that is left).
+- **Budget:** sliders that always add up to 100%: recruiting and equipment are dragged, and the home front gets what is left (shown as a bar).
 - **Reports:** a feed on the right for everything; big events (a war declared on you, a peace offer, a capitulation) also pop up a card and pause the game.
 - **Peace terms:** the regions that would change hands light up on the map behind the peace window, which also lists them by name.
 

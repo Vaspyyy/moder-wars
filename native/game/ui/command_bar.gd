@@ -17,6 +17,7 @@ var tip: Label
 
 
 func setup() -> void:
+	Style.solid(self)
 	set_anchors_preset(PRESET_CENTER_BOTTOM)
 	grow_horizontal = GROW_DIRECTION_BOTH
 	grow_vertical = GROW_DIRECTION_BEGIN

@@ -32,9 +32,11 @@ var level_buttons: Array = []
 var draft_text: Label
 var draft_bar: Control
 var economy: Dictionary = {}
+var footer: Label
 
 
 func setup() -> void:
+	Style.solid(self)
 	set_anchors_preset(PRESET_CENTER_TOP)
 	grow_horizontal = GROW_DIRECTION_BOTH
 	offset_top = 96
@@ -121,8 +123,7 @@ func setup() -> void:
 	mobilization.add_child(draft_bar)
 	column.add_child(mobilization)
 
-	var footer := Style.label("Changes apply at once, even while paused. A division costs $%d bn and %s people; soldiers lost do not come back." % [
-		MwWorld.DIVISION_COST_K / 1_000_000, Style.thousands(MwWorld.DIVISION_SIZE)], 13, Style.MUTED)
+	footer = Style.label("", 13, Style.MUTED)
 	footer.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	footer.custom_minimum_size.x = WIDTH - 64
 	column.add_child(footer)
@@ -180,8 +181,20 @@ func _slide(value: int, is_recruiting: bool) -> void:
 	budget_changed.emit(int(recruiting.value), int(equipment.value))
 
 
-## Show a country's economy (MwWorld.economy).
-func show_economy(country: int, data: Dictionary) -> void:
+## Show a country's economy (MwWorld.economy). While the AI runs the
+## country it sets the budget itself, so the controls are locked.
+func show_economy(country: int, data: Dictionary, run_by_ai := false) -> void:
+	recruiting.editable = not run_by_ai
+	equipment.editable = not run_by_ai
+	for button in level_buttons:
+		button.disabled = run_by_ai
+	if run_by_ai:
+		footer.text = "The AI runs your country now and sets the budget and mobilization itself. Press I to take it back."
+		footer.add_theme_color_override("font_color", Style.GOLD)
+	else:
+		footer.text = "Changes apply at once, even while paused. A division costs $%d bn and %s people; soldiers lost do not come back." % [
+			MwWorld.DIVISION_COST_K / 1_000_000, Style.thousands(MwWorld.DIVISION_SIZE)]
+		footer.add_theme_color_override("font_color", Style.MUTED)
 	economy = data
 	swatch.add_theme_stylebox_override("panel", Style.box(palette.get_pixel(country, 0), Color(0, 0, 0, 0.6), 3))
 	title.text = "%s  ·  Economy" % scenario.country_name(country)
@@ -225,15 +238,15 @@ func show_economy(country: int, data: Dictionary) -> void:
 
 ## What a recruiting budget raises a day.
 func _recruits(per_day_k: int, manpower: int) -> String:
-	if manpower < MwWorld.DIVISION_SIZE:
-		return "no one left to draft at this mobilization"
 	if per_day_k <= 0:
 		return "no new divisions"
+	if manpower < MwWorld.DIVISION_SIZE:
+		return "fewer than %s people left to draft at this mobilization" % Style.thousands(MwWorld.DIVISION_SIZE)
 	var per_day := float(per_day_k) / MwWorld.DIVISION_COST_K
 	if per_day >= MwWorld.RECRUITS_PER_DAY:
 		return "about %d new divisions a day, the most allowed" % MwWorld.RECRUITS_PER_DAY
 	if per_day >= 1.0:
-		return "about 1 new division a day"
+		return "about %s new divisions a day" % String.num(per_day, 1)
 	return "a new division about every %d days" % ceili(1.0 / per_day)
 
 

@@ -338,8 +338,7 @@ func _lead(id: int, to_capital: bool) -> void:
 		sim.set_budget(player, recruiting, equipment)
 		_refresh_sim())
 	economy_window.mobilization_changed.connect(func(level: int) -> void:
-		if not sim.set_mobilization(player, level):
-			_note("Mobilization cannot change that way now")
+		sim.set_mobilization(player, level)
 		_refresh_sim())
 	economy_window.close_pressed.connect(func() -> void: _show_economy(false))
 	ui_layer.add_child(economy_window)
@@ -472,7 +471,7 @@ func _refresh_sim() -> void:
 	top_bar.show_state(player, economy, sim.enemies(player), divisions,
 		sim.time_text(), sim.is_paused(), sim.speed())
 	if economy_window.visible:
-		economy_window.show_economy(player, economy)
+		economy_window.show_economy(player, economy, sim.is_ai(player))
 	army_list.show_groups(_own_groups(), divisions, markers.selected_group)
 	_show_command_bar()
 
@@ -481,7 +480,7 @@ func _refresh_sim() -> void:
 func _show_economy(open: bool) -> void:
 	economy_window.visible = open and not no_hud
 	if economy_window.visible:
-		economy_window.show_economy(player, sim.economy(player))
+		economy_window.show_economy(player, sim.economy(player), sim.is_ai(player))
 
 
 ## The game date, "2026-10-25".

@@ -24,6 +24,7 @@ var values := {}
 
 
 func setup() -> void:
+	Style.solid(self)
 	set_anchors_preset(PRESET_TOP_WIDE)
 	custom_minimum_size.y = 60
 	var style := Style.box(Style.PANEL_SOLID, Color.TRANSPARENT, 0, 20, 0)

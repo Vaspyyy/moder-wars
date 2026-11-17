@@ -17,6 +17,7 @@ var shown: Array = []
 
 
 func setup() -> void:
+	Style.solid(self)
 	position = Vector2(16, 76)
 	custom_minimum_size.x = WIDTH
 	add_theme_stylebox_override("panel", Style.box(Color(Style.PANEL, 0.94), Style.LINE, 8, 16, 16))
