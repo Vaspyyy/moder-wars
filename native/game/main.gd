@@ -479,6 +479,10 @@ func _refresh_sim() -> void:
 			markers.routes[id] = points
 	markers.groups.clear()
 	for group in sim.groups():
+		# A group whose divisions all left (regrouped, lost) is not shown:
+		# no row in the list and no front on the map.
+		if PackedInt64Array(group["divisions"]).is_empty():
+			continue
 		for key in ["front", "arrow"]:
 			var points := PackedVector2Array()
 			for point in PackedVector2Array(group[key]):
@@ -487,6 +491,8 @@ func _refresh_sim() -> void:
 		# The front steps cell by cell around pockets; draw it smoothed.
 		group["front"] = Lines.smooth(group["front"])
 		markers.groups.append(group)
+	if markers.groups.all(func(g: Dictionary) -> bool: return int(g["id"]) != markers.selected_group):
+		markers.selected_group = 0
 	var changes := sim.control_changes()
 	for i in range(0, changes.size(), 3):
 		var country := changes[i + 2]

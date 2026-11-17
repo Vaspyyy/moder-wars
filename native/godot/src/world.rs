@@ -508,7 +508,9 @@ impl MwWorld {
     }
 
     /// The player leads `country`: it takes orders only from here, and the
-    /// AI runs every other country. Returns false for an unknown country.
+    /// AI runs every other country. Its divisions form their starting army
+    /// groups where they stand (`World::form_starting_groups`). Returns
+    /// false for an unknown country.
     #[func]
     fn lead(&mut self, country: i32) -> bool {
         let (Some(world), Ok(player)) = (self.world.as_mut(), u16::try_from(country)) else {
@@ -528,6 +530,7 @@ impl MwWorld {
                 .set_controller(id, controller)
                 .expect("a country of this world");
         }
+        world.form_starting_groups(player);
         self.player = player;
         true
     }

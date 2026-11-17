@@ -26,14 +26,28 @@ func _initialize() -> void:
 	for id in main.markers.countries:
 		if main.markers.countries[id] == poland:
 			own += 1
-	check(main.army_list.unassigned.visible, "a row for divisions in no group")
-	main.army_list.unassigned.pressed.emit()
-	check(main.markers.selected.size() == own, "it selects all %d" % own)
-	key(KEY_G)
-	check(not main.army_list.unassigned.visible, "after G they are all in a group")
-	key(KEY_ESCAPE)
+	check(not main.army_list.unassigned.visible, "every division starts in a group")
 	key(KEY_A, false, true)
 	check(main.markers.selected.size() == own, "Ctrl+A selects all your divisions")
+	key(KEY_G)
+	check(main._own_groups().size() == 1 and main.army_list.rows.get_child_count() == 1,
+		"G makes them one group, and the emptied starting groups leave the list")
+	key(KEY_ESCAPE)
+	# A direct order takes divisions out of their group: the row for
+	# divisions in no group selects them.
+	var loose := 0
+	var data: PackedFloat32Array = main.markers.data
+	for i in range(0, data.size(), MwWorld.DIVISION_STRIDE):
+		if int(data[i + 1]) == poland and loose < 2:
+			# Ordered to stay where it stands, which it always can.
+			main.sim.move_divisions(PackedInt64Array([int(data[i])]), data[i + 2], data[i + 3])
+			loose += 1
+	main._refresh_sim()
+	check(main.army_list.unassigned.visible, "a row for divisions in no group")
+	main.army_list.unassigned.pressed.emit()
+	check(main.markers.selected.size() == 2, "it selects those %d" % main.markers.selected.size())
+	key(KEY_G)
+	check(not main.army_list.unassigned.visible, "after G they are in a group too")
 	key(KEY_ESCAPE)
 	_button(MOUSE_BUTTON_LEFT, true, Vector2(2, 2), true)
 	var move := InputEventMouseMotion.new()

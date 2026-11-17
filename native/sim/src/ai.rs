@@ -353,7 +353,7 @@ impl World {
     }
 
     /// A line along the border with `enemy`, or empty if there is none.
-    fn front_line(&self, country: CountryId, enemy: CountryId) -> Vec<Cell> {
+    pub(crate) fn front_line(&self, country: CountryId, enemy: CountryId) -> Vec<Cell> {
         let border = self.border_cells(country, enemy);
         let walk = chain(&self.map, &border);
         let step = walk.len().div_ceil(FRONT_POINTS).max(1);
