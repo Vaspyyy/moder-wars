@@ -5,7 +5,10 @@
 //! peace, a region that one side owns by law and the other side alone holds
 //! more than half of becomes the holder's by law, whole: the cells the
 //! owner still held there go to it too, and it pays its new owner in full
-//! instead of the occupier's half. Whatever else either side holds of the
+//! instead of the occupier's half. Half is counted by what the land
+//! produces, as capitulation is (a big city weighs more than empty
+//! country around it), or by cells in a region that produces nothing.
+//! Whatever else either side holds of the
 //! other's regions goes back, so scattered pockets disappear and the new
 //! border runs along region lines. Divisions left on the other side's land
 //! go home to the nearest land their country holds. Regions of other
@@ -46,6 +49,8 @@ pub(crate) struct RegionMap {
     cell_region: Vec<u16>,
     /// Per region: its land cells.
     cells: Vec<u32>,
+    /// Per region: what its land produces (`MapData::value_k`, summed).
+    value_k: Vec<u64>,
     /// Per region: its owner by law when the game started.
     home: Vec<CountryId>,
 }
@@ -76,11 +81,18 @@ impl World {
     /// Give a world (fresh or loaded) its region map.
     pub(crate) fn attach_regions(&mut self, regions: &Regions) {
         self.regions_fingerprint = Some(regions.fingerprint());
-        self.regions = Some(Arc::new(RegionMap {
+        let mut map = RegionMap {
             cell_region: regions.cell_region.clone(),
             cells: regions.list.iter().map(|r| r.cells).collect(),
+            value_k: vec![0; regions.list.len()],
             home: regions.list.iter().map(|r| r.home).collect(),
-        }));
+        };
+        for (cell, value) in self.map.land_values() {
+            if let Some(region) = map.region(cell) {
+                map.value_k[region] += value;
+            }
+        }
+        self.regions = Some(Arc::new(map));
     }
 
     /// Who owns the cell by law: its region's new owner if a peace handed
@@ -184,28 +196,45 @@ impl World {
     fn settlement(&self, a: CountryId, b: CountryId) -> Option<Settlement> {
         let map = self.regions.as_deref()?;
         let (a, b) = (a.min(b), a.max(b));
-        // Cells of each region held by a and by b.
-        let mut held: BTreeMap<usize, [u32; 2]> = BTreeMap::new();
-        for (cell, &holder) in self.control.iter().enumerate() {
-            let side = match holder {
-                h if h == a => 0,
-                h if h == b => 1,
-                _ => continue,
-            };
-            if let Some(region) = map.region(cell as Cell) {
+        let side = |cell: Cell| match self.control[cell as usize] {
+            h if h == a => Some(0),
+            h if h == b => Some(1),
+            _ => None,
+        };
+        // Cells of each region held by a and by b, and what they produce.
+        let mut held: BTreeMap<usize, [u64; 2]> = BTreeMap::new();
+        for cell in 0..self.control.len() as Cell {
+            if let Some(side) = side(cell)
+                && let Some(region) = map.region(cell)
+            {
                 held.entry(region).or_default()[side] += 1;
             }
         }
+        let mut worth: BTreeMap<usize, [u64; 2]> = BTreeMap::new();
+        for (cell, value) in self.map.land_values() {
+            if let Some(side) = side(cell)
+                && let Some(region) = map.region(cell)
+            {
+                worth.entry(region).or_default()[side] += value;
+            }
+        }
         let mut settlement = Settlement::default();
-        for (&region, &[on_a, on_b]) in &held {
+        for (&region, &cells) in &held {
             let owner = self.region_owner(map, region);
-            let (other, on_other) = match owner {
-                o if o == a => (b, on_b),
-                o if o == b => (a, on_a),
+            let other_side = match owner {
+                o if o == a => 1,
+                o if o == b => 0,
                 // Another country's region: not part of this peace.
                 _ => continue,
             };
-            if u64::from(on_other) * 2 > u64::from(map.cells[region]) {
+            let other = [a, b][other_side];
+            let (on_other, total) = if map.value_k[region] > 0 {
+                let value = worth.get(&region).copied().unwrap_or_default();
+                (value[other_side], map.value_k[region])
+            } else {
+                (cells[other_side], u64::from(map.cells[region]))
+            };
+            if on_other * 2 > total {
                 settlement.ceded.push(Cession {
                     region,
                     from: owner,
