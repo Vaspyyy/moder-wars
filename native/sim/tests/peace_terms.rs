@@ -1,9 +1,9 @@
 //! Peace terms in regions. At peace, a region one side owns by law and the
-//! other side alone holds more than half of becomes theirs by law, whole,
-//! and pays them in full; whatever else either side holds of the other's
-//! regions goes back. A third country's region both hold parts of goes
-//! whole to the one holding more of it. Divisions left on the other side's
-//! land go home. Land held by anyone else is not part of the peace.
+//! other side alone holds more than half of (by what its land produces)
+//! becomes theirs by law, whole, and pays them in full; whatever else
+//! either side holds of the other's regions goes back. Divisions left on
+//! the other side's land go home. Land held by anyone else, and a third
+//! country's regions, are not part of the peace.
 
 mod common;
 
@@ -264,7 +264,10 @@ fn pockets_go_back_and_the_troops_come_home() {
 }
 
 #[test]
-fn half_of_a_region_is_not_enough() {
+fn a_city_outweighs_the_land_around_it() {
+    // Poland holds the city of Kyiv but only 4 of the 20 cells of its
+    // region, as a Ukrainian division holds the rest: the city produces
+    // more than all of them, so the region is Poland's.
     let s = common::world_2026();
     let (poland, ukraine) = (country(s, "Poland"), country(s, "Ukraine"));
     let mut world = World::new(s, 1);
@@ -272,29 +275,36 @@ fn half_of_a_region_is_not_enough() {
     order(&mut world, poland, Command::DeclareWar { target: ukraine });
     world.step();
     world
-        .spawn_division(poland, cell(s, 30.35, 50.45), 10_000)
+        .spawn_division(ukraine, cell(s, 30.40, 50.45), 10_000)
+        .unwrap();
+    world
+        .spawn_division(poland, cell(s, 30.52, 50.44), 10_000)
         .unwrap();
     run(&mut world, 2);
-    let city = cells_of(region("UKR-4826"));
-    assert_eq!((held_by(&world, &city, poland), city.len()), (10, 20));
-    let events = make_peace(&mut world, ukraine, poland);
-    assert!(
-        !events
-            .iter()
-            .any(|e| matches!(e, Event::RegionsCeded { .. }))
-    );
+    let kyiv = region("UKR-4826");
+    let city = cells_of(kyiv);
+    assert_eq!((held_by(&world, &city, poland), city.len()), (4, 20));
+    let capital = s.cities.iter().find(|c| c.name == "Kyiv").unwrap();
     assert_eq!(
-        held_by(&world, &city, ukraine),
-        city.len(),
-        "it all goes back"
+        world.control()[cell(s, capital.lng, capital.lat) as usize],
+        poland
     );
+    assert!(world.peace_terms(poland, ukraine).contains(&Cession {
+        region: kyiv,
+        from: ukraine,
+        to: poland,
+    }));
+    make_peace(&mut world, ukraine, poland);
+    assert!(city.iter().all(|&c| world.owner_by_law(c) == poland));
+    assert_eq!(held_by(&world, &city, poland), city.len(), "the whole city");
 }
 
 #[test]
 fn a_region_needs_more_than_half_of_it_held_by_the_winner_alone() {
-    // Russia, also at war with Ukraine, holds 6 of Kyiv's 20 cells, Poland
-    // 8 and Ukraine 6: the two at peace hold most of it together, but
-    // Poland alone does not.
+    // Russia, also at war with Ukraine, holds 9 of Kyiv's 20 cells with the
+    // city, Poland 7 and Ukraine 4: Poland holds more than Ukraine, and the
+    // two at peace hold most of the land together, but Poland alone does
+    // not hold most of what the region produces.
     let s = common::world_2026();
     let (poland, ukraine, russia) = (
         country(s, "Poland"),
@@ -307,10 +317,10 @@ fn a_region_needs_more_than_half_of_it_held_by_the_winner_alone() {
     order(&mut world, russia, Command::DeclareWar { target: ukraine });
     world.step();
     world
-        .spawn_division(russia, cell(s, 30.30, 50.30), 10_000)
+        .spawn_division(russia, cell(s, 30.52, 50.45), 10_000)
         .unwrap();
     world
-        .spawn_division(poland, cell(s, 30.48, 50.55), 10_000)
+        .spawn_division(poland, cell(s, 30.35, 50.45), 10_000)
         .unwrap();
     run(&mut world, 2);
     let city = cells_of(region("UKR-4826"));
@@ -319,7 +329,7 @@ fn a_region_needs_more_than_half_of_it_held_by_the_winner_alone() {
         held_by(&world, &city, ukraine),
         held_by(&world, &city, russia),
     );
-    assert_eq!((polish, ukrainian, russian, city.len()), (8, 6, 6, 20));
+    assert_eq!((polish, ukrainian, russian, city.len()), (7, 4, 9, 20));
 
     let events = make_peace(&mut world, ukraine, poland);
     assert!(
@@ -334,13 +344,10 @@ fn a_region_needs_more_than_half_of_it_held_by_the_winner_alone() {
         0,
         "Poland gives its part back"
     );
-    // Russia, still at war, keeps its part and may have taken a little
-    // more while the peace was offered and answered.
+    // Russia, still at war, keeps its part, and its division in the middle
+    // of the city takes what Poland handed back to Ukraine.
     let now_russian = held_by(&world, &city, russia);
-    assert!(
-        (russian..russian + 3).contains(&now_russian),
-        "{now_russian}"
-    );
+    assert!(now_russian >= russian, "{now_russian}");
     assert_eq!(held_by(&world, &city, ukraine) + now_russian, city.len());
     assert!(world.at_war(russia, ukraine));
 }
