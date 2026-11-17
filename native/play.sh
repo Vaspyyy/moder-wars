@@ -6,6 +6,8 @@
 #                                   commits land, pull, rebuild and restart
 #   native/play.sh --scenario=ukraine-2023-v3 --view=34,48.5,9
 #                                   any other option goes to the game
+#   native/play.sh --prepare        build and import only, then stop (for
+#                                   test-screens.sh)
 #
 # Close the game window (or press Ctrl+C here) to stop.
 set -euo pipefail
@@ -14,12 +16,14 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 godot=${GODOT:-godot-beta}
 interval=${PLAY_WATCH_SECONDS:-30}
 watch=0
+prepare=0
 args=()
 for arg in "$@"; do
 	case $arg in
 	--watch) watch=1 ;;
+	--prepare) prepare=1 ;;
 	-h | --help)
-		sed -n 2,10p "$0"
+		sed -n 2,12p "$0"
 		exit 0
 		;;
 	*) args+=("$arg") ;;
@@ -45,9 +49,10 @@ import_project() {
 	# extension is loaded (Godot 4.7.2 and 4.8 beta3 alike), after it has
 	# written everything. Judge it by the extension list, not the exit code,
 	# and skip the core dump.
-	(ulimit -c 0 && "$godot" --headless --path "$game" --import) >"$here/target/godot-import.log" 2>&1 || true
+	(ulimit -c 0 && timeout -k 5 600 "$godot" --headless --path "$game" --import) \
+		>"$here/target/godot-import.log" 2>&1 || true
 	if [ ! -f "$game/.godot/extension_list.cfg" ]; then
-		echo "Importing the Godot project failed; see native/target/godot-import.log"
+		echo "Importing the Godot project failed; see native/target/godot-import.log" >&2
 		return 1
 	fi
 	touch "$stamp"
@@ -55,6 +60,9 @@ import_project() {
 
 build
 import_project
+if ((prepare)); then
+	exit 0
+fi
 if ((!watch)); then
 	exec "$godot" --path "$here/game" -- "${args[@]}"
 fi
