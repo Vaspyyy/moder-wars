@@ -11,12 +11,17 @@ var scenario: MwScenario
 var failures := 0
 
 
-## Start the game on the pick screen, in a 1600x900 window (a headless
-## window is tiny otherwise, which makes click radii huge), with this
-## scenario's package (default: the command line's, or the 2026 world).
-func start(scenario_name := "") -> void:
+## Start the game in a 1600x900 window (a headless window is tiny
+## otherwise, which makes click radii huge) with this scenario's package
+## (default: the 2026 world), on the pick screen unless `options` (the
+## game's command-line options) say otherwise: {} opens the main menu.
+func start(scenario_name := "", options := {"pick": ""}) -> void:
 	root.size = Vector2i(1600, 900)
-	Main.restart_args = {"scenario": scenario_name} if scenario_name != "" else {}
+	var args: Dictionary = options.duplicate()
+	if scenario_name != "":
+		args["scenario"] = scenario_name
+	# The main menu needs some option set, or the command line's count.
+	Main.restart_args = args if not args.is_empty() else {"scenario": "world-map-2026-v3"}
 	main = load("res://main.tscn").instantiate()
 	root.add_child(main)
 	await process_frame

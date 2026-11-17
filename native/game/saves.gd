@@ -43,6 +43,47 @@ func list() -> Array:
 	return found
 
 
+## Every save in the folder of a scenario in `scenarios` (package names),
+## named or quick, of any country (whatever `scenario_name` and `who` say):
+## entries as in `list`, plus `scenario` (the package), `country` (the led
+## country's id, 0 for the viewer) and `country_name`, newest first.
+func all(scenarios: PackedStringArray) -> Array:
+	var found: Array = []
+	for file in DirAccess.get_files_at(ProjectSettings.globalize_path(dir)):
+		if not file.ends_with(".mwsave"):
+			continue
+		var quick := file.begins_with("quicksave-")
+		if not quick and not file.begins_with("save-"):
+			continue
+		var rest := file.trim_suffix(".mwsave").trim_prefix("quicksave-" if quick else "save-")
+		for scenario in scenarios:
+			var prefix := _file(scenario + "-")
+			if not rest.begins_with(prefix):
+				continue
+			var who := rest.trim_prefix(prefix)
+			if not quick:
+				# "<who>-<milliseconds>"
+				var cut := who.rfind("-")
+				if cut < 0 or not who.substr(cut + 1).is_valid_int():
+					break
+				who = who.left(cut)
+			var entry := _entry(_path(file), "Quick save" if quick else "Save")
+			entry["scenario"] = scenario
+			entry["country"] = 0
+			entry["country_name"] = ""
+			if who != "viewer":
+				var dash := who.find("-")
+				if dash <= 0 or not who.left(dash).is_valid_int():
+					break
+				entry["country"] = who.left(dash).to_int()
+				entry["country_name"] = who.substr(dash + 1)
+			found.append(entry)
+			break
+	found.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return a["saved"] > b["saved"] if a["saved"] != b["saved"] else a["path"] > b["path"])
+	return found
+
+
 ## The quick save, if any, then the named saves.
 func count() -> int:
 	return list().size() + (0 if quick().is_empty() else 1)

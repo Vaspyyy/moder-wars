@@ -3,6 +3,7 @@ extends Control
 ## player clicked, with a button to lead it.
 
 signal lead_pressed(country: int)
+signal back_pressed
 
 const Style := preload("res://ui/style.gd")
 const CountryCard := preload("res://ui/country_card.gd")
@@ -22,6 +23,8 @@ func setup(start_date: String) -> void:
 	var title := PanelContainer.new()
 	title.add_theme_stylebox_override("panel", Style.panel(18, 14))
 	title.position = Vector2(24, 20)
+	var title_row := HBoxContainer.new()
+	title_row.add_theme_constant_override("separation", 18)
 	var title_lines := VBoxContainer.new()
 	title_lines.add_theme_constant_override("separation", 4)
 	title_lines.add_child(Style.label("MODERN WARS", 22, Style.TEXT, Style.spaced(Style.TITLE_BOLD, 3)))
@@ -29,7 +32,13 @@ func setup(start_date: String) -> void:
 	if start_date != "":
 		subtitle += "  ·  starts " + Style.long_date(start_date)
 	title_lines.add_child(Style.label(subtitle, 14, Style.MUTED))
-	title.add_child(title_lines)
+	title_row.add_child(title_lines)
+	var back := Style.tool_button("Back", "Esc")
+	back.name = "Back"
+	back.size_flags_vertical = SIZE_SHRINK_CENTER
+	back.pressed.connect(func() -> void: back_pressed.emit())
+	title_row.add_child(back)
+	title.add_child(title_row)
 	Style.solid(title)
 	add_child(title)
 

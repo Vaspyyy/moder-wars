@@ -507,6 +507,21 @@ impl MwWorld {
         }
     }
 
+    /// Observer mode: the AI runs every country and nobody is led.
+    #[func]
+    fn observe(&mut self) {
+        let Some(world) = self.world.as_mut() else {
+            return;
+        };
+        let ids: Vec<CountryId> = world.countries().iter().map(|c| c.id).collect();
+        for id in ids {
+            world
+                .set_controller(id, Controller::Ai)
+                .expect("a country of this world");
+        }
+        self.player = 0;
+    }
+
     /// The player leads `country`: it takes orders only from here, and the
     /// AI runs every other country. Its divisions form their starting army
     /// groups where they stand (`World::form_starting_groups`). Returns
