@@ -82,6 +82,14 @@ func _initialize() -> void:
 	check(menu.name_box.text == "%s, %s" % [main.Style.long_date(main._today()),
 		main.sim.time_text().get_slice(" ", 1)], "a name is suggested: %s" % menu.name_box.text)
 	check(_row("Row0") == null and _row("Quick") == null, "no saves yet")
+	await process_frame
+	var orphans := Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)
+	for i in 3:
+		menu.show_saves(main._menu_state())
+	await process_frame
+	await process_frame
+	check(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT) == orphans,
+		"showing an empty list leaves no nodes behind")
 	menu.name_box.text = "  Before the push  "
 	_press("Save")
 	var slots = main._slots()

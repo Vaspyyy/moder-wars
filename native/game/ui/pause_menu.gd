@@ -178,11 +178,13 @@ func show_saves(info: Dictionary) -> void:
 	column.add_child(form)
 
 	var rows := _column(0)
+	rows.name = "Rows"
 	if not info["quick"].is_empty():
 		rows.add_child(_save_row(info["quick"], "Quick"))
 	for i in info["saves"].size():
 		rows.add_child(_save_row(info["saves"][i], "Row%d" % i))
 	if rows.get_child_count() == 0:
+		rows.free() # never shown, so freed here
 		column.add_child(_wrapped("No saves yet: name one above and press Save.", 15, Style.MUTED,
 			Style.BODY, SAVES_WIDTH - 60))
 	elif rows.get_child_count() > ROWS_SHOWN:
@@ -195,7 +197,6 @@ func show_saves(info: Dictionary) -> void:
 		column.add_child(scroll)
 	else:
 		column.add_child(rows)
-	rows.name = "Rows"
 	if String(info.get("message", "")) != "":
 		column.add_child(_wrapped(info["message"], 14, Style.WAR, Style.BODY, SAVES_WIDTH - 60))
 	column.add_child(_wrapped("The saves of the country you lead in this scenario, newest first. "
