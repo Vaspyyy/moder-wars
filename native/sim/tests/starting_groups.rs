@@ -249,3 +249,66 @@ fn a_group_sent_to_another_border_drops_its_arrow() {
         "the arrow into Germany went with the old front"
     );
 }
+
+#[test]
+fn peace_drops_the_arrows_aimed_at_the_other_side() {
+    // An arrow into a country you are at peace with can never be finished
+    // (divisions do not enter its land), so making peace takes it away.
+    let s = common::world_2026();
+    let mut world = deployed();
+    let (poland, germany) = (country(s, "Poland"), country(s, "Germany"));
+    world.form_starting_groups(poland);
+    let group = world
+        .army_groups()
+        .iter()
+        .find(|g| g.enemy == Some(germany))
+        .expect("a group facing Germany")
+        .id;
+    let order = |tick, country, command| Order {
+        tick,
+        country,
+        command,
+    };
+    let tick = world.tick();
+    let berlin = common::cell(s, 13.4, 52.5);
+    let start = world.army_group(group).unwrap().front[0];
+    for o in [
+        order(tick, poland, Command::DeclareWar { target: germany }),
+        order(
+            tick,
+            poland,
+            Command::DrawArrow {
+                group,
+                line: vec![start, berlin],
+            },
+        ),
+        order(tick, poland, Command::OfferPeace { to: germany }),
+    ] {
+        world.submit(o).unwrap();
+    }
+    world.apply_orders();
+    assert!(
+        !world.army_group(group).unwrap().arrow.is_empty(),
+        "an arrow to Berlin"
+    );
+    world
+        .submit(order(
+            world.tick(),
+            germany,
+            Command::AnswerPeace {
+                from: poland,
+                accept: true,
+            },
+        ))
+        .unwrap();
+    world.apply_orders();
+    assert!(world.enemies(poland).is_empty(), "peace");
+    let held = world.army_group(group).unwrap();
+    assert!(held.arrow.is_empty(), "the arrow into Germany is gone");
+    assert_eq!(
+        held.enemy,
+        Some(germany),
+        "the group still holds the border"
+    );
+    assert!(!held.front.is_empty());
+}
