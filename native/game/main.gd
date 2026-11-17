@@ -462,6 +462,10 @@ func _start_sim(args: Dictionary) -> void:
 func _refresh_sim() -> void:
 	markers.pixel = 1.0 / camera.zoom.x
 	markers.update(sim.divisions())
+	# Divisions that are gone (destroyed or surrendered) leave the selection.
+	for id in markers.selected.keys():
+		if not markers.positions.has(id):
+			markers.selected.erase(id)
 	markers.routes.clear()
 	for id in markers.selected:
 		if not markers.positions.has(id):
@@ -573,9 +577,34 @@ func _show_command_bar() -> void:
 		for group in markers.groups:
 			if int(group["id"]) == markers.selected_group:
 				can_hold = PackedVector2Array(group["arrow"]).size() > 0
-	elif markers.selected.size() == 1:
-		name = "Division %d" % int(markers.selected.keys()[0])
-	command_bar.show_selection(name, can_hold, drawing)
+	var detail := ""
+	if markers.selected_group == 0 and markers.selected.size() == 1:
+		var id := int(markers.selected.keys()[0])
+		name = "Division %d" % id
+		detail = _division_state(id)
+	command_bar.show_selection(name, can_hold, drawing, detail)
+
+
+## "98% strength  ·  100% morale  ·  holding" for a division, or "" when it
+## is gone.
+func _division_state(id: int) -> String:
+	var data := markers.data
+	for i in range(0, data.size(), MwWorld.DIVISION_STRIDE):
+		if int(data[i]) == id:
+			return _division_state_at(i)
+	return ""
+
+
+## The same for the division at index `i` of markers.data.
+func _division_state_at(i: int) -> String:
+	var data := markers.data
+	var flags := int(data[i + 6])
+	var state := "fighting" if flags & MwWorld.IN_BATTLE else (
+		"marching" if flags & MwWorld.MOVING else "holding")
+	if not flags & MwWorld.SUPPLIED:
+		state += ", cut off"
+	return "%d%% strength  ·  %d%% morale  ·  %s" % [
+		roundi(data[i + 4] * 100.0), roundi(data[i + 5] * 100.0), state]
 
 
 ## Select one of the player's groups from the list and look at it.
@@ -818,19 +847,16 @@ func _show_details() -> void:
 	var stride := MwWorld.DIVISION_STRIDE
 	var data := markers.data
 	var lines: PackedStringArray = []
+	var count := 0
 	for i in range(0, data.size(), stride):
 		if not markers.selected.has(int(data[i])):
 			continue
-		var flags := int(data[i + 6])
-		var state := "fighting" if flags & MwWorld.IN_BATTLE else (
-			"marching" if flags & MwWorld.MOVING else "holding")
-		if not flags & MwWorld.SUPPLIED:
-			state += ", cut off"
-		lines.append("%s division %d  ·  %d%% strength  ·  %d%% morale  ·  %s" % [
-			scenario.country_name(int(data[i + 1])), int(data[i]),
-			roundi(data[i + 4] * 100.0), roundi(data[i + 5] * 100.0), state])
-	if lines.size() > 1:
-		lines = PackedStringArray(["%d divisions selected" % lines.size()])
+		count += 1
+		if count == 1:
+			lines.append("%s division %d  ·  %s" % [scenario.country_name(int(data[i + 1])), int(data[i]),
+				_division_state_at(i)])
+	if count > 1:
+		lines = PackedStringArray(["%d divisions selected" % count])
 	var country := _acting_country()
 	if country != 0:
 		var e: Dictionary = sim.economy(country)
