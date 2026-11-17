@@ -8,7 +8,9 @@ extends Node2D
 ## wheel or +/-. Space pauses and resumes, 1-5 set the speed.
 ##
 ## Armies: click a division to select it (only your own while you lead a
-## country), or its whole army group if it is in
+## country; Shift+drag selects all in a box, Ctrl+A all of yours, and the
+## army group list has a row for divisions in no group), or its whole army
+## group if it is in
 ## one (Shift-click adds or removes single divisions). G makes the selection an
 ## army group. F then a left-drag draws the selected group's front along a
 ## border; R then a left-drag draws its arrow into enemy land; X removes the
@@ -106,6 +108,9 @@ var stroke_points := PackedVector2Array()
 var hovered_id := -1
 var hovered_region := -1
 var dragging := false
+## Shift+drag: the box being drawn to select divisions.
+var boxing := false
+var select_box := Panel.new()
 var ui_layer := CanvasLayer.new()
 var no_hud := false
 ## The country the player leads, or 0 (pick screen or viewer).
@@ -239,6 +244,10 @@ func _build_map() -> void:
 
 func _build_ui() -> void:
 	add_child(ui_layer)
+	select_box.add_theme_stylebox_override("panel", Style.box(Color(Style.GOLD, 0.12), Style.GOLD, 2))
+	select_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	select_box.visible = false
+	ui_layer.add_child(select_box)
 	no_hud = _parse_args().has("no-hud")
 	for label in [info, clock, feed, details, help]:
 		label.add_theme_color_override("font_outline_color", Color.BLACK)
@@ -328,6 +337,7 @@ func _lead(id: int, to_capital: bool) -> void:
 	army_list.scenario = scenario
 	army_list.setup()
 	army_list.group_pressed.connect(_focus_group)
+	army_list.unassigned_pressed.connect(_select_loose)
 	reports = Reports.new()
 	reports.setup()
 	command_bar = CommandBar.new()
@@ -500,7 +510,11 @@ func _refresh_sim() -> void:
 		sim.time_text(), sim.is_paused(), sim.speed())
 	if economy_window.visible:
 		economy_window.show_economy(player, economy, sim.is_ai(player))
-	army_list.show_groups(_own_groups(), divisions, markers.selected_group)
+	var grouped := {}
+	for group in _own_groups():
+		for id in PackedInt64Array(group["divisions"]):
+			grouped[id] = true
+	army_list.show_groups(_own_groups(), divisions, markers.selected_group, divisions - grouped.size())
 	_show_command_bar()
 
 
@@ -573,6 +587,42 @@ func _focus_group(group: int) -> void:
 	if count > 0:
 		create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT) \
 			.tween_property(camera, "position", center / count, 0.5)
+	_refresh_sim()
+
+
+## Select the player's divisions that are in no army group.
+func _select_loose() -> void:
+	var grouped := {}
+	for group in _own_groups():
+		for id in PackedInt64Array(group["divisions"]):
+			grouped[id] = true
+	markers.selected.clear()
+	markers.selected_group = 0
+	for id in markers.countries:
+		if markers.countries[id] == player and not grouped.has(id):
+			markers.selected[id] = true
+	_refresh_sim()
+
+
+## Select every division of the country you lead (Ctrl+A).
+func _select_all_own() -> void:
+	markers.selected.clear()
+	markers.selected_group = 0
+	for id in markers.countries:
+		if markers.countries[id] == player:
+			markers.selected[id] = true
+	_refresh_sim()
+
+
+## Add the divisions inside a screen rectangle to the selection (only your
+## own while you lead a country).
+func _select_in_box(box: Rect2) -> void:
+	markers.selected_group = 0
+	for id in markers.positions:
+		if player != 0 and markers.countries[id] != player:
+			continue
+		if box.has_point(get_canvas_transform() * markers.positions[id]):
+			markers.selected[id] = true
 	_refresh_sim()
 
 
@@ -924,6 +974,21 @@ func _unhandled_input(event: InputEvent) -> void:
 					markers.stroke_is_arrow = drawing == "arrow"
 				else:
 					_finish_drawing()
+			MOUSE_BUTTON_LEFT when pick == null and (boxing or (button.pressed and button.shift_pressed)):
+				# Shift+drag draws a box; a Shift-click without dragging adds or
+				# removes one division.
+				if button.pressed:
+					boxing = true
+					press_at = button.position
+					select_box.position = press_at
+					select_box.size = Vector2.ZERO
+				else:
+					boxing = false
+					select_box.visible = false
+					if button.position.distance_to(press_at) < CLICK_SLOP:
+						_select_at(button.position, true)
+					else:
+						_select_in_box(Rect2(press_at, Vector2.ZERO).expand(button.position))
 			MOUSE_BUTTON_LEFT, MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_RIGHT:
 				dragging = button.pressed
 				if button.pressed:
@@ -941,6 +1006,11 @@ func _unhandled_input(event: InputEvent) -> void:
 				stroke_points.append(_lng_lat_at(motion.position))
 				markers.stroke.append(_screen_to_world(motion.position))
 				markers.queue_redraw()
+		elif boxing:
+			var box := Rect2(press_at, Vector2.ZERO).expand(motion.position)
+			select_box.position = box.position
+			select_box.size = box.size
+			select_box.visible = box.size.length() >= CLICK_SLOP
 		elif dragging:
 			camera.position -= motion.relative / camera.zoom
 			_clamp_camera()
@@ -975,6 +1045,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif key >= KEY_1 and key <= KEY_5:
 			sim.set_speed(key - KEY_0)
 			_refresh_sim()
+		elif key == KEY_A and (event as InputEventKey).ctrl_pressed and player != 0:
+			_select_all_own()
 		elif key == KEY_G and not markers.selected.is_empty():
 			var group := int(sim.create_group(PackedInt64Array(markers.selected.keys())))
 			_refresh_sim()
@@ -1061,11 +1133,13 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _process(delta: float) -> void:
 	var direction := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
-	# Not while a card or the peace window waits for an answer.
+	# WASD pans, but not as part of Ctrl+A or Shift+W, and not while a card
+	# or the peace window waits for an answer.
 	var modal: bool = (event_card != null and event_card.visible) or (peace_window != null and peace_window.visible)
-	for pair in [[KEY_A, Vector2.LEFT], [KEY_D, Vector2.RIGHT], [KEY_W, Vector2.UP], [KEY_S, Vector2.DOWN]]:
-		if not modal and Input.is_physical_key_pressed(pair[0]):
-			direction += pair[1]
+	if not modal and not Input.is_key_pressed(KEY_CTRL) and not Input.is_key_pressed(KEY_SHIFT):
+		for pair in [[KEY_A, Vector2.LEFT], [KEY_D, Vector2.RIGHT], [KEY_W, Vector2.UP], [KEY_S, Vector2.DOWN]]:
+			if Input.is_physical_key_pressed(pair[0]):
+				direction += pair[1]
 	if direction != Vector2.ZERO:
 		camera.position += direction.normalized() * 900.0 * delta / camera.zoom.x
 		_clamp_camera()
