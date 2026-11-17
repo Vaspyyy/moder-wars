@@ -85,7 +85,8 @@ pub(crate) fn spread_by(
         return Vec::new();
     };
     let weights: Vec<u64> = line.iter().map(|&c| weight(c).max(1)).collect();
-    // Start at one end: the cell farthest (by weight) from an arbitrary one.
+    // Start far out: the cell whose distance from an arbitrary one, times its
+    // weight, is largest (with equal weights, one end of the line).
     let (start, _) = line
         .iter()
         .zip(&weights)

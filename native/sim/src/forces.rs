@@ -190,12 +190,13 @@ impl World {
         let mut borders: BTreeMap<CountryId, BTreeMap<Cell, u64>> = BTreeMap::new();
         for cell in 0..self.map.len() as Cell {
             let holder = self.control[cell as usize];
-            if holder == 0 {
+            if holder == 0 || !self.map.is_land(cell) {
                 continue;
             }
             let weight = self
                 .map
                 .sides(cell)
+                .filter(|&n| self.map.is_land(n))
                 .map(|n| self.control[n as usize])
                 .filter(|&other| other != 0 && other != holder)
                 .map(&threat)

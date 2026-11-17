@@ -163,7 +163,7 @@ fn more_divisions_face_bigger_armies() {
     assert!(east >= 2 * south.max(1), "east {east}, south {south}");
     assert!(
         facing(&world, s, poland, &["Germany"]) > 0,
-        "smaller neighbors still get some"
+        "a smaller neighbor (Germany) still gets some"
     );
     // Ukraine: mostly facing Russia and Belarus, not its western neighbors.
     let ukraine = country(s, "Ukraine");
