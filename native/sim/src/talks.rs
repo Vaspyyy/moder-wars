@@ -15,8 +15,9 @@
 //!
 //! The chance it accepts is 50% when the margin just pays the price, and
 //! moves by `SPREAD` per percent (of output) either way, from never to
-//! always. The AI rolls that chance once, when it answers; the player sees
-//! it before sending terms.
+//! always; it is halved when the peace would be a separate one, costing
+//! the country its faction (`factions.rs`). The AI rolls that chance once,
+//! when it answers; the player sees it before sending terms.
 
 use crate::support::FULL_SUPPORT;
 use crate::world::{CountryId, World};
@@ -50,6 +51,8 @@ pub struct Willingness {
     pub asked: f64,
     /// The part of `asked` the other side holds.
     pub asked_held: f64,
+    /// Peace would take it out of its faction (a separate peace).
+    pub separate: bool,
 }
 
 impl World {
@@ -74,14 +77,17 @@ impl World {
             }
         }
         let margin = self.strain(to, from) - self.strain(from, to);
+        let separate = self.separate_peace(to, from);
+        let chance = (0.5 + (margin - price) / SPREAD).clamp(0.0, 1.0);
         Willingness {
-            chance: (0.5 + (margin - price) / SPREAD).clamp(0.0, 1.0),
+            chance: if separate { chance / 2.0 } else { chance },
             margin,
             price,
             lost: self.lost_share(to),
             support: economy.map_or(FULL_SUPPORT, |e| e.support),
             asked,
             asked_held,
+            separate,
         }
     }
 

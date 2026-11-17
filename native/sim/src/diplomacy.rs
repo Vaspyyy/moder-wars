@@ -113,7 +113,7 @@ impl World {
         let offer = self.offers.remove(at);
         if accept {
             events.push(Event::PeaceMade { from, to });
-            self.end_war_on(from, to, Some(&offer.terms), events);
+            self.make_peace(from, to, Some(&offer.terms), events);
         } else {
             events.push(Event::PeaceRefused { from, to });
             let until = self.tick() + TALKS_CLOSED_DAYS * 24;
@@ -143,6 +143,8 @@ impl World {
     /// The war between two countries is over; the land stays as it is held.
     fn stop_war(&mut self, a: CountryId, b: CountryId) {
         self.wars.remove(&(a.min(b), a.max(b)));
+        self.defending
+            .retain(|&(d, at), _| !((d == a && at == b) || (d == b && at == a)));
         self.offers
             .retain(|o| !((o.from == a && o.to == b) || (o.from == b && o.to == a)));
         for group in &mut self.groups {
@@ -246,6 +248,7 @@ impl World {
         self.remove_divisions(&surrendering, Loss::Surrendered, events);
         self.groups.retain(|g| g.country != country);
         self.after_capitulation(country);
+        self.leave_faction(country, false, events);
         self.open_conference(country, enemies, events);
     }
 }

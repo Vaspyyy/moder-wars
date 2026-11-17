@@ -1,13 +1,15 @@
 extends PanelContainer
-## The bar along the top while the player leads a country: the country and
-## whether it is at war on the left, the date with the pause button and the
-## five speeds in the middle, and income, people left to draft, divisions and
-## war support on the right.
+## The bar along the top while the player leads a country: the country,
+## whether it is at war and its faction on the left, the date with the
+## pause button and the five speeds in the middle, and income, people left
+## to draft, divisions and war support on the right.
 
 signal pause_pressed
 signal speed_pressed(speed: int)
 ## Income or people left to draft was clicked: open the economy window.
 signal economy_pressed
+## The faction button was clicked: open the faction window.
+signal faction_pressed
 
 const Style := preload("res://ui/style.gd")
 
@@ -21,6 +23,8 @@ var date: Label
 var hour: Label
 var speed := SpeedControl.new()
 var values := {}
+## The faction's name, a button (hidden in no faction).
+var faction: Button
 
 
 func setup() -> void:
@@ -48,6 +52,23 @@ func setup() -> void:
 	status = Style.label("", 14)
 	status_box.add_child(status)
 	left.add_child(status_box)
+	faction = Button.new()
+	faction.name = "Faction"
+	faction.focus_mode = FOCUS_NONE
+	faction.mouse_default_cursor_shape = CURSOR_POINTING_HAND
+	faction.size_flags_vertical = SIZE_SHRINK_CENTER
+	faction.tooltip_text = "Your faction"
+	faction.add_theme_font_override("font", Style.BODY_STRONG)
+	faction.add_theme_font_size_override("font_size", 14)
+	for state in ["normal", "hover", "pressed"]:
+		faction.add_theme_color_override("font_%s_color" % state if state != "normal" else "font_color",
+			Style.GOLD)
+		faction.add_theme_stylebox_override(state, Style.box(
+			Style.BUTTON_HOVER if state == "hover" else Color.TRANSPARENT, Style.GOLD, 4, 10, 4))
+	faction.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	faction.pressed.connect(func() -> void: faction_pressed.emit())
+	faction.visible = false
+	left.add_child(faction)
 	row.add_child(left)
 
 	var middle := HBoxContainer.new()
@@ -134,6 +155,12 @@ func show_state(country: int, economy: Dictionary, enemies: PackedInt32Array,
 	values["Can draft"].text = Style.thousands(int(economy["manpower"]))
 	values["Divisions"].text = str(divisions)
 	values["War support"].text = "%d%%" % roundi(int(economy["support"]) / 10.0)
+
+
+## The faction button: its name, or hidden for "" (no faction).
+func show_faction(name: String) -> void:
+	faction.text = name
+	faction.visible = name != ""
 
 
 ## The pause button and five speed bars; the bars up to the current speed

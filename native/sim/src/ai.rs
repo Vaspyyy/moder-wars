@@ -136,6 +136,7 @@ impl World {
                 level: mobilization,
             });
         }
+        self.think_factions(country, &mut orders);
         if !at_war {
             if let Some(target) = self.aggression(country, self.aggression_comes_up(country)) {
                 orders.push(Command::DeclareWar { target });
@@ -157,7 +158,7 @@ impl World {
             && self
                 .economy(country)
                 .is_some_and(|e| e.support == FULL_SUPPORT)
-            && self.wars.len() < MAX_WARS;
+            && self.war_count() < MAX_WARS;
         if ready {
             self.war_target(country)
         } else {
@@ -181,10 +182,11 @@ impl World {
 
     /// The neighbor `country` would attack: of its land neighbors at peace,
     /// the weakest, if `country` is at least `AGGRESSION_RATIO` times
-    /// stronger than it (ties go to the lower id). Each side counts with its
-    /// overlord and puppets, who join the war (`family_power`). A country
-    /// without an army attacks no one (nothing is three times stronger than
-    /// nothing).
+    /// stronger than it (ties go to the lower id). It counts with its
+    /// overlord and puppets, who join the war (`family_power`), and the
+    /// neighbor with its whole faction too, which defends it
+    /// (`defended_power`). A country without an army attacks no one
+    /// (nothing is three times stronger than nothing).
     pub fn war_target(&self, country: CountryId) -> Option<CountryId> {
         let own = self.family_power(country);
         if own <= 0.0 {
@@ -192,7 +194,7 @@ impl World {
         }
         self.neighbors(country)
             .into_iter()
-            .map(|(neighbor, _)| (neighbor, self.family_power(neighbor)))
+            .map(|(neighbor, _)| (neighbor, self.defended_power(neighbor)))
             .filter(|&(neighbor, power)| {
                 own >= AGGRESSION_RATIO * power
                     && self.enemies(neighbor).is_empty()
@@ -207,8 +209,19 @@ impl World {
         self.power_of(country)
     }
 
+    /// The power `country` would meet in a war on `target`: `target` with
+    /// its overlord and puppets, and every member of its faction (or of its
+    /// overlord's) with theirs.
+    fn defended_power(&self, target: CountryId) -> f64 {
+        let head = self.overlord(target).unwrap_or(target);
+        match self.faction_of(head) {
+            Some(faction) => faction.members.iter().map(|&m| self.family_power(m)).sum(),
+            None => self.family_power(target),
+        }
+    }
+
     /// The power of `country` with its overlord and puppets (`family`).
-    fn family_power(&self, country: CountryId) -> f64 {
+    pub(crate) fn family_power(&self, country: CountryId) -> f64 {
         self.family(country).iter().map(|&c| self.power_of(c)).sum()
     }
 
@@ -254,6 +267,10 @@ impl World {
             if open || self.talks_closed(country, enemy) || self.overlord(enemy).is_some() {
                 continue;
             }
+            // Peace on its own would cost its faction: only when pressed.
+            if !pressed && self.separate_peace(country, enemy) {
+                continue;
+            }
             let cessions = self.peace_terms(country, enemy);
             let gains = cessions.iter().any(|c| c.to == country);
             let terms: Vec<u16> = cessions.iter().map(|c| c.region as u16).collect();
@@ -262,6 +279,25 @@ impl World {
                 orders.push(Command::OfferPeace { to: enemy, terms });
             }
         }
+    }
+
+    /// Answer invitations, requests to join and calls to arms, and look for
+    /// a faction when threatened (`factions.rs`).
+    fn think_factions(&self, country: CountryId, orders: &mut Vec<Command>) {
+        for invite in self.invites().iter().filter(|i| i.to == country) {
+            orders.push(Command::AnswerFaction {
+                from: invite.from,
+                accept: self.ai_accepts(invite.from, country, invite.kind),
+            });
+        }
+        for call in self.calls().iter().filter(|c| c.ally == country) {
+            orders.push(Command::AnswerCall {
+                attacker: call.attacker,
+                target: call.target,
+                join: self.ai_joins(country, call.attacker, call.target),
+            });
+        }
+        orders.extend(self.ai_seek_faction(country));
     }
 
     fn think_armies(&self, country: CountryId, enemies: &[CountryId], orders: &mut Vec<Command>) {
@@ -499,6 +535,23 @@ mod tests {
     }
 
     #[test]
+    fn a_neighbor_counts_with_its_whole_faction() {
+        let mut world = world();
+        let russia = id("Russia");
+        assert_eq!(
+            world.war_target(russia),
+            Some(id("Estonia")),
+            "alone, the weakest"
+        );
+        world.use_real_factions(scenario());
+        assert_eq!(
+            world.war_target(russia),
+            Some(id("Mongolia")),
+            "in NATO, Estonia is out of reach"
+        );
+    }
+
+    #[test]
     fn a_country_without_an_army_attacks_no_one() {
         // No starting armies at all: every power is zero.
         let world = World::new(scenario(), 1);
@@ -530,6 +583,17 @@ mod tests {
     }
 
     #[test]
+    fn a_war_is_counted_once_however_many_join_it() {
+        let mut world = world();
+        declare(&mut world, id("Russia"), id("Ukraine"));
+        declare(&mut world, id("Belarus"), id("Ukraine"));
+        declare(&mut world, id("Russia"), id("Georgia"));
+        assert_eq!(world.war_count(), 1, "one group fighting");
+        declare(&mut world, id("France"), id("Spain"));
+        assert_eq!(world.war_count(), 2);
+    }
+
+    #[test]
     fn no_new_war_while_enough_are_going_on() {
         let mut world = world();
         let russia = id("Russia");
@@ -539,7 +603,7 @@ mod tests {
             "one war is not enough"
         );
         declare(&mut world, id("Brazil"), id("Argentina"));
-        assert_eq!(world.wars.len(), MAX_WARS);
+        assert_eq!(world.war_count(), MAX_WARS);
         assert_eq!(world.aggression(russia, true), None);
     }
 
@@ -559,6 +623,6 @@ mod tests {
             .filter(|e| matches!(e, Event::WarDeclared { .. }))
             .count();
         assert_eq!(declared, 1, "only one more war: {events:?}");
-        assert_eq!(world.wars.len(), MAX_WARS);
+        assert_eq!(world.war_count(), MAX_WARS);
     }
 }

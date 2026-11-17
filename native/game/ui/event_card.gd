@@ -1,14 +1,19 @@
 extends Control
 ## A card in the middle of the screen for a big event (a war declared on
 ## the player, a peace made, a capitulation). The game pauses while it is
-## open; Continue closes it. (Peace offers get the peace window instead.)
+## open; Continue closes it. A choice (a call to arms, an invitation into a
+## faction) has two buttons instead and says which was pressed. (Peace
+## offers get the peace window instead.)
 
 signal closed
+signal chosen(yes: bool)
 
 const Style := preload("res://ui/style.gd")
 const WIDTH := 460.0
 
 var card := PanelContainer.new()
+## Whether the card shown asks a yes or no (`show_choice`).
+var choice := false
 
 
 func setup() -> void:
@@ -28,6 +33,35 @@ func setup() -> void:
 
 ## `kicker` is the small line above the title.
 func show_event(kicker: String, title: String, body: String) -> void:
+	var buttons := _begin(kicker, title, body)
+	var go_on := Style.primary_button("Continue", 18)
+	go_on.pressed.connect(func() -> void: closed.emit())
+	buttons.add_child(go_on)
+	choice = false
+	card.reset_size()
+	visible = true
+
+
+## A yes or no: `no` and `yes` are [text, key] for the two buttons.
+func show_choice(kicker: String, title: String, body: String, no: Array, yes: Array) -> void:
+	var buttons := _begin(kicker, title, body)
+	var refuse := Style.tool_button(no[0], no[1])
+	refuse.name = "No"
+	refuse.custom_minimum_size.y = 48
+	refuse.pressed.connect(func() -> void: chosen.emit(false))
+	buttons.add_child(refuse)
+	var accept := Style.primary_button("%s  (%s)" % yes, 18)
+	accept.name = "Yes"
+	accept.custom_minimum_size.y = 48
+	accept.pressed.connect(func() -> void: chosen.emit(true))
+	buttons.add_child(accept)
+	choice = true
+	card.reset_size()
+	visible = true
+
+
+## The kicker, title and text; returns the row for the buttons.
+func _begin(kicker: String, title: String, body: String) -> HBoxContainer:
 	for child in card.get_children():
 		card.remove_child(child) # gone now, so the new size is not the old one's
 		child.queue_free()
@@ -46,10 +80,6 @@ func show_event(kicker: String, title: String, body: String) -> void:
 	var buttons := HBoxContainer.new()
 	buttons.alignment = BoxContainer.ALIGNMENT_END
 	buttons.add_theme_constant_override("separation", 12)
-	var go_on := Style.primary_button("Continue", 18)
-	go_on.pressed.connect(func() -> void: closed.emit())
-	buttons.add_child(go_on)
 	column.add_child(buttons)
 	card.add_child(column)
-	card.reset_size()
-	visible = true
+	return buttons
