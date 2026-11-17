@@ -119,6 +119,8 @@ var ui_layer := CanvasLayer.new()
 var no_hud := false
 ## The country the player leads, or 0 (pick screen or viewer).
 var player := 0
+## Where quick saves go: Godot's user data folder (tests use their own).
+var save_dir := "user://"
 ## The pick screen while it is open.
 var pick: Control = null
 ## The bar along the top while the player leads a country, and the other
@@ -828,9 +830,40 @@ func _show_country_card(country: int, world: Vector2) -> void:
 		[["Offer peace" if at_war else "Declare war", true, action]], "Esc closes")
 
 
-## One quick save slot, in Godot's user data folder.
+## One quick save slot per led country, and one for the viewer: a save made
+## leading one country must not load into a game leading another (it would
+## hand yours to the AI and leave the saved one with no one running it).
 func _quicksave_path() -> String:
-	return ProjectSettings.globalize_path("user://quicksave.mwsave")
+	var file := "quicksave.mwsave"
+	if player != 0:
+		file = "quicksave-%s.mwsave" % scenario.country_name(player).validate_filename()
+	return ProjectSettings.globalize_path(save_dir.path_join(file))
+
+
+func _quickload() -> void:
+	var path := _quicksave_path()
+	if not FileAccess.file_exists(path):
+		var whose := (" for %s" % scenario.country_name(player)) if player != 0 else ""
+		_note("No quick save%s yet: F5 makes one" % whose)
+		return
+	var error := sim.load_game(path)
+	if error != "":
+		_note(error)
+		return
+	markers.selected.clear()
+	markers.selected_group = 0
+	if drawing != "":
+		drawing = ""
+		stroke_points.clear()
+		markers.stroke.clear()
+		_show_help()
+	if player != 0:
+		# What was waiting belonged to the game before the load.
+		cards.clear()
+		card_report = {}
+		country_card.show_country(0, Vector2.ZERO, {}, "", [], "")
+		reports.clear()
+	_note("Game loaded")
 
 
 func _add_feed(line: String) -> void:
@@ -1163,13 +1196,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_note(error if error != "" else "Game saved")
 			_refresh_sim()
 		elif key == KEY_F9:
-			var error := sim.load_game(_quicksave_path())
-			if error == "":
-				markers.selected.clear()
-				markers.selected_group = 0
-				_note("Game loaded")
-			else:
-				_note(error)
+			_quickload()
 			_refresh_sim()
 		elif key == KEY_X and markers.selected_group != 0:
 			_hold()
