@@ -573,9 +573,28 @@ func _show_command_bar() -> void:
 		for group in markers.groups:
 			if int(group["id"]) == markers.selected_group:
 				can_hold = PackedVector2Array(group["arrow"]).size() > 0
-	elif markers.selected.size() == 1:
-		name = "Division %d" % int(markers.selected.keys()[0])
-	command_bar.show_selection(name, can_hold, drawing)
+	var detail := ""
+	if markers.selected_group == 0 and markers.selected.size() == 1:
+		var id := int(markers.selected.keys()[0])
+		name = "Division %d" % id
+		detail = _division_state(id)
+	command_bar.show_selection(name, can_hold, drawing, detail)
+
+
+## "98% strength  ·  100% morale  ·  holding" for a division, or "".
+func _division_state(id: int) -> String:
+	var data := markers.data
+	for i in range(0, data.size(), MwWorld.DIVISION_STRIDE):
+		if int(data[i]) != id:
+			continue
+		var flags := int(data[i + 6])
+		var state := "fighting" if flags & MwWorld.IN_BATTLE else (
+			"marching" if flags & MwWorld.MOVING else "holding")
+		if not flags & MwWorld.SUPPLIED:
+			state += ", cut off"
+		return "%d%% strength  ·  %d%% morale  ·  %s" % [
+			roundi(data[i + 4] * 100.0), roundi(data[i + 5] * 100.0), state]
+	return ""
 
 
 ## Select one of the player's groups from the list and look at it.
@@ -821,14 +840,8 @@ func _show_details() -> void:
 	for i in range(0, data.size(), stride):
 		if not markers.selected.has(int(data[i])):
 			continue
-		var flags := int(data[i + 6])
-		var state := "fighting" if flags & MwWorld.IN_BATTLE else (
-			"marching" if flags & MwWorld.MOVING else "holding")
-		if not flags & MwWorld.SUPPLIED:
-			state += ", cut off"
-		lines.append("%s division %d  ·  %d%% strength  ·  %d%% morale  ·  %s" % [
-			scenario.country_name(int(data[i + 1])), int(data[i]),
-			roundi(data[i + 4] * 100.0), roundi(data[i + 5] * 100.0), state])
+		lines.append("%s division %d  ·  %s" % [scenario.country_name(int(data[i + 1])), int(data[i]),
+			_division_state(int(data[i]))])
 	if lines.size() > 1:
 		lines = PackedStringArray(["%d divisions selected" % lines.size()])
 	var country := _acting_country()

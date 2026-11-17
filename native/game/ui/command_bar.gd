@@ -52,8 +52,9 @@ func setup() -> void:
 
 
 ## `name` of the selection; `can_hold` when it is a group with an arrow;
-## `drawing` is "front", "arrow" or "".
-func show_selection(name: String, can_hold: bool, drawing: String) -> void:
+## `drawing` is "front", "arrow" or ""; `detail` says how a single division
+## stands ("" for none).
+func show_selection(name: String, can_hold: bool, drawing: String, detail := "") -> void:
 	title.text = name
 	hold.disabled = not can_hold
 	for button in [front, arrow, hold]:
@@ -64,5 +65,6 @@ func show_selection(name: String, can_hold: bool, drawing: String) -> void:
 		"arrow":
 			tip.text = "Drag from the front into enemy land  ·  Esc cancels"
 		_:
-			tip.text = "Right-click: order divisions directly"
+			tip.text = (detail + "  ·  right-click to move it") if detail != "" \
+				else "Right-click: order divisions directly"
 	reset_size()

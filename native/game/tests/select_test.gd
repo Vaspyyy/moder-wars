@@ -82,4 +82,15 @@ func _initialize() -> void:
 	_button(MOUSE_BUTTON_LEFT, false, Vector2(8, 8))
 	check(main.markers.selected_group == group and not main.boxing, "and letting go of it selects nothing")
 	key(KEY_ESCAPE)
+	key(KEY_ESCAPE)
+	var one := -1
+	for id in main.markers.countries:
+		if main.markers.countries[id] == poland:
+			one = id
+	# A Shift-click takes one division out of its group's selection.
+	main._select_at(main.get_canvas_transform() * main.markers.positions[one], true)
+	var tip: String = main.command_bar.tip.text
+	check(main.command_bar.title.text == "Division %d" % one, "one division: its number")
+	check(tip.contains("% strength") and tip.contains("% morale") and tip.contains("holding"),
+		"and how it stands: %s" % tip)
 	finish()
