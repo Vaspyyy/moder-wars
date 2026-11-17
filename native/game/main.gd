@@ -771,9 +771,10 @@ func _refresh_sim() -> void:
 				points.append(_world_from_lng_lat(point.x, point.y))
 			markers.routes[id] = points
 	markers.groups.clear()
-	# Another country's arrows are its own plans: only yours show, unless
-	# you are watching the world without leading it.
-	markers.arrows_of = {} if player == 0 or watching else {player: true}
+	# Another country's arrows are its own plans: only yours (and your
+	# puppets' and overlord's) show, unless you are watching the world
+	# without leading it.
+	markers.arrows_of = {} if player == 0 or watching else _family_of(player)
 	var formed := {}
 	for group in sim.groups():
 		# Each country's groups are numbered in the order they were formed,
@@ -1159,6 +1160,18 @@ func _close_conference() -> void:
 ## Whether `country` owns no region by law any more.
 func _owns_nothing(country: int) -> bool:
 	return float(sim.war_record(country).get("land_kept", 1.0)) <= 0.0
+
+
+## `country`, its overlord and the overlord's puppets (or its own), as a
+## set: whose arrows the player sees.
+func _family_of(country: int) -> Dictionary:
+	var head := sim.overlord(country)
+	if head == 0:
+		head = country
+	var family := {head: true}
+	for puppet in sim.puppets(head):
+		family[puppet] = true
+	return family
 
 
 func _close_card() -> void:

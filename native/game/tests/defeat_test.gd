@@ -75,19 +75,22 @@ func _initialize() -> void:
 	key(KEY_B)
 	check(main.sim.is_paused() and not main.economy_window.visible, "keys wait")
 
-	# Only your own arrows are on the map while you lead a country.
+	# Only your own arrows, and as Germany's puppet now Germany's, are on
+	# the map while you lead a country.
 	var line := PackedVector2Array([Vector2.ZERO, Vector2.ONE])
-	var german_attack := {"arrow": line, "country": germany}
-	check(main.markers.arrows_of == {luxembourg: true}, "your arrows only: %s" % [main.markers.arrows_of])
-	check(not main.markers.shows_arrow(german_attack), "a German arrow is not shown")
+	var french_attack := {"arrow": line, "country": country("France")}
+	check(main.markers.arrows_of == {luxembourg: true, germany: true},
+		"yours and your overlord's: %s" % [main.markers.arrows_of])
+	check(not main.markers.shows_arrow(french_attack), "a French arrow is not shown")
 	check(main.markers.shows_arrow({"arrow": line, "country": luxembourg}), "yours is")
+	check(main.markers.shows_arrow({"arrow": line, "country": germany}), "and Germany's")
 	check(not main.markers.shows_arrow({"arrow": PackedVector2Array(), "country": luxembourg}),
 		"a group without an arrow draws none")
 
 	# Watch the world go on: the screen closes and the game runs again.
 	_press("Watch")
 	check(not screen.visible and not main.sim.is_paused(), "Watch lets the world go on")
-	check(main.markers.shows_arrow(german_attack), "watching, every country's arrows show")
+	check(main.markers.shows_arrow(french_attack), "watching, every country's arrows show")
 	main.sim.run(24)
 	main._refresh_sim()
 	check(not screen.visible, "and it does not come back")
@@ -125,8 +128,8 @@ func _initialize() -> void:
 	key(KEY_F9)
 	check(not main.defeat_screen.visible and not main.menu.visible, "a load closes both")
 	main._refresh_sim()
-	check(not main.watching and main.markers.arrows_of == {luxembourg: true},
-		"the loaded game is yours to lead again: your arrows only")
+	check(not main.watching and main.markers.arrows_of == {luxembourg: true, germany: true},
+		"the loaded game is yours to lead again: your arrows and Germany's only")
 	main.cards.append({"big": "capitulated", "other": luxembourg})
 	main._refresh_sim()
 	check(main.defeat_screen.visible, "the screen again")

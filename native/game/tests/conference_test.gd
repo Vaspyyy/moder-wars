@@ -63,6 +63,8 @@ func _initialize() -> void:
 		return t.contains("You took Minsk.") and t.contains("Belarus is now your puppet")), "%s" % [card])
 	main._close_card()
 	check(not main.sim.is_paused(), "the game runs again")
+	check(main.markers.arrows_of == {poland: true, belarus: true}, "its arrows show with yours: %s"
+		% [main.markers.arrows_of])
 
 	# Its card says so, and offers no war.
 	main._show_country_card(belarus, main._world_from_lng_lat(28.5, 53.0))
