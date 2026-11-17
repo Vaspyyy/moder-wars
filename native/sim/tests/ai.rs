@@ -211,7 +211,14 @@ fn answer(ai_name: &str, ai_divisions: usize, enemy_divisions: usize) -> bool {
     line_up(&mut world, enemy, ai, enemy_divisions);
     order(&mut world, enemy, Command::DeclareWar { target: ai });
     world.step();
-    order(&mut world, enemy, Command::OfferPeace { to: ai });
+    order(
+        &mut world,
+        enemy,
+        Command::OfferPeace {
+            to: ai,
+            terms: vec![],
+        },
+    );
     run(&mut world, 2 * 24)
         .iter()
         .find_map(|e| match e {
@@ -350,13 +357,11 @@ fn a_war_weary_ai_makes_peace() {
     world.set_controller(monaco, Controller::Ai).unwrap();
     order(&mut world, france, Command::DeclareWar { target: monaco });
     run(&mut world, 2 * 24);
-    order(&mut world, france, Command::OfferPeace { to: monaco });
+    // A white peace is a coin toss while both sides are fresh.
+    let fresh = world.willingness(france, monaco, &[]).chance;
     assert!(
-        run(&mut world, 2 * 24).contains(&Event::PeaceRefused {
-            from: france,
-            to: monaco
-        }),
-        "full support: Monaco fights on"
+        fresh <= 0.6,
+        "full support: Monaco is in no hurry ({fresh})"
     );
     while support(&world) >= 400 {
         let events = run(&mut world, 24);
@@ -372,7 +377,16 @@ fn a_war_weary_ai_makes_peace() {
         assert!(world.tick() < 600 * 24, "support never fell");
     }
     let mut asking = world.clone();
-    order(&mut world, france, Command::OfferPeace { to: monaco });
+    let weary = world.willingness(france, monaco, &[]).chance;
+    assert!(weary == 1.0, "below 40% Monaco wants peace ({weary})");
+    order(
+        &mut world,
+        france,
+        Command::OfferPeace {
+            to: monaco,
+            terms: vec![],
+        },
+    );
     assert!(
         run(&mut world, 2 * 24).contains(&Event::PeaceMade {
             from: france,

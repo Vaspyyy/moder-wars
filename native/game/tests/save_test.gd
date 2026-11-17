@@ -43,7 +43,7 @@ func _initialize() -> void:
 	# A peace offer waiting in the saved game opens the peace window again.
 	var germany := country("Germany")
 	main.sim.declare_war(germany, poland)
-	main.sim.offer_peace_to(germany, poland)
+	main.sim.offer_peace_to(germany, poland, PackedInt32Array())
 	main.sim.take_reports() # no card now: the offer is only in the save
 	main.sim.save_game(main._quicksave_path())
 	main._quickload()

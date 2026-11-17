@@ -23,10 +23,16 @@ fn order(world: &mut World, country: CountryId, command: Command) {
         .unwrap();
 }
 
-/// `from` offers peace, `to` accepts; returns the events of the hour it
-/// was accepted.
+/// `from` offers peace on the terms the land held gives, `to` accepts;
+/// returns the events of the hour it was accepted.
 fn make_peace(world: &mut World, from: CountryId, to: CountryId) -> Vec<Event> {
-    order(world, from, Command::OfferPeace { to });
+    // On the terms the land held gives: each side gets what it holds most of.
+    let terms = world
+        .peace_terms(from, to)
+        .iter()
+        .map(|c| c.region as u16)
+        .collect();
+    order(world, from, Command::OfferPeace { to, terms });
     world.step();
     order(world, to, Command::AnswerPeace { from, accept: true });
     world.step()

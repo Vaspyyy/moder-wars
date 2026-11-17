@@ -155,7 +155,14 @@ fn peace_lets_support_recover() {
     run(&mut world, 30 * 24);
     let at_peace = support(&world, ukraine);
     assert!(at_peace < FULL_SUPPORT - 100);
-    order(&mut world, ukraine, Command::OfferPeace { to: poland });
+    order(
+        &mut world,
+        ukraine,
+        Command::OfferPeace {
+            to: poland,
+            terms: vec![],
+        },
+    );
     world.step();
     order(
         &mut world,

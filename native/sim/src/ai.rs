@@ -15,9 +15,12 @@
 //! - draws an arrow towards an enemy's capital when its group is clearly
 //!   stronger than the enemy divisions near the front, and takes it away
 //!   when it no longer is;
-//! - accepts peace when it is losing or its war support is low, refuses
-//!   otherwise, and asks for peace once it has lost a quarter of its land
-//!   or its war support runs lower still.
+//! - answers peace terms by rolling the chance `talks.rs` gives (better
+//!   the worse its war goes, worse the more the terms take from it);
+//! - offers each enemy peace on the terms the land held gives (each side
+//!   gets the regions it holds most of): any day once it has lost a quarter
+//!   of its land or its war support runs low, and once a week when it would
+//!   gain land and the enemy would likely accept.
 //!
 //! Its orders are queued and applied like anyone's, so a replay of the
 //! player's orders replays the AI too.
@@ -44,14 +47,12 @@ const STOP_RATIO: f64 = 0.9;
 const NEAR_FRONT_M: u64 = 150_000;
 /// Share of its own land lost before it mobilizes further and asks for peace.
 const HARD_PRESSED: f64 = 0.25;
-/// It accepts peace once it has lost this share of its land, or when it is
-/// weaker than this share of the enemy.
-const ACCEPT_LOST: f64 = 0.2;
-const ACCEPT_POWER: f64 = 0.7;
-/// War support (per mille) below which it accepts peace, and below which
-/// it asks for it.
-const ACCEPT_SUPPORT: u16 = 400;
+/// War support (per mille) below which it asks for peace.
 const ASK_SUPPORT: u16 = 300;
+/// Winning, it offers terms the enemy would accept at least this often.
+const OFFER_CHANCE: f64 = 0.4;
+/// It thinks about offering peace once every this many days.
+const OFFER_EVERY_DAYS: u64 = 7;
 /// The most points the AI draws a front with.
 const FRONT_POINTS: usize = 40;
 /// Looking for a border it does not have is retried this often (days).
@@ -65,6 +66,8 @@ pub const AGGRESSION_RATIO: f64 = 3.0;
 pub const MAX_WARS: usize = 2;
 /// Mixed into the daily dice so they do not follow any other random stream.
 const AGGRESSION_STREAM: u64 = 0xA66E_5510;
+/// Random numbers for answering peace terms.
+const PEACE_STREAM: u64 = 0x9EAC_E7A1;
 
 impl World {
     /// Let the AI countries whose hour it is think, and apply their orders.
@@ -215,24 +218,35 @@ impl World {
         support: u16,
         orders: &mut Vec<Command>,
     ) {
-        let own = self.power_of(country);
         for offer in self.offers.iter().filter(|o| o.to == country) {
-            let losing = lost >= ACCEPT_LOST
-                || own < ACCEPT_POWER * self.power_of(offer.from)
-                || support < ACCEPT_SUPPORT;
+            let chance = self.willingness(offer.from, country, &offer.terms).chance;
+            let stream = PEACE_STREAM
+                ^ self.tick().wrapping_mul(0x2545_F491_4F6C_DD1D)
+                ^ (u64::from(offer.from) << 32)
+                ^ u64::from(country);
             orders.push(Command::AnswerPeace {
                 from: offer.from,
-                accept: losing,
+                accept: self.rng.fork(stream).chance(chance),
             });
         }
-        if lost >= HARD_PRESSED || support < ASK_SUPPORT {
-            for &enemy in enemies {
-                let open = self.offers.iter().any(|o| {
-                    (o.from == country && o.to == enemy) || (o.from == enemy && o.to == country)
-                });
-                if !open {
-                    orders.push(Command::OfferPeace { to: enemy });
-                }
+        // Pressed, it asks any day; winning, it looks for a deal once a week.
+        let pressed = lost >= HARD_PRESSED || support < ASK_SUPPORT;
+        if !pressed && !(self.tick() / 24 + u64::from(country)).is_multiple_of(OFFER_EVERY_DAYS) {
+            return;
+        }
+        for &enemy in enemies {
+            let open = self.offers.iter().any(|o| {
+                (o.from == country && o.to == enemy) || (o.from == enemy && o.to == country)
+            });
+            if open || self.talks_closed(country, enemy) {
+                continue;
+            }
+            let cessions = self.peace_terms(country, enemy);
+            let gains = cessions.iter().any(|c| c.to == country);
+            let terms: Vec<u16> = cessions.iter().map(|c| c.region as u16).collect();
+            if pressed || (gains && self.willingness(country, enemy, &terms).chance >= OFFER_CHANCE)
+            {
+                orders.push(Command::OfferPeace { to: enemy, terms });
             }
         }
     }

@@ -84,9 +84,11 @@ pub enum Command {
     SetMobilization {
         level: u8,
     },
-    /// Offer peace to a country this one is at war with.
+    /// Offer peace to a country this one is at war with, on terms: the
+    /// regions of either side that change hands (empty: a white peace).
     OfferPeace {
         to: CountryId,
+        terms: Vec<u16>,
     },
     /// Accept or refuse a peace offer from `from`.
     AnswerPeace {
@@ -200,6 +202,11 @@ pub enum Rejection {
     NoOffer,
     /// A peace offer to that country is already open.
     AlreadyOffered,
+    /// That country refused this one's peace less than
+    /// `diplomacy::TALKS_CLOSED_DAYS` ago.
+    TalksClosed,
+    /// Peace terms named a region neither side owns by law.
+    NotTheirRegion,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -238,6 +245,9 @@ pub struct World {
     next_group: u32,
     /// Open peace offers, sorted by (from, to).
     pub(crate) offers: Vec<PeaceOffer>,
+    /// (from, to) -> the tick until which `from` may not offer `to` peace
+    /// again, after `to` refused it.
+    pub(crate) talks_closed: BTreeMap<(CountryId, CountryId), u64>,
     /// Orders not applied yet, sorted by (tick, country, seq).
     pending: Vec<Queued>,
     next_seq: u64,
@@ -304,6 +314,7 @@ impl World {
             groups: Vec::new(),
             next_group: 1,
             offers: Vec::new(),
+            talks_closed: BTreeMap::new(),
             pending: Vec::new(),
             next_seq: 0,
             ceded: BTreeMap::new(),
@@ -648,7 +659,7 @@ impl World {
                     Ok(())
                 }
             },
-            Command::OfferPeace { to } => self.offer_peace(country, *to, events),
+            Command::OfferPeace { to, terms } => self.offer_peace(country, *to, terms, events),
             Command::AnswerPeace { from, accept } => {
                 self.answer_peace(*from, country, *accept, events)
             }

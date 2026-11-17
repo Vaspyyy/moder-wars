@@ -294,7 +294,14 @@ fn peace_drops_the_arrows_aimed_at_the_other_side() {
         order(tick, poland, arrow(&world, polish, 13.4, 52.5)), // Berlin
         order(tick, germany, arrow(&world, german, 21.0, 52.2)), // Warsaw
         order(tick, poland, arrow(&world, eastern, 24.0, 49.8)), // Lviv
-        order(tick, poland, Command::OfferPeace { to: germany }),
+        order(
+            tick,
+            poland,
+            Command::OfferPeace {
+                to: germany,
+                terms: vec![],
+            },
+        ),
     ] {
         world.submit(o).unwrap();
     }

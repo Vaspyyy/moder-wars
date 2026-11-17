@@ -249,7 +249,7 @@ func _initialize() -> void:
 	main.sim.declare_war(germany, poland)
 	main._refresh_sim()
 	main._close_card()
-	main.sim.offer_peace_to(germany, poland)
+	main.sim.offer_peace_to(germany, poland, PackedInt32Array())
 	main._refresh_sim()
 	check(main.peace_window.visible and main.sim.is_paused(), "a peace offer waits")
 	main._notification(Node.NOTIFICATION_WM_CLOSE_REQUEST)
