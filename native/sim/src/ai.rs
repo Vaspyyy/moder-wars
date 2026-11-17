@@ -162,18 +162,28 @@ impl World {
     }
 
     /// The daily one-in-`AGGRESSION_DAYS` chance (`World::aggression_days`),
-    /// from a fork of the world's
-    /// random numbers (it does not advance them).
+    /// from a fork of the world's random numbers (it does not advance them).
     fn aggression_comes_up(&self, country: CountryId) -> bool {
         let stream = AGGRESSION_STREAM ^ (self.tick() << 16) ^ u64::from(country);
-        self.rng.fork(stream).below(self.aggression_days) == 0
+        self.aggression_days > 0 && self.rng.fork(stream).below(self.aggression_days) == 0
+    }
+
+    /// How rarely AI countries start wars: about once in `days` days for
+    /// each that could (1 every day it can, 0 never). For tests and setups;
+    /// it is not saved, so a loaded game is back to `AGGRESSION_DAYS`.
+    pub fn set_aggression_days(&mut self, days: u32) {
+        self.aggression_days = days;
     }
 
     /// The neighbor `country` would attack: of its land neighbors at peace,
     /// the weakest, if `country` is at least `AGGRESSION_RATIO` times
-    /// stronger than it (ties go to the lower id).
+    /// stronger than it (ties go to the lower id). A country without an army
+    /// attacks no one (nothing is three times stronger than nothing).
     pub fn war_target(&self, country: CountryId) -> Option<CountryId> {
         let own = self.power_of(country);
+        if own <= 0.0 {
+            return None;
+        }
         self.neighbors(country)
             .into_iter()
             .map(|(neighbor, _)| (neighbor, self.power_of(neighbor)))
@@ -418,6 +428,25 @@ mod tests {
     }
 
     #[test]
+    fn the_chance_can_be_forced_or_turned_off() {
+        let mut world = World::new(scenario(), 1);
+        let ids: Vec<CountryId> = world.countries.iter().map(|c| c.id).collect();
+        world.set_aggression_days(1);
+        assert!(ids.iter().all(|&c| world.aggression_comes_up(c)));
+        world.set_aggression_days(0);
+        assert!(ids.iter().all(|&c| !world.aggression_comes_up(c)));
+    }
+
+    #[test]
+    fn a_country_without_an_army_attacks_no_one() {
+        // No starting armies at all: every power is zero.
+        let world = World::new(scenario(), 1);
+        for name in ["Russia", "Germany", "Brazil"] {
+            assert_eq!(world.war_target(id(name)), None, "{name}");
+        }
+    }
+
+    #[test]
     fn no_war_without_full_support() {
         let mut world = world();
         let russia = id("Russia");
@@ -456,7 +485,7 @@ mod tests {
     #[test]
     fn countries_thinking_in_the_same_hour_respect_the_war_limit() {
         let mut world = world();
-        world.aggression_days = 1; // every AI at peace attacks if it can
+        world.set_aggression_days(1); // every AI at peace attacks if it can
         declare(&mut world, id("France"), id("Spain"));
         let ids: Vec<CountryId> = world.countries.iter().map(|c| c.id).collect();
         for country in ids {

@@ -458,16 +458,22 @@ fn ai_countries_start_wars_rarely_and_only_on_the_weak() {
     let mut world = ai_world();
     let mut started = Vec::new();
     for _ in 0..240 {
-        let before = world.clone();
-        for event in run(&mut world, 24) {
-            if let Event::WarDeclared { attacker, target } = event {
-                // Judged by the day before: support was full, the target a
-                // much weaker neighbor at peace.
-                let support = before.economy(attacker).unwrap().support;
-                assert_eq!(support, mw_sim::support::FULL_SUPPORT);
-                assert!(before.enemies(target).is_empty(), "the target was at peace");
-                assert!(before.army_power(attacker) >= 3.0 * before.army_power(target));
-                started.push((attacker, target));
+        let day = world.clone();
+        for hour in 0..24 {
+            for event in run(&mut world, 1) {
+                if let Event::WarDeclared { attacker, target } = event {
+                    // Judged by the world as the hour began (replayed from
+                    // the day's start, which gives the same world): support
+                    // was full, the target a much weaker neighbor at peace.
+                    let mut before = day.clone();
+                    run(&mut before, hour);
+                    let support = before.economy(attacker).unwrap().support;
+                    assert_eq!(support, mw_sim::support::FULL_SUPPORT);
+                    assert!(before.enemies(target).is_empty(), "the target was at peace");
+                    let power = before.army_power(attacker);
+                    assert!(power > 0.0 && power >= 3.0 * before.army_power(target));
+                    started.push((attacker, target));
+                }
             }
         }
         assert!(world.war_count() <= 2, "no more than two wars at once");

@@ -249,7 +249,8 @@ pub struct World {
     #[serde(skip)]
     pub(crate) regions: Option<Arc<RegionMap>>,
     /// An AI at peace with a much weaker neighbor attacks it about once in
-    /// this many days (`ai::AGGRESSION_DAYS`; tests set 1 to force it).
+    /// this many days (`ai::AGGRESSION_DAYS`; 0 never). Not saved: a loaded
+    /// game uses the default. See `set_aggression_days`.
     #[serde(skip, default = "default_aggression_days")]
     pub(crate) aggression_days: u32,
 }
