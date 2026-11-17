@@ -82,6 +82,7 @@ struct WorldBankCountry {
     id: String,
     #[serde(rename = "iso2Code")]
     iso2: String,
+    name: String,
     region: WorldBankRegion,
 }
 
@@ -129,13 +130,20 @@ pub fn read_observations(
         .unwrap_or(2026);
     // Groups of countries have two-letter codes of their own, which some
     // map entries (disputed areas) share; they are no country's figures.
-    let iso3_of: BTreeMap<&str, &str> = snapshot
+    let countries: Vec<&WorldBankCountry> = snapshot
         .responses
         .countries
         .1
         .iter()
         .filter(|c| c.region.value.trim() != "Aggregates")
+        .collect();
+    let iso3_of: BTreeMap<&str, &str> = countries
+        .iter()
         .map(|c| (c.iso2.as_str(), c.id.as_str()))
+        .collect();
+    let iso3_by_name: BTreeMap<String, &str> = countries
+        .iter()
+        .map(|c| (plain_name(&c.name), c.id.as_str()))
         .collect();
     // iso3 -> (year, personnel) of the latest usable observation.
     let mut latest: BTreeMap<&str, (i32, u32)> = BTreeMap::new();
@@ -153,16 +161,65 @@ pub fn read_observations(
             *entry = (year, value as u32);
         }
     }
-    Ok(scenario
-        .countries
-        .iter()
-        .flatten()
-        .filter_map(|c| {
-            let iso3 = iso3_of.get(c.iso2.as_deref()?)?;
+    // A country is found by its code, else the code in its flag link, else
+    // its name (the web game does the same: some packages carry no codes).
+    // Where several entries come to one country (releasables named and
+    // flagged like it), the one holding the most land gets the figure.
+    let mut land: BTreeMap<CountryId, usize> = BTreeMap::new();
+    for (&holder, &is_land) in scenario.control.iter().zip(&scenario.land) {
+        if is_land != 0 {
+            *land.entry(holder).or_default() += 1;
+        }
+    }
+    let mut chosen: BTreeMap<&str, CountryId> = BTreeMap::new();
+    for c in scenario.countries.iter().flatten() {
+        let found = c
+            .iso2
+            .as_deref()
+            .and_then(|code| iso3_of.get(code))
+            .or_else(|| iso3_of.get(flag_code(c.flag_url.as_deref()?)?.as_str()))
+            .or_else(|| iso3_by_name.get(&plain_name(&c.name)));
+        let Some(&iso3) = found else {
+            continue;
+        };
+        let held = |id: CountryId| land.get(&id).copied().unwrap_or(0);
+        chosen
+            .entry(iso3)
+            .and_modify(|best| {
+                if held(c.id) > held(*best) {
+                    *best = c.id;
+                }
+            })
+            .or_insert(c.id);
+    }
+    Ok(chosen
+        .into_iter()
+        .filter_map(|(iso3, id)| {
             let &(year, personnel) = latest.get(iso3)?;
-            Some((c.id, Observation { personnel, year }))
+            Some((id, Observation { personnel, year }))
         })
         .collect())
+}
+
+/// The two-letter code in a flag link: `https://flagcdn.com/w320/pl.png`
+/// or the bundled `assets/flags/pl.svg`, upper case.
+fn flag_code(url: &str) -> Option<String> {
+    let rest = url
+        .split_once("flagcdn.com/")
+        .or_else(|| url.split_once("assets/flags/"))?
+        .1;
+    let file = rest.rsplit('/').next()?;
+    let (code, _) = file.split_once('.')?;
+    (code.len() == 2 && code.bytes().all(|b| b.is_ascii_alphabetic()))
+        .then(|| code.to_ascii_uppercase())
+}
+
+/// A name for matching: lower case letters and digits only.
+fn plain_name(name: &str) -> String {
+    name.chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
 }
 
 impl World {

@@ -383,3 +383,51 @@ fn no_division_starts_on_a_sliver_of_land_it_cannot_leave() {
     assert_eq!(count("Singapore"), 4);
     assert_eq!(count("Bahrain"), 1);
 }
+
+#[test]
+fn a_scenario_without_codes_finds_countries_by_flag_or_name() {
+    // The Ukraine 2023 package keeps the 2022 setup's countries, which carry
+    // no two-letter codes; like the web game, the figures are found through
+    // the code in a country's flag link, or else its name.
+    let s = common::ukraine_2023();
+    let path = common::repo_root().join("assets/data/forces/world-bank.json.gz");
+    let p = forces::read_personnel(&std::fs::read(path).unwrap(), s).unwrap();
+    let year_2022 = |name: &str| p.get(&country(s, name)).copied();
+    // Figures up to the scenario's start (2023): the latest is 2020.
+    assert_eq!(year_2022("Ukraine"), Some(298_000));
+    assert_eq!(year_2022("Russia"), Some(1_454_000));
+    assert_eq!(year_2022("Poland"), Some(189_000));
+    // Afghanistan's flag is an old WebSim link: found by its name.
+    assert!(year_2022("Afghanistan").is_some(), "Afghanistan by name");
+    assert!(p.len() >= 80, "only {} countries matched", p.len());
+    // The scenario has three entries named Romania and two named Moldova
+    // (releasables with the same flag); one army each, for the entry that
+    // holds land.
+    for name in ["Romania", "Moldova"] {
+        let entries: Vec<CountryId> = s
+            .countries
+            .iter()
+            .flatten()
+            .filter(|c| c.name == name)
+            .map(|c| c.id)
+            .collect();
+        assert!(entries.len() > 1, "{name} appears more than once");
+        let armed: Vec<CountryId> = entries
+            .iter()
+            .copied()
+            .filter(|c| p.contains_key(c))
+            .collect();
+        assert_eq!(armed.len(), 1, "{name}: {armed:?} of {entries:?}");
+        assert!(
+            s.control.iter().any(|&h| h == armed[0]),
+            "{name}'s figure goes to the entry that holds land"
+        );
+    }
+    let mut world = World::new(s, 1);
+    world.deploy_forces(&p);
+    assert!(
+        world.divisions().len() > 500,
+        "{} divisions",
+        world.divisions().len()
+    );
+}
