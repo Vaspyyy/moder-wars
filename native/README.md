@@ -61,7 +61,7 @@ That puts 24 German and 12 French divisions on their border, each side as one ar
 | drag, WASD or arrows | pan (WASD waits while Shift or Ctrl is held, for Shift+W and Ctrl+A) |
 | wheel, + or - | zoom |
 
-A marker is a box in the country's colour with a bar for the soldiers left. An orange frame means it is fighting, a red corner means it is cut off from supply. A front is a thick line in the group's colour (gold when selected), an arrow is orange.
+A marker is a box in the country's colour with a bar for the soldiers left. An orange frame means it is fighting, a red corner means it is cut off from supply. A front is a thick line in the group's colour (gold when selected), drawn smoothed where it steps around pockets (the rules still use the cells); an arrow is orange.
 
 Add `--ai` to hand both sides to the AI and just watch (`native/play.sh --war=Germany,France --ai --play`). Add `--forces` to give every country its real starting army instead of the sandbox divisions (`native/play.sh --forces --war=Russia,Ukraine --ai --play --view=34,49,7`). Countries start without a controller and only move when you order them or give them to the AI.
 
