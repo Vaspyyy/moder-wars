@@ -110,6 +110,8 @@ var hovered_region := -1
 var dragging := false
 ## Shift+drag: the box being drawn to select divisions, from this corner.
 var boxing := false
+## Esc dropped the box; its release then does nothing.
+var box_cancelled := false
 var box_from := Vector2.ZERO
 var select_box := Panel.new()
 var ui_layer := CanvasLayer.new()
@@ -979,14 +981,15 @@ func _unhandled_input(event: InputEvent) -> void:
 				# if F or R started a drawing meanwhile.
 				if button.pressed:
 					boxing = true
+					box_cancelled = false
 					box_from = button.position
 					select_box.position = box_from
 					select_box.size = Vector2.ZERO
 				else:
 					boxing = false
 					select_box.visible = false
-					if drawing != "":
-						pass # a drawing started meanwhile keeps its group
+					if box_cancelled or drawing != "":
+						pass # Esc dropped it, or a drawing started meanwhile keeps its group
 					elif button.position.distance_to(box_from) < CLICK_SLOP:
 						_select_at(button.position, true)
 					else:
@@ -999,7 +1002,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				else:
 					_finish_drawing()
 			MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_RIGHT when boxing:
-				pass # no panning or orders while a box is drawn
+				# No panning or orders while a box is drawn, but a pan whose
+				# button is let go meanwhile still ends.
+				if not button.pressed:
+					dragging = false
 			MOUSE_BUTTON_LEFT, MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_RIGHT:
 				dragging = button.pressed
 				if button.pressed:
@@ -1021,7 +1027,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			var box := Rect2(box_from, Vector2.ZERO).expand(motion.position)
 			select_box.position = box.position
 			select_box.size = box.size
-			select_box.visible = box.size.length() >= CLICK_SLOP
+			select_box.visible = not box_cancelled and box.size.length() >= CLICK_SLOP
 		elif dragging:
 			camera.position -= motion.relative / camera.zoom
 			_clamp_camera()
@@ -1127,8 +1133,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			_refresh_sim()
 		elif key == KEY_X and markers.selected_group != 0:
 			_hold()
-		elif key == KEY_ESCAPE and boxing:
-			boxing = false
+		elif key == KEY_ESCAPE and boxing and not box_cancelled:
+			# The box stays open until its button is let go, so that release
+			# is not taken for a click.
+			box_cancelled = true
 			select_box.visible = false
 		elif key == KEY_ESCAPE and economy_window != null and economy_window.visible:
 			_show_economy(false)
