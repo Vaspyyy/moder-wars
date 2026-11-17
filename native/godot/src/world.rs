@@ -398,7 +398,7 @@ impl MwWorld {
         };
         entry.set("output_k", e.output_k);
         entry.set("income_k", e.income_k());
-        entry.set("may_serve", (e.manpower() + e.drafted) as i64);
+        entry.set("may_serve", e.may_serve() as i64);
         entry.set("recruiting", i64::from(e.budget.recruiting));
         entry.set("equipment", i64::from(e.budget.equipment));
         entry.set("home_front", i64::from(e.home_front()));

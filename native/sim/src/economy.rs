@@ -100,10 +100,15 @@ impl Economy {
         self.output_k * (100 - loss) / 100
     }
 
-    /// People who may still be drafted at this mobilization level.
+    /// People who may serve at this mobilization level, drafted or not.
+    pub fn may_serve(&self) -> u64 {
+        self.population * SERVE_PER_MILLE[usize::from(self.mobilization.min(3))] / 1000
+    }
+
+    /// People who may still be drafted at this mobilization level: none
+    /// once more serve than the level allows.
     pub fn manpower(&self) -> u64 {
-        let share = SERVE_PER_MILLE[usize::from(self.mobilization.min(3))];
-        (self.population * share / 1000).saturating_sub(self.drafted)
+        self.may_serve().saturating_sub(self.drafted)
     }
 }
 

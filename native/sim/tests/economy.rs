@@ -357,3 +357,22 @@ fn a_year_of_peace_runs_quickly() {
     eprintln!("a year of peace: {elapsed:?}");
     assert!(elapsed.as_secs_f64() < 2.0, "a year took {elapsed:?}");
 }
+
+#[test]
+fn who_may_serve_follows_the_mobilization_level() {
+    // A one-division army is more than Luxembourg may have at peace: none of its
+    // people may be drafted, and the limit stays the level's, not the army.
+    let s = common::world_2026();
+    let luxembourg = country(s, "Luxembourg");
+    let mut world = World::new(s, 1);
+    world.deploy_forces(&mw_sim::forces::Personnel::from([(luxembourg, 20_000)]));
+    let e = world.economy(luxembourg).unwrap();
+    assert_eq!(e.may_serve(), e.population * 5 / 1000);
+    assert!(e.drafted > e.may_serve(), "{} drafted", e.drafted);
+    assert_eq!(e.manpower(), 0);
+    mobilize(&mut world, luxembourg, 3);
+    world.step();
+    let e = world.economy(luxembourg).unwrap();
+    assert_eq!(e.may_serve(), e.population * 80 / 1000);
+    assert_eq!(e.manpower(), e.may_serve() - e.drafted);
+}
