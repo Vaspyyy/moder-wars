@@ -100,7 +100,8 @@ func _initialize() -> void:
 	_button(MOUSE_BUTTON_LEFT, false, Vector2(8, 8))
 	check(main.markers.selected_group == group and not main.boxing, "and letting go of it selects nothing")
 	key(KEY_ESCAPE)
-	key(KEY_ESCAPE)
+	check(main.markers.selected_group == 0 and not main.menu.visible,
+		"Esc clears the selection before it opens the pause menu")
 	var one := -1
 	for id in main.markers.countries:
 		if main.markers.countries[id] == poland:

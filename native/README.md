@@ -28,6 +28,8 @@ While you lead a country, your army groups are listed on the left (you start wit
 
 Clicking Income or Can draft in the top bar (or pressing B or M) opens the budget and mobilization window: what your land produces and what mobilization costs, sliders for the recruiting and equipment shares (the home front gets the rest, so the three always add up to 100%), what that buys ("about 2 new divisions a day"), the four mobilization levels and the people you can still draft. Changes apply at once, even while paused; Esc closes it. While the AI runs your country (I) the window only shows what it chose.
 
+Esc, once nothing else is open (a window, a selection or a line being drawn closes first), pauses the game and opens the menu: Continue, Saves, New game and Quit to desktop. Saves lists your saves for the country you lead in this scenario, newest first, with the quick save on top: type a name and press Save (or Enter) for a new one, and each row has Load, Overwrite and Delete (those two ask once, in the row; the quick save only loads). There is no limit on saves; a long list scrolls. Load, like F9, does not ask first and leaves the loaded game paused. New game goes back to the pick screen of the same scenario. New game, Quit and closing the window ask "Leave this game?" first, but only when the game changed since your last save or load (an hour going by or an order counts); the pick screen and the `--war` viewer close at once. Saves live in Godot's user data folder (`~/.local/share/godot/app_userdata/Modern Wars/` on Linux), each `.mwsave` with a small `.json` beside it holding its name and dates.
+
 Clicking another country's land (not a division) opens its card with how it stands with you: "Declare war" if you are at peace, "Offer peace" if you are at war. Offering peace, or getting an offer, opens the peace window: what the peace would do (the regions each side would hand over, named in the window and striped on the map, gold for what you gain and red for what you give up; everything else goes back), a table comparing both sides, and Accept or Refuse (Y or N) for an offer to you, or Offer peace or Cancel for yours. The game pauses while it is open.
 
 To watch divisions fight, start a sandbox war between two neighbours (names as the scenario spells them); `--war` opens the viewer, where any country's divisions take orders, unless `--lead` is given too:
@@ -56,8 +58,8 @@ That puts 24 German and 12 French divisions on their border, each side as one ar
 | P | offer peace to all enemies |
 | Y or N | accept or refuse a peace offer (the peace window while you lead, in the viewer the newest offer to anyone) |
 | I | hand the country to the AI, or take it back |
-| F5 or F9 | quick save, or load the quick save (one slot for each country you lead and one for the viewer, in Godot's user data folder) |
-| Esc | stop drawing, or clear the selection |
+| F5 or F9 | quick save, or load the quick save (one slot for each country you lead and one for the viewer, in Godot's user data folder), also from the pause menu |
+| Esc | stop drawing, or clear the selection; with nothing left to close, the pause menu (while leading a country); in the menu, back one step |
 | drag, WASD or arrows | pan (WASD waits while Shift or Ctrl is held, for Shift+W and Ctrl+A) |
 | wheel, + or - | zoom |
 

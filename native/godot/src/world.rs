@@ -761,10 +761,29 @@ impl MwWorld {
             return GString::from("There is no game to save");
         };
         let path = path.to_string();
-        match std::fs::write(&path, mw_sim::save::save(world)) {
+        // Into a file beside it first, then over the old save: a full disk
+        // or a crash halfway never leaves a broken save in its place.
+        let temporary = format!("{path}.tmp");
+        let written = std::fs::write(&temporary, mw_sim::save::save(world))
+            .and_then(|()| std::fs::rename(&temporary, &path));
+        match written {
             Ok(()) => GString::new(),
-            Err(e) => GString::from(&format!("Cannot save to {path}: {e}")),
+            Err(e) => {
+                let _ = std::fs::remove_file(&temporary);
+                GString::from(&format!("Cannot save to {path}: {e}"))
+            }
         }
+    }
+
+    /// A number that changes whenever the game changes (an order, an hour
+    /// gone by) and matches for a loaded game and the one saved: keep it at
+    /// a save and compare later to know whether leaving loses anything.
+    /// 0 without a game.
+    #[func]
+    fn state_hash(&self) -> i64 {
+        self.world
+            .as_ref()
+            .map_or(0, |world| mw_sim::save::fingerprint(world) as i64)
     }
 
     /// Load a game saved on this scenario (and its region map). Returns an
