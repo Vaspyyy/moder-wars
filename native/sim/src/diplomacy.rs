@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::division::Loss;
 use crate::map::Cell;
+use crate::record::Capitulation;
 use crate::world::{CountryId, Event, Rejection, World};
 
 /// Days an unanswered peace offer stays open.
@@ -118,21 +119,34 @@ impl World {
                 .capital(country)
                 .is_some_and(|c| self.control[c as usize] == country);
             if lost_most && !holds_capital {
-                self.capitulate(country, events);
+                self.capitulate(country, false, events);
             }
         }
     }
 
-    pub(crate) fn capitulate(&mut self, country: CountryId, events: &mut Vec<Event>) {
-        let enemies: Vec<CountryId> = self
-            .wars
+    /// `country` gives up (`support_collapsed`: because war support at home
+    /// ran out): all its wars end and its divisions lay down their arms.
+    /// Its record remembers when, to whom and since when it was at war.
+    pub(crate) fn capitulate(
+        &mut self,
+        country: CountryId,
+        support_collapsed: bool,
+        events: &mut Vec<Event>,
+    ) {
+        let enemies = self.enemies(country);
+        let war_began = enemies
             .iter()
-            .filter_map(|&(a, b)| match (a == country, b == country) {
-                (true, _) => Some(b),
-                (_, true) => Some(a),
-                _ => None,
-            })
-            .collect();
+            .filter_map(|&enemy| self.war_began(country, enemy))
+            .min()
+            .unwrap_or(self.tick());
+        if let Some(index) = self.index_of(country) {
+            self.countries[index].record.capitulation = Some(Capitulation {
+                tick: self.tick(),
+                enemies: enemies.clone(),
+                war_began,
+                support_collapsed,
+            });
+        }
         events.push(Event::Capitulated { country });
         for enemy in enemies {
             self.end_war(country, enemy, events);

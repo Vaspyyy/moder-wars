@@ -589,6 +589,54 @@ impl MwWorld {
         entry
     }
 
+    /// What `country`'s wars cost it, for the end-of-war screen, as a
+    /// dictionary: `raised` (divisions recruited), `lost` (soldiers lost),
+    /// `inflicted` (enemy soldiers its divisions put out of action),
+    /// `land_kept` (share of its land it still owns by law, 0 to 1),
+    /// `lost_regions` (one dictionary per region handed over: `region` as
+    /// `region_name` takes it, and `to`), and `capitulated`. When it has
+    /// capitulated, also `date` ("2027-03-03"), `enemies` (the countries it
+    /// gave up to), `war_days` (since the oldest of those wars began) and
+    /// `support_collapsed` (war support ran out, rather than the capital
+    /// and most of the land). Empty for an unknown country.
+    #[func]
+    fn war_record(&self, country: i32) -> VarDictionary {
+        let mut entry = VarDictionary::new();
+        let (Some(world), Ok(country)) = (self.world.as_ref(), u16::try_from(country)) else {
+            return entry;
+        };
+        let Some(record) = world.war_record(country) else {
+            return entry;
+        };
+        entry.set("raised", i64::from(record.raised));
+        entry.set("lost", record.lost as i64);
+        entry.set("inflicted", record.inflicted as i64);
+        entry.set("land_kept", world.land_kept(country));
+        let lost: Array<VarDictionary> = world
+            .lost_regions(country)
+            .iter()
+            .map(|c| {
+                let mut region = VarDictionary::new();
+                region.set("region", c.region as i64 + 1);
+                region.set("to", i64::from(c.to));
+                region
+            })
+            .collect();
+        entry.set("lost_regions", &lost);
+        entry.set("capitulated", record.capitulation.is_some());
+        if let Some(capitulation) = &record.capitulation {
+            let date = world.time_of(capitulation.tick).date.to_string();
+            entry.set("date", &GString::from(&date));
+            let enemies: PackedInt32Array =
+                capitulation.enemies.iter().map(|&e| i32::from(e)).collect();
+            entry.set("enemies", &enemies);
+            let days = capitulation.tick.saturating_sub(capitulation.war_began) / 24;
+            entry.set("war_days", days as i64);
+            entry.set("support_collapsed", capitulation.support_collapsed);
+        }
+        entry
+    }
+
     /// The regions a peace between `a` and `b` would hand over by law: one
     /// dictionary each with `region` (region number, as `region_name`
     /// takes it), `from` and `to`.

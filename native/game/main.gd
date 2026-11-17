@@ -82,6 +82,7 @@ const EconomyWindow := preload("res://ui/economy.gd")
 const PeaceWindow := preload("res://ui/peace.gd")
 const CountryCard := preload("res://ui/country_card.gd")
 const PauseMenu := preload("res://ui/pause_menu.gd")
+const DefeatScreen := preload("res://ui/defeat.gd")
 const Lines := preload("res://ui/lines.gd")
 const SaveSlots := preload("res://saves.gd")
 
@@ -155,6 +156,8 @@ var cards: Array = []
 var card_report: Dictionary = {}
 ## Whether a card paused the game (so closing the last one resumes it).
 var paused_by_card := false
+## The screen when the led country capitulates.
+var defeat_screen: Control = null
 ## The pause menu while leading a country, and whether it paused the game.
 var menu: Control = null
 var paused_by_menu := false
@@ -413,6 +416,22 @@ func _lead(id: int, to_capital: bool) -> void:
 	event_card.visible = false
 	event_card.closed.connect(_close_card)
 	ui_layer.add_child(event_card)
+	defeat_screen = DefeatScreen.new()
+	defeat_screen.scenario = scenario
+	defeat_screen.palette = palette
+	defeat_screen.setup()
+	defeat_screen.visible = false
+	defeat_screen.watch_pressed.connect(_close_card)
+	defeat_screen.load_pressed.connect(func() -> void:
+		_close_defeat()
+		# The menu now holds the game paused, and lets it run again if the
+		# defeat paused it.
+		_open_menu()
+		paused_by_menu = paused_by_card or paused_by_menu
+		paused_by_card = false
+		menu.show_saves(_menu_state()))
+	defeat_screen.new_game_pressed.connect(func() -> void: _do_leave("new"))
+	ui_layer.add_child(defeat_screen)
 	menu = PauseMenu.new()
 	menu.setup()
 	menu.visible = false
@@ -764,7 +783,8 @@ func _hold() -> void:
 ## Open the card for the next big report, pausing the game. Cards wait
 ## while the pause menu is open.
 func _show_next_card() -> void:
-	if event_card.visible or peace_window.visible or menu.visible or cards.is_empty():
+	if event_card.visible or peace_window.visible or menu.visible or defeat_screen.visible \
+			or cards.is_empty():
 		return
 	card_report = cards.pop_front()
 	var other := scenario.country_name(int(card_report["other"]))
@@ -788,8 +808,7 @@ func _show_next_card() -> void:
 				"The war is over. The reports list the regions that changed hands.")
 		"capitulated":
 			if int(card_report["other"]) == player:
-				event_card.show_event("DEFEAT", "%s capitulated" % other,
-					"Your country gave up: its wars are over and its divisions laid down their arms.")
+				defeat_screen.show_defeat(player, sim.war_record(player))
 			else:
 				event_card.show_event("VICTORY", "%s capitulated" % other,
 					"It gave up: the war is over, and the regions you hold most of are yours.")
@@ -798,7 +817,14 @@ func _show_next_card() -> void:
 func _close_card() -> void:
 	card_report = {}
 	event_card.visible = false
+	defeat_screen.visible = false
 	_after_modal()
+
+
+## Close the defeat screen without letting the game run again.
+func _close_defeat() -> void:
+	card_report = {}
+	defeat_screen.visible = false
 
 
 ## Pause while a card or the peace window is open, remembering to resume.
@@ -812,7 +838,8 @@ func _pause_for_card() -> void:
 ## run again if a card paused it.
 func _after_modal() -> void:
 	_show_next_card()
-	if not event_card.visible and not peace_window.visible and paused_by_card:
+	if not event_card.visible and not peace_window.visible and not defeat_screen.visible \
+			and paused_by_card:
 		paused_by_card = false
 		if sim.is_paused():
 			sim.toggle_pause()
@@ -971,6 +998,7 @@ func _load_save(path: String) -> String:
 		cards.clear()
 		card_report = {}
 		event_card.visible = false
+		defeat_screen.visible = false
 		if peace_window.visible:
 			peace_window.visible = false
 			(map_rect.material as ShaderMaterial).set_shader_parameter("has_marks", false)
@@ -1333,6 +1361,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			if key == KEY_ENTER or key == KEY_KP_ENTER or key == KEY_ESCAPE:
 				_close_card()
 			return
+		if defeat_screen != null and defeat_screen.visible:
+			# Esc watches the world go on; nothing else reaches the game.
+			if key == KEY_ESCAPE:
+				_close_card()
+			return
 		if peace_window != null and peace_window.visible:
 			if key == KEY_Y or key == KEY_ENTER or key == KEY_KP_ENTER:
 				_answer_peace(true)
@@ -1445,7 +1478,8 @@ func _process(delta: float) -> void:
 	# the pause menu is open (they move the caret in the save name box), and
 	# WASD not as part of Ctrl+A or Shift+W.
 	var modal: bool = (event_card != null and event_card.visible) \
-		or (peace_window != null and peace_window.visible) or (menu != null and menu.visible)
+		or (peace_window != null and peace_window.visible) or (menu != null and menu.visible) \
+		or (defeat_screen != null and defeat_screen.visible)
 	var direction := Vector2.ZERO
 	if not modal:
 		direction = Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")

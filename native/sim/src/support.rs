@@ -75,7 +75,7 @@ impl World {
             // An earlier collapse today may have ended its last war.
             if self.countries_at_war().contains(&country) {
                 events.push(Event::SupportCollapsed { country });
-                self.capitulate(country, events);
+                self.capitulate(country, true, events);
             }
         }
     }

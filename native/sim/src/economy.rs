@@ -225,6 +225,7 @@ impl World {
             let division = self
                 .spawn_division(country, home, DIVISION_SIZE)
                 .expect("a supply source is held land");
+            self.countries[index].record.raised += 1;
             let economy = &mut self.countries[index].economy;
             economy.recruit_fund_k -= DIVISION_COST_K;
             let equipment = economy.equipment_k.min(DIVISION_EQUIPMENT_K);

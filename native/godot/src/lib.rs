@@ -159,6 +159,22 @@ impl MwScenario {
             })
     }
 
+    /// The name of a country's capital (its most populous capital city, the
+    /// one the simulation counts), or an empty string for none.
+    #[func]
+    fn country_capital_name(&self, id: i32) -> GString {
+        self.scenario
+            .as_ref()
+            .and_then(|s| {
+                s.cities
+                    .iter()
+                    .filter(|c| i32::from(c.owner_id) == id && c.is_capital)
+                    .max_by(|a, b| a.pop.total_cmp(&b.pop))
+            })
+            .map(|c| GString::from(&c.name))
+            .unwrap_or_default()
+    }
+
     #[func]
     fn attribution(&self) -> GString {
         self.scenario
