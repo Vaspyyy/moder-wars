@@ -66,6 +66,11 @@ const LEAD_ZOOM := 5.0
 const Style := preload("res://ui/style.gd")
 const PickScreen := preload("res://ui/pick.gd")
 const TopBar := preload("res://ui/top_bar.gd")
+const ArmyGroups := preload("res://ui/army_groups.gd")
+const Reports := preload("res://ui/reports.gd")
+const CommandBar := preload("res://ui/command_bar.gd")
+const MapKey := preload("res://ui/map_key.gd")
+const EventCard := preload("res://ui/event_card.gd")
 
 var scenario := MwScenario.new()
 var sim := MwWorld.new()
@@ -101,8 +106,18 @@ var no_hud := false
 var player := 0
 ## The pick screen while it is open.
 var pick: Control = null
-## The bar along the top while the player leads a country.
+## The bar along the top while the player leads a country, and the other
+## panels of that screen.
 var top_bar: PanelContainer = null
+var army_list: PanelContainer = null
+var reports: PanelContainer = null
+var command_bar: PanelContainer = null
+var event_card: Control = null
+## Big reports waiting for their card, and the one shown.
+var cards: Array = []
+var card_report: Dictionary = {}
+## Whether a card paused the game (so closing the last one resumes it).
+var paused_by_card := false
 
 
 func _ready() -> void:
@@ -292,11 +307,43 @@ func _lead(id: int, to_capital: bool) -> void:
 		_refresh_sim())
 	top_bar.visible = not no_hud
 	ui_layer.add_child(top_bar)
-	for label in [info, feed, details, help]:
-		label.visible = not no_hud
-	clock.visible = false
-	info.position.y = 72
-	feed.position.y = 72
+	army_list = ArmyGroups.new()
+	army_list.scenario = scenario
+	army_list.setup()
+	army_list.group_pressed.connect(_focus_group)
+	reports = Reports.new()
+	reports.setup()
+	command_bar = CommandBar.new()
+	command_bar.setup()
+	command_bar.front_pressed.connect(func() -> void: _start_drawing("front"))
+	command_bar.arrow_pressed.connect(func() -> void: _start_drawing("arrow"))
+	command_bar.hold_pressed.connect(_hold)
+	var key := MapKey.new()
+	key.setup()
+	for panel in [army_list, reports, command_bar, key]:
+		panel.visible = not no_hud
+		ui_layer.add_child(panel)
+	event_card = EventCard.new()
+	event_card.setup()
+	event_card.visible = false
+	event_card.closed.connect(_close_card)
+	ui_layer.add_child(event_card)
+	ui_layer.move_child(credit, -1)
+	for label in [clock, feed, details, help]:
+		label.visible = false
+	# The hover line moves to the bottom left corner, small.
+	info.visible = not no_hud
+	info.remove_theme_constant_override("outline_size")
+	info.add_theme_font_override("font", Style.BODY)
+	info.add_theme_font_size_override("font_size", 13)
+	info.add_theme_color_override("font_color", Style.CREDIT)
+	info.add_theme_stylebox_override("normal", Style.box(Color(Style.PANEL, 0.8), Color.TRANSPARENT, 4, 10, 6))
+	info.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	info.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	info.offset_left = 16
+	info.offset_bottom = -20
+	info.text = ""
+	hovered_id = -2
 	markers.selected.clear()
 	markers.selected_group = 0
 	var capital := scenario.country_capital(id)
@@ -383,19 +430,144 @@ func _refresh_sim() -> void:
 	if changes.size() > 0:
 		control_dirty = true
 		hovered_id = -2 # the label may name a new holder
-	for line in sim.take_events():
-		_add_feed(line)
-	_show_feed()
+	var news := sim.take_reports()
 	var state := "Paused" if sim.is_paused() else "Speed %d" % sim.speed()
 	clock.text = "%s   %s" % [sim.time_text(), state]
-	if top_bar != null:
-		var divisions := 0
-		for i in range(0, markers.data.size(), MwWorld.DIVISION_STRIDE):
-			if int(markers.data[i + 1]) == player:
-				divisions += 1
-		top_bar.show_state(player, sim.economy(player), sim.enemies(player), divisions,
-			sim.time_text(), sim.is_paused(), sim.speed())
-	_show_details()
+	if top_bar == null:
+		for report in news:
+			_add_feed(report["text"])
+		_show_feed()
+		_show_details()
+		return
+	var divisions := 0
+	for i in range(0, markers.data.size(), MwWorld.DIVISION_STRIDE):
+		if int(markers.data[i + 1]) == player:
+			divisions += 1
+	reports.add(news, _today())
+	for report in news:
+		if report["big"] != "":
+			cards.append(report)
+	_show_next_card()
+	top_bar.show_state(player, sim.economy(player), sim.enemies(player), divisions,
+		sim.time_text(), sim.is_paused(), sim.speed())
+	army_list.show_groups(_own_groups(), divisions, markers.selected_group)
+	_show_command_bar()
+
+
+## The game date, "2026-10-25".
+func _today() -> String:
+	return sim.time_text().split(" ")[0]
+
+
+## A message from the game itself (not the simulation): into the reports
+## while the player leads a country, else into the feed.
+func _note(line: String) -> void:
+	if reports != null:
+		var time := sim.time_text().split(" ")
+		reports.add([{"text": line, "date": time[0], "hour": int(time[1].left(2)), "mine": true,
+			"tone": ""}], time[0])
+	else:
+		_add_feed(line)
+		_show_feed()
+
+
+## The player's army groups, from the last refresh.
+func _own_groups() -> Array:
+	return markers.groups.filter(func(g: Dictionary) -> bool: return int(g["country"]) == player)
+
+
+## "1st Army Group" for the player's first group, and so on.
+func _group_name(group: int) -> String:
+	var own := _own_groups()
+	for i in own.size():
+		if int(own[i]["id"]) == group:
+			return "%s Army Group" % Style.ordinal(i + 1)
+	return "Army group %d" % group
+
+
+func _show_command_bar() -> void:
+	if command_bar == null:
+		return
+	command_bar.visible = not no_hud and (drawing != "" or not markers.selected.is_empty())
+	if not command_bar.visible:
+		return
+	var name := "%d divisions" % markers.selected.size()
+	var can_hold := false
+	if markers.selected_group != 0:
+		name = _group_name(markers.selected_group)
+		for group in markers.groups:
+			if int(group["id"]) == markers.selected_group:
+				can_hold = PackedVector2Array(group["arrow"]).size() > 0
+	elif markers.selected.size() == 1:
+		name = "Division %d" % int(markers.selected.keys()[0])
+	command_bar.show_selection(name, can_hold, drawing)
+
+
+## Select one of the player's groups from the list and look at it.
+func _focus_group(group: int) -> void:
+	_select_group(group)
+	var center := Vector2.ZERO
+	var count := 0
+	for id in markers.selected:
+		if markers.positions.has(id):
+			center += markers.positions[id]
+			count += 1
+	if count > 0:
+		create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT) \
+			.tween_property(camera, "position", center / count, 0.5)
+	_refresh_sim()
+
+
+## Take the selected group's arrow away: it holds its front.
+func _hold() -> void:
+	if markers.selected_group != 0:
+		sim.draw_arrow(markers.selected_group, PackedVector2Array())
+		_refresh_sim()
+
+
+## Open the card for the next big report, pausing the game.
+func _show_next_card() -> void:
+	if event_card.visible or cards.is_empty():
+		return
+	card_report = cards.pop_front()
+	var other := scenario.country_name(int(card_report["other"]))
+	var kind := String(card_report["big"])
+	if not sim.is_paused():
+		sim.toggle_pause()
+		paused_by_card = true
+	match kind:
+		"war":
+			event_card.show_event("WAR", "%s declared war on you" % other,
+				"Its divisions will cross the border. Give your army groups fronts along it, "
+				+ "and arrows where you want to strike back.", false)
+		"peace_offer":
+			event_card.show_event("PEACE OFFER", "%s offers peace" % other,
+				"If you accept, the war ends today. A region either side alone holds more than "
+				+ "half of becomes theirs; everything else goes back.", true)
+		"peace":
+			event_card.show_event("PEACE", "Peace with %s" % other,
+				"The war is over. The reports list the regions that changed hands.", false)
+		"capitulated":
+			if int(card_report["other"]) == player:
+				event_card.show_event("DEFEAT", "%s capitulated" % other,
+					"Your country gave up: its wars are over and its divisions laid down their arms.",
+					false)
+			else:
+				event_card.show_event("VICTORY", "%s capitulated" % other,
+					"It gave up: the war is over, and the regions you hold most of are yours.", false)
+
+
+func _close_card(accepted: bool) -> void:
+	if card_report.get("big", "") == "peace_offer":
+		sim.answer_peace(int(card_report["other"]), player, accepted)
+	card_report = {}
+	event_card.visible = false
+	_show_next_card()
+	if not event_card.visible and paused_by_card:
+		paused_by_card = false
+		if sim.is_paused():
+			sim.toggle_pause()
+	_refresh_sim()
 
 
 ## One quick save slot, in Godot's user data folder.
@@ -485,6 +657,7 @@ func _thousands(value: int) -> String:
 
 
 func _show_help() -> void:
+	_show_command_bar()
 	match drawing:
 		"front":
 			help.text = "Drawing a front: drag along the border with the left mouse button  ·  Esc cancels"
@@ -545,7 +718,7 @@ func _group_for_drawing() -> int:
 
 func _start_drawing(kind: String) -> void:
 	if _group_for_drawing() == 0:
-		_add_feed("Select divisions or an army group first")
+		_note("Select divisions or an army group first")
 		_refresh_sim()
 		return
 	drawing = kind
@@ -614,6 +787,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		_update_hover(motion.position)
 	elif event is InputEventKey and event.pressed:
 		var key := (event as InputEventKey).keycode
+		if event_card != null and event_card.visible:
+			# A card waits for an answer; the game stays paused.
+			if key == KEY_Y or key == KEY_ENTER or key == KEY_KP_ENTER:
+				_close_card(true)
+			elif key == KEY_N or key == KEY_ESCAPE:
+				_close_card(card_report.get("big", "") != "peace_offer")
+			return
 		if key == KEY_EQUAL or key == KEY_KP_ADD:
 			_zoom_at(1.25, get_viewport_rect().size / 2)
 		elif key == KEY_MINUS or key == KEY_KP_SUBTRACT:
@@ -655,7 +835,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			var country := _acting_country()
 			var on := not sim.is_ai(country)
 			sim.set_ai(country, on)
-			_add_feed(("%s is now run by the AI" if on else "%s takes orders from you again")
+			_note(("%s is now run by the AI" if on else "%s takes orders from you again")
 				% scenario.country_name(country))
 			_refresh_sim()
 		elif key == KEY_W and _acting_country() != 0 and hovered_id > 0:
@@ -663,7 +843,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_refresh_sim()
 		elif key == KEY_P and _acting_country() != 0:
 			if sim.offer_peace(_acting_country()) == 0:
-				_add_feed("%s is at war with nobody" % scenario.country_name(_acting_country()))
+				_note("%s is at war with nobody" % scenario.country_name(_acting_country()))
 			_refresh_sim()
 		elif key == KEY_Y or key == KEY_N:
 			var newest: Dictionary = {}
@@ -673,26 +853,25 @@ func _unhandled_input(event: InputEvent) -> void:
 				if newest.is_empty() or int(offer["tick"]) >= int(newest["tick"]):
 					newest = offer
 			if newest.is_empty():
-				_add_feed("No open peace offers")
+				_note("No open peace offers")
 			else:
 				sim.answer_peace(int(newest["from"]), int(newest["to"]), key == KEY_Y)
 			_refresh_sim()
 		elif key == KEY_F5:
 			var error := sim.save_game(_quicksave_path())
-			_add_feed(error if error != "" else "Game saved")
+			_note(error if error != "" else "Game saved")
 			_refresh_sim()
 		elif key == KEY_F9:
 			var error := sim.load_game(_quicksave_path())
 			if error == "":
 				markers.selected.clear()
 				markers.selected_group = 0
-				_add_feed("Game loaded")
+				_note("Game loaded")
 			else:
-				_add_feed(error)
+				_note(error)
 			_refresh_sim()
 		elif key == KEY_X and markers.selected_group != 0:
-			sim.draw_arrow(markers.selected_group, PackedVector2Array())
-			_refresh_sim()
+			_hold()
 		elif key == KEY_ESCAPE:
 			if drawing != "":
 				drawing = ""
@@ -753,15 +932,20 @@ func _hover_world(world: Vector2) -> void:
 	var material := map_rect.material as ShaderMaterial
 	material.set_shader_parameter("hovered_id", id)
 	material.set_shader_parameter("hovered_region", region)
-	var text := scenario.scenario_name()
+	var place := ""
 	if region > 0:
 		var home := scenario.region_home(region)
-		text += "  ·  %s, %s" % [scenario.region_name(region), scenario.country_name(home)]
+		place = "%s, %s" % [scenario.region_name(region), scenario.country_name(home)]
 		if id > 0 and id != home:
-			text += " (held by %s)" % scenario.country_name(id)
+			place += " (held by %s)" % scenario.country_name(id)
 	elif id > 0:
-		text += "  ·  " + scenario.country_name(id)
-	info.text = text
+		place = scenario.country_name(id)
+	if player == 0:
+		info.text = scenario.scenario_name() + ("  ·  " + place if place != "" else "")
+	else:
+		# The small line in the corner: only the place, or nothing.
+		info.text = place
+		info.visible = place != "" and not no_hud
 
 
 ## Pixel of the cell images under a world position, or (-1, -1) off the map.

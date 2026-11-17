@@ -31,8 +31,10 @@ pub struct MwWorld {
     pacer: Pacer,
     /// Military control as last handed out by `control_changes`.
     shown: Vec<u16>,
-    /// Event lines not collected by `take_events` yet.
-    log: Vec<String>,
+    /// Reports not collected by `take_reports` yet.
+    log: Vec<Report>,
+    /// The country the player leads (see `lead`), or 0.
+    player: CountryId,
     /// The force figures `deploy_forces` used, for the country card.
     forces: BTreeMap<CountryId, forces::Observation>,
     base: Base<RefCounted>,
@@ -47,6 +49,7 @@ impl IRefCounted for MwWorld {
             pacer: Pacer::default(),
             shown: Vec::new(),
             log: Vec::new(),
+            player: 0,
             forces: BTreeMap::new(),
             base,
         }
@@ -84,6 +87,7 @@ impl MwWorld {
         self.pacer = Pacer::default();
         self.log.clear();
         self.forces.clear();
+        self.player = 0;
         self.world.is_some()
     }
 
@@ -139,11 +143,13 @@ impl MwWorld {
             return;
         };
         for _ in 0..hours.max(0) {
-            for event in world.step() {
-                if let Some(line) = describe(s, world, &event) {
-                    self.log.push(line);
-                }
-            }
+            let enemies = world.enemies(self.player);
+            let events = world.step();
+            self.log.extend(
+                events
+                    .iter()
+                    .filter_map(|e| report(s, world, e, self.player, &enemies)),
+            );
         }
     }
 
@@ -267,7 +273,7 @@ impl MwWorld {
 
     /// Order divisions to march to a point. Each order is given by the
     /// division's own country and applies at once, paused or not (a target
-    /// out of reach shows up in `take_events`); it takes the division out
+    /// out of reach shows up in `take_reports`); it takes the division out
     /// of its army group. Returns how many orders were given.
     #[func]
     fn move_divisions(&mut self, ids: PackedInt64Array, lng: f64, lat: f64) -> i32 {
@@ -303,7 +309,7 @@ impl MwWorld {
     }
 
     /// Form an army group from divisions of one country. Returns the new
-    /// group's id, or 0 if the order was refused (see `take_events`).
+    /// group's id, or 0 if the order was refused (see `take_reports`).
     #[func]
     fn create_group(&mut self, ids: PackedInt64Array) -> i64 {
         let divisions: Vec<DivisionId> = ids
@@ -334,7 +340,7 @@ impl MwWorld {
     }
 
     /// Give a group a front drawn through (longitude, latitude) points.
-    /// Returns whether the group took it (see `take_events` if not).
+    /// Returns whether the group took it (see `take_reports` if not).
     #[func]
     fn set_front(&mut self, group: i64, points: PackedVector2Array) -> bool {
         self.group_line(group, &points, |group, line| Command::SetFront {
@@ -481,6 +487,7 @@ impl MwWorld {
                 .set_controller(id, controller)
                 .expect("a country of this world");
         }
+        self.player = player;
         true
     }
 
@@ -610,7 +617,9 @@ impl MwWorld {
     }
 
     /// Every army group as a dictionary: `id`, `country`, `divisions`
-    /// (ids), and `front` and `arrow` as (longitude, latitude) points.
+    /// (ids), `personnel` and `establishment` (soldiers it has and would
+    /// have at full strength), `enemy` (the country its front faces, or 0),
+    /// and `front` and `arrow` as (longitude, latitude) points.
     #[func]
     fn groups(&self) -> Array<VarDictionary> {
         let (Some(world), Some(grid)) = (self.world.as_ref(), self.grid()) else {
@@ -631,10 +640,16 @@ impl MwWorld {
             .map(|g| {
                 let divisions: PackedInt64Array =
                     g.divisions.iter().map(|d| i64::from(d.0)).collect();
+                let members = || g.divisions.iter().filter_map(|&d| world.division(d));
+                let personnel: u64 = members().map(|d| u64::from(d.personnel)).sum();
+                let establishment: u64 = members().map(|d| u64::from(d.establishment)).sum();
                 let mut entry = VarDictionary::new();
                 entry.set("id", i64::from(g.id.0));
                 entry.set("country", i64::from(g.country));
                 entry.set("divisions", &divisions);
+                entry.set("personnel", personnel as i64);
+                entry.set("establishment", establishment as i64);
+                entry.set("enemy", g.enemy.map_or(0, i64::from));
                 entry.set("front", &points(&g.front));
                 entry.set("arrow", &points(&g.arrow));
                 entry
@@ -687,12 +702,26 @@ impl MwWorld {
         }
     }
 
-    /// What happened since the last call, one line per event.
+    /// What happened since the last call, one dictionary per event with a
+    /// line: `text`, `date` ("2026-10-25") and `hour`, `mine` (whether it
+    /// belongs in the player's feed), `big` (the card it pops up, see
+    /// `Report`), `tone` ("war", "peace" or "") and `other` (the other
+    /// country of a big event).
     #[func]
-    fn take_events(&mut self) -> PackedStringArray {
+    fn take_reports(&mut self) -> Array<VarDictionary> {
         self.log
             .drain(..)
-            .map(|line| GString::from(&line))
+            .map(|r| {
+                let mut entry = VarDictionary::new();
+                entry.set("text", &GString::from(&r.text));
+                entry.set("date", &GString::from(&r.date));
+                entry.set("hour", i64::from(r.hour));
+                entry.set("mine", r.mine);
+                entry.set("big", &GString::from(r.big));
+                entry.set("tone", &GString::from(r.tone));
+                entry.set("other", i64::from(r.other));
+                entry
+            })
             .collect()
     }
 }
@@ -719,11 +748,15 @@ impl MwWorld {
         let (Some(world), Some(scenario)) = (self.world.as_mut(), self.scenario.as_ref()) else {
             return Vec::new();
         };
+        let enemies = world.enemies(self.player);
         let events = world.apply_orders();
         let bound = scenario.bind();
         if let Some(s) = bound.scenario.as_ref() {
-            self.log
-                .extend(events.iter().filter_map(|e| describe(s, world, e)));
+            self.log.extend(
+                events
+                    .iter()
+                    .filter_map(|e| report(s, world, e, self.player, &enemies)),
+            );
         }
         events
     }
@@ -777,6 +810,100 @@ fn country_name(scenario: &Scenario, id: u16) -> &str {
 }
 
 /// A line for the event feed, or None for events not worth showing.
+/// One line for the reports feed.
+struct Report {
+    text: String,
+    /// When it happened: "2026-10-25" and the hour.
+    date: String,
+    hour: u8,
+    /// Whether it belongs in the player's feed (everything does in the
+    /// viewer).
+    mine: bool,
+    /// The card it pops up for the player, which pauses the game: "war"
+    /// (war declared on the player), "peace_offer" (an offer to the
+    /// player), "peace" (the player made peace), "capitulated" (the player
+    /// or one of its enemies gave up); "" for none.
+    big: &'static str,
+    /// "war", "peace" or "" for how the feed colors the line.
+    tone: &'static str,
+    /// For wars, peace and capitulations: the country other than the
+    /// player (the attacker when the player is not involved), or 0.
+    other: CountryId,
+}
+
+/// The report for an event, if it has a line. `enemies` are the player's
+/// enemies before the event, so a capitulated enemy still counts as one.
+fn report(
+    scenario: &Scenario,
+    world: &World,
+    event: &Event,
+    player: CountryId,
+    enemies: &[CountryId],
+) -> Option<Report> {
+    let text = describe(scenario, world, event)?;
+    let time = world.time();
+    let own = |c: CountryId| c == player;
+    let side = |c: CountryId| own(c) || enemies.contains(&c);
+    let division_country = |d: DivisionId| world.division(d).map(|d| d.country);
+    let (mine, big, tone, other) = match *event {
+        Event::WarDeclared { attacker, target } => {
+            let on_me = own(target);
+            let tone = if own(attacker) || on_me { "war" } else { "" };
+            let other = if own(attacker) { target } else { attacker };
+            (true, if on_me { "war" } else { "" }, tone, other)
+        }
+        Event::PeaceOffered { from, to } => (
+            own(from) || own(to),
+            if own(to) { "peace_offer" } else { "" },
+            "",
+            from,
+        ),
+        Event::PeaceMade { from, to } => {
+            let mine = own(from) || own(to);
+            let other = if own(from) { to } else { from };
+            (
+                true,
+                if mine { "peace" } else { "" },
+                if mine { "peace" } else { "" },
+                other,
+            )
+        }
+        Event::PeaceRefused { from, to } => (own(from) || own(to), "", "", 0),
+        Event::Capitulated { country } => {
+            let big = if side(country) { "capitulated" } else { "" };
+            (true, big, if side(country) { "war" } else { "" }, country)
+        }
+        Event::SupportCollapsed { .. } | Event::RegionsCeded { .. } => (true, "", "", 0),
+        Event::Rejected { ref order, .. } => (own(order.country), "", "", 0),
+        Event::ArmyGroupCreated { country, .. } | Event::DivisionRecruited { country, .. } => {
+            (own(country), "", "", 0)
+        }
+        Event::ArrowReached { group } => (
+            world.army_group(group).is_some_and(|g| own(g.country)),
+            "",
+            "",
+            0,
+        ),
+        Event::MoveBlocked { division } => (division_country(division).is_some_and(own), "", "", 0),
+        Event::DivisionRetreated { division, .. } => {
+            (division_country(division).is_some_and(side), "", "", 0)
+        }
+        Event::DivisionDestroyed { country, .. } => (side(country), "", "", 0),
+        Event::DivisionArrived { .. } => (false, "", "", 0),
+    };
+    Some(Report {
+        text,
+        date: time.date.to_string(),
+        hour: time.hour,
+        // The viewer (no player) shows everything; nothing involves country 0,
+        // so it pops up nothing.
+        mine: mine || player == 0,
+        big,
+        tone,
+        other,
+    })
+}
+
 fn describe(scenario: &Scenario, world: &World, event: &Event) -> Option<String> {
     let name = |id| country_name(scenario, id);
     // "Poland division 12", or "Division 12" once it is gone.
@@ -859,4 +986,106 @@ fn describe(scenario: &Scenario, world: &World, event: &Event) -> Option<String>
         }
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn scenario() -> Scenario {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../assets/maps/compiled/world-map-2026-v3.mwsc.gz"
+        );
+        mw_sim::scenario::decode_gzip(&std::fs::read(path).unwrap()).unwrap()
+    }
+
+    fn id(s: &Scenario, name: &str) -> CountryId {
+        s.countries
+            .iter()
+            .flatten()
+            .find(|c| c.name == name)
+            .unwrap()
+            .id
+    }
+
+    #[test]
+    fn reports_say_what_concerns_the_player() {
+        let s = scenario();
+        let world = World::new(&s, 1);
+        let (poland, germany, france, spain) = (
+            id(&s, "Poland"),
+            id(&s, "Germany"),
+            id(&s, "France"),
+            id(&s, "Spain"),
+        );
+        let war = |attacker, target| Event::WarDeclared { attacker, target };
+        let concern = |event: &Event, player, enemies: &[CountryId]| {
+            let r = report(&s, &world, event, player, enemies).unwrap();
+            (r.mine, r.big, r.tone, r.other)
+        };
+        assert_eq!(
+            concern(&war(germany, poland), poland, &[]),
+            (true, "war", "war", germany),
+            "war on the player pops up a card"
+        );
+        assert_eq!(
+            concern(&war(poland, germany), poland, &[]),
+            (true, "", "war", germany)
+        );
+        assert_eq!(
+            concern(&war(france, spain), poland, &[]),
+            (true, "", "", france),
+            "wars elsewhere are news, nothing more"
+        );
+        let recruited = |country| Event::DivisionRecruited {
+            division: DivisionId(1),
+            country,
+        };
+        assert!(concern(&recruited(poland), poland, &[]).0);
+        assert!(
+            !concern(&recruited(germany), poland, &[germany]).0,
+            "an enemy's recruits stay out of the feed"
+        );
+        let lost = Event::DivisionDestroyed {
+            division: DivisionId(1),
+            country: germany,
+            cause: Loss::Surrendered,
+        };
+        assert!(
+            concern(&lost, poland, &[germany]).0,
+            "the enemy's losses show"
+        );
+        assert!(!concern(&lost, poland, &[]).0, "others' losses do not");
+        let gave_up = Event::Capitulated { country: germany };
+        assert_eq!(
+            concern(&gave_up, poland, &[germany]),
+            (true, "capitulated", "war", germany)
+        );
+        assert_eq!(concern(&gave_up, poland, &[]).1, "");
+        let offer = Event::PeaceOffered {
+            from: germany,
+            to: poland,
+        };
+        assert_eq!(concern(&offer, poland, &[germany]).1, "peace_offer");
+        assert_eq!(concern(&offer, france, &[]), (false, "", "", germany));
+        let peace = Event::PeaceMade {
+            from: poland,
+            to: germany,
+        };
+        assert_eq!(
+            concern(&peace, poland, &[]),
+            (true, "peace", "peace", germany)
+        );
+        assert_eq!(
+            concern(&recruited(germany), 0, &[]),
+            (true, "", "", 0),
+            "the viewer shows everything"
+        );
+        assert_eq!(
+            concern(&war(germany, poland), 0, &[]).1,
+            "",
+            "and pops up nothing"
+        );
+    }
 }
