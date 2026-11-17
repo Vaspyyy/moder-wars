@@ -9,7 +9,7 @@
 mod common;
 
 use common::{cell, country, run};
-use mw_sim::support::FULL_SUPPORT;
+use mw_sim::support::{AFTER_CAPITULATION, FULL_SUPPORT};
 use mw_sim::world::{Command, CountryId, Event, Order, World};
 
 fn order(world: &mut World, country: CountryId, command: Command) {
@@ -201,7 +201,11 @@ fn a_country_whose_support_collapses_capitulates() {
         "a quiet war takes a long time to break a country: {day}"
     );
     assert!(!world.at_war(poland, ukraine));
-    assert_eq!(support(&world, ukraine), 0);
+    assert_eq!(
+        support(&world, ukraine),
+        AFTER_CAPITULATION,
+        "it starts again after giving up"
+    );
 }
 
 #[test]

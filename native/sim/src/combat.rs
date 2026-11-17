@@ -178,6 +178,11 @@ impl World {
         let total: u64 = lost.iter().map(|&(_, n)| n).sum();
         for &(country, n) in lost {
             self.count_losses(country, n, 0);
+            // Who put this country's soldiers out of action, for the turns
+            // at a conference.
+            for (winner, part) in shares(n, by) {
+                *self.defeated.entry((winner, country)).or_default() += part;
+            }
         }
         for (country, n) in shares(total, by) {
             self.count_losses(country, 0, n);

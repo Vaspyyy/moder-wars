@@ -128,7 +128,36 @@ func _initialize() -> void:
 	main._refresh_sim()
 	check(not main.peace_window.visible, "no window for the peace offer the capitulation ended")
 	check(main.event_card.visible and _card_text().contains("Luxembourg capitulated"), "a victory card")
-	check(_card_text().contains("You gain Grevenmacher and Luxembourg."), "naming the regions gained: %s" % _card_text())
+	check(_card_text().contains("Next, at the peace conference, you decide what becomes of its land."),
+		"announcing the conference: %s" % _card_text())
+
+	# The conference: Germany won alone. A click picks a region, Take takes
+	# it, Annex the rest takes the others.
+	main._close_card()
+	var window: Control = main.conference_window
+	check(window.visible and main.conference_loser == luxembourg, "then the peace conference")
+	check(main.sim.is_paused(), "paused while dividing")
+	var labels := func() -> Array: return window.dialog.find_children("*", "Label", true, false).map(
+		func(l: Label) -> String: return l.text)
+	check(labels.call().has("Divide Luxembourg"), "titled for the loser")
+	check(window.dialog.find_child("Turns", true, false) == null, "no turns for a lone winner")
+	check((window.dialog.find_child("Take", true, false) as Button).disabled, "Take waits for a region")
+	await look_at(6.13, 49.61, 8.0)
+	main._select_at(screen_at(6.13, 49.61), false)
+	var capital_region: int = main._region_at(main._world_from_lng_lat(6.13, 49.61))
+	check(main.conference_selected == capital_region, "a click on the capital chooses its region")
+	var take: Button = window.dialog.find_child("Take", true, false)
+	check(not take.disabled and take.text == "Take " + scenario.region_name(capital_region), take.text)
+	take.pressed.emit()
+	check(labels.call().has("You took " + scenario.region_name(capital_region)), "listed as taken")
+	check(main.sim.conferences().size() == 1, "the rest is still open")
+	(window.dialog.find_child("Annex", true, false) as Button).pressed.emit()
+	check(not window.visible and main.sim.conferences().is_empty(), "Annex the rest ends it")
+	check(main.event_card.visible and _card_text().contains("Luxembourg is divided")
+		and _card_text().contains("Luxembourg is gone from the map."), "a last card: %s" % _card_text())
+	check(main.sim.region_owner(capital_region) == germany_led, "the capital's region is German")
+	main._close_card()
+	check(not main.event_card.visible, "and the game goes on")
 	finish()
 
 

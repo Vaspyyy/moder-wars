@@ -161,10 +161,14 @@ func _story(country: int, record: Dictionary) -> String:
 	if ceded.is_empty():
 		then += ", and no region changed hands."
 	elif receivers.size() == 1:
-		then += ", and the regions %s held most of now belong to it." \
+		then += ", and at the peace conference %s took the regions below." \
 			% scenario.country_name(int(receivers.keys()[0]))
 	else:
-		then += ", and each enemy now owns the regions it held most of."
+		then += ", and at the peace conference the winners took the regions below."
+	var overlord := int(record.get("overlord", 0))
+	if overlord != 0:
+		then += " %s made you its puppet: you keep the rest, but fight in its wars and pay it a quarter of your income." \
+			% scenario.country_name(overlord)
 	return why + " " + then
 
 

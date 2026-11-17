@@ -46,17 +46,17 @@ struct Settlement {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct RegionMap {
     /// Per cell: region index + 1, or 0 for no region.
-    cell_region: Vec<u16>,
+    pub(crate) cell_region: Vec<u16>,
     /// Per region: its land cells.
-    cells: Vec<u32>,
+    pub(crate) cells: Vec<u32>,
     /// Per region: what its land produces (`MapData::value_k`, summed).
     value_k: Vec<u64>,
     /// Per region: its owner by law when the game started.
-    home: Vec<CountryId>,
+    pub(crate) home: Vec<CountryId>,
 }
 
 impl RegionMap {
-    fn region(&self, cell: Cell) -> Option<usize> {
+    pub(crate) fn region(&self, cell: Cell) -> Option<usize> {
         match self.cell_region.get(cell as usize) {
             Some(&value) if value > 0 => Some(usize::from(value) - 1),
             _ => None,
@@ -388,7 +388,7 @@ impl World {
 
     /// Divisions of `a` and `b` standing on land the other side holds go to
     /// the nearest land their country holds.
-    fn withdraw(&mut self, a: CountryId, b: CountryId) {
+    pub(crate) fn withdraw(&mut self, a: CountryId, b: CountryId) {
         for index in 0..self.divisions.len() {
             let (country, cell) = (self.divisions[index].country, self.divisions[index].cell);
             let holder = self.control[cell as usize];

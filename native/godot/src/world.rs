@@ -6,9 +6,11 @@ use std::collections::BTreeMap;
 use godot::classes::IRefCounted;
 use godot::prelude::*;
 use mw_sim::army::ArmyGroupId;
+use mw_sim::conference::Move;
 use mw_sim::division::{DivisionId, Loss};
 use mw_sim::economy;
 use mw_sim::forces;
+use mw_sim::regions::Regions;
 use mw_sim::sandbox::{self, SandboxError};
 use mw_sim::scenario::Scenario;
 use mw_sim::time::{GameTime, Pacer};
@@ -174,8 +176,10 @@ impl MwWorld {
         let Some(s) = bound.scenario.as_ref() else {
             return;
         };
+        let regions = bound.regions.as_ref();
         for _ in 0..hours.max(0) {
-            self.log.extend(step_reports(s, world, self.player));
+            self.log
+                .extend(step_reports(s, regions, world, self.player));
         }
     }
 
@@ -417,6 +421,12 @@ impl MwWorld {
         entry.set("manpower", e.manpower() as i64);
         entry.set("recruit_fund_k", e.recruit_fund_k);
         entry.set("equipment_k", e.equipment_k);
+        let tribute = self
+            .world
+            .as_ref()
+            .zip(u16::try_from(country).ok())
+            .map_or(0, |(w, c)| w.tribute_today_k(c));
+        entry.set("tribute_k", tribute);
         entry
     }
 
@@ -653,6 +663,7 @@ impl MwWorld {
         let lost = regions(&mut world.lost_regions(country).iter().map(|c| (c.region, c.to)));
         entry.set("lost_regions", &lost);
         entry.set("capitulated", record.capitulation.is_some());
+        entry.set("overlord", world.overlord(country).map_or(0, i64::from));
         if let Some(capitulation) = &record.capitulation {
             let date = world.time_of(capitulation.tick).date.to_string();
             entry.set("date", &GString::from(&date));
@@ -795,6 +806,138 @@ impl MwWorld {
                 entry
             })
             .collect()
+    }
+
+    /// Open peace conferences, oldest first, as dictionaries: `loser`,
+    /// `winners` (in turn order), `picking` (whose turn it is), `done`
+    /// (winners who left), `open` (region numbers left to take, as
+    /// `region_name` takes them) and `picks` (one dictionary per region
+    /// taken, in order: `region`, `by`).
+    #[func]
+    fn conferences(&self) -> Array<VarDictionary> {
+        let Some(world) = self.world.as_ref() else {
+            return Array::new();
+        };
+        let ids = |list: &[CountryId]| -> PackedInt32Array {
+            list.iter().map(|&c| i32::from(c)).collect()
+        };
+        world
+            .conferences()
+            .iter()
+            .map(|c| {
+                let mut entry = VarDictionary::new();
+                entry.set("loser", i64::from(c.loser));
+                entry.set("winners", &ids(&c.winners));
+                entry.set("picking", i64::from(c.picking()));
+                entry.set("done", &ids(&c.done));
+                let open: PackedInt32Array = c.open.iter().map(|&r| i32::from(r) + 1).collect();
+                entry.set("open", &open);
+                let picks: Array<VarDictionary> = c
+                    .picks
+                    .iter()
+                    .map(|&(region, by)| {
+                        let mut pick = VarDictionary::new();
+                        pick.set("region", i64::from(region) + 1);
+                        pick.set("by", i64::from(by));
+                        pick
+                    })
+                    .collect();
+                entry.set("picks", &picks);
+                entry
+            })
+            .collect()
+    }
+
+    /// `country`'s move at the conference on `loser`: "take" (region
+    /// number `region`), "puppet", "annex" (the rest) or "leave". Returns
+    /// whether it was taken; the AI winners after it move at once.
+    #[func]
+    fn conference_move(&mut self, country: i32, loser: i32, action: GString, region: i32) -> bool {
+        let (Ok(country), Ok(loser)) = (u16::try_from(country), u16::try_from(loser)) else {
+            return false;
+        };
+        let command = match action.to_string().as_str() {
+            "take" => match u16::try_from(region - 1) {
+                Ok(region) => Command::TakeRegion { loser, region },
+                Err(_) => return false,
+            },
+            "puppet" => Command::MakePuppet { loser },
+            "annex" => Command::AnnexRest { loser },
+            "leave" => Command::LeaveConference { loser },
+            _ => return false,
+        };
+        self.order(country, command)
+            && !self
+                .apply_now()
+                .iter()
+                .any(|e| matches!(e, Event::Rejected { .. }))
+    }
+
+    /// What the AI would do on `winner`'s turn at the conference on
+    /// `loser`: "take" with `region`, "puppet" or "leave", as a dictionary
+    /// with `action` and `region` (0 when none).
+    #[func]
+    fn conference_advice(&self, winner: i32, loser: i32) -> VarDictionary {
+        let mut entry = VarDictionary::new();
+        let (Some(world), Ok(winner), Ok(loser)) = (
+            self.world.as_ref(),
+            u16::try_from(winner),
+            u16::try_from(loser),
+        ) else {
+            return entry;
+        };
+        let (action, region) = match world.ai_move(winner, loser) {
+            Move::Take(region) => ("take", i64::from(region) + 1),
+            Move::Puppet => ("puppet", 0),
+            Move::AnnexRest => ("annex", 0),
+            Move::Leave => ("leave", 0),
+        };
+        entry.set("action", action);
+        entry.set("region", region);
+        entry
+    }
+
+    /// Set a country's war support (0 to 1000), for sandboxes and tests: at
+    /// zero it capitulates at the next daily update if it is at war.
+    #[func]
+    fn set_war_support(&mut self, country: i32, per_mille: i32) -> bool {
+        let (Some(world), Ok(country), Ok(support)) = (
+            self.world.as_mut(),
+            u16::try_from(country),
+            u16::try_from(per_mille.clamp(0, 1000)),
+        ) else {
+            return false;
+        };
+        world.set_war_support(country, support).is_ok()
+    }
+
+    /// The country `country` is a puppet of, or 0.
+    #[func]
+    fn overlord(&self, country: i32) -> i32 {
+        self.world
+            .as_ref()
+            .zip(u16::try_from(country).ok())
+            .and_then(|(w, c)| w.overlord(c))
+            .map_or(0, i32::from)
+    }
+
+    /// The puppets of `country`.
+    #[func]
+    fn puppets(&self, country: i32) -> PackedInt32Array {
+        self.world
+            .as_ref()
+            .zip(u16::try_from(country).ok())
+            .map(|(w, c)| w.puppets(c).into_iter().map(i32::from).collect())
+            .unwrap_or_default()
+    }
+
+    /// Soldiers of `loser` that `winner` put out of action in their war.
+    #[func]
+    fn defeated(&self, winner: i32, loser: i32) -> i64 {
+        self.world
+            .as_ref()
+            .zip(u16::try_from(winner).ok().zip(u16::try_from(loser).ok()))
+            .map_or(0, |(w, (a, b))| w.defeated(a, b) as i64)
     }
 
     /// The owner by law now of region number `region` (as `region_name`
@@ -1053,10 +1196,11 @@ impl MwWorld {
         let events = world.apply_orders();
         let bound = scenario.bind();
         if let Some(s) = bound.scenario.as_ref() {
+            let regions = bound.regions.as_ref();
             self.log.extend(
                 events
                     .iter()
-                    .filter_map(|e| report(s, world, e, self.player, &enemies, time)),
+                    .filter_map(|e| report(s, regions, world, e, self.player, &enemies, time)),
             );
         }
         events
@@ -1111,6 +1255,15 @@ fn region_indices(numbers: &PackedInt32Array) -> Vec<u16> {
         .collect()
 }
 
+/// "A", "A and B", "A, B and C".
+fn list_and(names: &[&str]) -> String {
+    match names {
+        [] => String::new(),
+        [one] => (*one).to_string(),
+        [rest @ .., last] => format!("{} and {}", rest.join(", "), last),
+    }
+}
+
 fn country_name(scenario: &Scenario, id: u16) -> &str {
     scenario
         .countries
@@ -1145,7 +1298,12 @@ struct Report {
 /// Run one tick and report what happened in it. A capitulation is one
 /// line that counts the divisions laying down their arms with it, not a
 /// line per division.
-fn step_reports(scenario: &Scenario, world: &mut World, player: CountryId) -> Vec<Report> {
+fn step_reports(
+    scenario: &Scenario,
+    regions: Option<&Regions>,
+    world: &mut World,
+    player: CountryId,
+) -> Vec<Report> {
     let enemies = world.enemies(player);
     // The tick the events happen in; `step` moves the clock on after them.
     let time = world.time();
@@ -1162,7 +1320,7 @@ fn step_reports(scenario: &Scenario, world: &mut World, player: CountryId) -> Ve
         .iter()
         .filter(|e| !surrendered(e).is_some_and(|c| capitulated.contains(&c)))
         .filter_map(|e| {
-            let mut line = report(scenario, world, e, player, &enemies, time)?;
+            let mut line = report(scenario, regions, world, e, player, &enemies, time)?;
             if let Event::Capitulated { country } = e {
                 match laid_down(*country) {
                     0 => {}
@@ -1192,13 +1350,14 @@ fn surrendered(event: &Event) -> Option<CountryId> {
 /// `time` is when it happened.
 fn report(
     scenario: &Scenario,
+    regions: Option<&Regions>,
     world: &World,
     event: &Event,
     player: CountryId,
     enemies: &[CountryId],
     time: GameTime,
 ) -> Option<Report> {
-    let text = describe(scenario, world, event)?;
+    let text = describe(scenario, regions, world, event)?;
     let own = |c: CountryId| c == player;
     let side = |c: CountryId| own(c) || enemies.contains(&c);
     let division_country = |d: DivisionId| world.division(d).map(|d| d.country);
@@ -1231,6 +1390,20 @@ fn report(
             (true, big, if side(country) { "war" } else { "" }, country)
         }
         Event::SupportCollapsed { .. } | Event::RegionsCeded { .. } => (true, "", "", 0),
+        Event::ConferenceOpened { loser, ref winners } => {
+            // The player divides the loser's land: the conference window.
+            let big = if winners.contains(&player) {
+                "conference"
+            } else {
+                ""
+            };
+            (side(loser), big, "", loser)
+        }
+        Event::RegionTaken { loser, by, .. } => (own(by) || own(loser), "", "", 0),
+        Event::ConferenceClosed { loser } => (side(loser), "", "", loser),
+        // The conference's last card and the defeat screen say so.
+        Event::Puppeted { .. } => (true, "", "", 0),
+        Event::PuppetFreed { country } => (true, "", "", country),
         Event::Rejected { ref order, .. } => (own(order.country), "", "", 0),
         Event::ArmyGroupCreated { country, .. } | Event::DivisionRecruited { country, .. } => {
             (own(country), "", "", 0)
@@ -1261,7 +1434,24 @@ fn report(
     })
 }
 
-fn describe(scenario: &Scenario, world: &World, event: &Event) -> Option<String> {
+fn describe(
+    scenario: &Scenario,
+    regions: Option<&Regions>,
+    world: &World,
+    event: &Event,
+) -> Option<String> {
+    let region_name = |region: usize| -> String {
+        regions.and_then(|r| r.list.get(region)).map_or_else(
+            || format!("region {}", region + 1),
+            |r| {
+                if r.names.en.is_empty() {
+                    r.id.clone()
+                } else {
+                    r.names.en.clone()
+                }
+            },
+        )
+    };
     let name = |id| country_name(scenario, id);
     // "Poland division 12", or "Division 12" once it is gone.
     let division_name = |id: DivisionId| match world.division(id) {
@@ -1321,6 +1511,27 @@ fn describe(scenario: &Scenario, world: &World, event: &Event) -> Option<String>
         Event::SupportCollapsed { country } => {
             format!("{}'s support for the war collapsed", name(*country))
         }
+        Event::ConferenceOpened { loser, winners } => {
+            let names: Vec<&str> = winners.iter().map(|&w| name(w)).collect();
+            format!(
+                "Peace conference on {}: {} divide its land",
+                name(*loser),
+                list_and(&names)
+            )
+        }
+        Event::RegionTaken { loser, by, region } => format!(
+            "{} took {} from {}",
+            name(*by),
+            region_name(*region),
+            name(*loser)
+        ),
+        Event::ConferenceClosed { loser } => {
+            format!("The peace conference on {} is over", name(*loser))
+        }
+        Event::Puppeted { country, overlord } => {
+            format!("{} became a puppet of {}", name(*country), name(*overlord))
+        }
+        Event::PuppetFreed { country } => format!("{} is free again", name(*country)),
         Event::RegionsCeded { from, to, regions } => format!(
             "{} ceded {} {} to {}",
             name(*from),
@@ -1440,7 +1651,7 @@ mod tests {
                 command: Command::DeclareWar { target: poland },
             })
             .unwrap();
-        let reports = step_reports(&s, &mut world, poland);
+        let reports = step_reports(&s, None, &mut world, poland);
         let war = reports
             .iter()
             .find(|r| r.big == "war")
@@ -1488,7 +1699,7 @@ mod tests {
                 .unwrap();
         }
         for _ in 0..10 * 24 {
-            let reports = step_reports(&s, &mut world, germany);
+            let reports = step_reports(&s, None, &mut world, germany);
             let Some(line) = reports.iter().find(|r| r.big == "capitulated") else {
                 continue;
             };
@@ -1518,7 +1729,7 @@ mod tests {
         );
         let war = |attacker, target| Event::WarDeclared { attacker, target };
         let concern = |event: &Event, player, enemies: &[CountryId]| {
-            let r = report(&s, &world, event, player, enemies, world.time()).unwrap();
+            let r = report(&s, None, &world, event, player, enemies, world.time()).unwrap();
             (r.mine, r.big, r.tone, r.other)
         };
         assert_eq!(

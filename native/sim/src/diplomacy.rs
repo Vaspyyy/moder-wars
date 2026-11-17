@@ -49,6 +49,10 @@ impl World {
         if !self.at_war(from, to) {
             return Err(Rejection::NotAtWar);
         }
+        if self.overlord(from).is_some() || self.overlord(to).is_some() {
+            // A puppet's wars end with its overlord's.
+            return Err(Rejection::Puppet);
+        }
         if self.talks_closed(from, to) {
             return Err(Rejection::TalksClosed);
         }
@@ -109,7 +113,7 @@ impl World {
         let offer = self.offers.remove(at);
         if accept {
             events.push(Event::PeaceMade { from, to });
-            self.end_war(from, to, Some(&offer.terms), events);
+            self.end_war_on(from, to, Some(&offer.terms), events);
         } else {
             events.push(Event::PeaceRefused { from, to });
             let until = self.tick() + TALKS_CLOSED_DAYS * 24;
@@ -121,14 +125,23 @@ impl World {
     /// End the war between two countries, drop offers between them and
     /// their arrows into each other (divisions do not enter land at peace,
     /// so such an arrow could never be finished), and settle the land on
-    /// `terms` (see `World::settle_regions`).
-    fn end_war(
+    /// `terms` (see `World::settle_regions`). Puppets of either side at war
+    /// with the other make peace too.
+    pub(crate) fn end_war_on(
         &mut self,
         a: CountryId,
         b: CountryId,
         terms: Option<&[u16]>,
         events: &mut Vec<Event>,
     ) {
+        self.stop_war(a, b);
+        self.settle_regions(a, b, terms, events);
+        self.puppets_make_peace(a, b, events);
+        self.puppets_make_peace(b, a, events);
+    }
+
+    /// The war between two countries is over; the land stays as it is held.
+    fn stop_war(&mut self, a: CountryId, b: CountryId) {
         self.wars.remove(&(a.min(b), a.max(b)));
         self.offers
             .retain(|o| !((o.from == a && o.to == b) || (o.from == b && o.to == a)));
@@ -141,7 +154,6 @@ impl World {
         }
         self.talks_closed.remove(&(a, b));
         self.talks_closed.remove(&(b, a));
-        self.settle_regions(a, b, terms, events);
     }
 
     /// Drop offers older than `OFFER_DAYS`.
@@ -185,9 +197,12 @@ impl World {
     }
 
     /// `country` gives up (`support_collapsed`: because war support at home
-    /// ran out): all its wars end and its divisions lay down their arms.
-    /// Its record remembers when, to whom, since when it was at war, what
-    /// those wars cost it and the regions it handed over.
+    /// ran out): all its wars end, its divisions lay down their arms, its
+    /// puppets are free (and so is it, if it was one), its war support
+    /// starts again at `support::AFTER_CAPITULATION`, and its enemies divide
+    /// its land at a conference (`conference.rs`). Its record remembers
+    /// when, to whom, since when it was at war and what those wars cost it
+    /// (the regions it hands over once the conference ends).
     pub(crate) fn capitulate(
         &mut self,
         country: CountryId,
@@ -200,29 +215,29 @@ impl World {
             .filter_map(|&enemy| self.war_began(country, enemy))
             .min()
             .unwrap_or(self.tick());
-        let lost_before = self.lost_regions(country);
         events.push(Event::Capitulated { country });
-        // Each winner takes the regions it holds most of.
-        for &enemy in &enemies {
-            self.end_war(country, enemy, None, events);
-        }
-        let ceded = self
-            .lost_regions(country)
-            .into_iter()
-            .filter(|c| !lost_before.contains(c))
-            .map(|c| (c.region as u16, c.to))
-            .collect();
         let tick = self.tick();
         if let Some(index) = self.index_of(country) {
             let record = &mut self.countries[index].record;
             record.capitulation = Some(Capitulation {
                 tick,
-                enemies,
+                enemies: enemies.clone(),
                 war_began,
                 support_collapsed,
                 cost: record.war,
-                ceded,
+                ceded: Vec::new(),
             });
+        }
+        self.free_puppets(country, &enemies, events);
+        // A puppet that gives up is free of its overlord too: the winners
+        // decide what becomes of it.
+        if let Some(index) = self.index_of(country)
+            && self.countries[index].overlord.take().is_some()
+        {
+            events.push(Event::PuppetFreed { country });
+        }
+        for &enemy in &enemies {
+            self.stop_war(country, enemy);
         }
         self.offers.retain(|o| o.from != country && o.to != country);
         let surrendering: Vec<usize> = (0..self.divisions.len())
@@ -230,5 +245,7 @@ impl World {
             .collect();
         self.remove_divisions(&surrendering, Loss::Surrendered, events);
         self.groups.retain(|g| g.country != country);
+        self.after_capitulation(country);
+        self.open_conference(country, enemies, events);
     }
 }

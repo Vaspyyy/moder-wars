@@ -199,15 +199,44 @@ impl World {
         self.control[cell as usize] = to;
     }
 
-    /// The daily payday: income into the funds, then recruitment.
+    /// The daily payday: income into the funds (puppets pay tribute first),
+    /// then recruitment.
     pub(crate) fn run_economy(&mut self, events: &mut Vec<Event>) {
+        // A puppet pays its overlord a share of its income first.
+        let mut income: Vec<i64> = self
+            .countries
+            .iter()
+            .map(|c| c.economy.income_k().max(0))
+            .collect();
         for index in 0..self.countries.len() {
+            if let Some(overlord) = self.countries[index].overlord
+                && let Some(to) = self.index_of(overlord)
+            {
+                let tribute = World::tribute_k(income[index]);
+                income[index] -= tribute;
+                income[to] += tribute;
+            }
+        }
+        for (index, &income) in income.iter().enumerate() {
             let economy = &mut self.countries[index].economy;
-            let income = economy.income_k().max(0);
             economy.recruit_fund_k += income * i64::from(economy.budget.recruiting) / 100;
             economy.equipment_k += income * i64::from(economy.budget.equipment) / 100;
             self.recruit(index, events);
         }
+    }
+
+    /// What `country` pays its overlord a day (negative) or gets from its
+    /// puppets (positive), thousands of dollars.
+    pub fn tribute_today_k(&self, country: CountryId) -> i64 {
+        let paid = self.overlord(country).map_or(0, |_| {
+            World::tribute_k(self.economy(country).map_or(0, |e| e.income_k()))
+        });
+        let got: i64 = self
+            .puppets(country)
+            .into_iter()
+            .map(|p| World::tribute_k(self.economy(p).map_or(0, |e| e.income_k())))
+            .sum();
+        got - paid
     }
 
     fn recruit(&mut self, index: usize, events: &mut Vec<Event>) {

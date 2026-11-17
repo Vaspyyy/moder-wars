@@ -2,7 +2,7 @@
 //   owners:  one pixel per grid cell (RG = country id, B = land), row 0 = north
 //   regions: one pixel per grid cell (RG = region number, 0 = none)
 //   palette: pixel N = color of country N
-//   marks:   pixel N = region N's mark (R = the player gains it, G = loses it)
+//   marks:   pixel N = region N's mark: its color, striped over the map (A = 0: none)
 // The quad is shown in Web Mercator; each fragment converts its position
 // back to latitude/longitude and reads the matching cell.
 shader_type canvas_item;
@@ -12,7 +12,8 @@ uniform sampler2D regions : filter_nearest, repeat_disable;
 uniform sampler2D palette : filter_nearest, repeat_disable;
 uniform sampler2D marks : filter_nearest, repeat_disable;
 uniform bool has_regions = false;
-// Regions a peace would hand over, striped gold (gained) or red (lost).
+// Regions striped in a color: what a peace would hand over (gold gained,
+// red lost), or what each winner took at a peace conference.
 uniform bool has_marks = false;
 uniform vec4 water_color : source_color = vec4(0.055, 0.094, 0.149, 1.0);
 uniform vec4 unclaimed_color : source_color = vec4(0.35, 0.35, 0.33, 1.0);
@@ -81,8 +82,8 @@ void fragment() {
 		}
 		if (has_marks && c.z > 0 && c.z < textureSize(marks, 0).x) {
 			vec4 mark = texelFetch(marks, ivec2(c.z, 0), 0);
-			if (mark.r > 0.5 || mark.g > 0.5) {
-				vec3 tint = mark.r > 0.5 ? vec3(0.949, 0.710, 0.267) : vec3(0.898, 0.325, 0.294);
+			if (mark.a > 0.5) {
+				vec3 tint = mark.rgb;
 				float stripe = step(mod(FRAGCOORD.x + FRAGCOORD.y, 10.0), 4.0);
 				color.rgb = mix(color.rgb, tint, 0.35 + 0.4 * stripe);
 			}

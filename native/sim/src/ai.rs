@@ -152,6 +152,7 @@ impl World {
     /// fewer than `MAX_WARS` wars are going on, against `war_target`.
     pub(crate) fn aggression(&self, country: CountryId, chance: bool) -> Option<CountryId> {
         let ready = chance
+            && self.overlord(country).is_none()
             && self.enemies(country).is_empty()
             && self
                 .economy(country)
@@ -180,18 +181,22 @@ impl World {
 
     /// The neighbor `country` would attack: of its land neighbors at peace,
     /// the weakest, if `country` is at least `AGGRESSION_RATIO` times
-    /// stronger than it (ties go to the lower id). A country without an army
-    /// attacks no one (nothing is three times stronger than nothing).
+    /// stronger than it (ties go to the lower id). Each side counts with its
+    /// overlord and puppets, who join the war (`family_power`). A country
+    /// without an army attacks no one (nothing is three times stronger than
+    /// nothing).
     pub fn war_target(&self, country: CountryId) -> Option<CountryId> {
-        let own = self.power_of(country);
+        let own = self.family_power(country);
         if own <= 0.0 {
             return None;
         }
         self.neighbors(country)
             .into_iter()
-            .map(|(neighbor, _)| (neighbor, self.power_of(neighbor)))
+            .map(|(neighbor, _)| (neighbor, self.family_power(neighbor)))
             .filter(|&(neighbor, power)| {
-                own >= AGGRESSION_RATIO * power && self.enemies(neighbor).is_empty()
+                own >= AGGRESSION_RATIO * power
+                    && self.enemies(neighbor).is_empty()
+                    && self.check_declare_war(country, neighbor).is_ok()
             })
             .min_by(|a, b| a.1.total_cmp(&b.1).then(a.0.cmp(&b.0)))
             .map(|(neighbor, _)| neighbor)
@@ -200,6 +205,11 @@ impl World {
     /// The fighting power of all of a country's divisions.
     pub fn army_power(&self, country: CountryId) -> f64 {
         self.power_of(country)
+    }
+
+    /// The power of `country` with its overlord and puppets (`family`).
+    fn family_power(&self, country: CountryId) -> f64 {
+        self.family(country).iter().map(|&c| self.power_of(c)).sum()
     }
 
     fn power_of(&self, country: CountryId) -> f64 {
@@ -218,6 +228,9 @@ impl World {
         support: u16,
         orders: &mut Vec<Command>,
     ) {
+        if self.overlord(country).is_some() {
+            return; // its overlord makes its peace
+        }
         for offer in self.offers.iter().filter(|o| o.to == country) {
             let chance = self.willingness(offer.from, country, &offer.terms).chance;
             let stream = PEACE_STREAM
@@ -238,7 +251,7 @@ impl World {
             let open = self.offers.iter().any(|o| {
                 (o.from == country && o.to == enemy) || (o.from == enemy && o.to == country)
             });
-            if open || self.talks_closed(country, enemy) {
+            if open || self.talks_closed(country, enemy) || self.overlord(enemy).is_some() {
                 continue;
             }
             let cessions = self.peace_terms(country, enemy);
@@ -472,6 +485,17 @@ mod tests {
         assert!(ids.iter().all(|&c| world.aggression_comes_up(c)));
         world.set_aggression_days(0);
         assert!(ids.iter().all(|&c| !world.aggression_comes_up(c)));
+    }
+
+    #[test]
+    fn a_weak_puppet_counts_with_its_overlord() {
+        let mut world = world();
+        let russia = id("Russia");
+        let target = world.war_target(russia).unwrap();
+        // The same neighbor as China's puppet: China would join the war.
+        let index = world.index_of(target).unwrap();
+        world.countries[index].overlord = Some(id("People's Republic of China"));
+        assert_ne!(world.war_target(russia), Some(target));
     }
 
     #[test]
