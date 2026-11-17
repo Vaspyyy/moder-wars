@@ -306,6 +306,15 @@ fn a_separate_peace_costs_the_place() {
     }));
     assert!(world.faction_of(poland).is_none());
     assert!(world.at_war(lithuania, belarus), "Lithuania fights on");
+    let russia = country(s, "Russia");
+    assert!(
+        !world.at_war(poland, russia),
+        "Russia fought Poland only for Belarus"
+    );
+    assert!(
+        world.at_war(lithuania, russia),
+        "and still fights Lithuania"
+    );
 }
 
 #[test]

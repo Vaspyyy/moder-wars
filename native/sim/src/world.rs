@@ -416,6 +416,9 @@ pub struct World {
     pub(crate) invites: Vec<Invite>,
     /// Open calls to arms, oldest first.
     pub(crate) calls: Vec<Call>,
+    /// (defender, attacker) -> the ally the defender went to war for
+    /// (`World::defend`), while that war lasts.
+    pub(crate) defending: BTreeMap<(CountryId, CountryId), CountryId>,
     /// (from, to) -> the tick until which an AI `from` does not ask `to`
     /// into a faction again, after `to` said no.
     pub(crate) faction_refused: BTreeMap<(CountryId, CountryId), u64>,
@@ -507,6 +510,7 @@ impl World {
             next_faction: 1,
             invites: Vec::new(),
             calls: Vec::new(),
+            defending: BTreeMap::new(),
             faction_refused: BTreeMap::new(),
             borders: BTreeMap::new(),
             borders_stale: true,

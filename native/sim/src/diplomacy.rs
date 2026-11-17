@@ -143,6 +143,8 @@ impl World {
     /// The war between two countries is over; the land stays as it is held.
     fn stop_war(&mut self, a: CountryId, b: CountryId) {
         self.wars.remove(&(a.min(b), a.max(b)));
+        self.defending
+            .retain(|&(d, at), _| !((d == a && at == b) || (d == b && at == a)));
         self.offers
             .retain(|o| !((o.from == a && o.to == b) || (o.from == b && o.to == a)));
         for group in &mut self.groups {

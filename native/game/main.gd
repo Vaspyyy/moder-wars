@@ -740,6 +740,9 @@ func _lead(id: int, to_capital: bool) -> bool:
 ## --war sandbox without --forces.
 func _start_sim(args: Dictionary) -> void:
 	sim.start(scenario, int(args.get("seed", "1")))
+	# The game setup (none in the --war sandbox).
+	alliances = not args.has("war") and (String(args["alliances"]) != "off"
+		if args.has("alliances") else Settings.real_alliances())
 	if args.has("forces") or not args.has("war"):
 		var error := sim.deploy_forces(ProjectSettings.globalize_path("res://").path_join(
 			"../../assets/data/forces/world-bank.json.gz"))
@@ -749,9 +752,7 @@ func _start_sim(args: Dictionary) -> void:
 			# License requirement (CC BY 4.0): the force data credit stays visible.
 			credit.text += "  ·  Forces: World Bank, IISS (CC BY 4.0)"
 		# The game setup: NATO and the CSTO as they stood on the start date.
-		alliances = String(args["alliances"]) != "off" if args.has("alliances") \
-			else Settings.real_alliances()
-		if alliances and not args.has("war"):
+		if alliances:
 			sim.use_real_factions()
 		# The wars already going on when the scenario starts (nobody is
 		# called to arms for them).
@@ -858,7 +859,12 @@ func _refresh_sim() -> void:
 	reports.add(news, _today())
 	_check_new_wars()
 	for report in news:
-		if report["big"] != "":
+		if report["big"] == "peace" and cards.any(func(c: Dictionary) -> bool: return c["big"] == "peace"):
+			# One card for a peace that ends several wars at once.
+			for card in cards:
+				if card["big"] == "peace":
+					card["more"] = PackedInt32Array(card.get("more", [])) + PackedInt32Array([int(report["other"])])
+		elif report["big"] != "":
 			cards.append(report)
 	_show_next_card()
 	var shown := int(country_card.country)
@@ -889,6 +895,8 @@ func _refresh_sim() -> void:
 ## Open or close the budget and mobilization window.
 func _show_economy(open: bool) -> void:
 	economy_window.visible = open and not no_hud
+	if economy_window.visible and faction_window.visible:
+		_open_faction(false) # they would overlap
 	if economy_window.visible:
 		economy_window.show_economy(player, sim.economy(player), sim.is_ai(player))
 
@@ -1139,8 +1147,10 @@ func _show_next_card() -> void:
 				event_card.show_event("FACTION", "%s joined %s" % [other, name],
 					"%s is your ally now: it defends you, and you it, and its arrows show on your map." % other)
 		"peace":
-			event_card.show_event("PEACE", "Peace with %s" % other,
-				"The war is over. The reports list the regions that changed hands.")
+			var with := PackedInt32Array([int(card_report["other"])]) + PackedInt32Array(card_report.get("more", []))
+			event_card.show_event("PEACE", "Peace with %s" % _country_list(with),
+				"The war is over. The reports list the regions that changed hands." if with.size() == 1
+				else "Those wars are over. The reports list the regions that changed hands.")
 		"capitulated":
 			if int(card_report["other"]) == player:
 				defeat_screen.show_defeat(player, sim.war_record(player))
@@ -2128,7 +2138,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event_card != null and event_card.visible:
 			# A card waits to be closed (or answered); the game stays paused.
 			if event_card.choice:
-				if key == KEY_Y or key == KEY_ENTER or key == KEY_KP_ENTER:
+				# Only Y says yes: a stray Enter must not start a war.
+				if key == KEY_Y:
 					_answer_card(true)
 				elif key == KEY_N or key == KEY_ESCAPE:
 					_answer_card(false)

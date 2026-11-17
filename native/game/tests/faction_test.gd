@@ -129,6 +129,9 @@ func _initialize() -> void:
 	for file in DirAccess.get_files_at(dir):
 		DirAccess.remove_absolute(dir.path_join(file))
 	DirAccess.remove_absolute(dir)
+	key(KEY_ENTER)
+	check(main.event_card.visible and not main.sim.enemies(poland).has(belarus),
+		"Enter does not answer a call to arms")
 	key(KEY_Y)
 	check(not main.event_card.visible and main.sim.enemies(poland).has(belarus), "Y joins the war")
 	check(main.sim.enemies(poland).has(russia), "and the CSTO defends Belarus")
@@ -140,6 +143,21 @@ func _initialize() -> void:
 	check(send != null and send.text == "Send terms, leave NATO", send.text if send else "no Send")
 	key(KEY_ESCAPE)
 	check(not main.peace_window.visible, "Esc cancels")
+	# The United States makes peace with Russia: the war with the whole
+	# CSTO ends for every member, on one card.
+	var usa := country("United States of America")
+	check(main.sim.answer_call(usa, lithuania, belarus, true), "the United States joins too")
+	main._refresh_sim()
+	main.sim.offer_peace_to(usa, russia, PackedInt32Array())
+	main.sim.answer_peace(usa, russia, true)
+	main._refresh_sim()
+	check(main.sim.enemies(poland).is_empty(), "Poland's wars are over: %s" % [main.sim.enemies(poland)])
+	check(main.event_card.visible and main.card_report.get("big") == "peace"
+		and _labels(main.event_card.card).any(func(t: String) -> bool:
+			return t.begins_with("Peace with ") and t.contains("Russia") and t.contains("more")),
+		"one card: %s" % [_labels(main.event_card.card)])
+	main._close_card()
+	check(not main.event_card.visible, "and only one")
 
 	# Without real alliances: leading Ukraine, Moldova invites it.
 	main.free()

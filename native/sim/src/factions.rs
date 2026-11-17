@@ -16,9 +16,10 @@
 //!   then defends it), without calling anyone else.
 //! - **Peace.** A leader's peace with an enemy is its faction's: every
 //!   member makes peace with that enemy (a white peace), and with the
-//!   enemy's whole faction if the enemy leads one. A member that makes peace
-//!   on its own while another member still fights that enemy leaves the
-//!   faction (a separate peace).
+//!   enemy's whole faction if the enemy leads one. Countries that went to
+//!   war only to defend one side make peace with the other too. A member
+//!   that makes peace on its own while another member still fights that
+//!   enemy leaves the faction (a separate peace).
 //! - **Joining.** The leader invites countries in no faction; a country in
 //!   none may ask a leader to let it in, or form a faction it leads by
 //!   inviting another country in none. Invitations and requests stay open
@@ -547,6 +548,7 @@ impl World {
         // One event for all of them, not a declaration each.
         for &ally in &defenders {
             self.open_war(attacker, ally);
+            self.defending.insert((ally, attacker), target);
         }
         events.push(Event::Defended {
             ally: target,
@@ -669,6 +671,25 @@ impl World {
                 if self.at_war(x, y) {
                     events.push(Event::PeaceMade { from: x, to: y });
                     self.end_war_on(x, y, Some(&[]), events);
+                }
+            }
+        }
+        // Those who went to war only to defend one side make peace with the
+        // other too.
+        for (country, enemy) in [(a, b), (b, a)] {
+            let defenders: Vec<CountryId> = self
+                .defending
+                .iter()
+                .filter(|&(&(_, attacker), &ally)| attacker == country && ally == enemy)
+                .map(|(&(defender, _), _)| defender)
+                .collect();
+            for defender in defenders {
+                if self.at_war(defender, country) {
+                    events.push(Event::PeaceMade {
+                        from: defender,
+                        to: country,
+                    });
+                    self.end_war_on(defender, country, Some(&[]), events);
                 }
             }
         }
