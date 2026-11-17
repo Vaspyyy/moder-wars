@@ -1017,9 +1017,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		_update_hover(motion.position)
 	elif event is InputEventKey and event.pressed:
 		var key := (event as InputEventKey).keycode
-		if (event as InputEventKey).echo and (
-				(event_card != null and event_card.visible) or (peace_window != null and peace_window.visible)):
-			return # a held key must not answer the next window unseen
+		# A held key repeats only for zooming: it must not answer the next
+		# window unseen or give the same order again and again.
+		if (event as InputEventKey).echo and key not in [KEY_EQUAL, KEY_KP_ADD, KEY_MINUS, KEY_KP_SUBTRACT]:
+			return
 		if event_card != null and event_card.visible:
 			# A card waits to be closed; the game stays paused.
 			if key == KEY_ENTER or key == KEY_KP_ENTER or key == KEY_ESCAPE:
