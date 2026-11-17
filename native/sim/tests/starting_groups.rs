@@ -253,44 +253,58 @@ fn a_group_sent_to_another_border_drops_its_arrow() {
 #[test]
 fn peace_drops_the_arrows_aimed_at_the_other_side() {
     // An arrow into a country you are at peace with can never be finished
-    // (divisions do not enter its land), so making peace takes it away.
+    // (divisions do not enter its land), so making peace takes away the
+    // arrows both sides aimed at each other, and only those.
     let s = common::world_2026();
     let mut world = deployed();
-    let (poland, germany) = (country(s, "Poland"), country(s, "Germany"));
+    let (poland, germany, ukraine) = (
+        country(s, "Poland"),
+        country(s, "Germany"),
+        country(s, "Ukraine"),
+    );
     world.form_starting_groups(poland);
-    let group = world
-        .army_groups()
-        .iter()
-        .find(|g| g.enemy == Some(germany))
-        .expect("a group facing Germany")
-        .id;
+    world.form_starting_groups(germany);
+    let facing = |world: &World, own: CountryId, enemy: CountryId| {
+        world
+            .army_groups()
+            .iter()
+            .find(|g| g.country == own && g.enemy == Some(enemy))
+            .unwrap_or_else(|| panic!("a group of {own} facing {enemy}"))
+            .id
+    };
+    let polish = facing(&world, poland, germany);
+    let german = facing(&world, germany, poland);
+    let eastern = facing(&world, poland, ukraine);
     let order = |tick, country, command| Order {
         tick,
         country,
         command,
     };
+    let arrow = |world: &World, group, lng, lat| Command::DrawArrow {
+        group,
+        line: vec![
+            world.army_group(group).unwrap().front[0],
+            common::cell(s, lng, lat),
+        ],
+    };
     let tick = world.tick();
-    let berlin = common::cell(s, 13.4, 52.5);
-    let start = world.army_group(group).unwrap().front[0];
     for o in [
         order(tick, poland, Command::DeclareWar { target: germany }),
-        order(
-            tick,
-            poland,
-            Command::DrawArrow {
-                group,
-                line: vec![start, berlin],
-            },
-        ),
+        order(tick, poland, Command::DeclareWar { target: ukraine }),
+        order(tick, poland, arrow(&world, polish, 13.4, 52.5)), // Berlin
+        order(tick, germany, arrow(&world, german, 21.0, 52.2)), // Warsaw
+        order(tick, poland, arrow(&world, eastern, 24.0, 49.8)), // Lviv
         order(tick, poland, Command::OfferPeace { to: germany }),
     ] {
         world.submit(o).unwrap();
     }
     world.apply_orders();
-    assert!(
-        !world.army_group(group).unwrap().arrow.is_empty(),
-        "an arrow to Berlin"
-    );
+    for group in [polish, german, eastern] {
+        assert!(
+            !world.army_group(group).unwrap().arrow.is_empty(),
+            "{group:?} has an arrow"
+        );
+    }
     world
         .submit(order(
             world.tick(),
@@ -302,13 +316,24 @@ fn peace_drops_the_arrows_aimed_at_the_other_side() {
         ))
         .unwrap();
     world.apply_orders();
-    assert!(world.enemies(poland).is_empty(), "peace");
-    let held = world.army_group(group).unwrap();
-    assert!(held.arrow.is_empty(), "the arrow into Germany is gone");
     assert_eq!(
-        held.enemy,
-        Some(germany),
-        "the group still holds the border"
+        world.enemies(poland),
+        vec![ukraine],
+        "peace with Germany only"
     );
-    assert!(!held.front.is_empty());
+    for group in [polish, german] {
+        let held = world.army_group(group).unwrap();
+        assert!(
+            held.arrow.is_empty(),
+            "{group:?}: the arrow over the border is gone"
+        );
+        assert!(
+            held.enemy.is_some() && !held.front.is_empty(),
+            "{group:?} still holds it"
+        );
+    }
+    assert!(
+        !world.army_group(eastern).unwrap().arrow.is_empty(),
+        "the arrow into Ukraine, still at war, stays"
+    );
 }
