@@ -43,6 +43,7 @@ func show_country(id: int, world_spot: Vector2, info: Dictionary, relation: Stri
 	spot = world_spot
 	card.visible = id > 0
 	for child in body.get_children():
+		body.remove_child(child) # gone now, so the new size is not the old one's
 		child.queue_free()
 	if id <= 0:
 		queue_redraw()

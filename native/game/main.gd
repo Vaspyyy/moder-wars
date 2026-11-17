@@ -126,6 +126,9 @@ var country_card: Control = null
 ## The other country of the open peace window, and whether it offered.
 var peace_with := 0
 var peace_incoming := true
+## Whether the country on the card was at war with the player when it was
+## made, to rebuild it when that changes.
+var card_at_war := false
 ## Big reports waiting for their card, and the one shown.
 var cards: Array = []
 var card_report: Dictionary = {}
@@ -489,6 +492,9 @@ func _refresh_sim() -> void:
 		if report["big"] != "":
 			cards.append(report)
 	_show_next_card()
+	var shown := int(country_card.country)
+	if country_card.card.visible and sim.enemies(player).has(shown) != card_at_war:
+		_show_country_card(shown, country_card.spot)
 	var economy: Dictionary = sim.economy(player)
 	top_bar.show_state(player, economy, sim.enemies(player), divisions,
 		sim.time_text(), sim.is_paused(), sim.speed())
@@ -539,7 +545,8 @@ func _group_name(group: int) -> String:
 func _show_command_bar() -> void:
 	if command_bar == null:
 		return
-	command_bar.visible = not no_hud and (drawing != "" or not markers.selected.is_empty())
+	command_bar.visible = not no_hud and not peace_window.visible \
+		and (drawing != "" or not markers.selected.is_empty())
 	if not command_bar.visible:
 		return
 	var name := "%d divisions" % markers.selected.size()
@@ -660,7 +667,8 @@ func _open_peace(other: int, incoming: bool) -> void:
 		# Put them in the middle of the map left of the window.
 		var screen_w := get_viewport_rect().size.x
 		var target_x := (screen_w - PeaceWindow.WIDTH - 16) / 2.0
-		var at := center + Vector2((screen_w / 2.0 - target_x) / camera.zoom.x, 0)
+		var at := (center + Vector2((screen_w / 2.0 - target_x) / camera.zoom.x, 0)).clamp(
+			-map_size / 2, map_size / 2)
 		create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT) \
 			.tween_property(camera, "position", at, 0.5)
 	for panel in [army_list, reports, command_bar]:
@@ -680,9 +688,10 @@ func _side(country: int) -> Dictionary:
 func _answer_peace(accept: bool) -> void:
 	if peace_incoming:
 		sim.answer_peace(peace_with, player, accept)
-	elif accept:
-		if sim.offer_peace_to(player, peace_with):
-			_note("You offered peace to %s" % scenario.country_name(peace_with))
+	elif accept and not sim.offer_peace_to(player, peace_with):
+		# Sent offers show in the reports; say why one was not sent.
+		_note("No offer went to %s: you are not at war, or your last offer is still open"
+			% scenario.country_name(peace_with))
 	peace_window.visible = false
 	(map_rect.material as ShaderMaterial).set_shader_parameter("has_marks", false)
 	for panel in [army_list, reports]:
@@ -698,12 +707,20 @@ func _show_country_card(country: int, world: Vector2) -> void:
 		country_card.show_country(0, Vector2.ZERO, {}, "", [], "")
 		return
 	var at_war := sim.enemies(player).has(country)
+	card_at_war = at_war
+	# The buttons look again when pressed: a war may have started or ended
+	# since the card opened.
 	var action: Callable
 	if at_war:
-		action = func() -> void: _open_peace(country, false)
+		action = func() -> void:
+			if sim.enemies(player).has(country):
+				_open_peace(country, false)
+			else:
+				_show_country_card(country, world)
 	else:
 		action = func() -> void:
-			sim.declare_war(player, country)
+			if not sim.enemies(player).has(country):
+				sim.declare_war(player, country)
 			country_card.show_country(0, Vector2.ZERO, {}, "", [], "")
 			_refresh_sim()
 	country_card.show_country(country, world, sim.country_info(country),
@@ -930,6 +947,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		_update_hover(motion.position)
 	elif event is InputEventKey and event.pressed:
 		var key := (event as InputEventKey).keycode
+		if (event as InputEventKey).echo and (
+				(event_card != null and event_card.visible) or (peace_window != null and peace_window.visible)):
+			return # a held key must not answer the next window unseen
 		if event_card != null and event_card.visible:
 			# A card waits to be closed; the game stays paused.
 			if key == KEY_ENTER or key == KEY_KP_ENTER or key == KEY_ESCAPE:
@@ -1041,8 +1061,10 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _process(delta: float) -> void:
 	var direction := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
+	# Not while a card or the peace window waits for an answer.
+	var modal: bool = (event_card != null and event_card.visible) or (peace_window != null and peace_window.visible)
 	for pair in [[KEY_A, Vector2.LEFT], [KEY_D, Vector2.RIGHT], [KEY_W, Vector2.UP], [KEY_S, Vector2.DOWN]]:
-		if Input.is_physical_key_pressed(pair[0]):
+		if not modal and Input.is_physical_key_pressed(pair[0]):
 			direction += pair[1]
 	if direction != Vector2.ZERO:
 		camera.position += direction.normalized() * 900.0 * delta / camera.zoom.x

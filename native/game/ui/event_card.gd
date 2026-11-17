@@ -29,6 +29,7 @@ func setup() -> void:
 ## `kicker` is the small line above the title.
 func show_event(kicker: String, title: String, body: String) -> void:
 	for child in card.get_children():
+		card.remove_child(child) # gone now, so the new size is not the old one's
 		child.queue_free()
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 14)

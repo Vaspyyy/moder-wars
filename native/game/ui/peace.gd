@@ -42,6 +42,7 @@ func setup() -> void:
 func show_terms(offer_incoming: bool, player: int, other: int, terms: Array, sides: Dictionary) -> void:
 	incoming = offer_incoming
 	for child in dialog.get_children():
+		dialog.remove_child(child) # gone now, so the new size is not the old one's
 		child.queue_free()
 	var them := scenario.country_name(other)
 	var column := VBoxContainer.new()
@@ -124,11 +125,14 @@ func show_terms(offer_incoming: bool, player: int, other: int, terms: Array, sid
 
 	var bottom := HBoxContainer.new()
 	bottom.add_theme_constant_override("separation", 16)
-	var score := int(float(mine["land"]) >= float(theirs["land"])) \
-		+ int(int(mine["personnel"]) >= int(theirs["personnel"]))
-	var standing: String = ["You are losing.", "The war is even.", "You are winning."][score]
-	var hint := Style.label(standing + " The AI accepts peace when it is losing or its people tire of the war.",
-		13, Style.MUTED)
+	# Ahead or behind on land (by more than half a percent) and on soldiers.
+	var land_gap := float(mine["land"]) - float(theirs["land"])
+	var score := signi(int(mine["personnel"]) - int(theirs["personnel"])) \
+		+ (signi(int(land_gap * 1000)) if absf(land_gap) > 0.005 else 0)
+	var standing := "You are winning." if score > 0 else ("You are losing." if score < 0 else "The war is even.")
+	if not incoming:
+		standing += " The AI accepts peace when it is losing or its people tire of the war."
+	var hint := Style.label(standing, 13, Style.MUTED)
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.size_flags_horizontal = SIZE_EXPAND_FILL
 	hint.size_flags_vertical = SIZE_SHRINK_CENTER
