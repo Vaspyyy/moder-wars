@@ -87,10 +87,31 @@ func _initialize() -> void:
 	for id in main.markers.countries:
 		if main.markers.countries[id] == poland:
 			one = id
-	# A Shift-click takes one division out of its group's selection.
+	# A group of two; a Shift-click takes one out, and the other is selected
+	# on its own: the command bar tells how it stands.
+	var two := -1
+	for id in main.markers.countries:
+		if main.markers.countries[id] == poland and id != one and two < 0:
+			two = id
 	main._select_at(main.get_canvas_transform() * main.markers.positions[one], true)
+	main._select_at(main.get_canvas_transform() * main.markers.positions[two], true)
+	key(KEY_G)
+	check(main.markers.selected_group != 0 and main.markers.selected.size() == 2, "a group of two")
+	check(not main.command_bar.tip.text.contains("% strength"), "a group shows no division's state")
+	main._select_at(main.get_canvas_transform() * main.markers.positions[one], true)
+	check(main.markers.selected.keys() == [two] and main.markers.selected_group == 0,
+		"a Shift-click takes one out of the group's selection")
+	var at := -1
+	for i in range(0, main.markers.data.size(), MwWorld.DIVISION_STRIDE):
+		if int(main.markers.data[i]) == two:
+			at = i
+	var stands := "%d%% strength  ·  %d%% morale  ·  " % [
+		roundi(main.markers.data[at + 4] * 100.0), roundi(main.markers.data[at + 5] * 100.0)]
 	var tip: String = main.command_bar.tip.text
-	check(main.command_bar.title.text == "Division %d" % one, "one division: its number")
-	check(tip.contains("% strength") and tip.contains("% morale") and tip.contains("holding"),
-		"and how it stands: %s" % tip)
+	check(main.command_bar.title.text == "Division %d" % two, "the other: its number")
+	check(tip.begins_with(stands) and tip.ends_with("right-click to move it"), "and how it stands: %s" % tip)
+	# A division that is gone leaves the selection.
+	main.markers.selected[987654] = true
+	main._refresh_sim()
+	check(not main.markers.selected.has(987654), "a division that is gone leaves the selection")
 	finish()
