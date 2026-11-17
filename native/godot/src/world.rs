@@ -928,16 +928,49 @@ struct Report {
     other: CountryId,
 }
 
-/// Run one tick and report what happened in it.
+/// Run one tick and report what happened in it. A capitulation is one
+/// line that counts the divisions laying down their arms with it, not a
+/// line per division.
 fn step_reports(scenario: &Scenario, world: &mut World, player: CountryId) -> Vec<Report> {
     let enemies = world.enemies(player);
     // The tick the events happen in; `step` moves the clock on after them.
     let time = world.time();
     let events = world.step();
+    let capitulated: Vec<CountryId> = events
+        .iter()
+        .filter_map(|e| match e {
+            Event::Capitulated { country } => Some(*country),
+            _ => None,
+        })
+        .collect();
+    let laid_down = |of: CountryId| events.iter().filter(|e| surrendered(e) == Some(of)).count();
     events
         .iter()
-        .filter_map(|e| report(scenario, world, e, player, &enemies, time))
+        .filter(|e| !surrendered(e).is_some_and(|c| capitulated.contains(&c)))
+        .filter_map(|e| {
+            let mut line = report(scenario, world, e, player, &enemies, time)?;
+            if let Event::Capitulated { country } = e {
+                match laid_down(*country) {
+                    0 => {}
+                    1 => line.text += ": its last division laid down its arms",
+                    n => line.text += &format!(": its {n} divisions laid down their arms"),
+                }
+            }
+            Some(line)
+        })
         .collect()
+}
+
+/// The country of a division that surrendered, for a surrender event.
+fn surrendered(event: &Event) -> Option<CountryId> {
+    match event {
+        Event::DivisionDestroyed {
+            country,
+            cause: Loss::Surrendered,
+            ..
+        } => Some(*country),
+        _ => None,
+    }
 }
 
 /// The report for an event, if it has a line. `enemies` are the player's
@@ -1203,6 +1236,60 @@ mod tests {
             (start.date.to_string().as_str(), start.hour),
             "the hour of the tick it happened in, not the next"
         );
+    }
+
+    #[test]
+    fn a_capitulation_is_one_line_with_the_divisions_that_laid_down_their_arms() {
+        // Luxembourg, with two divisions, loses its capital to Germany.
+        let s = scenario();
+        let mut world = World::new(&s, 1);
+        let (germany, luxembourg) = (id(&s, "Germany"), id(&s, "Luxembourg"));
+        let city = s
+            .cities
+            .iter()
+            .find(|c| c.owner_id == luxembourg && c.is_capital)
+            .unwrap();
+        let cell = |lng: f64, lat: f64| s.grid.cell_at(lng, lat).unwrap() as u32;
+        for _ in 0..2 {
+            world
+                .spawn_division(luxembourg, cell(6.0, 49.95), 10_000)
+                .unwrap();
+        }
+        let raider = world
+            .spawn_division(germany, cell(6.45, 49.75), 10_000)
+            .unwrap();
+        for command in [
+            Command::DeclareWar { target: luxembourg },
+            Command::MoveDivision {
+                division: raider,
+                to: cell(city.lng, city.lat),
+            },
+        ] {
+            world
+                .submit(Order {
+                    tick: 0,
+                    country: germany,
+                    command,
+                })
+                .unwrap();
+        }
+        for _ in 0..10 * 24 {
+            let reports = step_reports(&s, &mut world, germany);
+            let Some(line) = reports.iter().find(|r| r.big == "capitulated") else {
+                continue;
+            };
+            assert_eq!(
+                line.text,
+                "Luxembourg capitulated: its 2 divisions laid down their arms"
+            );
+            assert!(
+                reports.iter().all(|r| !r.text.ends_with("surrendered")),
+                "no line per division: {:?}",
+                reports.iter().map(|r| &r.text).collect::<Vec<_>>()
+            );
+            return;
+        }
+        panic!("Luxembourg never capitulated");
     }
 
     #[test]
