@@ -10,7 +10,8 @@
 //! everyone to one border), or over its cities when it has no land border.
 //! A border cell on a sliver of land (joined to fewer than
 //! `MIN_REACH_CELLS` cells of the country, and not to its capital) gets no
-//! division, since divisions could never leave it. A country without an
+//! division, since divisions could never leave it, unless the country has
+//! nothing else: no other border cell and no city. A country without an
 //! observation starts with no divisions, and the World Bank's groups of
 //! countries ("Least developed countries") are no country's figures.
 

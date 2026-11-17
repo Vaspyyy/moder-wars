@@ -376,13 +376,10 @@ fn no_division_starts_on_a_sliver_of_land_it_cannot_leave() {
     );
     // A country that small, with no city on the map, keeps its divisions
     // on its border.
-    let singapore = country(s, "Singapore");
-    assert_eq!(
-        world
-            .divisions()
-            .iter()
-            .filter(|d| d.country == singapore)
-            .count(),
-        4
-    );
+    let count = |name: &str| {
+        let c = country(s, name);
+        world.divisions().iter().filter(|d| d.country == c).count()
+    };
+    assert_eq!(count("Singapore"), 4);
+    assert_eq!(count("Bahrain"), 1);
 }
