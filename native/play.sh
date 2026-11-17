@@ -49,9 +49,10 @@ import_project() {
 	# extension is loaded (Godot 4.7.2 and 4.8 beta3 alike), after it has
 	# written everything. Judge it by the extension list, not the exit code,
 	# and skip the core dump.
-	(ulimit -c 0 && "$godot" --headless --path "$game" --import) >"$here/target/godot-import.log" 2>&1 || true
+	(ulimit -c 0 && timeout -k 5 600 "$godot" --headless --path "$game" --import) \
+		>"$here/target/godot-import.log" 2>&1 || true
 	if [ ! -f "$game/.godot/extension_list.cfg" ]; then
-		echo "Importing the Godot project failed; see native/target/godot-import.log"
+		echo "Importing the Godot project failed; see native/target/godot-import.log" >&2
 		return 1
 	fi
 	touch "$stamp"

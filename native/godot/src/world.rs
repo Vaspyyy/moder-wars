@@ -497,6 +497,16 @@ impl MwWorld {
         world.set_controller(country, controller).is_ok()
     }
 
+    /// Whether AI countries start wars of their own now and then (on by
+    /// default; the screen tests turn it off so no war interrupts them). A
+    /// loaded game has it on again.
+    #[func]
+    fn set_ai_wars(&mut self, on: bool) {
+        if let Some(world) = self.world.as_mut() {
+            world.set_aggression_days(if on { mw_sim::ai::AGGRESSION_DAYS } else { 0 });
+        }
+    }
+
     /// The player leads `country`: it takes orders only from here, and the
     /// AI runs every other country. Returns false for an unknown country.
     #[func]

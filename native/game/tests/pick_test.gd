@@ -34,8 +34,11 @@ func _initialize() -> void:
 			german = id
 		if main.markers.countries[id] == poland:
 			polish = id
+	# The click does land on a German division; it just is not yours.
+	var hit: int = main.markers.pick(main.markers.positions[german], 12.0, 0)
+	check(german >= 0 and hit >= 0 and main.markers.countries[hit] == germany, "the click lands on a German division")
 	main._select_at(main.get_canvas_transform() * main.markers.positions[german], false)
-	check(german >= 0 and main.markers.selected.is_empty(), "a German division cannot be selected")
+	check(main.markers.selected.is_empty(), "a German division cannot be selected")
 	main._select_at(main.get_canvas_transform() * main.markers.positions[polish], false)
 	check(main.markers.selected.has(polish), "a Polish one can")
 	main._hover_world(main._world_from_lng_lat(10.0, 51.0))

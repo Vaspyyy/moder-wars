@@ -18,6 +18,8 @@ func start() -> void:
 	await process_frame
 	await process_frame
 	scenario = main.scenario
+	# No AI war of its own may interrupt a test with a card.
+	main.sim.set_ai_wars(false)
 
 
 func country(name: String) -> int:

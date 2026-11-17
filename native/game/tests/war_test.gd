@@ -62,6 +62,8 @@ func _initialize() -> void:
 	main._close_card()
 	check(card_buttons(main.country_card)[0].text == "Offer peace", "once Spain declares war, the card offers peace")
 	main._show_country_card(france, main._world_from_lng_lat(2.35, 48.86))
+	buttons = card_buttons(main.country_card)
+	check(buttons[0].text == "Offer peace", "France's card offers peace again")
 	var running: bool = not main.sim.is_paused()
 	buttons[0].pressed.emit()
 	check(main.peace_window.visible and not main.peace_window.incoming, "Offer peace opens the peace window to send one")
