@@ -8,7 +8,11 @@
 //! country's land borders, closer together where the neighbor's army is
 //! bigger (by the square root of its personnel, so a giant does not pull
 //! everyone to one border), or over its cities when it has no land border.
-//! A country without an observation starts with no divisions.
+//! A border cell on a sliver of land (joined to fewer than
+//! `MIN_REACH_CELLS` cells of the country, and not to its capital) gets no
+//! division, since divisions could never leave it. A country without an
+//! observation starts with no divisions, and the World Bank's groups of
+//! countries ("Least developed countries") are no country's figures.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -129,7 +133,7 @@ pub fn read_observations(
         .countries
         .1
         .iter()
-        .filter(|c| c.region.value != "Aggregates")
+        .filter(|c| c.region.value.trim() != "Aggregates")
         .map(|c| (c.iso2.as_str(), c.id.as_str()))
         .collect();
     // iso3 -> (year, personnel) of the latest usable observation.
@@ -186,12 +190,22 @@ impl World {
                 .filter(|&(&cell, _)| self.leads_inland(cell, country, source))
                 .map(|(&cell, &weight)| (cell, weight))
                 .collect();
-            let places = if usable.is_empty() {
-                self.home_cities(country)
-            } else {
-                let line: Vec<Cell> = usable.keys().copied().collect();
-                spread_by(&self.map, &line, count, |c| usable[&c])
-            };
+            // Without a usable border cell, the cities; without those
+            // either (a sliver of a country that holds no city), the border
+            // after all: somewhere is better than nowhere.
+            let mut places = Vec::new();
+            if usable.is_empty() {
+                places = self.home_cities(country);
+            }
+            if places.is_empty() {
+                let cells = if usable.is_empty() {
+                    borders.get(&country).cloned().unwrap_or_default()
+                } else {
+                    usable
+                };
+                let line: Vec<Cell> = cells.keys().copied().collect();
+                places = spread_by(&self.map, &line, count, |c| cells[&c]);
+            }
             for i in 0..count {
                 let Some(&cell) = places.get(i % places.len().max(1)) else {
                     break;

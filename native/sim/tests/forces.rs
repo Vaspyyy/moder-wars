@@ -281,6 +281,10 @@ fn groups_of_countries_in_the_data_give_no_one_an_army() {
         "Kunashir",
         "Shikotan",
         "Paracel Islands",
+        // Groups without figures in this snapshot, which a refresh may add.
+        "Bir Tawil",
+        "Tunb Islands",
+        "Abyei",
     ] {
         assert_eq!(p.get(&country(s, name)), None, "{name}");
     }
@@ -309,13 +313,11 @@ fn reach(
             break;
         }
         let (x, y) = (c % width, c / width);
-        let mut next = Vec::new();
-        if x > 0 {
-            next.push(c - 1);
-        }
-        if x + 1 < width {
-            next.push(c + 1);
-        }
+        // Columns wrap around the date line, as on the game's map.
+        let mut next = vec![
+            y * width + (x + width - 1) % width,
+            y * width + (x + 1) % width,
+        ];
         if y > 0 {
             next.push(c - width);
         }
@@ -339,8 +341,13 @@ fn no_division_starts_on_a_sliver_of_land_it_cannot_leave() {
     let s = common::world_2026();
     let mut world = World::new(s, 1);
     world.deploy_forces(personnel());
-    // On a small piece of land with the capital (all of Singapore) a
-    // division is not stuck.
+    // On a small piece of land with the capital a division is not stuck,
+    // nor anywhere in a country smaller than ten cells (Singapore, Bahrain).
+    let land = |country: CountryId| {
+        (0..s.land.len())
+            .filter(|&c| s.land[c] != 0 && s.control[c] == country)
+            .count()
+    };
     let capital_of = |country: CountryId| {
         s.cities
             .iter()
@@ -353,7 +360,9 @@ fn no_division_starts_on_a_sliver_of_land_it_cannot_leave() {
         .iter()
         .filter(|d| {
             let (reached, cells) = reach(&world, s, d.cell, d.country, 10);
-            reached < 10 && !capital_of(d.country).iter().any(|c| cells.contains(c))
+            reached < 10
+                && !capital_of(d.country).iter().any(|c| cells.contains(c))
+                && land(d.country) >= 10
         })
         .map(|d| {
             let (lng, lat) = s.grid.center(d.cell as usize);
@@ -364,5 +373,16 @@ fn no_division_starts_on_a_sliver_of_land_it_cannot_leave() {
         stuck.is_empty(),
         "{} divisions on slivers: {stuck:?}",
         stuck.len()
+    );
+    // A country that small, with no city on the map, keeps its divisions
+    // on its border.
+    let singapore = country(s, "Singapore");
+    assert_eq!(
+        world
+            .divisions()
+            .iter()
+            .filter(|d| d.country == singapore)
+            .count(),
+        4
     );
 }
