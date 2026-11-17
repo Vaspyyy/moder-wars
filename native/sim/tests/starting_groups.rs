@@ -173,7 +173,12 @@ fn the_ai_sends_a_starting_group_to_a_war_on_an_unheld_border() {
             command: Command::DeclareWar { target: poland },
         })
         .unwrap();
-    common::run(&mut world, 48);
+    let before: BTreeMap<_, usize> = world
+        .army_groups()
+        .iter()
+        .map(|g| (g.id, g.divisions.len()))
+        .collect();
+    common::run(&mut world, 10 * 24);
     assert!(
         world
             .army_groups()
@@ -181,5 +186,66 @@ fn the_ai_sends_a_starting_group_to_a_war_on_an_unheld_border() {
             .any(|g| g.country == poland && g.enemy == Some(enemy) && !g.front.is_empty()),
         "no Polish group faces {enemy}: {:?}",
         world.army_groups()
+    );
+    // The groups still on borders at peace are no war fronts: no arrows
+    // into a country Poland is not at war with, and no recruits.
+    for g in world.army_groups().iter().filter(|g| g.country == poland) {
+        if g.enemy != Some(enemy) {
+            assert!(g.arrow.is_empty(), "an arrow at peace: {g:?}");
+            assert!(
+                g.divisions.len() <= before.get(&g.id).copied().unwrap_or(0),
+                "recruits sent to a border at peace: {g:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_group_sent_to_another_border_drops_its_arrow() {
+    let s = common::world_2026();
+    let mut world = deployed();
+    let (poland, germany, czechia) = (
+        country(s, "Poland"),
+        country(s, "Germany"),
+        country(s, "Czechia"),
+    );
+    world.form_starting_groups(poland);
+    let group = world
+        .army_groups()
+        .iter()
+        .find(|g| g.enemy == Some(germany))
+        .expect("a group facing Germany")
+        .id;
+    let tick = world.tick();
+    let order = |command| Order {
+        tick,
+        country: poland,
+        command,
+    };
+    let berlin = common::cell(s, 13.4, 52.5);
+    world
+        .submit(order(Command::DrawArrow {
+            group,
+            line: vec![world.army_group(group).unwrap().front[0], berlin],
+        }))
+        .unwrap();
+    world.apply_orders();
+    assert!(
+        !world.army_group(group).unwrap().arrow.is_empty(),
+        "an arrow to Berlin"
+    );
+    let czech_border = world.border_cells(poland, czechia);
+    world
+        .submit(order(Command::SetFront {
+            group,
+            line: czech_border,
+        }))
+        .unwrap();
+    world.apply_orders();
+    let moved = world.army_group(group).unwrap();
+    assert_eq!(moved.enemy, Some(czechia));
+    assert!(
+        moved.arrow.is_empty(),
+        "the arrow into Germany went with the old front"
     );
 }

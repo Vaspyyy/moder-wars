@@ -312,7 +312,7 @@ impl World {
         let fronted: Vec<(&ArmyGroup, f64)> = groups
             .iter()
             .copied()
-            .filter(|g| !g.front.is_empty() && g.enemy.is_some())
+            .filter(|g| !g.front.is_empty() && g.enemy.is_some_and(|e| enemies.contains(&e)))
             .map(|g| {
                 let own: f64 = g
                     .divisions
