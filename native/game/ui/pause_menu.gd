@@ -43,6 +43,9 @@ var confirming: Array = []
 ## What "Leave this game?" asks about: "new" or "quit".
 var leaving := ""
 var name_box: LineEdit = null
+## What the player typed into the name box, kept while the Saves view is
+## rebuilt (a question asked in a row, F5); empty for the suggested name.
+var typed_name := ""
 ## Unix seconds now, for "saved 12 minutes ago" (tests replace it).
 var now := func() -> float: return Time.get_unix_time_from_system()
 
@@ -85,6 +88,7 @@ func show_menu(info: Dictionary) -> void:
 	state = info
 	view = "menu"
 	confirming = []
+	typed_name = ""
 	var column := _begin(MENU_WIDTH, 150, 22)
 	var top := _column(8)
 	top.add_child(_kicker("PAUSED  ·  " + _clock(info["date"]).to_upper()))
@@ -147,7 +151,8 @@ func show_saves(info: Dictionary) -> void:
 	entry.add_theme_constant_override("separation", 10)
 	name_box = LineEdit.new()
 	name_box.name = "SaveName"
-	name_box.text = info["suggested"]
+	name_box.text = typed_name if typed_name != "" else info["suggested"]
+	name_box.text_changed.connect(func(text: String) -> void: typed_name = text)
 	name_box.placeholder_text = "Name this save"
 	name_box.max_length = 60
 	name_box.select_all_on_focus = true
@@ -306,23 +311,32 @@ func when(entry: Dictionary) -> String:
 	var parts := PackedStringArray()
 	if String(entry["time"]) != "":
 		parts.append(_clock(entry["time"]) + " in the game")
-	parts.append(saved_text(float(entry["saved"]), now.call()))
+	parts.append(saved_text(float(entry["saved"]), now.call(), String(entry.get("local", "")),
+		Time.get_datetime_string_from_system()))
 	return "  ·  ".join(parts)
 
 
-## When a save was made, from Unix seconds, in local time: "saved just
-## now", "saved 12 minutes ago", "saved today, 02:40", "saved 16 November,
-## 23:10".
-static func saved_text(saved: float, at: float) -> String:
+## When a save was made, from Unix seconds `saved` and now (`at`): "saved
+## just now", "saved 12 minutes ago", "saved today, 02:40", "saved 16
+## November, 23:10". The clock and day come from `local` and `today`
+## (local times, "2026-11-17T02:40:00") when given, which stay right across
+## a change to or from summer time; else from today's offset to UTC.
+static func saved_text(saved: float, at: float, local := "", today_local := "") -> String:
 	var ago := at - saved
 	if ago < 60.0:
 		return "saved just now"
 	if ago < 3600.0:
 		var minutes := int(ago / 60.0)
 		return "saved 1 minute ago" if minutes == 1 else "saved %d minutes ago" % minutes
-	var bias := int(Time.get_time_zone_from_system().get("bias", 0)) * 60
-	var then := Time.get_datetime_dict_from_unix_time(int(saved) + bias)
-	var today := Time.get_datetime_dict_from_unix_time(int(at) + bias)
+	var then: Dictionary
+	var today: Dictionary
+	if local != "" and today_local != "":
+		then = Time.get_datetime_dict_from_datetime_string(local, false)
+		today = Time.get_datetime_dict_from_datetime_string(today_local, false)
+	else:
+		var bias := int(Time.get_time_zone_from_system().get("bias", 0)) * 60
+		then = Time.get_datetime_dict_from_unix_time(int(saved) + bias)
+		today = Time.get_datetime_dict_from_unix_time(int(at) + bias)
 	var clock := "%02d:%02d" % [then["hour"], then["minute"]]
 	if then["year"] == today["year"] and then["month"] == today["month"] and then["day"] == today["day"]:
 		return "saved today, " + clock
@@ -335,7 +349,7 @@ static func saved_text(saved: float, at: float) -> String:
 ## The name box takes the keys once it is on screen (the view may have
 ## been rebuilt again meanwhile).
 func _focus_name() -> void:
-	if view == "saves" and is_instance_valid(name_box) and name_box.is_inside_tree():
+	if visible and view == "saves" and is_instance_valid(name_box) and name_box.is_inside_tree():
 		name_box.grab_focus()
 
 

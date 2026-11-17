@@ -29,8 +29,9 @@ func quick() -> Dictionary:
 
 
 ## The named saves, newest first: dictionaries with `path`, `name`, `time`
-## (in the game, "2026-10-25 09:00", empty if unknown) and `saved` (Unix
-## seconds).
+## (in the game, "2026-10-25 09:00", empty if unknown), `saved` (Unix
+## seconds) and `local` (when it was saved in local time,
+## "2026-11-17T02:40:00", empty if unknown).
 func list() -> Array:
 	var prefix := _file("save-%s-%s-" % [scenario_name, who])
 	var found: Array = []
@@ -63,26 +64,35 @@ func write(sim: MwWorld, path: String, name: String) -> String:
 	var error := sim.save_game(path)
 	if error != "":
 		return error
-	var info := FileAccess.open(path.get_basename() + INFO, FileAccess.WRITE)
+	# Beside it first, then over the old one, like the save itself.
+	var info_path := path.get_basename() + INFO
+	var info := FileAccess.open(info_path + ".tmp", FileAccess.WRITE)
 	if info == null:
 		return "Cannot save the name of %s: %s" % [path, error_string(FileAccess.get_open_error())]
 	info.store_string(JSON.stringify({"name": name, "time": sim.time_text(),
-		"saved": Time.get_unix_time_from_system()}))
+		"saved": Time.get_unix_time_from_system(), "local": Time.get_datetime_string_from_system()}))
+	info.close()
+	var moved := DirAccess.rename_absolute(info_path + ".tmp", info_path)
+	if moved != OK:
+		return "Cannot save the name of %s: %s" % [path, error_string(moved)]
 	return ""
 
 
 ## Delete a save and its name file. Returns an empty string or the error.
 func delete(path: String) -> String:
+	var info_path := path.get_basename() + INFO
+	if FileAccess.file_exists(info_path):
+		DirAccess.remove_absolute(info_path)
+	if not FileAccess.file_exists(path):
+		return ""
 	var error := DirAccess.remove_absolute(path)
 	if error != OK:
 		return "Cannot delete %s: %s" % [path, error_string(error)]
-	if FileAccess.file_exists(path.get_basename() + INFO):
-		DirAccess.remove_absolute(path.get_basename() + INFO)
 	return ""
 
 
 func _entry(path: String, fallback: String) -> Dictionary:
-	var entry := {"path": path, "name": fallback, "time": "",
+	var entry := {"path": path, "name": fallback, "time": "", "local": "",
 		"saved": float(FileAccess.get_modified_time(path))}
 	var info_path := path.get_basename() + INFO
 	var info: Variant = null
@@ -95,6 +105,8 @@ func _entry(path: String, fallback: String) -> Dictionary:
 			entry["time"] = info["time"]
 		if info.get("saved") is float:
 			entry["saved"] = info["saved"]
+		if info.get("local") is String:
+			entry["local"] = info["local"]
 	return entry
 
 

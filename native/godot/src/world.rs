@@ -761,9 +761,17 @@ impl MwWorld {
             return GString::from("There is no game to save");
         };
         let path = path.to_string();
-        match std::fs::write(&path, mw_sim::save::save(world)) {
+        // Into a file beside it first, then over the old save: a full disk
+        // or a crash halfway never leaves a broken save in its place.
+        let temporary = format!("{path}.tmp");
+        let written = std::fs::write(&temporary, mw_sim::save::save(world))
+            .and_then(|()| std::fs::rename(&temporary, &path));
+        match written {
             Ok(()) => GString::new(),
-            Err(e) => GString::from(&format!("Cannot save to {path}: {e}")),
+            Err(e) => {
+                let _ = std::fs::remove_file(&temporary);
+                GString::from(&format!("Cannot save to {path}: {e}"))
+            }
         }
     }
 

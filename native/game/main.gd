@@ -936,9 +936,18 @@ func _load_save(path: String) -> String:
 		markers.stroke.clear()
 		_show_help()
 	if player != 0:
-		# What was waiting belonged to the game before the load.
+		# What was waiting or open belonged to the game before the load (the
+		# menu can open over a card or the peace window when the window is
+		# closed); the loaded game waits, paused, until the player goes on.
 		cards.clear()
 		card_report = {}
+		event_card.visible = false
+		if peace_window.visible:
+			peace_window.visible = false
+			(map_rect.material as ShaderMaterial).set_shader_parameter("has_marks", false)
+			for panel in [army_list, reports]:
+				panel.visible = not no_hud
+		paused_by_card = false
 		country_card.show_country(0, Vector2.ZERO, {}, "", [], "")
 		reports.clear()
 		# Peace offered to the player in the saved game waits for an answer.
@@ -987,6 +996,7 @@ func _menu_state() -> Dictionary:
 func _after_save(error: String, line: String) -> void:
 	if error == "":
 		saved_hash = sim.state_hash()
+		menu.typed_name = "" # the next save gets a new suggested name
 		_note(line)
 	var state := _menu_state()
 	state["message"] = error
@@ -1274,12 +1284,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		if menu != null and menu.visible:
 			# The menu keeps the game paused; only its own keys work.
 			if key == KEY_ESCAPE:
-				menu.back()
+				menu.back() # (PauseMenu._input takes Esc first in a running game)
 			elif key == KEY_F5:
 				_quicksave()
 				if menu.view == "saves":
 					menu.show_saves(_menu_state())
-				elif menu.view == "menu":
+				else:
+					# Saved now: "Leave this game?" no longer applies.
 					menu.show_menu(_menu_state())
 			elif key == KEY_F9 and _quickload():
 				paused_by_menu = false
@@ -1399,11 +1410,14 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
-	var direction := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
-	# WASD pans, but not as part of Ctrl+A or Shift+W, and not while a card
-	# or the peace window waits for an answer.
+	# The arrow keys and WASD pan, but not while a card, the peace window or
+	# the pause menu is open (they move the caret in the save name box), and
+	# WASD not as part of Ctrl+A or Shift+W.
 	var modal: bool = (event_card != null and event_card.visible) \
 		or (peace_window != null and peace_window.visible) or (menu != null and menu.visible)
+	var direction := Vector2.ZERO
+	if not modal:
+		direction = Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	if not modal and not Input.is_key_pressed(KEY_CTRL) and not Input.is_key_pressed(KEY_SHIFT):
 		for pair in [[KEY_A, Vector2.LEFT], [KEY_D, Vector2.RIGHT], [KEY_W, Vector2.UP], [KEY_S, Vector2.DOWN]]:
 			if Input.is_physical_key_pressed(pair[0]):

@@ -198,6 +198,81 @@ func _initialize() -> void:
 	check(not menu.visible and not main.sim.is_paused(), "and then to the running game")
 	main.sim.toggle_pause()
 
+	# F5 and F9 still work while the name box has the keys; a typed name
+	# stays while a row asks.
+	key(KEY_ESCAPE)
+	_press("Saves")
+	await process_frame
+	main.sim.run(4)
+	var f5 := InputEventKey.new()
+	f5.keycode = KEY_F5
+	f5.pressed = true
+	root.push_input(f5)
+	check(slots.quick().get("time") == main.sim.time_text(), "F5 saves with the name box focused")
+	menu.name_box.text = "Before Moscow"
+	menu.name_box.text_changed.emit("Before Moscow")
+	_press_in("Row0", "Delete")
+	_press_in("Row0", "Cancel")
+	check(menu.name_box.text == "Before Moscow", "the typed name stays: %s" % menu.name_box.text)
+	var quick_time: String = slots.quick()["time"]
+	main.sim.run(6)
+	var f9 := InputEventKey.new()
+	f9.keycode = KEY_F9
+	f9.pressed = true
+	root.push_input(f9)
+	check(main.sim.time_text() == quick_time, "F9 in the menu loads the quick save")
+	check(not menu.visible and main.sim.is_paused(), "closes the menu and waits")
+
+	# Closing the window: asks when unsaved, F5 there goes back to the
+	# menu, and a saved game closes at once.
+	main.sim.run(2)
+	main._notification(Node.NOTIFICATION_WM_CLOSE_REQUEST)
+	check(menu.visible and menu.view == "leave" and quits == 2, "closing the window with changes asks")
+	key(KEY_F5)
+	check(menu.view == "menu", "F5 saves and goes back to the menu")
+	main._notification(Node.NOTIFICATION_WM_CLOSE_REQUEST)
+	check(quits == 3, "a saved game closes at once")
+	menu.back()
+
+	# A load from the menu opened over the peace window closes it, and the
+	# loaded game waits, paused.
+	var germany := country("Germany")
+	main.sim.toggle_pause()
+	main.sim.declare_war(germany, poland)
+	main._refresh_sim()
+	main._close_card()
+	main.sim.offer_peace_to(germany, poland)
+	main._refresh_sim()
+	check(main.peace_window.visible and main.sim.is_paused(), "a peace offer waits")
+	main._notification(Node.NOTIFICATION_WM_CLOSE_REQUEST)
+	check(menu.visible and menu.view == "leave", "closing the window asks over it")
+	_press("Stay")
+	_press("Saves")
+	_press_in("Row0", "Load")
+	check(not main.peace_window.visible and not menu.visible, "the load closes the old peace window")
+	check(main.sim.is_paused() and not main.paused_by_card, "and the loaded game waits, paused")
+	check(not (main.map_rect.material as ShaderMaterial).get_shader_parameter("has_marks"),
+		"without its stripes on the map")
+	check(main.army_list.visible and main.reports.visible, "the panels are back")
+	key(KEY_ESCAPE)
+	check(menu.visible, "and Esc opens the menu again")
+	var camera_at: Vector2 = main.camera.position
+	Input.action_press("ui_left")
+	main._process(0.2)
+	Input.action_release("ui_left")
+	check(main.camera.position == camera_at, "the arrow keys do not pan behind the menu")
+	menu.back()
+	Input.action_press("ui_left")
+	main._process(0.2)
+	Input.action_release("ui_left")
+	check(main.camera.position != camera_at, "but do once it is closed")
+
+	# A save of another scenario never lists.
+	var listed: int = slots.list().size()
+	DirAccess.copy_absolute(slots.list()[0]["path"],
+		dir.path_join("save-ukraine-2023-v3-%d-Poland-1.mwsave" % poland))
+	check(slots.list().size() == listed, "another scenario's save is not listed")
+
 	# When a save was made.
 	var bias := int(Time.get_time_zone_from_system().get("bias", 0)) * 60
 	var noon := Time.get_unix_time_from_datetime_dict({"year": 2026, "month": 11, "day": 17,
@@ -208,6 +283,14 @@ func _initialize() -> void:
 			[noon - 365 * 86400, "saved 17 November 2025, 12:00"]]:
 		var said: String = main.PauseMenu.saved_text(case[0], noon)
 		check(said == case[1], "%s, not %s" % [case[1], said])
+	# With the local time kept in the save, a save from before the clocks
+	# changed shows the hour it was made.
+	var said_local: String = main.PauseMenu.saved_text(noon - 7200, noon, "2026-03-29T01:30:00",
+		"2026-03-29T04:00:00")
+	check(said_local == "saved today, 01:30", said_local)
+	said_local = main.PauseMenu.saved_text(noon - 86400, noon, "2026-10-24T23:10:00",
+		"2026-10-25T23:00:00")
+	check(said_local == "saved 24 October, 23:10", said_local)
 
 	# Leading another country: Poland's saves are not listed.
 	await _lead_fresh("Ukraine")
@@ -230,6 +313,9 @@ func _initialize() -> void:
 	check(current_scene.restart_args == {"scenario": "world-map-2026-v3"}, "of the same scenario")
 	main = current_scene
 	main.restart_args = {}
+	main.quit_game = func() -> void: quits += 1
+	main._notification(Node.NOTIFICATION_WM_CLOSE_REQUEST)
+	check(quits == 4, "the pick screen closes at once")
 
 	for file in DirAccess.get_files_at(dir):
 		DirAccess.remove_absolute(dir.path_join(file))
