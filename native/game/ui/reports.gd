@@ -48,6 +48,12 @@ func add(reports: Array, today: String) -> void:
 		_show(today)
 
 
+## Forget every report (a loaded game has its own past).
+func clear() -> void:
+	entries.clear()
+	_show("")
+
+
 func _show(today: String) -> void:
 	for child in list.get_children():
 		child.queue_free()
