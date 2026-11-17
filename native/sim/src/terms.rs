@@ -121,6 +121,52 @@ impl World {
         }
     }
 
+    /// The regions `country` owned by law when the game started that a
+    /// peace has handed to another country since, in region order.
+    pub fn lost_regions(&self, country: CountryId) -> Vec<Cession> {
+        let Some(map) = self.regions.as_deref() else {
+            return Vec::new();
+        };
+        self.ceded
+            .iter()
+            .map(|(&region, &to)| (usize::from(region), to))
+            .filter(|&(region, to)| map.home[region] == country && to != country)
+            .map(|(region, to)| Cession {
+                region,
+                from: country,
+                to,
+            })
+            .collect()
+    }
+
+    /// The share of the land `country` owned by law when the game started
+    /// that it still owns by law, counted in map cells (1.0 for a country
+    /// with no land). Without regions a peace keeps every cell each side
+    /// holds, so it is the share it holds.
+    pub fn land_kept(&self, country: CountryId) -> f64 {
+        let law = self.law_of();
+        let with_regions = self.regions.is_some();
+        let (mut had, mut kept) = (0u64, 0u64);
+        for cell in 0..self.map.len() as Cell {
+            if self.map.de_jure(cell) == country {
+                had += 1;
+                let owner = if with_regions {
+                    law(cell)
+                } else {
+                    self.control[cell as usize]
+                };
+                if owner == country {
+                    kept += 1;
+                }
+            }
+        }
+        if had == 0 {
+            1.0
+        } else {
+            kept as f64 / had as f64
+        }
+    }
+
     fn region_owner(&self, map: &RegionMap, region: usize) -> CountryId {
         self.ceded
             .get(&(region as u16))

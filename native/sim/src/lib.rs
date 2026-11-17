@@ -12,6 +12,7 @@ mod front;
 pub mod map;
 mod movement;
 mod path;
+pub mod record;
 pub mod regions;
 pub mod rng;
 pub mod sandbox;

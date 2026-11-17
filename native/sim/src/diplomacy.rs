@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::division::Loss;
 use crate::map::Cell;
+use crate::record::Capitulation;
 use crate::world::{CountryId, Event, Rejection, World};
 
 /// Days an unanswered peace offer stays open.
@@ -109,6 +110,10 @@ impl World {
     /// give up.
     pub(crate) fn check_capitulation(&mut self, events: &mut Vec<Event>) {
         for country in self.countries_at_war() {
+            // An earlier capitulation today may have ended its last war.
+            if !self.countries_at_war().contains(&country) {
+                continue;
+            }
             let Some(index) = self.index_of(country) else {
                 continue;
             };
@@ -118,24 +123,49 @@ impl World {
                 .capital(country)
                 .is_some_and(|c| self.control[c as usize] == country);
             if lost_most && !holds_capital {
-                self.capitulate(country, events);
+                self.capitulate(country, false, events);
             }
         }
     }
 
-    pub(crate) fn capitulate(&mut self, country: CountryId, events: &mut Vec<Event>) {
-        let enemies: Vec<CountryId> = self
-            .wars
+    /// `country` gives up (`support_collapsed`: because war support at home
+    /// ran out): all its wars end and its divisions lay down their arms.
+    /// Its record remembers when, to whom, since when it was at war, what
+    /// those wars cost it and the regions it handed over.
+    pub(crate) fn capitulate(
+        &mut self,
+        country: CountryId,
+        support_collapsed: bool,
+        events: &mut Vec<Event>,
+    ) {
+        let enemies = self.enemies(country);
+        let war_began = enemies
             .iter()
-            .filter_map(|&(a, b)| match (a == country, b == country) {
-                (true, _) => Some(b),
-                (_, true) => Some(a),
-                _ => None,
-            })
-            .collect();
+            .filter_map(|&enemy| self.war_began(country, enemy))
+            .min()
+            .unwrap_or(self.tick());
+        let lost_before = self.lost_regions(country);
         events.push(Event::Capitulated { country });
-        for enemy in enemies {
+        for &enemy in &enemies {
             self.end_war(country, enemy, events);
+        }
+        let ceded = self
+            .lost_regions(country)
+            .into_iter()
+            .filter(|c| !lost_before.contains(c))
+            .map(|c| (c.region as u16, c.to))
+            .collect();
+        let tick = self.tick();
+        if let Some(index) = self.index_of(country) {
+            let record = &mut self.countries[index].record;
+            record.capitulation = Some(Capitulation {
+                tick,
+                enemies,
+                war_began,
+                support_collapsed,
+                cost: record.war,
+                ceded,
+            });
         }
         self.offers.retain(|o| o.from != country && o.to != country);
         let surrendering: Vec<usize> = (0..self.divisions.len())

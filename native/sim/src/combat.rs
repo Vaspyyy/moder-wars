@@ -15,13 +15,18 @@
 //! Losing morale weakens a division, so a battle tips once it leans. A
 //! defender that breaks falls back to a neighbouring cell of its own, away
 //! from the attackers, or surrenders when there is none.
+//!
+//! Every soldier lost counts in the loser's war record, and the soldiers a
+//! side puts out of action (or makes surrender) count for the countries on
+//! the other side, each by its share of that side's power.
 
 use crate::division::{
     BREAK_MORALE, CASUALTIES_PER_HOUR, CITY_BONUS, DEFENDER_BONUS, Loss, MORALE_LOSS_PER_HOUR,
 };
 use crate::map::Cell;
 use crate::movement::occupants;
-use crate::world::{Event, World};
+use crate::record::shares;
+use crate::world::{CountryId, Event, World};
 
 impl World {
     pub(crate) fn fight(&mut self, events: &mut Vec<Event>) {
@@ -53,6 +58,9 @@ impl World {
         attacks.sort_unstable();
 
         let mut broken = Vec::new();
+        // Per battle: the attackers' power by country, to share out the
+        // soldiers of a defender that surrenders.
+        let mut attack_shares: Vec<Vec<(CountryId, f64)>> = Vec::new();
         for battle in attacks.chunk_by(|a, b| a.0 == b.0) {
             let cell = battle[0].0;
             let attackers: Vec<usize> = battle.iter().map(|&(_, i)| i).collect();
@@ -75,16 +83,20 @@ impl World {
             let attack_luck = 0.8 + 0.4 * self.rng.next_f64();
             let defence_luck = 0.8 + 0.4 * self.rng.next_f64();
             let odds = (attack / defence.max(1.0)).clamp(0.05, 20.0);
-            self.hit(
+            let attack_by = self.power_by_country(&attackers);
+            let defence_by = self.power_by_country(&defenders);
+            let defenders_lost = self.hit(
                 &defenders,
                 MORALE_LOSS_PER_HOUR * odds * attack_luck,
                 CASUALTIES_PER_HOUR * attack * attack_luck / bonus,
             );
-            self.hit(
+            let attackers_lost = self.hit(
                 &attackers,
                 MORALE_LOSS_PER_HOUR / odds * defence_luck,
                 CASUALTIES_PER_HOUR * defence * defence_luck,
             );
+            self.count_battle(&defenders_lost, &attack_by);
+            self.count_battle(&attackers_lost, &defence_by);
             // Direction the attack comes from, to fall back the other way.
             let (mut from_x, mut from_y) = (0, 0);
             for &i in &attackers {
@@ -93,13 +105,14 @@ impl World {
             }
             for &i in &defenders {
                 if self.divisions[i].morale < BREAK_MORALE {
-                    broken.push((i, (from_x, from_y)));
+                    broken.push((i, (from_x, from_y), attack_shares.len()));
                 }
             }
+            attack_shares.push(attack_by);
         }
 
         let mut surrendered = Vec::new();
-        for (index, attack_from) in broken {
+        for (index, attack_from, battle) in broken {
             match self.fallback_cell(index, attack_from, &occupancy) {
                 Some(to) => {
                     let division = &mut self.divisions[index];
@@ -112,25 +125,62 @@ impl World {
                     division.path.clear();
                     division.progress_m = 0;
                 }
-                None => surrendered.push(index),
+                None => {
+                    let division = &self.divisions[index];
+                    let soldiers = [(division.country, u64::from(division.personnel))];
+                    self.count_battle(&soldiers, &attack_shares[battle]);
+                    surrendered.push(index);
+                }
             }
         }
         self.remove_divisions(&surrendered, Loss::Surrendered, events);
     }
 
     /// Take morale and soldiers from a side, soldiers shared by size.
-    fn hit(&mut self, side: &[usize], morale: f64, casualties: f64) {
+    /// Returns the soldiers lost, by country.
+    fn hit(&mut self, side: &[usize], morale: f64, casualties: f64) -> Vec<(CountryId, u64)> {
         let soldiers: f64 = side
             .iter()
             .map(|&i| f64::from(self.divisions[i].personnel))
             .sum();
+        let mut lost_by: Vec<(CountryId, u64)> = Vec::new();
         for &i in side {
             let division = &mut self.divisions[i];
             division.in_battle = true;
             division.morale = (f64::from(division.morale) - morale).max(0.0) as f32;
             let share = f64::from(division.personnel) / soldiers.max(1.0);
-            let lost = (casualties * share).round() as u32;
-            division.personnel = division.personnel.saturating_sub(lost);
+            let lost = ((casualties * share).round() as u32).min(division.personnel);
+            division.personnel -= lost;
+            match lost_by.iter_mut().find(|(c, _)| *c == division.country) {
+                Some((_, sum)) => *sum += u64::from(lost),
+                None => lost_by.push((division.country, u64::from(lost))),
+            }
+        }
+        lost_by
+    }
+
+    /// The power of a side's divisions, by country.
+    fn power_by_country(&self, side: &[usize]) -> Vec<(CountryId, f64)> {
+        let mut by: Vec<(CountryId, f64)> = Vec::new();
+        for &i in side {
+            let division = &self.divisions[i];
+            match by.iter_mut().find(|(c, _)| *c == division.country) {
+                Some((_, power)) => *power += division.power(),
+                None => by.push((division.country, division.power())),
+            }
+        }
+        by
+    }
+
+    /// Soldiers one side lost (by country) go in their records, and the
+    /// countries of the other side share them out by power (`by`).
+    fn count_battle(&mut self, lost: &[(CountryId, u64)], by: &[(CountryId, f64)]) {
+        let total: u64 = lost.iter().map(|&(_, n)| n).sum();
+        for &(country, n) in lost {
+            self.count_losses(country, n, 0);
+        }
+        for (country, n) in shares(total, by) {
+            self.count_losses(country, 0, n);
         }
     }
 

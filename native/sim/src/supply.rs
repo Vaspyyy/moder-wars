@@ -96,6 +96,7 @@ impl World {
 
     pub(crate) fn upkeep(&mut self, events: &mut Vec<Event>) {
         let at_war = self.countries_at_war();
+        let mut worn: Vec<(CountryId, u64)> = Vec::new();
         for index in 0..self.divisions.len() {
             let division = &self.divisions[index];
             let repairable =
@@ -116,7 +117,9 @@ impl World {
                 division.morale = (division.morale - CUT_OFF_MORALE).max(0.0);
                 division.equipment = (division.equipment - CUT_OFF_EQUIPMENT).max(0.0);
                 let lost = (f64::from(division.personnel) * CUT_OFF_ATTRITION).round() as u32;
-                division.personnel = division.personnel.saturating_sub(lost.max(1));
+                let lost = lost.max(1).min(division.personnel);
+                division.personnel -= lost;
+                worn.push((division.country, u64::from(lost)));
             }
             if division.morale < ATTACK_MORALE {
                 division.resting = true;
@@ -127,6 +130,14 @@ impl World {
         let broken_up: Vec<usize> = (0..self.divisions.len())
             .filter(|&i| self.divisions[i].broken_up())
             .collect();
+        // The few left in a division too weak to fight are lost too.
+        for &i in &broken_up {
+            let division = &self.divisions[i];
+            worn.push((division.country, u64::from(division.personnel)));
+        }
+        for (country, lost) in worn {
+            self.count_losses(country, lost, 0);
+        }
         self.remove_divisions(&broken_up, Loss::BrokenUp, events);
     }
 }

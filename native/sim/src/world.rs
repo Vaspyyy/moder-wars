@@ -18,6 +18,7 @@ use crate::division::{Division, DivisionId, Loss, SpawnError};
 use crate::economy::{Budget, Economy, SERVE_PER_MILLE};
 use crate::map::{Cell, MapData};
 use crate::path;
+use crate::record::{Tally, WarRecord};
 use crate::rng::Rng;
 use crate::scenario::Scenario;
 use crate::terms::RegionMap;
@@ -38,6 +39,8 @@ pub struct CountryState {
     pub id: CountryId,
     pub controller: Controller,
     pub economy: Economy,
+    /// What its wars cost it so far (see `record.rs`).
+    pub record: WarRecord,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -222,8 +225,9 @@ pub struct World {
     pub(crate) rng: Rng,
     /// Sorted by id.
     pub(crate) countries: Vec<CountryState>,
-    /// Pairs at war, stored as (lower id, higher id).
-    pub(crate) wars: BTreeSet<(CountryId, CountryId)>,
+    /// Pairs at war, stored as (lower id, higher id), with the tick each
+    /// war began.
+    pub(crate) wars: BTreeMap<(CountryId, CountryId), u64>,
     /// Military control per grid cell (0 = nobody).
     pub(crate) control: Vec<u16>,
     /// Sorted by id.
@@ -278,6 +282,7 @@ impl World {
                 id: c.id,
                 controller: Controller::Passive,
                 economy: Economy::new(c.pop.unwrap_or(0.0).max(0.0) as u64),
+                record: WarRecord::default(),
             })
             .collect();
         countries.sort_by_key(|c| c.id);
@@ -292,7 +297,7 @@ impl World {
             tick: 0,
             rng: Rng::new(seed),
             countries,
-            wars: BTreeSet::new(),
+            wars: BTreeMap::new(),
             control: scenario.control.clone(),
             divisions: Vec::new(),
             next_division: 1,
@@ -405,6 +410,11 @@ impl World {
         time_at(self.start, self.tick)
     }
 
+    /// The date and hour of a tick of this game.
+    pub fn time_of(&self, tick: u64) -> GameTime {
+        time_at(self.start, tick)
+    }
+
     pub fn countries(&self) -> &[CountryState] {
         &self.countries
     }
@@ -418,7 +428,29 @@ impl World {
     }
 
     pub fn at_war(&self, a: CountryId, b: CountryId) -> bool {
-        self.wars.contains(&pair(a, b))
+        self.wars.contains_key(&pair(a, b))
+    }
+
+    /// The tick the war between `a` and `b` began, if they are at war.
+    pub fn war_began(&self, a: CountryId, b: CountryId) -> Option<u64> {
+        self.wars.get(&pair(a, b)).copied()
+    }
+
+    /// What `country`'s wars cost it so far, or None for an unknown country.
+    pub fn war_record(&self, country: CountryId) -> Option<&WarRecord> {
+        self.country(country).map(|c| &c.record)
+    }
+
+    /// Add soldiers lost (`lost`) or put out of action (`inflicted`) to a
+    /// country's record.
+    pub(crate) fn count_losses(&mut self, country: CountryId, lost: u64, inflicted: u64) {
+        if let Some(index) = self.index_of(country) {
+            let record = &mut self.countries[index].record;
+            for tally in [&mut record.total, &mut record.war] {
+                tally.lost += lost;
+                tally.inflicted += inflicted;
+            }
+        }
     }
 
     /// How many wars are going on.
@@ -430,7 +462,7 @@ impl World {
     pub fn enemies(&self, country: CountryId) -> Vec<CountryId> {
         let mut enemies: Vec<CountryId> = self
             .wars
-            .iter()
+            .keys()
             .filter_map(|&(a, b)| match country {
                 c if c == a => Some(b),
                 c if c == b => Some(a),
@@ -544,7 +576,7 @@ impl World {
 
     /// Countries in at least one war.
     pub(crate) fn countries_at_war(&self) -> BTreeSet<CountryId> {
-        self.wars.iter().flat_map(|&(a, b)| [a, b]).collect()
+        self.wars.keys().flat_map(|&(a, b)| [a, b]).collect()
     }
 
     pub(crate) fn any_war(&self) -> bool {
@@ -709,7 +741,16 @@ impl World {
         match order.command {
             Command::DeclareWar { target } => match self.check_declare_war(order.country, target) {
                 Ok(()) => {
-                    self.wars.insert(pair(order.country, target));
+                    // A side going from peace to war counts this war's cost
+                    // from now on.
+                    for side in [order.country, target] {
+                        if self.enemies(side).is_empty()
+                            && let Some(index) = self.index_of(side)
+                        {
+                            self.countries[index].record.war = Tally::default();
+                        }
+                    }
+                    self.wars.insert(pair(order.country, target), self.tick);
                     events.push(Event::WarDeclared {
                         attacker: order.country,
                         target,
