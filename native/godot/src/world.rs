@@ -507,6 +507,21 @@ impl MwWorld {
         }
     }
 
+    /// Observer mode: the AI runs every country and nobody is led.
+    #[func]
+    fn observe(&mut self) {
+        let Some(world) = self.world.as_mut() else {
+            return;
+        };
+        let ids: Vec<CountryId> = world.countries().iter().map(|c| c.id).collect();
+        for id in ids {
+            world
+                .set_controller(id, Controller::Ai)
+                .expect("a country of this world");
+        }
+        self.player = 0;
+    }
+
     /// The player leads `country`: it takes orders only from here, and the
     /// AI runs every other country. Its divisions form their starting army
     /// groups where they stand (`World::form_starting_groups`). Returns
@@ -851,6 +866,31 @@ impl MwWorld {
         self.world
             .as_ref()
             .map_or(0, |world| mw_sim::save::fingerprint(world) as i64)
+    }
+
+    /// Whether a save would load on this scenario (and its region map):
+    /// an empty string, or the error `load_game` would give. The game goes
+    /// on as it is either way.
+    #[func]
+    fn check_save(&self, path: GString) -> GString {
+        let Some(scenario) = self.scenario.as_ref() else {
+            return GString::from("Start a game first");
+        };
+        let bound = scenario.bind();
+        let Some(s) = bound.scenario.as_ref() else {
+            return GString::from("Start a game first");
+        };
+        let path = path.to_string();
+        let checked = std::fs::read(&path)
+            .map_err(|e| format!("Cannot read {path}: {e}"))
+            .and_then(|bytes| {
+                mw_sim::save::load(&bytes, s, bound.regions.as_ref())
+                    .map(|_| ())
+                    .map_err(|e| format!("Cannot load {path}: {e}"))
+            });
+        checked
+            .err()
+            .map_or_else(GString::new, |m| GString::from(&m))
     }
 
     /// Load a game saved on this scenario (and its region map). Returns an

@@ -1,7 +1,7 @@
 extends Control
 ## The end of a lost war: when the country you lead capitulates, this
 ## screen says what the war cost (days at war, divisions raised, soldiers
-## lost on both sides, land kept, regions handed over) and offers New game,
+## lost on both sides, land kept, regions handed over) and offers Main menu,
 ## Load your save, or Watch the world go on. The game stays paused while it
 ## is open; Esc watches.
 
@@ -132,7 +132,7 @@ func show_defeat(country: int, record: Dictionary) -> void:
 	var load := _button("Load", "Load your save", "plain")
 	load.pressed.connect(func() -> void: load_pressed.emit())
 	buttons.add_child(load)
-	var fresh := Style.primary_button("New game", 19)
+	var fresh := Style.primary_button("Main menu", 19)
 	fresh.name = "NewGame"
 	fresh.focus_mode = FOCUS_NONE
 	fresh.custom_minimum_size.y = 48

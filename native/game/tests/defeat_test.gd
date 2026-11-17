@@ -1,6 +1,6 @@
 extends "res://tests/harness.gd"
 ## The defeat screen: when the country you lead capitulates, the game
-## pauses on what the war cost, and New game, Load your save and Watch the
+## pauses on what the war cost, and Main menu, Load your save and Watch the
 ## world go on each do what they say.
 
 var dir := ""
@@ -104,7 +104,7 @@ func _initialize() -> void:
 	check(not main.menu.visible and not main.sim.is_paused(),
 		"backing out of the menu lets the game run as it did before the defeat")
 
-	# Esc watches too, and New game starts over right away.
+	# Esc watches too, and Main menu starts over right away.
 	check(await _lose(), "a third defeat")
 	main._refresh_sim()
 	key(KEY_ESCAPE)
@@ -132,7 +132,7 @@ func _initialize() -> void:
 	check(await _lose(), "a fourth defeat")
 	main._refresh_sim()
 	_press("NewGame")
-	check(restarts == 1, "New game starts over, without asking")
+	check(restarts == 1, "Main menu starts over, without asking")
 
 	for file in DirAccess.get_files_at(dir):
 		DirAccess.remove_absolute(dir.path_join(file))

@@ -1,9 +1,11 @@
 extends Node2D
 ## The game: loads a real scenario through the Rust extension, draws the
 ## political map with a shader and runs the simulation on it. It opens on
-## the pick screen (every country with its real army, paused): click a
-## country, then "Lead" it; the AI runs every other country. --war without
-## --lead opens the viewer instead, where any country's divisions take orders.
+## the main menu (Play, Continue, Load game, Quit); Play chooses a scenario
+## and observer mode, then the pick screen (every country with its real
+## army, paused): click a country, then "Lead" it; the AI runs every other
+## country. In observer mode, or with --war without --lead, the viewer opens
+## instead, where any country's divisions take orders.
 ## Pan by dragging with any mouse button or with WASD/arrows, zoom with the
 ## wheel or +/-. Space pauses and resumes, 1-5 set the speed.
 ##
@@ -17,7 +19,7 @@ extends Node2D
 ## arrow. Right-click sends the selected divisions somewhere directly, which
 ## takes them out of their group. Esc cancels drawing, then clears the
 ## selection, and with nothing left to close opens the pause menu (Continue,
-## Saves, New game, Quit to desktop). Orders take effect at once, even
+## Saves, Main menu, Quit to desktop). Orders take effect at once, even
 ## while paused. F5 and F9 save and load the quick save.
 ##
 ## The stand-in controls below act for the country you lead, or in the viewer
@@ -35,8 +37,10 @@ extends Node2D
 ##
 ## Command-line options (after `--`):
 ##   --scenario=<name>        package in assets/maps/compiled (default world-map-2026-v3)
-##   --lead=<country>         skip the pick screen and lead this country
-##   --pick=<country>         on the pick screen, show this country's card (for screenshots)
+##   --lead=<country>         skip the menus and lead this country (a name or an id)
+##   --load=<path>            with --lead or --observe: load this save
+##   --pick[=<country>]       open the pick screen, showing this country's card
+##   --observe                observer mode: the AI plays every country
 ##   --view=<lng>,<lat>,<zoom> start the camera here
 ##   --war=<attacker>,<defender>[,<attackers>,<defenders>]
 ##                            sandbox war along their border, with that many
@@ -70,6 +74,8 @@ const MOBILIZATION_NAMES := ["peacetime", "partial mobilization", "general mobil
 	"total mobilization"]
 ## How far the camera zooms in on the capital when the player takes a country.
 const LEAD_ZOOM := 5.0
+## The saves of observer mode (the --war viewer's are "viewer").
+const OBSERVER := "observer"
 const Style := preload("res://ui/style.gd")
 const PickScreen := preload("res://ui/pick.gd")
 const TopBar := preload("res://ui/top_bar.gd")
@@ -86,10 +92,15 @@ const DefeatScreen := preload("res://ui/defeat.gd")
 const Lines := preload("res://ui/lines.gd")
 const SaveSlots := preload("res://saves.gd")
 const Scenarios := preload("res://scenarios.gd")
+const MainMenu := preload("res://ui/main_menu.gd")
 
-## New game starts the scene again with these options instead of the
-## command line's (only the scenario), so it opens on the pick screen.
+## The scene starts again with these options instead of the command line's:
+## the scenario (Main menu in the pause menu: it opens on the main menu),
+## and what the main menu chose ("pick", "observe", "lead", "load").
 static var restart_args := {}
+## Each scenario's name, date and credit for the Play screen, read from its
+## package once (`_scenario_infos`).
+static var scenario_infos := {}
 
 var scenario := MwScenario.new()
 var sim := MwWorld.new()
@@ -133,6 +144,10 @@ var player := 0
 var save_dir := "user://"
 ## The scenario package loaded ("world-map-2026-v3"), for the save slots.
 var scenario_name := ""
+## The main menu while it is open.
+var main_menu: Control = null
+## Observer mode: watching the world, with no country to lead.
+var observing := false
 ## The pick screen while it is open.
 var pick: Control = null
 ## The bar along the top while the player leads a country, and the other
@@ -211,21 +226,42 @@ func _ready() -> void:
 	var view: PackedStringArray = String(args.get("view", "15,30,1.2")).split(",")
 	camera.position = _world_from_lng_lat(float(view[0]), float(view[1]))
 	camera.zoom = Vector2.ONE * float(view[2]) * get_viewport_rect().size.x / map_size.x
-	if args.has("lead"):
-		var id := scenario.country_id(args["lead"])
-		if id == 0:
-			push_error("--lead: no country named %s" % args["lead"])
+	# A save chosen on the main menu of another scenario: back to the menu,
+	# saying why, if it would not load.
+	var load_error := ""
+	if args.has("load"):
+		load_error = sim.check_save(args["load"])
+	if load_error != "":
+		push_warning(load_error)
+		_open_main_menu()
+		main_menu.show_error(load_error)
+	elif args.has("lead"):
+		# A name, or the id the main menu passes for a save.
+		var lead := String(args["lead"])
+		var id := lead.to_int() if lead.is_valid_int() else scenario.country_id(lead)
+		if _lead(id, not args.has("view")):
+			if args.has("load"):
+				_load_or_say(args["load"])
+		elif args.has("load"):
+			_open_main_menu()
+			main_menu.show_error("That save's country is not in this scenario")
 		else:
-			_lead(id, not args.has("view"))
-	elif not args.has("war"):
+			push_error("--lead: no country named %s" % args["lead"])
+	elif args.has("observe"):
+		_observe()
+		if args.has("load"):
+			_load_or_say(args["load"])
+	elif args.has("pick"):
 		_open_pick()
-		if args.has("pick"):
+		if args["pick"] != "":
 			var id := scenario.country_id(args["pick"])
 			var capital := scenario.country_capital(id)
 			if id == 0 or is_nan(capital.x):
 				push_error("--pick: no country with a capital named %s" % args["pick"])
 			else:
 				_pick_country(id, _world_from_lng_lat(capital.x, capital.y))
+	elif not args.has("war"):
+		_open_main_menu()
 
 	if args.has("probe"):
 		for point in String(args["probe"]).split(";"):
@@ -326,6 +362,175 @@ func _build_ui() -> void:
 	_show_help()
 
 
+## The pause menu (Esc), for the country led or the observer.
+func _build_menu() -> void:
+	menu = PauseMenu.new()
+	menu.setup()
+	menu.visible = false
+	menu.continued.connect(_close_menu)
+	menu.new_game_pressed.connect(func() -> void: _leave("new"))
+	menu.quit_pressed.connect(func() -> void: _leave("quit"))
+	menu.leave_confirmed.connect(_do_leave)
+	menu.save_pressed.connect(func(name: String) -> void:
+		_after_save(_slots().create(sim, name), "Game saved: %s" % name))
+	menu.overwrite_pressed.connect(func(path: String, name: String) -> void:
+		_after_save(_slots().write(sim, path, name), "Game saved: %s" % name))
+	menu.delete_pressed.connect(func(path: String) -> void:
+		var error := _slots().delete(path)
+		var state := _menu_state()
+		state["message"] = error
+		menu.show_saves(state))
+	menu.load_pressed.connect(func(path: String) -> void:
+		var error := _load_save(path)
+		if error != "":
+			var state := _menu_state()
+			state["message"] = error
+			menu.show_saves(state)
+			return
+		# The loaded game waits, paused, for the player to look at it.
+		paused_by_menu = false
+		menu.visible = false
+		_refresh_sim())
+	ui_layer.add_child(menu)
+	ui_layer.move_child(credit, -1) # license requirement: the credit stays on top
+
+
+## The main menu: the world dimmed behind it, every label but the credits
+## hidden.
+func _open_main_menu() -> void:
+	# The game waits behind the menu (--play may have started it).
+	if not sim.is_paused():
+		sim.toggle_pause()
+	main_menu = MainMenu.new()
+	main_menu.infos = _scenario_infos()
+	main_menu.saves = _all_saves()
+	main_menu.selected = scenario_name
+	main_menu.setup()
+	main_menu.play_chosen.connect(_play)
+	main_menu.load_chosen.connect(_load_from_menu)
+	main_menu.quit_pressed.connect(func() -> void: quit_game.call())
+	ui_layer.add_child(main_menu)
+	ui_layer.move_child(credit, -1)
+	for label in [info, clock, feed, details, help]:
+		label.visible = false
+	markers.visible = false # the armies wait for the game
+	main_menu.visible = not no_hud
+	main_menu.show_main()
+
+
+## Back from the pick screen: nothing has happened yet, so the main menu
+## opens over the same game.
+func _back_to_main_menu() -> void:
+	_pick_country(0, Vector2.ZERO)
+	ui_layer.remove_child(pick)
+	pick.queue_free()
+	pick = null
+	_open_main_menu()
+
+
+func _close_main_menu() -> void:
+	ui_layer.remove_child(main_menu)
+	main_menu.queue_free()
+	main_menu = null
+	markers.visible = true
+
+
+## Each scenario's name, start date and data credit, from its package (only
+## this one is loaded for the game).
+func _scenario_infos() -> Dictionary:
+	for entry in Scenarios.LIST:
+		var id: String = entry["id"]
+		if scenario_infos.has(id):
+			continue
+		var source := scenario
+		if id != scenario_name:
+			source = MwScenario.new()
+			var error := source.load_package(ProjectSettings.globalize_path("res://").path_join(
+				"../../assets/maps/compiled/%s.mwsc.gz" % id))
+			if error != "":
+				push_warning(error)
+				continue
+		scenario_infos[id] = {"name": source.scenario_name(), "date": source.start_date(),
+			"credit": source.attribution() + "  ·  Forces: World Bank, IISS (CC BY 4.0)"}
+	return scenario_infos
+
+
+## Every save of every scenario the Play screen offers, newest first.
+func _all_saves() -> Array:
+	var slots := SaveSlots.new()
+	slots.dir = save_dir
+	return slots.all(PackedStringArray(Scenarios.LIST.map(func(e: Dictionary) -> String: return e["id"])),
+		OBSERVER)
+
+
+## Play: the pick screen (or, in observer mode, the viewer) of a scenario.
+## Another scenario's package loads with the scene started again.
+func _play(id: String, observe: bool) -> void:
+	if id != scenario_name:
+		restart_args = {"scenario": id, "observe" if observe else "pick": ""}
+		restart.call()
+		return
+	_close_main_menu()
+	if observe:
+		_observe()
+	else:
+		_open_pick()
+	_refresh_sim()
+
+
+## Continue or Load game: the save's scenario, its country (or observer
+## mode), then the save.
+func _load_from_menu(entry: Dictionary) -> void:
+	var country := int(entry["country"])
+	if entry["scenario"] != scenario_name:
+		restart_args = {"scenario": entry["scenario"], "load": entry["path"]}
+		if country != 0:
+			restart_args["lead"] = str(country)
+		else:
+			restart_args["observe"] = ""
+		restart.call()
+		return
+	# Stay on the menu, saying why, if it would not load.
+	var error := sim.check_save(entry["path"])
+	if error == "" and country != 0 and scenario.country_name(country) == "":
+		error = "That save's country is not in this scenario"
+	if error != "":
+		main_menu.show_error(error)
+		return
+	_close_main_menu()
+	if country != 0:
+		_lead(country, true)
+	else:
+		_observe()
+	_load_or_say(entry["path"])
+
+
+## Load a save, or say why it did not.
+func _load_or_say(path: String) -> void:
+	var error := _load_save(path)
+	if error != "":
+		push_warning(error)
+		_note(error)
+	elif observing:
+		# The AI plays everyone, whatever ran the countries when it was saved.
+		sim.observe()
+		saved_hash = sim.state_hash()
+	_refresh_sim()
+
+
+## Observer mode: the viewer, with the pause menu on Esc and every
+## country's arrows on the map.
+func _observe() -> void:
+	observing = true
+	sim.observe()
+	for label in [info, clock, feed, details, help]:
+		label.visible = not no_hud
+	_build_menu()
+	# Nothing to lose yet: leaving right away asks nothing.
+	saved_hash = sim.state_hash()
+	_note("Observer mode: Space runs the game, Esc opens the menu")
+
+
 ## The pick screen: the world, paused, every label but the credits hidden.
 func _open_pick() -> void:
 	pick = PickScreen.new()
@@ -333,7 +538,10 @@ func _open_pick() -> void:
 	pick.palette = palette
 	pick.to_screen = func(world: Vector2) -> Vector2: return get_canvas_transform() * world
 	pick.setup(scenario.start_date())
-	pick.lead_pressed.connect(func(id: int) -> void: _lead(id, true))
+	pick.lead_pressed.connect(func(id: int) -> void:
+		if not _lead(id, true):
+			push_error("cannot lead country %d" % id))
+	pick.back_pressed.connect(_back_to_main_menu)
 	ui_layer.add_child(pick)
 	ui_layer.move_child(credit, -1)
 	for label in [info, clock, feed, details, help]:
@@ -349,10 +557,10 @@ func _pick_country(id: int, world: Vector2) -> void:
 
 ## The player takes `id`: the AI runs everyone else, the top bar replaces the
 ## pick screen, and (with `to_capital`) the camera moves to the capital.
-func _lead(id: int, to_capital: bool) -> void:
-	if not sim.lead(id):
-		push_error("cannot lead country %d" % id)
-		return
+## False, changing nothing, for a country not in this scenario.
+func _lead(id: int, to_capital: bool) -> bool:
+	if id <= 0 or scenario.country_name(id) == "" or not sim.lead(id):
+		return false
 	player = id
 	if pick != null:
 		pick.queue_free()
@@ -436,34 +644,7 @@ func _lead(id: int, to_capital: bool) -> void:
 		menu.show_saves(_menu_state()))
 	defeat_screen.new_game_pressed.connect(func() -> void: _do_leave("new"))
 	ui_layer.add_child(defeat_screen)
-	menu = PauseMenu.new()
-	menu.setup()
-	menu.visible = false
-	menu.continued.connect(_close_menu)
-	menu.new_game_pressed.connect(func() -> void: _leave("new"))
-	menu.quit_pressed.connect(func() -> void: _leave("quit"))
-	menu.leave_confirmed.connect(_do_leave)
-	menu.save_pressed.connect(func(name: String) -> void:
-		_after_save(_slots().create(sim, name), "Game saved: %s" % name))
-	menu.overwrite_pressed.connect(func(path: String, name: String) -> void:
-		_after_save(_slots().write(sim, path, name), "Game saved: %s" % name))
-	menu.delete_pressed.connect(func(path: String) -> void:
-		var error := _slots().delete(path)
-		var state := _menu_state()
-		state["message"] = error
-		menu.show_saves(state))
-	menu.load_pressed.connect(func(path: String) -> void:
-		var error := _load_save(path)
-		if error != "":
-			var state := _menu_state()
-			state["message"] = error
-			menu.show_saves(state)
-			return
-		# The loaded game waits, paused, for the player to look at it.
-		paused_by_menu = false
-		menu.visible = false
-		_refresh_sim())
-	ui_layer.add_child(menu)
+	_build_menu()
 	ui_layer.move_child(credit, -1)
 	for label in [clock, feed, details, help]:
 		label.visible = false
@@ -495,6 +676,7 @@ func _lead(id: int, to_capital: bool) -> void:
 	# Nothing to lose yet: leaving right away asks nothing.
 	saved_hash = sim.state_hash()
 	_refresh_sim()
+	return true
 
 
 ## Start the simulation, with the sandbox war from --war if given. Every
@@ -1001,6 +1183,8 @@ func _slots() -> SaveSlots:
 	slots.scenario_name = scenario_name
 	if player != 0:
 		slots.who = "%d-%s" % [player, scenario.country_name(player)]
+	elif observing:
+		slots.who = OBSERVER
 	return slots
 
 
@@ -1096,7 +1280,7 @@ func _menu_state() -> Dictionary:
 	for enemy in sim.enemies(player):
 		enemies.append(scenario.country_name(enemy))
 	var time := sim.time_text()
-	return {"date": time, "name": scenario.country_name(player),
+	return {"date": time, "name": scenario.country_name(player), "observer": observing,
 		"color": palette.get_pixel(player, 0), "enemies": enemies,
 		"scenario": scenario.scenario_name(), "quick": slots.quick(), "saves": slots.list(),
 		"suggested": "%s, %s" % [Style.long_date(_today()), time.get_slice(" ", 1)]}
@@ -1130,6 +1314,7 @@ func _leave(action: String) -> void:
 
 func _do_leave(action: String) -> void:
 	if action == "new":
+		# Back to the main menu, with this scenario's map behind it.
 		restart_args = {"scenario": scenario_name}
 		restart.call()
 	else:
@@ -1321,6 +1506,8 @@ func _order_at(screen_point: Vector2) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if main_menu != null:
+		return # the main menu takes its own clicks and keys; the map waits
 	if event is InputEventMouseButton:
 		var button := event as InputEventMouseButton
 		match button.button_index:
@@ -1435,8 +1622,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			_zoom_at(0.8, get_viewport_rect().size / 2)
 		elif pick != null:
 			# The pick screen only looks at the map; the game has not started.
-			if key == KEY_ESCAPE:
+			# Esc closes the card, then goes back to the main menu.
+			if key == KEY_ESCAPE and pick.card.card.visible:
 				_pick_country(0, Vector2.ZERO)
+			elif key == KEY_ESCAPE:
+				_back_to_main_menu()
 		elif key == KEY_SPACE:
 			sim.toggle_pause()
 			_refresh_sim()
@@ -1536,7 +1726,7 @@ func _process(delta: float) -> void:
 	# WASD not as part of Ctrl+A or Shift+W.
 	var modal: bool = (event_card != null and event_card.visible) \
 		or (peace_window != null and peace_window.visible) or (menu != null and menu.visible) \
-		or (defeat_screen != null and defeat_screen.visible)
+		or (defeat_screen != null and defeat_screen.visible) or main_menu != null
 	var direction := Vector2.ZERO
 	if not modal:
 		direction = Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")

@@ -306,7 +306,7 @@ func _initialize() -> void:
 	_press("Saves")
 	check(_row("Row0") == null and _row("Quick") == null, "Ukraine has no saves yet")
 
-	# New game starts over on the pick screen.
+	# Main menu starts over on the main menu.
 	main.restart = func() -> void: main.get_tree().reload_current_scene()
 	current_scene = main
 	var old := main.get_instance_id()
@@ -316,14 +316,14 @@ func _initialize() -> void:
 	_press("Leave")
 	for i in 5:
 		await process_frame
-	check(current_scene.get_instance_id() != old and current_scene.pick != null
-		and current_scene.player == 0, "a new game opens on the pick screen")
-	check(current_scene.restart_args == {"scenario": "world-map-2026-v3"}, "of the same scenario")
+	check(current_scene.get_instance_id() != old and current_scene.main_menu != null
+		and current_scene.pick == null and current_scene.player == 0, "Main menu opens the main menu")
+	check(current_scene.restart_args == {"scenario": "world-map-2026-v3"}, "with the same scenario behind it")
 	main = current_scene
 	main.restart_args = {}
 	main.quit_game = func() -> void: quits += 1
 	main._notification(Node.NOTIFICATION_WM_CLOSE_REQUEST)
-	check(quits == 4, "the pick screen closes at once")
+	check(quits == 4, "the main menu closes at once")
 
 	for file in DirAccess.get_files_at(dir):
 		DirAccess.remove_absolute(dir.path_join(file))

@@ -2,12 +2,13 @@ extends Control
 ## The pause menu, opened with Esc when nothing else is open (a window, a
 ## selection or a line being drawn closes first). One box with three views:
 ##
-## - the menu: Continue, Saves, New game, Quit to desktop;
+## - the menu: Continue, Saves, Main menu, Quit to desktop (for the country
+##   led, or in observer mode for the observer);
 ## - Saves: a name and Save make a new save; below, the quick save (F5 and
 ##   F9) and the named saves of the country you lead in this scenario,
 ##   newest first, each with Load, Overwrite and Delete (those two ask once,
 ##   in their row);
-## - "Leave this game?", before New game or Quit when the game changed since
+## - "Leave this game?", before Main menu or Quit when the game changed since
 ##   the last save.
 ##
 ## The game stays paused while it is open. Esc goes back one step.
@@ -94,13 +95,19 @@ func show_menu(info: Dictionary) -> void:
 	top.add_child(_kicker("PAUSED  ·  " + _clock(info["date"]).to_upper()))
 	var title := HBoxContainer.new()
 	title.add_theme_constant_override("separation", 12)
-	var swatch := Style.swatch(info["color"])
-	swatch.size_flags_vertical = SIZE_SHRINK_CENTER
-	title.add_child(swatch)
-	title.add_child(_wrapped(info["name"], 36, Style.TEXT, Style.TITLE, MENU_WIDTH - 86))
+	var observer: bool = info.get("observer", false)
+	if not observer:
+		var swatch := Style.swatch(info["color"])
+		swatch.size_flags_vertical = SIZE_SHRINK_CENTER
+		title.add_child(swatch)
+	title.add_child(_wrapped("Observer" if observer else info["name"], 36, Style.TEXT, Style.TITLE,
+		MENU_WIDTH - 86))
 	top.add_child(title)
 	var enemies: PackedStringArray = info["enemies"]
-	if enemies.is_empty():
+	if observer:
+		top.add_child(_wrapped("Watching the world: the AI plays every country", 15, Style.MUTED,
+			Style.BODY, MENU_WIDTH - 56))
+	elif enemies.is_empty():
 		top.add_child(_wrapped("At peace", 15, Style.PEACE, Style.BODY, MENU_WIDTH - 56))
 	else:
 		top.add_child(_wrapped("At war with " + Style.list_and(enemies), 15, Style.WAR, Style.BODY,
@@ -117,7 +124,7 @@ func show_menu(info: Dictionary) -> void:
 	line.color = Style.LINE
 	line.custom_minimum_size.y = 1
 	buttons.add_child(_spaced(line, 6))
-	buttons.add_child(_big_button("NewGame", "New game", "", "", "plain",
+	buttons.add_child(_big_button("NewGame", "Main menu", "", "", "plain",
 		func() -> void: new_game_pressed.emit()))
 	buttons.add_child(_big_button("Quit", "Quit to desktop", "", "", "plain",
 		func() -> void: quit_pressed.emit()))
@@ -135,7 +142,8 @@ func show_saves(info: Dictionary) -> void:
 	top.add_theme_constant_override("separation", 16)
 	var heading := _column(6)
 	heading.size_flags_horizontal = SIZE_EXPAND_FILL
-	heading.add_child(_kicker("PAUSED  ·  %s  ·  %s" % [String(info["name"]).to_upper(),
+	var who := "OBSERVER" if info.get("observer", false) else String(info["name"]).to_upper()
+	heading.add_child(_kicker("PAUSED  ·  %s  ·  %s" % [who,
 		String(info["scenario"]).to_upper()]))
 	heading.add_child(Style.label("Saves", 34, Style.TEXT, Style.TITLE))
 	top.add_child(heading)
@@ -199,7 +207,8 @@ func show_saves(info: Dictionary) -> void:
 		column.add_child(rows)
 	if String(info.get("message", "")) != "":
 		column.add_child(_wrapped(info["message"], 14, Style.WAR, Style.BODY, SAVES_WIDTH - 60))
-	column.add_child(_wrapped("The saves of the country you lead in this scenario, newest first. "
+	var whose := "observer mode" if info.get("observer", false) else "the country you lead"
+	column.add_child(_wrapped("The saves of %s in this scenario, newest first. " % whose
 		+ "Overwrite and Delete ask once before they replace or remove a save.", 13, Style.MUTED,
 		Style.BODY, SAVES_WIDTH - 60))
 	_end()
@@ -211,7 +220,7 @@ func show_leave(action: String) -> void:
 	view = "leave"
 	confirming = []
 	var column := _begin(LEAVE_WIDTH, 220, 16)
-	column.add_child(_kicker("NEW GAME" if action == "new" else "QUIT TO DESKTOP"))
+	column.add_child(_kicker("MAIN MENU" if action == "new" else "QUIT TO DESKTOP"))
 	column.add_child(_wrapped("Leave this game?", 34, Style.TEXT, Style.TITLE, LEAVE_WIDTH - 56))
 	column.add_child(_wrapped("It changed since your last save. If you leave now, everything "
 		+ "since then is lost.", 16, Style.CREDIT, Style.BODY, LEAVE_WIDTH - 56))
